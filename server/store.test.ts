@@ -1372,3 +1372,22 @@ test('le colonne nuove della riga si leggono già pronte, e una storta non rompe
   assert.equal(store.compito('cn1')!.ipotesi, null)
   assert.ok(store.elencoCompiti().some(x => x.id === 'cn1'))
 })
+
+// — P10: i pezzi di una scrittura —
+
+test('P10 · i pezzi finiscono a duecento documenti o a un milione di caratteri, e fra un pezzo e l’altro si cede il passo', async () => {
+  const { pezziDi, salvaDocumentiAPezzi } = await import('./store.ts')
+  const tempi = await import('./tempi.ts')
+  const grossi = Array.from({ length: 10 }, (_, i) => ({ corpo: 'x'.repeat(300_000), i }))
+  assert.ok(pezziDi(grossi).length >= 3, 'dieci documenti da trecentomila caratteri in un pezzo solo')
+  assert.equal(pezziDi(grossi).flatMap(p => p.docs).length, 10, 'nessun documento perso')
+  const corti = Array.from({ length: 200 }, () => ({ corpo: 'breve' }))
+  assert.equal(pezziDi(corti).length, 1)
+  assert.equal(pezziDi([{ corpo: 'x'.repeat(2_000_000) }]).length, 1, 'uno troppo grosso sta comunque nel suo pezzo')
+  assert.equal(pezziDi([]).length, 0)
+  const prima = tempi.cessioni()
+  const docs = Array.from({ length: 10 }, (_, i) => ({ id: `desktop:/x/grosso-${i}.md`, fonte: 'desktop', tipo: 'file', titolo: `Grosso ${i}`, corpo: `parola ${i} `.repeat(30_000), quando: new Date().toISOString() }))
+  const e = await salvaDocumentiAPezzi(docs)
+  assert.equal(e.nuovi, 10)
+  assert.ok(tempi.cessioni() - prima >= 2, 'fra i pezzi non si è ceduto il passo')
+})

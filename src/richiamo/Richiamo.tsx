@@ -12,7 +12,7 @@
 // e «apri l'app» porta alla radice. Niente qui scorre di lato.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
-import { api, alloScadere, sessione } from '../api'
+import { api, apiP10, alloScadere, sessione } from '../api'
 import { desktop, type Dove } from '../desktop'
 import { frasi, lingua, t } from '../lingua'
 import { COMANDI, type Comando, type Modo } from '../oggi/Barra'
@@ -71,6 +71,8 @@ export function Richiamo() {
     c.it.startsWith(filtro) || c.en.startsWith(filtro) || !!c.anche?.some(a => a.startsWith(filtro)) || t(c.nome).toLowerCase().startsWith(filtro))
   const aperto = filtro !== null && visti.length > 0
   useEffect(() => { setScelto(0) }, [filtro])
+  // P10 · il richiamo si apre per chiedere: il modello di questo Mac si sveglia adesso
+  useEffect(() => { apiP10.scaldaIlModello() }, [])
 
   /*
    * L'altezza la decide il contenuto, e la finestra la segue.

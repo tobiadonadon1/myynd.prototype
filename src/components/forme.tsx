@@ -208,7 +208,8 @@ export function Bottone({ tipo = 'contorno', piccolo, occupato, etichettaOccupat
 export function Scelte<Id extends string>({ etichetta, mostraEtichetta, opzioni, scelta, scegli, attivazione = 'manuale' }: {
   etichetta: string
   mostraEtichetta?: boolean
-  opzioni: { id: Id; nome: string; disabilitato?: boolean; titolo?: string }[]
+  /** `occupato`: la scelta sta lavorando (P10: aria-busy, come `Bottone`). */
+  opzioni: { id: Id; nome: string; disabilitato?: boolean; occupato?: boolean; titolo?: string }[]
   scelta: Id | null
   scegli: (id: Id) => void
   attivazione?: 'manuale' | 'automatica'
@@ -224,7 +225,7 @@ export function Scelte<Id extends string>({ etichetta, mostraEtichetta, opzioni,
       <div role="radiogroup" aria-label={mostraEtichetta ? undefined : etichetta} aria-labelledby={mostraEtichetta ? idEtichetta : undefined} className="f-scelte">
         {opzioni.map((o, i) => (
           <button key={o.id} ref={el => { bottoni.current[i] = el }} type="button" role="radio" className="f-scelta"
-            aria-checked={o.id === scelta} tabIndex={i === girevole ? 0 : -1} disabled={o.disabilitato} title={o.titolo}
+            aria-checked={o.id === scelta} tabIndex={i === girevole ? 0 : -1} disabled={o.disabilitato} aria-busy={o.occupato || undefined} title={o.titolo}
             onFocus={() => setFuoco(i)}
             onClick={() => { if (o.id !== scelta) scegli(o.id) }}
             onKeyDown={e => {

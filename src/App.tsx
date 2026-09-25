@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { desktop } from './desktop'
 import { Sfondo } from './Sfondo'
@@ -31,6 +31,7 @@ import { useVals, type Vals } from './vals'
 import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
 import { annunciaCollegamento, rilettura, suCollegamento } from './collegamenti'
 import { Accesso } from './Accesso'
+import { inviaAvvio, ospitatoQui, segna } from './tempi'
 
 
 /**
@@ -173,9 +174,11 @@ export default function App() {
   const carica = useCallback(async () => {
     try {
       const a = await api.accesso()
+      segna('accesso'); ospitatoQui(!!a.ospitato)
       setAccesso(a)
       if (a.entrato) {
         const s = await api.stato()
+        segna('stato')
         setStato(s)
         setOnboarding(!s.config.onboarding)
         dilloIlFuso(s.config.fuso)
@@ -297,6 +300,14 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   stato: Stato; apriConnessioni: (fonte?: string) => void; esci: () => void; avviaOnboarding: () => void; email: string
 }) {
   const v = useVals(stato, apriConnessioni, avviaOnboarding, email)
+  // P10 · la prima pagina è disegnata: una volta per caricamento, e i segni partono
+  const disegnata = useRef(false)
+  useLayoutEffect(() => {
+    if (!v.feedCaricato || disegnata.current) return
+    disegnata.current = true
+    segna('casa-disegnata')
+    inviaAvvio()
+  }, [v.feedCaricato])
   // la lista si vede anche da qui: due facce, un cervello. Il filo che tiene
   // vive le deleghe la aggiorna da solo quando l'app cambia qualcosa.
   const lista = useCompiti(v.mostraToast, apriConnessioni)
@@ -651,10 +662,16 @@ function RigaChat({ ch }: { ch: Vals['threads'][number] }) {
   )
 }
 
+/**
+ * L'attesa prima della prima pagina (P10): lo stesso aspetto della pagina
+ * con cui il guscio si apre (`paginaDiAvvio` in desktop/finestra.ts), nei
+ * colori del tema. Un avvio a freddo è un aspetto solo, non tre.
+ */
 function Attesa() {
   return (
-    <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#191715', color: 'rgba(244,239,232,.6)', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", fontSize: 15 }}>
-      <div style={{ animation: 'puls 1.6s ease-in-out infinite' }}>myynd</div>
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, background: 'var(--pagina)', color: 'var(--inchiostro)', padding: 16 }}>
+      <div style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-.02em' }}>Myynd</div>
+      <div style={{ fontSize: 15, opacity: .7, textAlign: 'center' }}>{t('Myynd si sta svegliando.')}</div>
     </div>
   )
 }

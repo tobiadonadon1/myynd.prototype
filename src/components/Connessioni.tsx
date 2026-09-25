@@ -302,13 +302,13 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
               coda={t('Apri Impostazioni, aggiungi Myynd, poi torna qui.')} />
           </div>}
           {scelta.collegato && <div className="connection-detail-actions">
-            {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id || (fonteInLettura === '*' && righe?.some(r => r.id === scelta.id && (r.stato === 'attesa' || r.stato === 'leggo'))) ? t('leggo…') : t('Rileggi')}</button>}
+            {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} aria-busy={!!fonteInLettura || undefined} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id || (fonteInLettura === '*' && righe?.some(r => r.id === scelta.id && (r.stato === 'attesa' || r.stato === 'leggo'))) ? t('leggo…') : t('Rileggi')}</button>}
             {CAMBIABILI.includes(scelta.id) && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}
             <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica() }}>{t('Scollega')}</BottoneSicuro>
           </div>}
           {!scelta.collegato && subito.includes(scelta.id) && <div className="connection-quick">
             <p>{t('la chiave di Claude che è già qui')}</p>
-            <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando}>{collegando ? t('Collego…') : t('Consenti')}</button>
+            <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando} aria-busy={collegando || undefined}>{collegando ? t('Collego…') : t('Consenti')}</button>
           </div>}
           {moduloVisibile && !moduloSopra && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={formOk} collegato={formCollegato} /></div>}
         </div>}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { apiP10 } from '../api'
 import { frasi, t, tradotta } from '../lingua'
 import { Hov } from '../ui'
 import { IconSu } from '../icons'
@@ -221,6 +222,8 @@ function Campo({ v, rispondendo }: { v: Vals; rispondendo: boolean }) {
   }, [v.draftMsg])
   return (
     <textarea ref={el} rows={1} value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey} autoFocus={rispondendo}
+      // P10 · il modello di questo Mac si sveglia mentre si scrive, non dopo l'invio
+      onFocus={() => apiP10.scaldaIlModello()}
       placeholder={rispondendo ? t('Rispondi qui…') : t('Chiedi qualcosa al tuo materiale…')}
       style={{
         /*

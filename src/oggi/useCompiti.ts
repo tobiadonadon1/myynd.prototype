@@ -12,12 +12,13 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, correggiCompito, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest } from '../api'
+import { api, apiP10, correggiCompito, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest } from '../api'
 import { appenaFinite as appenaFiniteFra, siRivede, testoMostrato } from '../lavoro-affidato'
 import { quanteAspettano } from '../blocchi-feed'
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
+import { segna } from '../tempi'
 import { giornoLocale } from './giorni'
 import { secchioVivo } from './secchi'
 import { preparaApertura } from '../navigazione.ts'
@@ -62,7 +63,7 @@ export function useCompiti(
 
   useEffect(() => {
     api.compiti()
-      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco); setGuasto('') })
+      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco); setGuasto(''); segna('compiti') })
       // dire «la lista è vuota» quando in realtà non si è riusciti a leggerla è
       // il modo peggiore di sbagliare: la schermata mentirebbe con sicurezza
       .catch(e => setGuasto(e instanceof Error ? e.message : String(e)))
@@ -427,6 +428,47 @@ export function useCompiti(
     return finto.id
   }, [indietro, delega])
 
+  /**
+   * «Affidalo a Myynd» da una carta, in un passo solo (P10).
+   *
+   * Nello stesso istante del clic la carta se ne va (lo fa chi chiama) e qui
+   * nasce la sua riga, già affidata, nel blocco del suo progetto, con il fuoco.
+   * Il server fa tutto o niente (`/api/compiti/affida`): se non riesce, la
+   * riga se ne va e la carta torna dov'era (`rimetti`).
+   */
+  const affidaDaCarta = useCallback(async (
+    voce: { id: string; doc?: string | null; progetto?: string | null },
+    testo: string, nota: string | null, rimetti: () => void
+  ): Promise<string | null> => {
+    const pulito = testo.trim()
+    if (!pulito) { rimetti(); return null }
+    const ora = new Date().toISOString()
+    const riga: Compito = {
+      id: nuovoId(), testo: pulito, nota, quando: 'oggi', giorno: null,
+      stato: 'delegato', modo: 'tutto', progetto: voce.progetto ?? null,
+      ordine: 'zzzz', origine: 'feed', voce: voce.id, doc: voce.doc ?? null, chiesto: ora,
+      risultato: null, fonti: null, proposta: null, chieste: null, email: null, guaio: null,
+      creato: ora, aggiornato: ora, chiuso: null, esito: null, sparito: null, versione: 1
+    }
+    setCompiti(cs => [...cs, riga])
+    try {
+      const r = await apiP10.affida({ id: riga.id, testo: pulito, voce: voce.id, doc: voce.doc ?? null, nota })
+      setCompiti(r.compiti)
+      mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
+      return riga.id
+    } catch (e) {
+      ripristinate.current.add(riga.id)
+      setCompiti(cs => cs.filter(c => c.id !== riga.id))
+      rimetti()
+      if (e instanceof DaCollegare) {
+        // come `delega`: si dice cosa manca e si apre il pannello in cui si collega
+        mostraToast(t(e.message))
+        apriConnessioni?.(e.fonte)
+      } else mostraToast(t('Non sono riuscito ad affidarlo.'))
+      return null
+    }
+  }, [mostraToast, apriConnessioni])
+
   /** Ci ho ripensato: il compito torna mio. */
   const richiama = useCallback(async (id: string) => {
     const prima = compitiRef.current
@@ -713,7 +755,7 @@ export function useCompiti(
     pronte, chiedono,
     /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
     inAttesa,
-    aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

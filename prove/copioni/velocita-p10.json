@@ -1,0 +1,50 @@
+{
+  "modello": "finto",
+  "risposte": [
+    {
+      "se": "capo di gabinetto",
+      "in": "system",
+      "json": {
+        "priorita": [],
+        "domande": [],
+        "superate": []
+      }
+    },
+    {
+      "se": "MESSAGGIO CORRENTE",
+      "in": "utente",
+      "attesa": 6000,
+      "json": {
+        "voci": [
+          {
+            "tipo": "Da decidere",
+            "titolo": "Confirm the Friday kickoff with Nora",
+            "testo": "The Harbor kickoff moved to Friday at 10:00.",
+            "urgenza": "Friday 10:00",
+            "fonte": "posta",
+            "doc": "posta:INBOX:401",
+            "perche": "Nora waits for your yes on Friday.",
+            "prova": "Can you confirm you can make it?"
+          },
+          {
+            "tipo": "Da decidere",
+            "titolo": "Sign the Harbor Labs pilot order",
+            "testo": "Harbor Labs starts on Monday once you sign.",
+            "urgenza": "by Monday",
+            "fonte": "posta",
+            "doc": "posta:INBOX:402",
+            "perche": "The pilot starts Monday only with your signature.",
+            "prova": "Please sign it so we can start on Monday."
+          }
+        ]
+      }
+    },
+    {
+      "se": "audit call with Priya",
+      "in": "utente",
+      "attesa": 1500,
+      "testo": "The audit call with Priya is tomorrow at 10:00."
+    }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

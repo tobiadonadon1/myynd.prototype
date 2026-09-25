@@ -34,6 +34,7 @@
 // modello di casa *e* non c'è una chiave. Fra spendere il suo tetto e mandargli
 // una bolletta, si spende il tetto.
 
+import * as bandiere from './bandiere-cli.ts'
 import * as provaChiusa from './prova-chiusa.ts'
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -149,6 +150,16 @@ export function uscito(): boolean {
 export function riguarda(): void {
   if (!scelto() || !installato()) return
   void entrato().catch(() => {})
+  // P10 · e cosa sa fare questa versione, di fondo: mai dentro una chat
+  sondaLeBandiere()
+}
+
+/** P10 · guarda `claude --help` una volta per versione, senza aspettare. */
+export function sondaLeBandiere(): void {
+  // solo per chi l'account l'ha scelto: gli altri non lanciano mai `claude`
+  if (!scelto()) return
+  const exe = installato()
+  if (exe) void bandiere.sonda(exe).catch(() => {})
 }
 
 const aiCambi = new Set<() => void>()
@@ -364,7 +375,23 @@ const NON_CONOSCE_LA_PERSISTENZA = /no-session-persistence/i
 /** Per le prove: dimentica quello che ha imparato sulla versione di `claude`. */
 export function dimenticaLaVersione() { senzaPersistenzaNo = false }
 
-function argomenti(system: string, uscita: 'json' | 'stream-json', modello?: string): string[] {
+/*
+ * P10 · le opzioni che accorciano la partenza, solo se il `claude` installato
+ * le elenca (`bandiere-cli.ts`, guardato di fondo): `--tools ''` sempre,
+ * `--effort low` solo per una domanda secca. Finché non si sa, gli argomenti
+ * sono esattamente quelli di sempre. `--no-session-persistence` resta com'era.
+ */
+function nuove(exe: string | undefined, extra?: { sforzo?: 'low' }): string[] {
+  const b = exe ? bandiere.note(exe) : null
+  if (!b) return []
+  return [
+    ...(b.tools ? ['--tools', ''] : []),
+    ...(extra?.sforzo === 'low' && b.effort ? ['--effort', 'low'] : [])
+  ]
+}
+const RIFIUTATA = /unknown option|unrecognized|unknown argument/i
+
+function argomenti(system: string, uscita: 'json' | 'stream-json', modello?: string, extra?: { sforzo?: 'low'; exe?: string; senzaNuove?: boolean }): string[] {
   return [
     '-p',
     // Niente trascrizioni delle chiamate di Myynd sotto ~/.claude/projects:
@@ -382,9 +409,22 @@ function argomenti(system: string, uscita: 'json' | 'stream-json', modello?: str
     '--setting-sources', 'user',
     '--strict-mcp-config',
     '--system-prompt', system,
+    ...(extra?.senzaNuove ? [] : nuove(extra?.exe, extra)),
     // per ultimo: è variadico e si mangerebbe quello che gli viene dopo
     '--disallowed-tools', ...NEGATI
   ]
+}
+
+/**
+ * Una versione che dice di conoscere un'opzione e poi la rifiuta: la si
+ * dimentica per quella versione, e si riprova una volta senza (P10).
+ */
+async function conRitentativo<T>(exe: string, extra: { sforzo?: 'low' } | undefined, lancia: (senzaNuove: boolean) => Promise<T>): Promise<T> {
+  try { return await lancia(false) } catch (e) {
+    if (!nuove(exe, extra).length || !(e instanceof Error) || !RIFIUTATA.test(e.message)) throw e
+    bandiere.rifiutate(exe)
+    return await lancia(true)
+  }
 }
 
 /**
@@ -460,7 +500,7 @@ export async function chiedi(o: {
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
   try {
-    return await lanciaIntero(exe, sistema, domanda, o)
+    return await conRitentativo(exe, undefined, senzaNuove => lanciaIntero(exe, sistema, domanda, o, senzaNuove))
   } catch (e) {
     // una versione vecchia che non conosce l'opzione: si ritenta senza, una volta
     if (senzaPersistenzaNo || !(e instanceof Error) || !NON_CONOSCE_LA_PERSISTENZA.test(e.message)) throw e
@@ -469,9 +509,10 @@ export async function chiedi(o: {
   }
 }
 
-function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa: number; modello?: string; lavoro?: string }): Promise<string> {
+function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa: number; modello?: string; lavoro?: string }, senzaNuove = false): Promise<string> {
   return new Promise<string>((risolvi, rifiuta) => {
-    const p = spawn(exe, argomenti(sistema, 'json', o.modello), { cwd: VUOTA, env: ambiente() })
+    // `chiedi` non chiede mai meno sforzo: solo la chat, per una domanda secca
+    const p = spawn(exe, argomenti(sistema, 'json', o.modello, { exe, senzaNuove }), { cwd: VUOTA, env: ambiente() })
 
     /*
       La domanda entra dallo stdin, non dagli argomenti.
@@ -553,6 +594,8 @@ export async function inStreaming(o: {
   onTesto: (pezzo: string) => void
   /** Il lavoro, per il registro dell'uso: di qui passa la chat. */
   lavoro?: string
+  /** P10 · una domanda secca: meno sforzo, se il `claude` installato lo sa fare. */
+  sforzo?: 'low'
 }): Promise<string> {
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è su questa macchina.')
@@ -562,7 +605,7 @@ export async function inStreaming(o: {
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
   try {
-    return await lanciaInStreaming(exe, domanda, o)
+    return await conRitentativo(exe, { sforzo: o.sforzo }, senzaNuove => lanciaInStreaming(exe, domanda, o, senzaNuove))
   } catch (e) {
     if (senzaPersistenzaNo || !(e instanceof Error) || !NON_CONOSCE_LA_PERSISTENZA.test(e.message)) throw e
     senzaPersistenzaNo = true
@@ -570,9 +613,9 @@ export async function inStreaming(o: {
   }
 }
 
-function lanciaInStreaming(exe: string, domanda: string, o: { system: string; silenzio: number; onTesto: (pezzo: string) => void; lavoro?: string }): Promise<string> {
+function lanciaInStreaming(exe: string, domanda: string, o: { system: string; silenzio: number; onTesto: (pezzo: string) => void; lavoro?: string; sforzo?: 'low' }, senzaNuove = false): Promise<string> {
   return new Promise<string>((risolvi, rifiuta) => {
-    const p = spawn(exe, argomenti(o.system, 'stream-json'), { cwd: VUOTA, env: ambiente() })
+    const p = spawn(exe, argomenti(o.system, 'stream-json', undefined, { exe, sforzo: o.sforzo, senzaNuove }), { cwd: VUOTA, env: ambiente() })
 
     p.stdin.on('error', () => { /* se è morto prima, lo dice `close` */ })
     p.stdin.end(domanda)

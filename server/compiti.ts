@@ -47,6 +47,7 @@ import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modell
 import { stendi, type Stesa } from './stesura.ts'
 import { corpoPerChiRiceve, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
+import type { Lettura } from './lettura-chiesta.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
@@ -61,6 +62,8 @@ export type Evento =
   | { fase: 'feed' }
   /** Un collegamento è cambiato: chi mostra lo stato dei collegamenti lo rilegge. */
   | { fase: 'collegamento' }
+  /** P10 · la lettura chiesta con l'occhio: corre (con il suo passo), finisce, o va storta. */
+  | { fase: 'lettura'; stato: 'corre' | 'fine' | 'guaio'; lettura: Lettura; nuove?: number; errore?: string }
 
 /*
  * Ogni ascoltatore sa di chi vuole sentire.
@@ -81,8 +84,17 @@ export function ascolta(f: (e: Evento) => void, di: string | null = chi.adesso()
   for (const lavoro of passiAttivi.values()) {
     if (lavoro.di === di) { try { f(lavoro.evento) } catch { /* listener owns errors */ } }
   }
+  // P10 · una finestra che si apre (o si riapre) a metà lettura vede subito la riga
+  const lettura = lettureInCorso.get(di ?? '')
+  if (lettura) { try { f(lettura) } catch { /* listener owns errors */ } }
   return () => { ascoltatori.delete(a) }
 }
+
+/** P10 · la lettura chiesta con l'occhio, sul filo: `corre` si ricorda finché non arriva `fine` o `guaio`. */
+export function annunciaLettura(e: Omit<Extract<Evento, { fase: 'lettura' }>, 'fase'>) {
+  annuncia({ fase: 'lettura', ...e })
+}
+const lettureInCorso = new Map<string, Extract<Evento, { fase: 'lettura' }>>()
 
 /**
  * «È cambiato qualcosa, rileggi.»
@@ -173,6 +185,10 @@ function annuncia(e: Evento) {
   const di = chi.adesso()
   if (e.fase === 'lavoro') passiAttivi.set(chiave(e.id, di), { di, evento: e })
   else if ('id' in e) passiAttivi.delete(chiave(e.id, di))
+  if (e.fase === 'lettura') {
+    if (e.stato === 'corre') lettureInCorso.set(di ?? '', e)
+    else lettureInCorso.delete(di ?? '')
+  }
   for (const a of ascoltatori) {
     if (a.di !== di) continue
     // un ascoltatore che esplode non deve fermare gli altri né il lavoro

@@ -19,6 +19,8 @@ import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
 import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
+import { RigaCheLavora } from '../components/RigaCheLavora'
+import { testoPasso } from '../lettura-passo'
 import { PrimaPagina, inVista, usePrimaPagina } from '../prima-pagina'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { rigaFonti } from '../salute-fonti'
@@ -226,11 +228,12 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
   const affida = async () => {
     if (!lista || affidando) return
     setAffidando(true)
-    const id = await lista.affidaNuovo(carta.titolo, { doc: voce.doc, voce: voce.id, nota: offerta || null })
-    setAffidando(false)
-    if (!id) return
+    // P10 · nello stesso istante: la carta se ne va e la sua riga nasce, già al lavoro;
+    // se il server dice di no, tornano tutte e due com'erano
+    const dove = v.voci.findIndex(x => x.id === voce.id)
     v.viaDalFeed(voce.id)
-    v.mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
+    await lista.affidaDaCarta(voce, carta.titolo, offerta || null, () => v.rimettiVoce(voce, Math.max(0, dove)))
+    setAffidando(false)
   }
 
   // con la risposta già mandata dalla posta, «Fatto» è il bottone della riga anche su una priorità
@@ -273,7 +276,7 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
             <>
               <span>{[fonte, ora].filter(Boolean).join(' · ')}</span>
               {voce.doc && (
-                <Hov as="button" type="button" title={dettaglio || t('Portami lì')} disabled={aprendo}
+                <Hov as="button" type="button" title={dettaglio || t('Portami lì')} disabled={aprendo} aria-busy={aprendo || undefined}
                   onClick={fermo(() => { void v.portamiFonte(voce.doc!) })}
                   style={{ ...LINK, cursor: aprendo ? 'wait' : 'pointer' }} hover={{ textDecorationColor: 'currentColor' }}>{aprendo ? t('Un momento…') : t('Portami lì')}</Hov>
               )}
@@ -1238,6 +1241,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   // P4 · la prima pagina di un conto nuovo: finché la prepara, una riga che lavora sotto la riga fissa
   const primaPagina = usePrimaPagina()
   const preparando = inVista(primaPagina)
+  // P10 · l'occhio è premuto dalla pressione alla fine della lettura, anche mentre P4 prepara la prima pagina
+  const leggendo = v.generando || !!v.lettura || preparando
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1268,15 +1273,14 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
               «più piccolo, più umile». Un occhio accanto alle fonti, e basta:
               la lettura ormai parte da sola ogni dieci minuti, questo è per
               chi non vuole aspettarli. Il nome lo dice al passaggio. */}
-          {/* mentre prepara la prima pagina l'occhio ha l'aria di chi lavora, e resta premibile (P4) */}
-          <Hov as="button" type="button" onClick={v.genera} disabled={v.generando}
-            title={v.generando || preparando ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
-            {...(preparando ? { 'aria-pressed': true } : {})}
+          {/* P10 · premuto nello stesso istante, mai spento: un anello di rame mentre legge (anche mentre P4 prepara la prima pagina) */}
+          <Hov as="button" type="button" onClick={v.genera}
+            title={leggendo ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
+            aria-pressed={leggendo} aria-busy={leggendo || undefined}
             style={{
               flex: 'none', marginTop: 6, width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: '50%', border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.7)',
-              color: 'var(--rame)', cursor: v.generando ? 'wait' : 'pointer', padding: 0,
-              opacity: v.generando ? 0.55 : 1, animation: v.generando || preparando ? 'pulse 1.2s ease-in-out infinite' : undefined
+              borderRadius: '50%', border: leggendo ? '1.5px solid var(--rame)' : '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.7)',
+              color: 'var(--rame)', cursor: 'pointer', padding: 0
             }}
             hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>
             <IconOcchio size={15} />
@@ -1286,6 +1290,11 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
 
       <Avviso v={v} />
       <PrimaPagina s={primaPagina} />
+      {/* P10 · la lettura di «Leggi adesso»: una riga che lavora, sotto la riga fissa; mentre P4 prepara la prima pagina il posto è suo */}
+      {!preparando && (leggendo || v.finita) && (
+        <RigaCheLavora titolo={t('Leggo le tue fonti')} passo={testoPasso(v.lettura)}
+          finita={!leggendo && v.finita} onFinita={() => v.setFinita(false)} />
+      )}
 
       {/* Myynd ha scritto: le domande per conoscerti aspettano in chat. Sta in
           cima a tutto, perché rispondergli viene prima del resto. */}
@@ -1554,8 +1563,8 @@ function CartaDomande({ v }: { v: Vals }) {
       {domande.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 21px 14px' }}>
           <div style={{ flex: 1 }} />
-          <button type="button" onClick={() => { void manda() }} disabled={!piene.length || mandando}
-            style={piene.length && !mandando ? MANDA : MANDA_SPENTO}>{t('Manda')}</button>
+          <button type="button" onClick={() => { void manda() }} disabled={!piene.length || mandando} aria-busy={mandando || undefined}
+            style={piene.length && !mandando ? MANDA : MANDA_SPENTO}>{mandando ? t('Un momento…') : t('Manda')}</button>
         </div>
       )}
     </section>

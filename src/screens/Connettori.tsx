@@ -62,7 +62,7 @@ export function Connettori({ v }: { v: Vals }) {
         <h1>{t('Fonti')}</h1>
       </div>
       {/* la riga di avanzamento sta sulle schede, fonte per fonte: il bottone dice solo che sta leggendo */}
-      {v.connCount > 0 && <button className="connections-button" onClick={v.sincronizza} disabled={!!v.sincronizzando}>{v.sincronizzando ? t('Leggo…') : t('Rileggi tutto')}</button>}
+      {v.connCount > 0 && <button className="connections-button" onClick={v.sincronizza} disabled={!!v.sincronizzando} aria-busy={!!v.sincronizzando || undefined}>{v.sincronizzando ? t('Leggo…') : t('Rileggi tutto')}</button>}
     </header>
     {gruppo('Collegate', collegate, 'collegate')}
     {gruppo('Da collegare', daCollegare, 'da-collegare')}

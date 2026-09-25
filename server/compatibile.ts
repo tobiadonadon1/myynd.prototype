@@ -756,10 +756,12 @@ function pezzoOllama(riga: string): PezzoOllama | null {
  * `attesa` è quanto si aspetta *in tutto*: qui non c'è streaming, e una
  * risposta che non è finita in quel tempo non finirà.
  */
-export async function crea(f: Fornitore, p: Richiesta, attesa = 60_000): Promise<Anthropic.Message> {
+export async function crea(f: Fornitore, p: Richiesta, attesa = 60_000, segnale?: AbortSignal): Promise<Anthropic.Message> {
   const controllo = new AbortController()
   let perche: 'attesa' | 'silenzio' | null = null
   const sveglia = setTimeout(() => { perche = 'attesa'; controllo.abort() }, attesa)
+  // P10 · chi chiama può fermarla (lo scaldare, quando arriva la domanda vera)
+  if (segnale) { if (segnale.aborted) controllo.abort(); else segnale.addEventListener('abort', () => controllo.abort(), { once: true }) }
   const nativo = await eOllama(f.url)
   try {
     const r = await spedisci(

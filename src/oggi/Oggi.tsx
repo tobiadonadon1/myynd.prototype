@@ -737,7 +737,7 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
       {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 10 }}>{t(guaio)}</div>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 13 }}>
-        <button type="button" onClick={vai} disabled={faccio} style={{
+        <button type="button" onClick={vai} disabled={faccio} aria-busy={faccio || undefined} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
           background: faccio ? 'rgba(var(--inchiostro-rgb),.1)' : 'var(--gradiente-rame)',
           color: faccio ? 'rgba(var(--inchiostro-rgb),.35)' : 'var(--avorio)',
@@ -1186,7 +1186,7 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
       {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 9 }}>{t(guaio)}</div>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12 }}>
-        <button type="button" onClick={salva} disabled={salvo || !nome.trim() || !cartelle.length} style={{
+        <button type="button" onClick={salva} disabled={salvo || !nome.trim() || !cartelle.length} aria-busy={salvo || undefined} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
           background: !salvo && nome.trim() && cartelle.length ? 'var(--gradiente-rame)' : 'rgba(var(--inchiostro-rgb),.1)',
           color: !salvo && nome.trim() && cartelle.length ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.35)',
@@ -1287,7 +1287,7 @@ function CopiaEmail({ c, l, bozza }: { c: Compito; l: Lista; bozza: BozzaDaCopia
   return <div style={{ marginTop: 12, padding: '13px 15px', borderRadius: 13, background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--inchiostro-rgb),.12)' }}>
     <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{t('Invia questa bozza dal tuo programma di posta dopo averla riletta.')}</p>
     {c.email && <div style={{ fontSize: 12, marginBottom: 10, overflowWrap: 'anywhere', color: 'rgba(var(--inchiostro-rgb),.65)' }}>{[c.email.a, c.email.oggetto].filter(Boolean).join(' · ')}</div>}
-    <button type="button" onClick={vai} disabled={occupato} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontSize: 13, fontFamily: 'inherit', cursor: occupato ? 'wait' : 'pointer' }}>
+    <button type="button" onClick={vai} disabled={occupato} aria-busy={occupato || undefined} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontSize: 13, fontFamily: 'inherit', cursor: occupato ? 'wait' : 'pointer' }}>
       {occupato ? t('Un momento…') : bozza.apri ? t('Copia la bozza e apri l’email') : t('Copia la bozza')}
     </button>
     {esito && <div role="status" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 9, overflowWrap: 'anywhere' }}>{esito}</div>}
@@ -1362,7 +1362,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
   if (!aperto) {
     return (
       <div style={{ marginTop: 10 }}>
-        <Hov as="button" type="button" onClick={pronta ? () => { setM(pronta); apri() } : prepara} disabled={preparo}
+        <Hov as="button" type="button" onClick={pronta ? () => { setM(pronta); apri() } : prepara} disabled={preparo} aria-busy={preparo || undefined}
           style={lieve}
           hover={{ color: 'var(--rame)' }}>
           {preparo ? t('Preparo l’email…') : t('Mandala per email…')}

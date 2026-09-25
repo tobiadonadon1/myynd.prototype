@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, clo
 import { cartella } from './config.ts'
 import * as chi from './chi.ts'
 import { OSPITATO } from './ospitato.ts'
+import * as tempi from './tempi.ts'
 import { etichettato } from './etichetta-uso.ts'
 import { radici, radice, termini } from './lingua.ts'
 import { dovePortare } from './scrivania.ts'
@@ -1988,12 +1989,29 @@ export function segnaLetti(righe: { id: string; letto: boolean }[]): number {
  */
 export async function salvaDocumentiAPezzi(docs: Documento[], pezzo = 200): Promise<EsitoScrittura> {
   const tot: EsitoScrittura = { nuovi: 0, cambiati: 0, invariati: 0 }
-  for (let i = 0; i < docs.length; i += pezzo) {
-    const e = salvaDocumenti(docs.slice(i, i + pezzo))
+  // P10 · un pezzo finisce anche a un milione di caratteri: duecento file del
+  // Mac da ventimila caratteri erano quattro secondi di ciclo fermo in un colpo
+  for (const p of pezziDi(docs, pezzo)) {
+    const e = salvaDocumenti(p.docs)
     tot.nuovi += e.nuovi; tot.cambiati += e.cambiati; tot.invariati += e.invariati
-    if (i + pezzo < docs.length) await new Promise(r => setImmediate(r))
+    if (!p.ultimo) await tempi.cedi()
   }
   return tot
+}
+
+/** I pezzi di una scrittura: al massimo `pezzo` documenti o un milione di caratteri di corpo, mai vuoti. */
+export function pezziDi<T extends { corpo?: string | null }>(docs: T[], pezzo = 200, caratteri = 1_000_000): { docs: T[]; ultimo: boolean }[] {
+  const fuori: { docs: T[]; ultimo: boolean }[] = []
+  let cur: T[] = []
+  let somma = 0
+  for (const d of docs) {
+    const n = d.corpo?.length ?? 0
+    if (cur.length && (cur.length >= pezzo || somma + n > caratteri)) { fuori.push({ docs: cur, ultimo: false }); cur = []; somma = 0 }
+    cur.push(d); somma += n
+  }
+  if (cur.length) fuori.push({ docs: cur, ultimo: false })
+  if (fuori.length) fuori[fuori.length - 1].ultimo = true
+  return fuori
 }
 
 export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
@@ -5365,6 +5383,32 @@ export function togliEsitiDellaFonte(fonte: string) {
 }
 
 // — P6: fine —
+
+// — P10: inizio —
+
+/** Le carte aperte nate da `dal` in poi: il conto della fine di una lettura. */
+export function feedNateDal(dal: string): number {
+  return (db.prepare("SELECT COUNT(*) AS n FROM feed WHERE quando >= ? AND stato = 'aperto'").get(dal) as { n: number }).n
+}
+
+/** Per le carte nate da `dal` con un documento: quanti ms dopo l'arrivo del documento. */
+export function ritardiCarte(dal: string): number[] {
+  const r = db.prepare(`
+    SELECT f.quando AS carta, d.indicizzato AS arrivo FROM feed f JOIN documenti d ON d.id = f.doc
+    WHERE f.quando >= ? AND f.doc IS NOT NULL
+  `).all(dal) as { carta: string; arrivo: string }[]
+  return r.map(x => Date.parse(x.carta) - Date.parse(x.arrivo)).filter(n => Number.isFinite(n) && n >= 0)
+}
+
+/** Per i lavori affidati da `dal` e consegnati: quanti ms fra affidato e consegnato. */
+export function ritardiLavori(dal: string): number[] {
+  const r = db.prepare(`
+    SELECT affidato, consegnato FROM misure_compiti WHERE affidato >= ? AND consegnato IS NOT NULL
+  `).all(dal) as { affidato: string; consegnato: string }[]
+  return r.map(x => Date.parse(x.consegnato) - Date.parse(x.affidato)).filter(n => Number.isFinite(n) && n >= 0)
+}
+
+// — P10: fine —
 
 // — P4: inizio —
 //

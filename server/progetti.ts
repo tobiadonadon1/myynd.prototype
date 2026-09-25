@@ -19,7 +19,7 @@
 // quelli stanno già nella memoria, sotto `progetto:<nome>`, ed è lì che
 // restano.
 
-import { recordProjectField, recordTaskOutcome, projectMemoryContext, riassegnaMemoriaProgetto, dimenticaProgetto } from './project-memory.ts'
+import { conUnaLettura, recordProjectField, recordTaskOutcome, projectMemoryContext, riassegnaMemoriaProgetto, dimenticaProgetto } from './project-memory.ts'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -603,6 +603,11 @@ export function progresso(id: string): Progresso {
  * vuol dire più niente, e ogni riga è prompt pagato tre volte al giorno.
  */
 export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati = false): string {
+  // P10 · il file delle evidenze si legge una volta per chiamata, non una per attività
+  return conUnaLettura(() => perIlModelloDentro(discorso, tetto, soloNominati))
+}
+
+function perIlModelloDentro(discorso: string, tetto: number, soloNominati: boolean): string {
   const tutti = perContesto()
   const nominati = tutti.filter(p => nominaProgetto(discorso, p))
   const rilevanza = (p: Progetto) => nominaProgetto(discorso, p) ? 2 : Number(tocca(p, discorso))

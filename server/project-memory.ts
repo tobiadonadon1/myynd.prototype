@@ -12,8 +12,22 @@ export type ProjectMemory = {
  supersededBy?:string
 }
 const file=()=>join(cartella(),'project-evidence.json')
-function read():ProjectMemory[]{try{const x=JSON.parse(readFileSync(file(),'utf8'));return Array.isArray(x)?x:[]}catch{return []}}
-function save(rows:ProjectMemory[]){mkdirSync(cartella(),{recursive:true});writeFileSync(file()+'.tmp',JSON.stringify(rows),{mode:0o600});renameSync(file()+'.tmp',file())}
+/*
+ * P10 · una lettura sola del file per chiamata: `perIlModello` lo leggeva una
+ * volta per ogni attività di ogni progetto, e poi ancora per l'evidenza. Dentro
+ * `conUnaLettura` si legge una volta e si scrive solo se qualcosa cambia.
+ * È sincrono, quindi nessun'altra richiesta ci passa in mezzo.
+ */
+let unaLettura:{f:string;rows:ProjectMemory[]}|null=null
+function dalDisco():ProjectMemory[]{try{const x=JSON.parse(readFileSync(file(),'utf8'));return Array.isArray(x)?x:[]}catch{return []}}
+function read():ProjectMemory[]{const f=file();return unaLettura&&unaLettura.f===f?unaLettura.rows:dalDisco()}
+function save(rows:ProjectMemory[]){mkdirSync(cartella(),{recursive:true});writeFileSync(file()+'.tmp',JSON.stringify(rows),{mode:0o600});renameSync(file()+'.tmp',file());if(unaLettura&&unaLettura.f===file())unaLettura.rows=rows}
+/** Tutto quello che `fai` legge da questo file, letto una volta sola. */
+export function conUnaLettura<T>(fai:()=>T):T{
+ if(unaLettura)return fai()
+ unaLettura={f:file(),rows:dalDisco()}
+ try{return fai()}finally{unaLettura=null}
+}
 function project(id:string){if(!db.prepare('SELECT id FROM progetti WHERE id = ?').get(id))throw new Error('Project not found')}
 const fingerprint=(s:string)=>createHash('sha256').update(s).digest('hex')
 function record(input:Omit<ProjectMemory,'id'|'recordedAt'|'supersededBy'>):ProjectMemory {

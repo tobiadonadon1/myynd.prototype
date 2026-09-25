@@ -6,7 +6,7 @@ import { coloreProgetto } from './colori-progetto'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
-import { api, apiP2, apiP6, memoriaP5, type Connettore, type Stato } from './api'
+import { api, apiP2, apiP6, memoriaP5, type Connettore, type EventoLettura, type Lettura, type Stato } from './api'
 import { chiediSezione } from './sezioni.ts'
 import type { RagioneNonUtile } from './feed-carta'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
@@ -23,6 +23,7 @@ import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
 import { avvisiAccesi, desktop } from './desktop.ts'
 import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
+import { segna, tempiChat } from './tempi.ts'
 
 /**
  * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
@@ -559,11 +560,29 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [evidenziaProgetti, setEvidenziaProgetti] = useState(0)
   const [feedCaricato, setFeedCaricato] = useState(false)
 
+  /*
+   * P10 · «Leggi adesso» di fondo. `lettura` è la verità del server (dal filo
+   * o da /api/feed), `generando` è l'occhio appena premuto, prima della
+   * risposta; `finita` è il fuoco che si posa. `mia` è la lettura che questa
+   * finestra ha chiesto (solo lei dice la frase alla fine), `conToast` falso
+   * quando l'ha chiesta il fuoco (che ha già la sua frase).
+   */
+  const [letturaOcchio, setLettura] = useState<Lettura | null>(null)
+  const [finita, setFinita] = useState(false)
+  const mia = useRef<string | null>(null)
+  const conToast = useRef(true)
+  const premuto = useRef(false)
+  const finite = useRef(new Set<string>())
+  const inSospeso = useRef<EventoLettura | null>(null)
+  const iniziativeOra = useRef<ProjectInitiative[]>([])
+
   const caricaFeed = useCallback(async () => {
     let f: Awaited<ReturnType<typeof api.feed>>
+    const miaAllInvio = mia.current
     try {
       f = await api.feed()
       setGuastoFeed(null)
+      segna('feed')
     } catch (e) {
       setGuastoFeed(e instanceof Error ? e.message : String(e))
       throw e
@@ -572,14 +591,27 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     }
     setAperti(f.aperti as unknown as VoceFeed[])
     setIniziative(f.iniziative ?? [])
+    iniziativeOra.current = f.iniziative ?? []
     if (f.fonti) setStato(s => ({ ...s, letturaIncompleta: f.fonti }))
     setFatte(f.fatte as unknown as VoceFeed[])
     // solo il valore vero: la bozza del campo NON si tocca da qui. Prima ogni
     // ricaricamento del feed — una lettura, un cambio lingua, qualunque cosa —
     // ripassava di qui e sovrascriveva quello che stavi scrivendo con il valore
     // vecchio del server. Era il fuoco che «tornava indietro da solo».
-    api.fuoco().then(r => setFuoco(r.fuoco)).catch(() => {})
-    api.domanda().then(r => setDomanda(r.domanda)).catch(() => {})
+    // P10 · arrivano con il feed: niente altri due giri prima di disegnare
+    if ('fuoco' in f) setFuoco(f.fuoco ?? '')
+    else api.fuoco().then(r => setFuoco(r.fuoco)).catch(() => {})
+    if ('domanda' in f) setDomanda(f.domanda ?? null)
+    else api.domanda().then(r => setDomanda(r.domanda)).catch(() => {})
+    // la lettura che corre: una finestra aperta (o ricaricata) a metà la vede subito
+    const l = f.lettura ?? null
+    if (l && !finite.current.has(l.id)) setLettura(l)
+    else if (!l && miaAllInvio && mia.current === miaAllInvio) {
+      // finita senza che il filo lo dicesse (era giù): si chiude qui, senza frase
+      finite.current.add(miaAllInvio)
+      mia.current = null; premuto.current = false
+      setLettura(null); setGenerando(false)
+    }
   }, [])
 
   /**
@@ -812,6 +844,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     filoChat.current?.abort()
     const filo = new AbortController()
     filoChat.current = filo
+    // P10 · quanto ci mette la prima parola
+    const cronometro = tempiChat()
     try {
       // La risposta cresce sotto gli occhi invece di comparire tutta insieme:
       // un messaggio finto che si riempie a ogni frammento, sostituito da
@@ -821,6 +855,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       setPassoChat(null)
       const r = await api.chiedi(id, testo, delta => {
         if (gen.current !== mio) return
+        cronometro.primaParola()
         cresciuta += delta
         setPensando(false)
         setPassoChat(null)
@@ -837,6 +872,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         setMessaggi(m => m.filter(x => x.id !== idVivo))
       }, filo.signal, compitoDiscussione(id), passo => { if (gen.current === mio) setPassoChat(passo) })
       if (gen.current === mio) setMessaggi(r.messaggi)
+      cronometro.fine()
     } catch (e) {
       /*
        * «Annulla» non è un guasto.
@@ -883,36 +919,78 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     void Promise.all([ricaricaStato(), caricaMente(mappaInVista), caricaFeed()]).catch(() => {})
   }, [letturaStato.finite])
 
-  const genera = async () => {
+  /**
+   * «Leggi adesso» (P10): l'occhio si preme nello stesso istante, la risposta
+   * arriva subito con la lettura che corre di fondo, e la riga che lavora la
+   * segue sul filo dei compiti. Premuto di nuovo non fa niente. La frase
+   * arriva solo alla fine, e solo qui, dove è stato premuto.
+   */
+  const genera = async (conFrase = true) => {
+    if (premuto.current || letturaOcchio) return
+    premuto.current = true
+    conToast.current = conFrase
     setGenerando(true)
+    segna('occhio-premuto')
     try {
       const r = await api.generaFeed()
       setGuastoLettura(null)
       // la riga fissa delle fonti non lette viene dallo stato: si rilegge, così
       // una fonte che è tornata a posto sparisce da lì nello stesso momento
-      setStato(s => ({ ...s, letturaIncompleta: r.fonti ?? [] }))
-      await caricaFeed()
-      // «dice che c'è un passo da chiarire, ma non mi ci porta»: la frase dice
-      // dove, e la pagina porta le carte sotto gli occhi e le accende un attimo
-      // «213 più vecchi della finestra» è una regola raccontata come scusa, e
-      // a chi lavora su otto progetti suona ridicola: quando il quadro sta per
-      // essere guardato, si dice quello, e basta. I numeri restano solo per
-      // chi non ha un modello che possa dire altro.
-      // stava già leggendo: non è un guasto e non è un «niente», è la stessa
-      // lettura che avrebbe chiesto lui, cominciata un momento prima
-      mostraToast(r.gia ? t('Sto già leggendo le tue fonti: quello che trovo compare qui da sé.')
-        : r.generate ? frasi.coseNuove(r.generate)
-        : r.cerco ? t('Dalle fonti non è arrivato niente di nuovo. Sto guardando i tuoi progetti, le cartelle di lavoro e la posta: quello che trovo compare qui da sé.')
-        : (r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
-          + (r.iniziative?.length ? ' ' + t('I tuoi progetti aspettano un passo, qui sotto.') : ''))
-      if (!r.generate && r.iniziative?.length) setEvidenziaProgetti(Date.now())
+      if (r.fonti) setStato(s => ({ ...s, letturaIncompleta: r.fonti ?? [] }))
+      if (r.lettura) {
+        mia.current = r.lettura.id
+        const tardi = inSospeso.current
+        inSospeso.current = null
+        // la fine è arrivata sul filo prima della risposta: vale adesso
+        if (tardi && tardi.lettura.id === r.lettura.id) { finisce(tardi); return }
+        if (!finite.current.has(r.lettura.id)) setLettura(r.lettura)
+      } else {
+        // la prima pagina è in preparazione (P4): la sua riga è la risposta
+        premuto.current = false
+        setGenerando(false)
+        if (r.gia) caricaFeed().catch(() => {})
+      }
     } catch (e) {
+      premuto.current = false
+      setGenerando(false)
       const message = e instanceof Error ? t(e.message) : t('La lettura non è riuscita.')
       setGuastoLettura(message)
       mostraToast(message)
     }
-    setGenerando(false)
   }
+
+  /** La lettura è finita (o andata storta): la riga se ne va, e dove è stata premuta si dice com'è andata. */
+  const finisce = (e: EventoLettura) => {
+    const sua = e.lettura.id === mia.current
+    finite.current.add(e.lettura.id)
+    setLettura(l => (l && l.id !== e.lettura.id ? l : null))
+    if (e.stato === 'fine') {
+      setFinita(true)
+      const frase = sua && conToast.current
+      void caricaFeed().catch(() => {}).then(() => {
+        if (!frase) return
+        mostraToast(e.nuove ? frasi.coseNuove(e.nuove) : t('Letto tutto quello che è cambiato.'))
+        // niente di nuovo ma i progetti aspettano un passo: la pagina li porta sotto gli occhi
+        if (!e.nuove && iniziativeOra.current.length) setEvidenziaProgetti(Date.now())
+      })
+    } else if (sua) {
+      const message = t(e.errore || 'La lettura non è riuscita.')
+      setGuastoLettura(message)
+      mostraToast(message)
+    }
+    if (sua) { mia.current = null; premuto.current = false; setGenerando(false) }
+  }
+  const finisceRef = useRef(finisce)
+  finisceRef.current = finisce
+
+  // la lettura sul filo: il passo che cambia, la fine, il guaio
+  useEffect(() => api.flussoCompiti(e => {
+    if (e.fase !== 'lettura') return
+    if (e.stato === 'corre') { if (!finite.current.has(e.lettura.id)) setLettura(e.lettura); return }
+    // la risposta alla pressione non è ancora arrivata: la fine si tiene da parte
+    if (premuto.current && !mia.current) { inSospeso.current = e; setLettura(null); return }
+    finisceRef.current(e)
+  }), [])
 
   // — valori derivati —
 
@@ -1079,8 +1157,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       mostraToast(testo.trim() ? t('Da adesso guardo prima lì.') : t('Fuoco tolto.'))
       // il fuoco nuovo non può restare una promessa: il feed si rigenera
       // subito, così cambiare direzione cambia la pagina che hai davanti
-      setGenerando(true)
-      api.generaFeed().then(() => caricaFeed()).catch(() => {}).finally(() => setGenerando(false))
+      // la stessa strada dell'occhio, senza la sua frase: questa ha già la sua
+      void genera(false)
     } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
   }
 
@@ -1334,7 +1412,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       catch { mostraToast(t('Non sono riuscito a salvare la preferenza.')) }
     },
     haFatte: fatte.length > 0,
-    generando, genera,
+    generando, genera: () => { void genera() },
+    /** P10 · la lettura che corre (dal server), e il fuoco che si posa quando finisce. */
+    lettura: letturaOcchio, finita, setFinita,
+    rimettiVoce,
     /** La carta scura: quella in cui si apre una riga della lista per lavorarci. */
     cartaScura: {
       borderRadius: 20,

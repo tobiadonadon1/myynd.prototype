@@ -157,6 +157,8 @@ test('quello che arriva dal server ha una traduzione', () => {
 
 /** Quello che non arriva mai sotto gli occhi di nessuno, e perché. */
 const INTERNI = new Set([
+  // P10 · `npm run velocita` spegne la rete apposta: lo legge chi lancia il comando nel terminale, mai l'app
+  'velocita: niente rete',
   // tornano al modello dentro il giro degli strumenti, non a una persona
   'manca la query',
   'manca il testo',

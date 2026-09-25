@@ -28,6 +28,10 @@ import * as chatgpt from './chatgpt.ts'
 import * as memoria from './memoria.ts'
 import * as conoscenza from './conoscenza.ts'
 import * as timone from './timone.ts'
+import * as tempi from './tempi.ts'
+import { rotteTempi } from './tempi-rotte.ts'
+import * as letturaChiesta from './lettura-chiesta.ts'
+import * as scalda from './scalda.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
@@ -520,6 +524,8 @@ app.post('/api/auth/reimposta', async (req, res) => {
 
 // da qui in giù serve essere dentro
 app.use(auth.guardia)
+// P10 · quanto si aspetta: metodo e forma della rotta, mai l'indirizzo vero
+app.use(tempi.misuraRichieste)
 
 /*
  * Un collegamento cambiato si dice anche alle altre finestre.
@@ -2786,7 +2792,11 @@ const OGNI = 10 * 60 * 1000
  * token di oggi sta dentro `modello.ts` e ferma `generaFeed` come tutto il
  * resto: qui lo si lascia salire, e chi chiama lo scrive nel registro.
  */
-async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
+function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
+  return tempi.misuraLavoro('arrivi', () => dopoLArrivoDentro(nuovi))
+}
+
+async function dopoLArrivoDentro(nuovi: store.Documento[]): Promise<number> {
   if (!nuovi.length || !await mod.disponibilePer('lettura')) return nuovi.length
   /*
    * La prima pagina è ancora da fare (P4): la farà lei, sulla posta dei trenta
@@ -2798,10 +2808,14 @@ async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuan
    * giro che ha portato solo file vecchi del Mac, o impegni, non paga una
    * lettura per sentirsi dire «niente». Le domande e «quando arriva» sotto
    * restano come sono.
+   *
+   * P10 · e mentre «Leggi adesso» sceglie dall'indice intero, una seconda
+   * lettura del modello qui non serve.
    */
-  const voci = primaPagina.dovuta() ? [] : await feedDegliArrivi(nuovi)
+  const voci = letturaChiesta.staScegliendo() || primaPagina.dovuta() ? [] : await feedDegliArrivi(nuovi)
   const nuove = voci.length ? store.salvaFeed(voci) : 0
   if (nuove) {
+    tempi.carteNate(nuove)
     console.log(`myynd · ${nuove} cose nuove messe da parte senza che nessuno le chiedesse`)
     // e chi ha la pagina aperta lo sa adesso, non alla prossima ricarica
     compiti.annunciaFeed()
@@ -2815,7 +2829,12 @@ async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuan
   return nuovi.length
 }
 
-async function rileggiDaSola() {
+/** P10 · il giro dei dieci minuti, misurato come un lavoro solo. */
+function rileggiDaSola(): Promise<void> {
+  return tempi.misuraLavoro('rilettura', rileggiDaSolaDentro)
+}
+
+async function rileggiDaSolaDentro() {
   if (sincronizzazioneInCorso()) return
   const c = cfg.leggi()
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
@@ -2875,7 +2894,7 @@ async function rileggiDaSola() {
     // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
     // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
-    if (!trattenuta && await priorita.forse()) compiti.annunciaFeed()
+    if (!trattenuta && await tempi.misuraLavoro('priorita', () => priorita.forse())) compiti.annunciaFeed()
     // niente tavolo qui: le righe inventate per riempire un progetto vuoto
     // erano «messed-up tasks that do not mean anything». Vedi `tavolo.ts`.
     // e le automazioni che non si è ancora scritto. Il cancello — un giro al
@@ -2997,7 +3016,13 @@ app.get('/api/feed', (_req, res) => {
   const ore = cfg.leggi().oreFatte ?? 48
   // e le fonti che l'ultima lettura non ha letto: la riga fissa della prima
   // pagina si aggiorna con il feed, cioè anche dopo una rilettura di fondo
-  res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(chi.adesso() ?? '') })
+  // P10 · e, nella stessa risposta, la lettura che corre, il fuoco e la domanda:
+  // la prima pagina non fa più tre giri per disegnarsi
+  const conto = chi.adesso() ?? ''
+  res.json({
+    aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto),
+    lettura: letturaChiesta.inCorso(conto), fuoco: timone.fuoco(), domanda: riferimento.aggiornata(store.domandaAperta())
+  })
 })
 
 /**
@@ -3053,71 +3078,99 @@ app.post('/api/feed/genera', async (_req, res) => {
   }
   try {
     /*
-     * Prima si rileggevano tutte le fonti, e poi si generava: «quando premo
-     * Leggi adesso ci mette un'eternità». Adesso si genera subito da quello
-     * che c'è in indice — la risposta arriva in pochi secondi — e le fonti si
-     * rileggono dopo, di fondo, con lo stesso giro delle sei ore: quello che
-     * arriva passa da `dopoLArrivo` e compare da solo, e la riga delle fonti
-     * non lette si aggiorna con il feed.
+     * «Quando premo Leggi adesso ci mette un'eternità» (P10).
+     *
+     * La risposta arriva subito, e la lettura corre di fondo come un lavoro
+     * solo per conto (`lettura-chiesta.ts`): la pagina la segue sul filo dei
+     * compiti, con una riga che lavora e i suoi passi, e alla fine una frase.
+     *
+     * Premere di nuovo, da un'altra finestra o dopo un ricaricamento, non è un
+     * errore e non fa partire una seconda lettura: si riceve quella che corre,
+     * con lo stesso id. Era un 409 addosso a chi aveva appena premuto («There
+     * is an error that comes up every time that I click that eye… it added two
+     * things to my feed while giving me an error»), poi un «sto già leggendo»;
+     * adesso è la stessa riga, già lì. E se una lettura delle fonti tiene già
+     * il lucchetto, la si segue invece di farne partire un'altra.
      */
     const conto = chi.adesso() ?? ''
+    const gia = letturaChiesta.inCorso(conto)
+    const giaCosi = (lettura: letturaChiesta.Lettura | null) => res.json({
+      ok: true, gia: true, generate: 0, lettura,
+      feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto)
+    })
+    if (gia) return giaCosi(gia)
     /*
-     * Premere l'occhio mentre sta già leggendo non è un errore.
-     *
-     * Era un 409 — «A source read is already running. Wait for it to finish
-     * and try again.» — e arrivava addosso a chi aveva appena premuto: una
-     * striscia rossa in alto a destra che se ne andava in cinque secondi, e
-     * subito dopo due carte nuove nel feed. «There is an error that comes up
-     * every time that I click that eye… it added two things to my feed while
-     * giving me an error.» Erano la stessa cosa: la rilettura di fondo che
-     * parte da *questo* bottone tiene il lucchetto per una mezza minuto, e
-     * in quel mezzo minuto ogni altra pressione era un errore. Poi la
-     * rilettura finiva e metteva le sue carte.
-     *
-     * Adesso si risponde con quello che c'è — il feed di adesso, le fonti —
-     * e si dice che sta già leggendo. Niente modello e nessuna seconda
-     * rilettura: quella in corso è la stessa che avrebbe chiesto lui.
+     * P4 sta preparando la prima pagina fuori dal lucchetto delle fonti
+     * (`primaPagina.prepara()`): la sua riga occupa già il posto, e una
+     * seconda lettura qui chiamerebbe il modello due volte. Si risponde
+     * «già», senza lettura: la pagina lo legge come «la risposta è la riga
+     * di P4».
      */
-    if (sincronizzazioniInCorso.has(conto)) {
-      return res.json({
-        ok: true, generate: 0, gia: true,
-        feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto)
-      })
-    }
-    const voci = await claude.generaFeed()
-    // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
-    // è quello che impedisce a una rilettura di duplicare il feed. Quello che
-    // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
-    // «tre cose nuove» quando erano già tutte lì è un'altra bugia.
-    const nuove = store.salvaFeed(voci)
-    // niente di nuovo: si dice perché, in numeri, invece di un «niente» secco
-    // e quello che la lettura non ha letto, perché la pagina lo dica accanto
-    // a quello che ha trovato invece di fermarsi lì
-    // niente di nuovo dalle fonti: si guarda il quadro intero, subito dopo
-    // aver risposto, e la pagina lo sa («guardo tutto il resto») — così il
-    // «niente» non è l'ultima parola quando c'è un modello per dirne un'altra
-    const cerco = !nuove && priorita.pronta(true)
-    res.json({ ok: true, generate: nuove, feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto), ...(nuove ? {} : { vuoto: percheVuoto(), cerco }) })
-    // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
-    compiti.annunciaFeed()
-
-    // Dopo aver risposto, non prima: capire se c'è qualcosa da chiedere non deve
-    // mai far aspettare una lettura. Quasi sempre non conclude niente, ed è giusto.
-    domande.forseChiedi().catch(() => {})
-    // e la rilettura delle fonti, dopo e di fondo; alla fine si avvisa la
-    // pagina, così la riga delle fonti dice quello che questa lettura ha visto
-    const utente = chi.adesso()
-    // prima le fonti, poi il quadro: le priorità devono vedere quello che
-    // la rilettura ha appena portato — le cartelle di lavoro, la posta di
-    // oggi — non il materiale di ieri. La pagina lo sa comunque subito.
-    const rileggi = async () => {
-      await rileggiDaSola(); compiti.annunciaFeed()
-      if (cerco && await priorita.forse(true)) compiti.annunciaFeed()
-    }
-    void (utente ? chi.dentro(utente, rileggi) : rileggi())
-      .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))
+    if (primaPagina.statoPagina(conto) === 'lavoro') return giaCosi(null)
+    const unita = sincronizzazioniInCorso.has(conto)
+    const { lettura } = letturaChiesta.avvia(conto, unita ? seguiLaLettura : catenaDellaLettura, { unita })
+    if (unita) return giaCosi(lettura)
+    res.json({ ok: true, avviata: true, generate: 0, lettura })
   } catch (e) { errore(res, e) }
 })
+
+/**
+ * La catena di «Leggi adesso», di fondo (P10): il modello sceglie
+ * dall'indice, le fonti si rileggono (sempre da `rileggiDaSola`, cioè da
+ * `leggiTutto`), e se non era arrivato niente il quadro dei progetti.
+ * Prima le fonti, poi il quadro: le priorità devono vedere quello che la
+ * rilettura ha appena portato, non il materiale di ieri.
+ */
+async function catenaDellaLettura(c: letturaChiesta.Controllo): Promise<void> {
+  const voci = await c.scegli(() => claude.generaFeed([], (p, n) => c.passo(p, n)))
+  // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
+  // è quello che impedisce a una rilettura di duplicare il feed
+  const nuove = store.salvaFeed(voci)
+  if (nuove) { compiti.annunciaFeed(); tempi.carteNate(nuove) }
+  // niente di nuovo dalle fonti: dopo la rilettura si guarda il quadro intero
+  const cerco = !nuove && priorita.pronta(true)
+  // capire se c'è qualcosa da chiedere non deve mai far aspettare una lettura
+  domande.forseChiedi().catch(() => {})
+  c.passo('fonti')
+  if (sincronizzazioneInCorso()) await finoAlLucchettoLibero()
+  else await rileggiDaSola()
+  compiti.annunciaFeed()
+  if (cerco) {
+    c.passo('progetti')
+    if (await priorita.forse(true)) compiti.annunciaFeed()
+  }
+}
+
+/** Una lettura delle fonti tiene già il lucchetto: la si segue fino in fondo, senza modello. */
+async function seguiLaLettura(c: letturaChiesta.Controllo): Promise<void> {
+  c.passo('fonti')
+  await finoAlLucchettoLibero()
+  compiti.annunciaFeed()
+}
+
+/**
+ * Aspetta che la lettura delle fonti di questo conto finisca, al massimo
+ * dieci minuti. Se la lettura ha il suo registro (`lettura-viva.ts`, P4) si
+ * ascolta quello fino a `fine` o `errore`; l'occhiata al secondo sul
+ * lucchetto resta sotto, per le letture senza registro e per l'ultimo tratto.
+ */
+async function finoAlLucchettoLibero(): Promise<void> {
+  const fino = Date.now() + 10 * 60_000
+  const v = viva.di(chi.adesso() ?? '')
+  if (v) {
+    await new Promise<void>(fatto => {
+      let via = () => {}
+      const basta = () => { clearTimeout(tempo); via(); fatto() }
+      const tempo = setTimeout(basta, Math.max(0, fino - Date.now()))
+      via = v.ascolta(e => {
+        const fase = String((e as { fase?: unknown } | null)?.fase ?? '')
+        if (fase === 'fine' || fase === 'errore') basta()
+      })
+      if (v.finita()) basta()
+    })
+  }
+  while (sincronizzazioneInCorso() && Date.now() < fino) await new Promise(r => setTimeout(r, 1000))
+}
 
 // — quello che chiede lui —
 
@@ -3671,10 +3724,15 @@ app.post('/api/compiti/:id/delega', (req, res) => {
     return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
   }
   const modo = MODI.includes(String(req.body?.modo)) ? String(req.body.modo) : 'bozza'
-  compiti.affida(c.id, modo)
+  affidaRiga(c.id, modo)
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
+
+/** Quello che succede quando una riga passa a Myynd, dopo i controlli: lo stesso per `/delega` e per `/affida` (P10). */
+function affidaRiga(id: string, modo: string) {
+  compiti.affida(id, modo)
+}
 
 /**
  * Chiude un compito con le tue parole.
@@ -4770,6 +4828,9 @@ app.post('/api/chat/:id/progetto', (req, res) => {
  * partita con 200, quindi un 500 a metà non esiste più come opzione.
  */
 app.post('/api/chat/:id', async (req, res) => {
+  // P10 · la domanda vera ferma lo scaldare del modello di casa, se c'è
+  scalda.ferma()
+  const tappe = tempi.tappeChat()
   const chat = req.params.id
   const domanda: string = req.body?.testo ?? ''
   if (!domanda.trim()) return res.status(400).json({ errore: 'Scrivi qualcosa.' })
@@ -4855,7 +4916,7 @@ app.post('/api/chat/:id', async (req, res) => {
       // Claude Code è caduto dopo aver già scritto mezza risposta, e il motore
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
       // invece di vedersela accodare a quella intera.
-    }, controllo.signal, () => invia({ fase: 'ricomincio' }))
+    }, controllo.signal, () => invia({ fase: 'ricomincio' }), undefined, tappe)
     // il testo è già pulito da `ancora` (segni fuori elenco, lineette fuori dal codice); `verifica` è il verbale, che si registra e basta
     store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: senzaTrattiniFuoriCodice(r.testo), fonti: r.fonti, verifica: r.verifica })
     console.log(risposteVive.rigaRisposta(r.verifica))
@@ -5322,6 +5383,71 @@ app.post('/api/resoconto/visto', (req, res) => {
 // — P9: rotte, fine —
 
 // — P10: rotte, inizio —
+/*
+ * Quanto si aspetta (P10): i numeri di questo processo e di questo conto.
+ * Mai su un server: dicono quando qualcuno lavora, e non servono a nessuno.
+ */
+const QUATTORDICI_GIORNI = 14 * 24 * 3_600_000
+rotteTempi(app, {
+  ospitato: () => ospitato.OSPITATO,
+  bordo: () => {
+    const dal = new Date(Date.now() - QUATTORDICI_GIORNI).toISOString()
+    return tempi.bordo(store.ritardiCarte(dal), store.ritardiLavori(dal))
+  }
+})
+
+/*
+ * «Affidalo a Myynd» da una carta, in un passo solo (P10): la riga nasce, la
+ * carta si chiude e il lavoro parte, o non succede niente. Prima erano due
+ * chiamate, crea e poi affida: senza motore la riga restava in lista aperta e
+ * la carta era già chiusa. Adesso i controlli vengono prima di ogni scrittura,
+ * e un guasto dopo la scrittura rimette tutto com'era.
+ */
+app.post('/api/compiti/affida', (req, res) => {
+  const testo = String(req.body?.testo ?? '').trim()
+  if (!testo) return res.status(400).json({ errore: 'Scrivi cosa c\'è da fare.' })
+  const idVoce = String(req.body?.voce ?? '')
+  const voce = idVoce ? store.voceFeed(idVoce) : undefined
+  if (!voce || voce.stato !== 'aperto') return res.status(409).json({ errore: 'Questa carta non c’è più.' })
+  if (!claude.collegato() || !mod.puoLavorare()) return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
+  const id = String(req.body?.id ?? '').trim() || `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+  let scritta = false
+  try {
+    const progetto = voce.progetto || progettoDelTesto(`${voce.titolo ?? ''}\n${voce.testo ?? ''}\n${testo}\n${String(req.body?.nota ?? '')}`)
+    store.scriviCompito({
+      id, testo,
+      nota: req.body?.nota ? String(req.body.nota) : null,
+      quando: 'oggi', giorno: null, ora: null, progetto, priorita: null,
+      ordine: ordine.dopo(store.ultimoOrdine('oggi')),
+      origine: 'feed',
+      voce: idVoce,
+      doc: req.body?.doc ? String(req.body.doc) : null
+    })
+    scritta = true
+    store.cambiaStatoFeed(idVoce, 'fatto', 'Passata nella lista.', 'lista')
+    affidaRiga(id, 'tutto')
+  } catch (e) {
+    if (scritta) {
+      try { store.scordaCompito(id) } catch { /* resta com'è */ }
+      try { store.cambiaStatoFeed(idVoce, 'aperto') } catch { /* resta com'è */ }
+    }
+    return errore(res, e)
+  }
+  res.json({ ok: true, id, compiti: compitiAttuali() })
+  compiti.annunciaCambio()
+  compiti.annunciaFeed()
+})
+
+
+/*
+ * Scaldare il modello di questo Mac quando la chat prende il fuoco (P10).
+ * Risponde subito; la chiamata va avanti da sola, e solo per un modello sul
+ * Mac. Non sta sotto /api/chat/*: `POST /api/chat/:id` se la prenderebbe.
+ */
+app.post('/api/modello/scalda', (_req, res) => {
+  res.json({ ok: true, ...scalda.scalda() })
+})
+
 // — P10: rotte, fine —
 
 // qualunque cosa sfugga ai singoli handler esce come JSON, non come stack HTML
@@ -5512,6 +5638,8 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // senza questa riga resta «da Myynd» per sempre, e la lista mente
   // la prima rilettura non è all'avvio ma dopo un minuto: accendere l'app non
   // deve voler dire aspettare che abbia finito di leggere la posta
+  // P10 · cosa sa fare il `claude` installato, guardato una volta di fondo: mai dentro una chat
+  perOgnuno('la sonda di claude non è riuscita', async () => abbonamento.sondaLeBandiere())()
   const rilettura = perOgnuno('la rilettura automatica si è fermata', rileggiDaSola)
   // le prove e le scene la anticipano (MYYND_PRIMA_RILETTURA_MS): un minuto è lungo da aspettare
   setTimeout(rilettura, Number(process.env.MYYND_PRIMA_RILETTURA_MS) || 60_000)
@@ -5607,13 +5735,19 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * nessun filo, e non è un errore.
    */
   const recupero = perOgnuno('il recupero dopo il risveglio non è riuscito', async () => {
+    // P10 · subito, come sempre (è il momento migliore del gemello: prima che lui guardi),
+    // ma misurato: quanto dopo il risveglio nasce la prima carta. I pezzi lunghi cedono il passo.
+    tempi.segnaSveglia()
+    await tempi.misuraLavoro('recupero', () => recuperoDentro())
+  })
+  const recuperoDentro = async () => {
     await rileggiDaSola()
     await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
     await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
     await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro()))
     await runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro()))
     await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
-  })
+  }
   sveglia.ascolta(() => {
     console.log('myynd · il computer si è svegliato: recupero quello che è successo nel frattempo')
     recupero()
@@ -5635,7 +5769,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const filtraMittenti = perOgnuno('sender rules paused', () => runScheduled('sender_rules', 15 * 60_000, runSenderRules))
   setTimeout(filtraMittenti, 135_000)
   setInterval(filtraMittenti, 15 * 60_000)
-  const giro = perOgnuno('il giro delle automazioni si è fermato', () => runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro())))
+  const giro = perOgnuno('il giro delle automazioni si è fermato', () => runScheduled('automations', 15 * 60_000, () => tempi.misuraLavoro('automazioni', () => store.senzaToccare(() => automazioni.giro()))))
   setTimeout(giro, 120_000)
   setInterval(giro, automazioni.OGNI)
   // il vassoio di prova (P6): una bozza per giro, nella fila delle prove
@@ -5736,7 +5870,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // a new local day past 06:00, so the run 10 s after launch is already enough:
   // an app opened at eight after a night closed refreshes in the background,
   // and one left open crosses 06:00 on this same 60 s loop.
-  const giornali = perOgnuno('la rassegna non si è aggiornata', () => rassegna.aggiorna(false))
+  const giornali = perOgnuno('la rassegna non si è aggiornata', () => tempi.misuraLavoro('rassegna', () => rassegna.aggiorna(false)))
   setTimeout(giornali, 10_000)
   setInterval(giornali, 60_000)
 
@@ -5749,17 +5883,35 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * `compatta()` guarda prima se ne vale la pena, quindi quasi tutti i giorni
    * non fa niente e non costa niente.
    */
+  /*
+   * P10 · e solo quando nessuno aspetta: dovuta una volta al giorno, parte
+   * quando da due minuti non arriva una richiesta; se non si trova mai un
+   * momento quieto, parte lo stesso con al massimo un giorno di ritardo. Si
+   * guarda ogni dieci minuti. La stessa volta, i numeri di bordo nel registro.
+   */
+  const dovutaIl = new Map<string, number>()
+  const primaVolta = Date.now() + 10 * 60_000
   const compattazione = perOgnuno('la compattazione si è fermata', async () => {
-    // prima che si guardi lo spazio: un indice di ricerca marcio non si vede
-    // da nessuna parte — i documenti ci sono e non si trovano — e l'unico modo
-    // di accorgersene è chiederglielo
-    const i = store.verificaLIndice()
-    if (i.rifatto) console.log('myynd · indice di ricerca rifatto: i documenti erano lì, l’indice no')
-    const e = store.compatta()
-    if (e.fatto) console.log(`myynd · compattato l'indice: ${e.liberate} pagine riprese`)
+    const conto = chi.adesso() ?? ''
+    const ora = Date.now()
+    const dovuta = dovutaIl.get(conto) ?? primaVolta
+    if (!tempi.manutenzioneTocca(ora, dovuta, tempi.quieto(120_000))) return
+    dovutaIl.set(conto, ora + 24 * 3600_000)
+    await tempi.misuraLavoro('manutenzione', async () => {
+      // prima che si guardi lo spazio: un indice di ricerca marcio non si vede
+      // da nessuna parte — i documenti ci sono e non si trovano — e l'unico modo
+      // di accorgersene è chiederglielo
+      const i = store.verificaLIndice()
+      if (i.rifatto) console.log('myynd · indice di ricerca rifatto: i documenti erano lì, l’indice no')
+      const e = store.compatta()
+      if (e.fatto) console.log(`myynd · compattato l'indice: ${e.liberate} pagine riprese`)
+    })
+    const dal = new Date(ora - 14 * 24 * 3_600_000).toISOString()
+    const riga = tempi.rigaBordo(tempi.bordo(store.ritardiCarte(dal), store.ritardiLavori(dal)))
+    if (riga) console.log(riga)
   })
   setTimeout(compattazione, 10 * 60_000)
-  setInterval(compattazione, 24 * 3600_000)
+  setInterval(compattazione, 10 * 60_000)
 
   /*
    * I compiti rimasti a metà si riaprono, per ognuno.

@@ -642,7 +642,7 @@ export function Preferenze({ v }: { v: Vals }) {
           <Identita v={v} />
           <Carta titolo={t('Lingua e aspetto')} id="lingua">
             <Scelte etichetta={t('Lingua')} mostraEtichetta
-              opzioni={v.lingue.map(l => ({ id: l.id, nome: l.occupato && !l.scelto ? t('Traduco…') : l.nome, disabilitato: l.occupato }))}
+              opzioni={v.lingue.map(l => ({ id: l.id, nome: l.occupato && !l.scelto ? t('Traduco…') : l.nome, disabilitato: l.occupato, occupato: l.occupato }))}
               scelta={v.lingue.find(l => l.scelto)?.id ?? null} scegli={id => { void v.lingue.find(l => l.id === id)?.onClick() }} />
             <Scelte etichetta={t('Aspetto')} mostraEtichetta attivazione="automatica"
               opzioni={v.temi.map(x => ({ id: x.id, nome: x.label }))}
