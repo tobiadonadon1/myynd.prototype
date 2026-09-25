@@ -287,6 +287,12 @@ export function rigaBordo(b: Bordo): string | null {
   return pezzi.length ? `myynd · tempi · bordo · ${pezzi.join(' · ')}` : null
 }
 
+/** La manutenzione di tutti i giorni: dovuta, e quieta (o in ritardo di un giorno intero). */
+export function manutenzioneTocca(ora: number, dovuta: number, quietoAdesso: boolean): boolean {
+  if (ora < dovuta) return false
+  return quietoAdesso || ora - dovuta >= 24 * 3_600_000
+}
+
 // — il riassunto per GET /api/tempi —
 
 export type Riassunto = {

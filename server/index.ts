@@ -5444,17 +5444,35 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * `compatta()` guarda prima se ne vale la pena, quindi quasi tutti i giorni
    * non fa niente e non costa niente.
    */
+  /*
+   * P10 · e solo quando nessuno aspetta: dovuta una volta al giorno, parte
+   * quando da due minuti non arriva una richiesta; se non si trova mai un
+   * momento quieto, parte lo stesso con al massimo un giorno di ritardo. Si
+   * guarda ogni dieci minuti. La stessa volta, i numeri di bordo nel registro.
+   */
+  const dovutaIl = new Map<string, number>()
+  const primaVolta = Date.now() + 10 * 60_000
   const compattazione = perOgnuno('la compattazione si è fermata', async () => {
-    // prima che si guardi lo spazio: un indice di ricerca marcio non si vede
-    // da nessuna parte — i documenti ci sono e non si trovano — e l'unico modo
-    // di accorgersene è chiederglielo
-    const i = store.verificaLIndice()
-    if (i.rifatto) console.log('myynd · indice di ricerca rifatto: i documenti erano lì, l’indice no')
-    const e = store.compatta()
-    if (e.fatto) console.log(`myynd · compattato l'indice: ${e.liberate} pagine riprese`)
+    const conto = chi.adesso() ?? ''
+    const ora = Date.now()
+    const dovuta = dovutaIl.get(conto) ?? primaVolta
+    if (!tempi.manutenzioneTocca(ora, dovuta, tempi.quieto(120_000))) return
+    dovutaIl.set(conto, ora + 24 * 3600_000)
+    await tempi.misuraLavoro('manutenzione', async () => {
+      // prima che si guardi lo spazio: un indice di ricerca marcio non si vede
+      // da nessuna parte — i documenti ci sono e non si trovano — e l'unico modo
+      // di accorgersene è chiederglielo
+      const i = store.verificaLIndice()
+      if (i.rifatto) console.log('myynd · indice di ricerca rifatto: i documenti erano lì, l’indice no')
+      const e = store.compatta()
+      if (e.fatto) console.log(`myynd · compattato l'indice: ${e.liberate} pagine riprese`)
+    })
+    const dal = new Date(ora - 14 * 24 * 3_600_000).toISOString()
+    const riga = tempi.rigaBordo(tempi.bordo(store.ritardiCarte(dal), store.ritardiLavori(dal)))
+    if (riga) console.log(riga)
   })
   setTimeout(compattazione, 10 * 60_000)
-  setInterval(compattazione, 24 * 3600_000)
+  setInterval(compattazione, 10 * 60_000)
 
   /*
    * I compiti rimasti a metà si riaprono, per ognuno.

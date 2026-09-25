@@ -165,3 +165,11 @@ test('cedi conta le cessioni', async () => {
   await tempi.cedi(); await tempi.cedi()
   assert.equal(tempi.cessioni(), 2)
 })
+
+test('la manutenzione: solo quando è dovuta e quieto, o con un giorno di ritardo', () => {
+  const g = 24 * 3_600_000
+  assert.equal(tempi.manutenzioneTocca(100, 200, true), false, 'non ancora dovuta')
+  assert.equal(tempi.manutenzioneTocca(300, 200, false), false, 'dovuta ma qualcuno lavora')
+  assert.equal(tempi.manutenzioneTocca(300, 200, true), true)
+  assert.equal(tempi.manutenzioneTocca(200 + g, 200, false), true, 'un giorno di ritardo: si fa lo stesso')
+})
