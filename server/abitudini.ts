@@ -249,9 +249,10 @@ function righe(): Abitudine[] {
  * più diventa `superata` (dalla data in `aggiornato`), e se torna a reggere torna
  * `osservata`. Le superate da più di novanta giorni se ne vanno.
  */
-export function ricalcola(adesso = new Date()): { righe: number } {
+export function ricalcola(adesso = new Date(), o: { senzaPosta?: boolean } = {}): { righe: number } {
   const ora = adesso.toISOString()
-  const candidate = [...righePosta(adesso), ...righeAgenda(adesso), ...righeLavoro(adesso)]
+  // senza la posta (il registro è indietro): le righe sulla posta non si rifanno e non si toccano
+  const candidate = [...(o.senzaPosta ? [] : righePosta(adesso)), ...righeAgenda(adesso), ...righeLavoro(adesso)]
   const esistenti = new Map(righe().map(r => [r.chiave, r]))
   const ins = db.prepare(`INSERT INTO abitudini (chiave, genere, dati, prova, fiducia, stato, testoSuo, visto, aggiornato, tolta) VALUES (?,?,?,?,?,?,?,?,?,NULL)`)
   const upd = db.prepare('UPDATE abitudini SET dati = ?, prova = ?, fiducia = ?, stato = ?, aggiornato = ? WHERE chiave = ?')
@@ -270,6 +271,7 @@ export function ricalcola(adesso = new Date()): { righe: number } {
     }
     for (const e of esistenti.values()) {
       if (viste.has(e.chiave) || e.stato === 'tolta' || e.stato === 'corretta') continue
+      if (o.senzaPosta && e.genere.startsWith('posta.')) continue
       if (e.stato === 'superata') {
         if (Date.parse(e.aggiornato) < adesso.getTime() - GIORNI_SUPERATA * GIORNO) db.prepare('DELETE FROM abitudini WHERE chiave = ?').run(e.chiave)
         continue
@@ -279,6 +281,16 @@ export function ricalcola(adesso = new Date()): { righe: number } {
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }
   return { righe: n }
+}
+
+/**
+ * Dopo «cancella le osservazioni»: le righe si rifanno subito, ma quelle sulla
+ * posta solo col registro in pari. Contate a metà del primo ripasso sarebbero
+ * false, in vigore senza un tocco, e la notte dopo resterebbero novanta giorni
+ * sotto «Non valgono più» accanto al loro contrario.
+ */
+export function ricalcolaDopoCancellazione(adesso = new Date()): { righe: number } {
+  return ricalcola(adesso, { senzaPosta: segnali.postaDaRipassare() })
 }
 
 /**
@@ -295,29 +307,34 @@ export function tutte(): AbitudineVista[] {
   })).sort((a, b) => (b.su ?? b.casi) - (a.su ?? a.casi) || a.chiave.localeCompare(b.chiave))
 }
 
-/** Tienila, correggila, toglila, o rimettila com'era (entro dieci minuti). */
-export function cambia(chiave: string, azione: 'tieni' | 'correggi' | 'togli' | 'ripristina', testo?: string, prima?: string, adesso = new Date()): void {
+/**
+ * Tienila, correggila, toglila, o rimettila com'era (entro dieci minuti).
+ * Torna il testo com'è salvato: dopo un «correggi» la pagina mostra quello,
+ * senza lineette, non quello battuto.
+ */
+export function cambia(chiave: string, azione: 'tieni' | 'correggi' | 'togli' | 'ripristina', testo?: string, prima?: string, adesso = new Date()): { testoSuo: string | null } {
   if (!['tieni', 'correggi', 'togli', 'ripristina'].includes(azione)) throw new Error('Azione sconosciuta.')
   const r = db.prepare('SELECT * FROM abitudini WHERE chiave = ?').get(chiave) as Riga | undefined
   if (!r) throw new Error('Non la trovo.')
   const ora = adesso.toISOString()
   switch (azione) {
     case 'tieni':
-      db.prepare("UPDATE abitudini SET stato = 'tenuta', tolta = NULL WHERE chiave = ?").run(chiave); return
+      db.prepare("UPDATE abitudini SET stato = 'tenuta', tolta = NULL WHERE chiave = ?").run(chiave); break
     case 'correggi': {
       const suo = senzaTrattini(String(testo ?? '')).trim()
       if (suo.length < 3 || suo.length > 300) throw new Error('Scrivila in poche parole.')
-      db.prepare("UPDATE abitudini SET stato = 'corretta', testoSuo = ?, tolta = NULL WHERE chiave = ?").run(suo, chiave); return
+      db.prepare("UPDATE abitudini SET stato = 'corretta', testoSuo = ?, tolta = NULL WHERE chiave = ?").run(suo, chiave); break
     }
     case 'togli':
-      db.prepare("UPDATE abitudini SET stato = 'tolta', tolta = ? WHERE chiave = ?").run(ora, chiave); return
+      db.prepare("UPDATE abitudini SET stato = 'tolta', tolta = ? WHERE chiave = ?").run(ora, chiave); break
     case 'ripristina': {
       const ok = prima === 'osservata' || prima === 'tenuta' || prima === 'corretta'
       const fresca = r.stato === 'tolta' && !!r.tolta && adesso.getTime() - Date.parse(r.tolta) <= MINUTI_ANNULLA * 60_000
       if (!ok || !fresca) throw new Error('È passato troppo tempo per annullare.')
-      db.prepare('UPDATE abitudini SET stato = ?, tolta = NULL WHERE chiave = ?').run(prima, chiave); return
+      db.prepare('UPDATE abitudini SET stato = ?, tolta = NULL WHERE chiave = ?').run(prima, chiave); break
     }
   }
+  return { testoSuo: (db.prepare('SELECT testoSuo FROM abitudini WHERE chiave = ?').get(chiave) as { testoSuo: string | null }).testoSuo }
 }
 
 // — le frasi per il modello, in italiano, in secchi —

@@ -12,6 +12,7 @@ import { Cestino, useAttiva } from '../ui'
 import { IconCroce, IconGiu, IconSpunta } from '../icons'
 import { portaAlleFonti } from '../vals'
 import { preparaApertura } from '../navigazione'
+import { senzaTrattini } from '../../server/testo.ts'
 import * as g from '../gemello-frasi'
 
 type Gruppo = 'posta' | 'agenda' | 'lavoro'
@@ -50,7 +51,8 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuo
   useEffect(() => { if (guaioFuori) setGuaio(guaioFuori) }, [guaioFuori])
 
   const salva = async () => {
-    const nuovo = bozza.trim()
+    // la stessa pulizia del server, prima ancora della risposta: una lineetta battuta non si vede mai
+    const nuovo = senzaTrattini(bozza).trim()
     setModifico(false)
     if (!nuovo || nuovo === mostrato) { setBozza(mostrato); return }
     const prima = mostrato
@@ -203,9 +205,10 @@ export function ComeLavori() {
   const aggiornaRiga = (chiave: string, cambio: Partial<AbitudineVista>) =>
     setD(v => v ? { ...v, abitudini: v.abitudini.map(a => a.chiave === chiave ? { ...a, ...cambio } : a) } : v)
 
+  // la riga mostra quello che il server ha salvato (senza lineette), non quello battuto
   const correggi = (a: AbitudineVista) => async (testo: string) => {
-    await gemelloApi.abitudine(a.chiave, 'correggi', testo)
-    aggiornaRiga(a.chiave, { testoSuo: testo, stato: 'corretta', inVigore: true })
+    const r = await gemelloApi.abitudine(a.chiave, 'correggi', testo)
+    aggiornaRiga(a.chiave, { testoSuo: r.testoSuo ?? testo, stato: 'corretta', inVigore: true })
   }
   const tieni = (a: AbitudineVista) => async () => {
     await gemelloApi.abitudine(a.chiave, 'tieni')

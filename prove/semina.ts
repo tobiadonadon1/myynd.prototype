@@ -332,6 +332,8 @@ if (ricetta) {
       store.segnaCursore('gemello:letta', new Date(Math.min(alle(d - 1, 0, 30).getTime(), tetto)).toISOString())
       await gemello.giro(alle(d - 1, 0, 40))
     }
+    // anche la mattina di oggi alle otto (o adesso, se le otto non sono passate): dalle sedici non si afferma più
+    await gemello.giro(new Date(Math.min(alle(0, 8).getTime(), Date.now())))
     await gemello.giro(new Date())
     const affermazioni = (store.default.prepare('SELECT COUNT(*) AS n FROM previsioni').get() as { n: number }).n
     const verificati = (store.default.prepare('SELECT COUNT(*) AS n FROM punteggi').get() as { n: number }).n

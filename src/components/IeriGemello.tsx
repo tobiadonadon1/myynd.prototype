@@ -42,7 +42,7 @@ export function IeriGemello({ chiudi, apriMemoria }: { chiudi: () => void; apriM
     chiudi()
     apriMemoria()
   }
-  const frase = fraseIeri(ieri.giuste, ieri.totale)
+  const frase = fraseIeri(ieri.giuste, ieri.totale, ieri.base)
   return (
     <Hov as="button" type="button" onClick={vai} style={RIGA} hover={{ color: 'var(--rame-testo)' }} title={frase}>
       {frase}

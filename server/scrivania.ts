@@ -344,13 +344,26 @@ export async function porta(desktop: ConfigDesktop | null | undefined, d: Destin
  * aprire davvero una finestra sul computer di chi le fa girare.
  */
 async function lancia(argomenti: string[]): Promise<void> {
-  const finta = perProva.apri
-  if (finta) { finta(argomenti); return }
-  await esegui('/usr/bin/open', argomenti)
+  switch (comeAprire()) {
+    case 'finta': perProva.apri!(argomenti); return
+    case 'registro': console.log(`myynd · scrivania · open non eseguito (prova): ${argomenti.join(' ')}`); return
+    default: await esegui('/usr/bin/open', argomenti)
+  }
+}
+
+/**
+ * Come si apre: con la mano delle prove (`perProva.apri`), solo nel registro
+ * (MYYND_PROVA_NIENTE_OPEN=1: una scena di prove/scena.sh, dove «Portami lì»
+ * porterebbe davanti un'app sul Mac di chi la fa girare), o con `open` davvero.
+ */
+function comeAprire(): 'finta' | 'registro' | 'open' {
+  if (perProva.apri) return 'finta'
+  if (process.env.MYYND_PROVA_NIENTE_OPEN === '1') return 'registro'
+  return 'open'
 }
 
 /** La mano delle prove: con `apri` impostata, `open` non parte mai davvero. */
-export const perProva: { apri: ((argomenti: string[]) => void) | null } = { apri: null }
+export const perProva: { apri: ((argomenti: string[]) => void) | null; comeAprire: typeof comeAprire } = { apri: null, comeAprire }
 
 /** Il testo di un documento appena scritto, per riaprirlo dove serve. */
 export async function rileggi(desktop: ConfigDesktop | null | undefined, percorso: string): Promise<string> {

@@ -2053,8 +2053,9 @@ export type Gemello = {
   /** Gli ultimi trenta giorni, solo le affermazioni verificate; null senza. */
   punteggio: { giuste: number; totale: number; base: number } | null
   oggi: { quante: number; sigillate: boolean; previsioni: PrevisioneVista[] }
-  ieri: { giorno: string; chiuso: boolean; giuste: number; totale: number; previsioni: PrevisioneVista[] } | null
-  /** Solo i generi con almeno dieci giudizi. */
+  /** `base`: quante di quelle giudicate avrebbe indovinato chi non ti conosce. */
+  ieri: { giorno: string; chiuso: boolean; giuste: number; totale: number; base: number; previsioni: PrevisioneVista[] } | null
+  /** Solo i generi con almeno dieci giudizi: le bozze, i documenti, le carte (le previsioni stanno nel punteggio). */
   fiducia: { genere: string; giuste: number; totale: number }[]
   abitudini: AbitudineVista[]
   /** Una casella collegata ma niente posta mandata in trenta giorni. */
@@ -2064,7 +2065,7 @@ export type StatoOsservatore = { disponibile: boolean; acceso: boolean; titoli: 
 export const gemelloApi = {
   vista: () => json<Gemello>('/api/gemello'),
   abitudine: (chiave: string, azione: 'tieni' | 'correggi' | 'togli' | 'ripristina', testo?: string, prima?: string) =>
-    json<{ ok: true }>(`/api/gemello/abitudini/${encodeURIComponent(chiave)}`, { method: 'POST', body: JSON.stringify({ azione, testo, prima }) }),
+    json<{ ok: true; testoSuo: string | null }>(`/api/gemello/abitudini/${encodeURIComponent(chiave)}`, { method: 'POST', body: JSON.stringify({ azione, testo, prima }) }),
   osservatore: () => json<StatoOsservatore>('/api/osservatore'),
   imposta: (v: { acceso?: boolean; titoli?: boolean }) => json<StatoOsservatore>('/api/osservatore', { method: 'POST', body: JSON.stringify(v) }),
   pausa: (minuti: number) => json<StatoOsservatore>('/api/osservatore/pausa', { method: 'POST', body: JSON.stringify({ minuti }) }),

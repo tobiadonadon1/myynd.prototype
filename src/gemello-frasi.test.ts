@@ -99,9 +99,9 @@ test('oggi, ieri, la fiducia e le altre righe: niente lineette, tutte e due le l
     () => g.faseOggi({ quante: 9, sigillate: true, previsioni: [] }),
     () => g.faseOggi({ quante: 1, sigillate: true, previsioni: [] }),
     () => g.faseOggi({ quante: 3, sigillate: false, previsioni }),
-    () => g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 7, totale: 9, previsioni: [] }),
-    () => g.rigaIeri({ giorno: '2026-09-23', chiuso: false, giuste: 0, totale: 0, previsioni: [] }),
-    () => g.fraseIeri(7, 9),
+    () => g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 7, totale: 9, base: 5, previsioni: [] }),
+    () => g.rigaIeri({ giorno: '2026-09-23', chiuso: false, giuste: 0, totale: 0, base: 0, previsioni: [] }),
+    () => g.fraseIeri(7, 9, 5),
     () => g.rigaFiducia({ genere: 'bozza.email', giuste: 23, totale: 25 }),
     () => g.rigaFiducia({ genere: 'bozza.documento', giuste: 9, totale: 11 }),
     () => g.rigaFiducia({ genere: 'feed.carta', giuste: 40, totale: 52 }),
@@ -120,7 +120,8 @@ test('oggi, ieri, la fiducia e le altre righe: niente lineette, tutte e due le l
   assert.equal(g.faseOggi({ quante: 9, sigillate: true, previsioni: [] }), '9 predictions today, opened tonight.')
   assert.equal(g.faseOggi({ quante: 1, sigillate: true, previsioni: [] }), '1 prediction today, opened tonight.')
   assert.equal(g.faseOggi({ quante: 3, sigillate: false, previsioni }), 'Today: 1 right, 1 wrong, 1 still open.')
-  assert.equal(g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 7, totale: 9, previsioni: [] }), 'Yesterday · 7 of 9')
+  assert.equal(g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 7, totale: 9, base: 5, previsioni: [] }), 'Yesterday · 7 of 9 · without knowing you 5')
+  assert.equal(g.fraseIeri(7, 9, 5), 'Yesterday I got 7 of 9 right. Without knowing you, 5.')
   assert.equal(g.rigaFiducia({ genere: 'bozza.email', giuste: 23, totale: 25 }), 'Reply drafts: right 23 of 25')
   assert.equal(g.provaAbitudine({ genere: 'posta.risponde_sempre', casi: 14, su: 15 }), '14 of 15')
   assert.equal(g.provaAbitudine({ genere: 'app.principale', casi: 23, su: null }), 'over 23 days')
@@ -130,7 +131,19 @@ test('oggi, ieri, la fiducia e le altre righe: niente lineette, tutte e due le l
   assert.equal(g.faseOggi({ quante: 9, sigillate: true, previsioni: [] }), 'Oggi 9 previsioni, le apro stasera.')
   assert.equal(g.faseOggi({ quante: 1, sigillate: true, previsioni: [] }), 'Oggi una previsione, la apro stasera.')
   assert.equal(g.faseOggi({ quante: 3, sigillate: false, previsioni }), 'Oggi: 1 giusta, 1 sbagliata, 1 ancora aperta.')
-  assert.equal(g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 7, totale: 9, previsioni: [] }), 'Ieri · 7 su 9')
-  assert.equal(g.fraseIeri(7, 9), 'Ieri ci ho preso 7 volte su 9.')
+  assert.equal(g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 7, totale: 9, base: 5, previsioni: [] }), 'Ieri · 7 su 9 · senza conoscerti 5')
+  assert.equal(g.fraseIeri(7, 9, 5), 'Ieri ci ho preso 7 volte su 9. Senza conoscerti, 5.')
   impostaLingua('en')
+})
+
+test('un tasso delle previsioni non esce mai dalla scala della fiducia: il punteggio, con la base accanto, lo dice già', () => {
+  for (const genere of ['previsione.posta', 'previsione.progetto', 'previsione.compito']) {
+    const r = ognuna(() => g.rigaFiducia({ genere, giuste: 18, totale: 19 }))
+    assert.equal(r.it, ''); assert.equal(r.en, '')
+  }
+  // il punteggio invece non esiste senza «senza conoscerti»
+  const p = ognuna(() => g.frasePunteggio(18, 20, 15))
+  assert.match(p.it, /Senza conoscerti, 8\./); assert.match(p.en, /Without knowing you, 8\./)
+  const i = ognuna(() => g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 2, totale: 2, base: 1, previsioni: [] }))
+  assert.match(i.it, /senza conoscerti 1$/); assert.match(i.en, /without knowing you 1$/)
 })

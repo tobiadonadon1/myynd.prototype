@@ -3867,8 +3867,12 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   const stato = req.body?.stato === 'lasciato' ? 'lasciato' : 'fatto'
   const esito = String(req.body?.esito ?? '').trim()
   const tenuto = String(req.body?.tenuto ?? '')
-  // quanto l'ha ritoccata, prima che la sua versione sovrascriva la bozza (P1B): solo su un documento vero
-  if (tenuto.trim() && gemello.contaComeDocumento(c)) { try { gemello.bozzaTenuta(c, tenuto.trim()) } catch { /* la misura non ferma la chiusura */ } }
+  // quanto l'ha ritoccata, prima che la sua versione sovrascriva la bozza (P1B): solo su un documento vero;
+  // un documento consegnato (un file, Pages, TextEdit) chiuso con «Va bene» è preso com'è
+  try {
+    if (tenuto.trim() && gemello.contaComeDocumento(c)) gemello.bozzaTenuta(c, tenuto.trim())
+    else if (stato === 'fatto') gemello.consegnaAccettata(c)
+  } catch { /* la misura non ferma la chiusura */ }
 
   // Quello che hai tenuto davvero è la cosa più preziosa che passa di qui, e
   // finiva soltanto dentro una convinzione: il testo com'è uscito non lo
@@ -4519,10 +4523,10 @@ app.post('/api/gemello/abitudini/:chiave', (req, res) => {
   const azione = String(req.body?.azione ?? '')
   if (!['tieni', 'correggi', 'togli', 'ripristina'].includes(azione)) return res.status(400).json({ errore: 'Azione sconosciuta.' })
   try {
-    abitudini.cambia(req.params.chiave, azione as 'tieni' | 'correggi' | 'togli' | 'ripristina',
+    const r = abitudini.cambia(req.params.chiave, azione as 'tieni' | 'correggi' | 'togli' | 'ripristina',
       typeof req.body?.testo === 'string' ? req.body.testo : undefined,
       typeof req.body?.prima === 'string' ? req.body.prima : undefined)
-    res.json({ ok: true })
+    res.json({ ok: true, testoSuo: r.testoSuo })
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e)
     errore(res, e, m === 'Non la trovo.' ? 404 : m === 'È passato troppo tempo per annullare.' ? 409 : 400)
@@ -4570,7 +4574,8 @@ app.delete('/api/osservatore/osservazioni', (_req, res) => {
   if (!osservatore.disponibile()) return senzaOsservatore(res)
   try {
     osservatore.cancellaOsservazioni()
-    abitudini.ricalcola()
+    // le righe sulla posta si rifanno solo col registro in pari: a metà ripasso sarebbero false, e in vigore
+    abitudini.ricalcolaDopoCancellazione()
     osservatore.annuncia()
     res.json({ ok: true })
   } catch (e) { errore(res, e) }

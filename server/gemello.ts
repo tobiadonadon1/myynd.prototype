@@ -48,6 +48,8 @@ import type { Compito } from './store.ts'
 const GIORNO = 86_400_000
 export const ORA_SIGILLO = 20
 export const ORA_MATTINA = 6
+/** Dalle sedici non si afferma più: quattro ore prima del sigillo il giorno è quasi deciso. */
+export const ORA_ULTIMA_MATTINA = 16
 export const ORA_NOTTE = 3
 const CURS = { letta: 'gemello:letta', attesa: 'gemello:letta:attesa', notte: 'gemello:notte', mattina: 'gemello:mattina', conserva: 'gemello:conserva' }
 
@@ -56,7 +58,7 @@ export type PrevisioneVista = { id: string; genere: string; nome: string; titolo
 export type Gemello = {
   punteggio: { giuste: number; totale: number; base: number } | null
   oggi: { quante: number; sigillate: boolean; previsioni: PrevisioneVista[] }
-  ieri: { giorno: string; chiuso: boolean; giuste: number; totale: number; previsioni: PrevisioneVista[] } | null
+  ieri: { giorno: string; chiuso: boolean; giuste: number; totale: number; base: number; previsioni: PrevisioneVista[] } | null
   fiducia: { genere: string; giuste: number; totale: number }[]
   abitudini: abitudini.AbitudineVista[]
   guai: 'posta-inviata'[]
@@ -169,11 +171,14 @@ function candidatiDiOggi(adesso: Date): previsioni.Candidato[] {
   const alta = new Set(progetti.elenco('attivo').filter(p => p.priorita === 'alta').map(p => p.id))
   const prog = previsioni.candidatoProgetto(attivita7, ieri, { eventi, compiti: compitiPer, alta })
   if (prog) fuori.push({ ...prog, dati: { ...prog.dati, nome: progetti.trova(prog.ref)?.nome ?? prog.ref } })
-  // i compiti
+  // i compiti: una riga si afferma una volta sola, come una mail. Una lasciata in «oggi» per settimane
+  // darebbe ogni mattina un «rimanderai» quasi certo, e un punteggio pieno che non misura niente
   const da30 = giornoPrima(oggi, 30)
   const storia = db.prepare('SELECT giorno, stato, chiuso FROM compiti WHERE giorno >= ? AND giorno < ? AND sparito IS NULL').all(da30, oggi) as { giorno: string; stato: string; chiuso: string | null }[]
   const storia30 = { pianificati: storia.length, chiusiInGiornata: storia.filter(c => c.stato === 'fatto' && c.chiuso && fuso.giornoIn(new Date(c.chiuso)) === c.giorno).length }
-  fuori.push(...previsioni.candidatiCompiti(aperti.map(c => ({ id: c.id, testo: c.testo, priorita: c.priorita ?? null, stato: c.stato, creato: (c as unknown as { creato: string }).creato ?? t0, progetto: c.progetto ?? null })), storia30, adesso))
+  const giaAffermate = new Set((db.prepare("SELECT ref FROM previsioni WHERE genere LIKE 'compito.%' AND giorno < ?").all(oggi) as { ref: string }[]).map(r => r.ref))
+  const nuove = aperti.filter(c => !giaAffermate.has(c.id))
+  fuori.push(...previsioni.candidatiCompiti(nuove.map(c => ({ id: c.id, testo: c.testo, priorita: c.priorita ?? null, stato: c.stato, creato: (c as unknown as { creato: string }).creato ?? t0, progetto: c.progetto ?? null })), storia30, adesso))
   return fuori
 }
 
@@ -181,12 +186,17 @@ function candidatiDiOggi(adesso: Date): previsioni.Candidato[] {
  * Le affermazioni di oggi, una volta al giorno dalle sei. Col registro della
  * posta indietro si rimanda al giro dopo: una mail già risposta che il registro
  * non ha ancora visto darebbe un «non risponde» facile e falso.
+ *
+ * Una mattina tardi (il Mac aperto alle 14) afferma sul resto del giorno; ma
+ * dalle sedici il resto è troppo poco e troppo sicuro, e un primo giro di
+ * sera farebbe affermazioni già oltre il sigillo: il giorno passa senza.
  */
 function mattina(adesso: Date, indietro = false): number {
   const oggi = fuso.giornoIn(adesso)
   if (store.cursore(CURS.mattina) === oggi) return 0
-  if (fuso.parti(adesso).ora < ORA_MATTINA) return 0
-  if (cfg.leggi().gemello?.previsioni === false) { store.segnaCursore(CURS.mattina, oggi); return 0 }
+  const ora = fuso.parti(adesso).ora
+  if (ora < ORA_MATTINA) return 0
+  if (ora >= ORA_ULTIMA_MATTINA || cfg.leggi().gemello?.previsioni === false) { store.segnaCursore(CURS.mattina, oggi); return 0 }
   if (indietro && fontePosta()) return 0
   const candidati = candidatiDiOggi(adesso)
   const { scelte } = previsioni.scegli(candidati)
@@ -455,10 +465,11 @@ export function agendaLetta(e: { viste: segnali.VistaAgenda[]; finestra: { da: s
 }
 
 /**
- * Da «Va bene» su una riga si conta solo una bozza di documento vera: senza
- * una consegna (un file consegnato manda la riga per lei, non il documento,
- * e /documento lo ha già contato col testo tenuto davvero) e senza una mail
- * pronta (quella la misura P3 in `misure_compiti`, come «bozza.email»).
+ * Da «Va bene» su una riga, il testo tenuto misura una bozza di documento
+ * solo se è il documento: senza una consegna (per un file consegnato la riga
+ * manda la sua nota, non il documento: quello passa da `consegnaAccettata`)
+ * e senza una mail pronta (quella la misura P3 in `misure_compiti`, come
+ * «bozza.email»).
  */
 export function contaComeDocumento(c: Pick<Compito, 'risultato' | 'consegna' | 'email'>): boolean {
   return !!c.risultato && !c.consegna && !c.email
@@ -469,6 +480,22 @@ export function bozzaTenuta(c: Pick<Compito, 'id' | 'risultato'>, tenuto: string
   if (!c.risultato) return
   const r = ritocco(c.risultato, tenuto)
   segnali.scrivi({ id: `myynd.bozza|${c.id}|${adesso.toISOString()}`, genere: 'myynd.bozza', quando: adesso.toISOString(), ref: c.id, valore: r, dati: { classe: classeDi(r), tipo: 'documento' } })
+}
+
+/** Una consegna di documento: un file scritto da Myynd, o una pagina in Pages o TextEdit. */
+export function consegnaDiDocumento(c: Pick<Compito, 'risultato' | 'consegna'>): boolean {
+  return !!c.risultato && !!c.consegna && ['File', 'Pages', 'TextEdit'].includes(c.consegna.app)
+}
+
+/**
+ * «Va bene» su un documento consegnato: l'ha preso com'è, e conta come
+ * identico. Se prima l'aveva ritoccato da /documento, quella misura è quella
+ * vera e non se ne scrive una seconda. Torna se ha scritto.
+ */
+export function consegnaAccettata(c: Pick<Compito, 'id' | 'risultato' | 'consegna'>, adesso = new Date()): boolean {
+  if (!consegnaDiDocumento(c)) return false
+  if (db.prepare("SELECT 1 FROM segnali WHERE genere = 'myynd.bozza' AND ref = ? LIMIT 1").get(c.id)) return false
+  return segnali.scrivi({ id: `myynd.bozza|${c.id}|${adesso.toISOString()}`, genere: 'myynd.bozza', quando: adesso.toISOString(), ref: c.id, valore: 0, dati: { classe: 'identico', tipo: 'documento' } })
 }
 
 // — la vista —
@@ -523,14 +550,18 @@ export function vista(adesso = new Date()): Gemello {
   }
   const diIeri = previsioniDel(ieri)
   const chiusoIeri = !!db.prepare('SELECT 1 FROM punteggi WHERE giorno = ?').get(ieri)
+  // ieri, sempre con chi non ti conosce accanto: la base sta in ogni riga giudicata
   const vistaIeri = diIeri.length ? {
     giorno: ieri, chiuso: chiusoIeri,
     giuste: diIeri.filter(p => p.esito === 'giusta').length,
     totale: diIeri.filter(p => p.esito === 'giusta' || p.esito === 'sbagliata').length,
+    base: diIeri.filter(p => (p.esito === 'giusta' || p.esito === 'sbagliata') && p.dati.base === true).length,
     previsioni: diIeri.map(p => vistaDi(p, chiusoIeri ? p.esito : null))
   } : null
+  // la scala della fiducia sulla pagina: le bozze, i documenti, le carte. Le previsioni hanno già il
+  // punteggio con la base accanto: un tasso da solo, sotto, direbbe un'altra cosa dello stesso gemello
   const fiducia = (db.prepare('SELECT genere, giuste, sbagliate FROM fiducia').all() as { genere: string; giuste: number; sbagliate: number }[])
-    .filter(r => r.giuste + r.sbagliate >= 10).map(r => ({ genere: r.genere, giuste: r.giuste, totale: r.giuste + r.sbagliate }))
+    .filter(r => !r.genere.startsWith('previsione.') && r.giuste + r.sbagliate >= 10).map(r => ({ genere: r.genere, giuste: r.giuste, totale: r.giuste + r.sbagliate }))
   // «non vedo la posta che mandi» solo a registro in pari: mentre il primo ripasso cammina, la cartella Sent può non essere ancora arrivata
   const guai: 'posta-inviata'[] = fontePosta() && !segnali.postaDaRipassare() && !segnali.coperturaInviata(adesso) ? ['posta-inviata'] : []
   return { punteggio, oggi: { quante: diOggi.length, sigillate, previsioni: previsioniOggi }, ieri: vistaIeri, fiducia, abitudini: abitudini.tutte(), guai }

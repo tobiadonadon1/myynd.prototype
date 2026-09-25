@@ -44,5 +44,6 @@ env -i PATH="$PATH" HOME=$T/casa MYYND_DATI=$T/dati MYYND_DEV=1 MYYND_PORT=18700
 
 - Mai `npm run dev`, `dev:server` o `start` per una prova: caricano `.env.local`, che spinge i documenti su un server ospitato.
 - Mai `osascript`, `open`, finestre visibili o tasti simulati fuori dalla finestra nascosta.
+- I bottoni «Portami lì» e «Apri» (posta, file, pagine) fanno partire `/usr/bin/open` sul Mac: sono innocui solo col server acceso con `MYYND_PROVA_NIENTE_OPEN=1` (`scena.sh` lo mette da sé; a mano va aggiunto), che scrive nel registro cosa avrebbe aperto.
 - Mai spegnere un processo per porta (`lsof … | xargs kill`): solo quelli accesi da te.
 - La rassegna, all'avvio, legge i titoli pubblici dei giornali (RSS): nessun dato della persona esce, ma le notizie cambiano da una prova all'altra.

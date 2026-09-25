@@ -128,26 +128,27 @@ export function faseOggi(o: Gemello['oggi']): string {
     en: `Today: ${giuste} right, ${sbagliate} wrong, ${aperte} still open.` })
 }
 
-/** «Ieri · 7 su 9», o «ancora aperte». */
+/** «Ieri · 7 su 9 · senza conoscerti 5», o «ancora aperte». Un conto di ieri, come il punteggio, sta sempre accanto a chi non ti conosce. */
 export function rigaIeri(i: NonNullable<Gemello['ieri']>): string {
   if (!i.chiuso) return t('Ieri · ancora aperte')
-  return scegli({ it: `Ieri · ${i.giuste} su ${i.totale}`, en: `Yesterday · ${i.giuste} of ${i.totale}` })
+  return scegli({ it: `Ieri · ${i.giuste} su ${i.totale} · senza conoscerti ${i.base}`, en: `Yesterday · ${i.giuste} of ${i.totale} · without knowing you ${i.base}` })
 }
 
 /** La riga in fondo al punto, che porta a «Come lavori». */
-export function fraseIeri(giuste: number, totale: number): string {
-  return scegli({ it: `Ieri ci ho preso ${giuste} volte su ${totale}.`, en: `Yesterday I got ${giuste} of ${totale} right.` })
+export function fraseIeri(giuste: number, totale: number, base: number): string {
+  return scegli({ it: `Ieri ci ho preso ${giuste} volte su ${totale}. Senza conoscerti, ${base}.`, en: `Yesterday I got ${giuste} of ${totale} right. Without knowing you, ${base}.` })
 }
 
-/** La scala della fiducia, per genere, senza gradini. */
+/**
+ * La scala della fiducia, per genere, senza gradini: le bozze, i documenti,
+ * le carte. Un tasso delle previsioni non esce mai da qui: da solo, senza chi
+ * non ti conosce accanto, direbbe una cosa diversa dal punteggio sopra.
+ */
 export function rigaFiducia(f: { genere: string; giuste: number; totale: number }): string {
   switch (f.genere) {
     case 'bozza.email': return scegli({ it: `Bozze di risposta: giuste ${f.giuste} su ${f.totale}`, en: `Reply drafts: right ${f.giuste} of ${f.totale}` })
     case 'bozza.documento': return scegli({ it: `Documenti: giusti ${f.giuste} su ${f.totale}`, en: `Documents: right ${f.giuste} of ${f.totale}` })
     case 'feed.carta': return scegli({ it: `Carte del feed: giuste ${f.giuste} su ${f.totale}`, en: `Feed cards: right ${f.giuste} of ${f.totale}` })
-    case 'previsione.posta': return scegli({ it: `Previsioni sulla posta: giuste ${f.giuste} su ${f.totale}`, en: `Mail predictions: right ${f.giuste} of ${f.totale}` })
-    case 'previsione.progetto': return scegli({ it: `Previsioni sul progetto: giuste ${f.giuste} su ${f.totale}`, en: `Project predictions: right ${f.giuste} of ${f.totale}` })
-    case 'previsione.compito': return scegli({ it: `Previsioni sulle righe: giuste ${f.giuste} su ${f.totale}`, en: `Task predictions: right ${f.giuste} of ${f.totale}` })
     default: return ''
   }
 }

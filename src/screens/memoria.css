@@ -184,6 +184,9 @@ textarea.mem-campo{resize:vertical;min-height:62px}
 .cl-riga-fissa{display:flex;align-items:center;gap:12px;min-width:0;padding:11px 14px;margin:0 0 12px;border-radius:14px;
   border:1px solid rgba(var(--inchiostro-rgb),.1);background:rgba(var(--carta-rgb),.6);font-size:13.5px;color:var(--inchiostro)}
 .cl-riga-fissa>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* di notte anche la riga fissa è un'ombra, non una lastra più chiara della pagina */
+:root[data-theme="dark"] .cl-riga-fissa{background:rgba(var(--ombra-rgb),.22)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .cl-riga-fissa{background:rgba(var(--ombra-rgb),.22)}}
 .cl-blocco{margin:0 0 14px}
 .cl-blocco-titolo{margin:0 4px 7px;font-size:12.5px;font-weight:500;color:var(--inchiostro-2);overflow-wrap:anywhere}
 .cl-gruppo{margin:0 4px 6px;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.5)}
