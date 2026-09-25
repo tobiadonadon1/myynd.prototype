@@ -185,5 +185,12 @@ chi.dentro(conto.id, () => {
   }
 })
 
+// — P8: inizio —
+if ((scena as Record<string, unknown>).p8) {
+  const p8 = await import(join(QUI, 'semina-p8.ts'))
+  chi.dentro(conto.id, () => p8.semina((scena as Record<string, unknown>).p8, { casa: CASA }))
+}
+// — P8: fine —
+
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

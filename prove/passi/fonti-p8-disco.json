@@ -1,0 +1,16 @@
+[
+  { "aspetta": 2000 },
+  { "scatta": "aggiornamento" },
+  { "clicca": "Open Settings" },
+  { "scatta": "aspetto" },
+  { "js": "(window.dispatchEvent(new Event('focus')), 1)" },
+  { "aspetta": 1500 },
+  { "scatta": "ancora" },
+  { "js": "(() => { const vero = window.myynd; window.myynd = new Proxy(vero, { get: (t, k) => k === 'riavvia' ? (async () => { window.__riavvio = true }) : k === 'osservatore' ? { permessoTitoli: async () => false, apriImpostazioniTitoli: async () => {} } : t[k] }); return 1 })()" },
+  { "clicca": "Reopen Myynd" },
+  { "js": "window.__riavvio === true" },
+  { "scatta": "riapro" },
+  { "js": "(window.dispatchEvent(new Event('focus')), 1)" },
+  { "aspetta": 1500 },
+  { "scatta": "titoli" }
+]
