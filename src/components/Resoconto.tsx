@@ -18,6 +18,7 @@ import type { AbitudineVista } from '../api'
 import type { Vals } from '../vals'
 import { APRIBILE, CARTA, ETICHETTA, FOGLIO, LINEA, RAME, SOTTO, SPENTO, TESTO, VELO } from './Punto'
 import { apriResoconto, ascoltaChiusura, ascoltaResoconto, resocontoChiuso, useLunedi } from '../useResoconto'
+import { gestoDi } from '../resoconto-gesti'
 import * as parole from '../resoconto-parole'
 
 // — la carta del lunedì —
@@ -102,7 +103,8 @@ export function ResocontoAperto({ v }: { v: Vals }) {
 
 const PIASTRELLA: CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, padding: '14px 16px', borderRadius: 14,
-  background: 'rgba(var(--inchiostro-rgb),.04)', border: 'none', textAlign: 'left', font: 'inherit', color: 'var(--inchiostro)',
+  // l'ombra, non l'inchiostro: di giorno un velo caldo, di notte più scuro del foglio, mai una lastra chiara
+  background: 'rgba(var(--ombra-rgb),.08)', border: 'none', textAlign: 'left', font: 'inherit', color: 'var(--inchiostro)',
   transition: 'box-shadow .2s ease'
 }
 const NUMERO: CSSProperties = { fontFamily: 'var(--serif)', fontSize: 34, lineHeight: 1.05, letterSpacing: '-.02em', color: 'var(--inchiostro)', overflowWrap: 'anywhere' }
@@ -126,7 +128,7 @@ function SezioneFoglio({ etichetta, stato, anello, dentro, children }: {
 
 /** Una riga: tutta la riga è il bersaglio se apre qualcosa, con la freccia in fondo; se no è testo. */
 function Riga({ testo, accanto, fine, apri, espansa }: {
-  testo: ReactNode; accanto?: ReactNode; fine?: ReactNode; apri?: (() => void) | null; espansa?: boolean
+  testo: ReactNode; accanto?: ReactNode; fine?: ReactNode; apri?: (() => unknown) | null; espansa?: boolean
 }) {
   const dentro = (
     <span style={TESTO}>
@@ -191,23 +193,9 @@ export function FoglioResoconto({ r, v, chiudi }: { r: Resoconto; v: Vals; chiud
     chiudi()
     v.goMemoria()
   }
-  const apri = (x: VoceResoconto): (() => void) | null => {
-    const a = x.apre
-    if (!a) return null
-    if ('doc' in a) return () => { chiudi(); void v.portamiFonte(a.doc) }
-    if (!suMac) return null
-    return async () => {
-      const ap = preparaApertura()
-      try {
-        const esito = await ap.completa(await api.portami(a.compito))
-        if (!esito.ok) v.mostraToast(t(esito.errore))
-        else if (esito.dove === 'posta' || esito.dove === 'file') v.mostraToast(t('Aperto.'))
-      } catch (e) {
-        ap.annulla()
-        v.mostraToast(t(e instanceof Error ? e.message : String(e)))
-      }
-    }
-  }
+  const apri = (x: VoceResoconto) => gestoDi(x.apre, {
+    suMac, chiudi, portamiFonte: v.portamiFonte, portami: api.portami, prepara: () => preparaApertura(), avvisa: v.mostraToast, t
+  })
   const giorno = (x: VoceResoconto) => parole.quandoRiga(x.quando, r.quale)
   const giraBozza = (k: string) => setAperte(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
 
@@ -244,7 +232,8 @@ export function FoglioResoconto({ r, v, chiudi }: { r: Resoconto; v: Vals; chiud
     ...(r.numeri.mail ? [{ chiave: 'mail' as const, numero: String(r.numeri.mail), etichetta: t('Mail mandate') }] : []),
     ...(r.numeri.lavori ? [{ chiave: 'lavori' as const, numero: String(r.numeri.lavori), etichetta: t('Lavori consegnati') }] : []),
     ...(r.numeri.scadenze ? [{ chiave: 'scadenze' as const, numero: String(r.numeri.scadenze), etichetta: t('Scadenze segnalate') }] : []),
-    ...(tempo ? [{ chiave: 'tempo' as const, numero: tempo, etichetta: t('Tempo risparmiato') }] : [])
+    // «1 h 05» non va a capo dentro la piastrella
+    ...(tempo ? [{ chiave: 'tempo' as const, numero: tempo.replace(/ /g, '\u00a0'), etichetta: t('Tempo risparmiato') }] : [])
   ]
   const notato = r.notato.map(n => n.stato === 'tenuta' && n.testoSuo ? n.testoSuo
     : rigaAbitudine({ genere: n.genere, dati: (n.dati ?? {}) as AbitudineVista['dati'], stato: n.stato as AbitudineVista['stato'], testoSuo: n.testoSuo })).filter(Boolean)
@@ -270,7 +259,7 @@ export function FoglioResoconto({ r, v, chiudi }: { r: Resoconto; v: Vals; chiud
         </div>
 
         {piastrelle.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginTop: 22 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginTop: 22 }}>
             {piastrelle.map(p => {
               const dentro = <><span style={NUMERO}>{p.numero}</span><span style={{ ...ETICHETTA, overflowWrap: 'anywhere' }}>{p.etichetta}</span></>
               if (p.chiave === 'tempo') return <div key={p.chiave} style={PIASTRELLA}>{dentro}</div>

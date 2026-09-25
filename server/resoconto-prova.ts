@@ -52,6 +52,7 @@ async function main() {
   ])
   await conti.avvia()
   await config.avvia()
+  await r.prepara()
   const cerco = a.conto.trim().toLowerCase()
   const id = conti.tutti().find(u => u === a.conto || conti.conto(u)?.email === cerco) ?? null
   if (!id) { console.error(`Non c'è nessun conto ${a.conto} in ${config.RADICE}.`); process.exitCode = 2; return }

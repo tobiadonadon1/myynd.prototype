@@ -108,3 +108,29 @@ test('le parole di P9 hanno il loro inglese', () => {
     assert.doesNotMatch(t(k), LINEETTE)
   }
 })
+
+test('il gesto di una riga: la fonte, il file solo sul Mac, e i suoi avvisi', async () => {
+  const { gestoDi, inTempo } = await import('./resoconto-gesti.ts')
+  const fatto: string[] = []
+  const mani = (x: Partial<Parameters<typeof gestoDi>[1]> = {}): Parameters<typeof gestoDi>[1] => ({
+    suMac: true, chiudi: () => fatto.push('chiudi'), portamiFonte: (d: string) => fatto.push(`fonte ${d}`),
+    portami: async (id: string) => { fatto.push(`portami ${id}`); return { ok: true, dove: 'file' } },
+    prepara: () => ({ completa: async r => r, annulla: () => fatto.push('annulla') }),
+    avvisa: (s: string) => fatto.push(`avviso ${s}`), t: (s: string) => s, ...x
+  })
+  assert.equal(gestoDi(null, mani()), null)
+  await gestoDi({ doc: 'posta:INBOX:1' }, mani())!()
+  assert.deepEqual(fatto.splice(0), ['chiudi', 'fonte posta:INBOX:1'])
+  await gestoDi({ compito: 'd1' }, mani())!()
+  assert.deepEqual(fatto.splice(0), ['portami d1', 'avviso Aperto.'])
+  // su un server ospitato un file del Mac è solo testo
+  assert.equal(gestoDi({ compito: 'd1' }, mani({ suMac: false })), null)
+  await gestoDi({ compito: 'd1' }, mani({ portami: async () => ({ ok: false, errore: 'Non trovo più il file.' }) }))!()
+  assert.deepEqual(fatto.splice(0), ['avviso Non trovo più il file.'])
+  await gestoDi({ compito: 'd1' }, mani({ portami: async () => { throw new Error('Rotto.') } }))!()
+  assert.deepEqual(fatto.splice(0), ['annulla', 'avviso Rotto.'])
+  // la carta del lunedì: prima delle carte sempre, dopo solo entro 300 ms
+  assert.equal(inTempo(1000, null), true)
+  assert.equal(inTempo(1300, 1000), true)
+  assert.equal(inTempo(1301, 1000), false)
+})

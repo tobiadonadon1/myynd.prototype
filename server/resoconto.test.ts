@@ -41,6 +41,7 @@ function carta(id: string, x: Record<string, string | null>) {
 }
 
 before(async () => {
+  await r.prepara()
   store.azzeraTutto()
   for (const [i, e] of ['a', 'b', 'c'].entries()) {
     const k = await conti.registra(`resoconto-${e}@esempio.test`, 'parola-di-prova-lunga')

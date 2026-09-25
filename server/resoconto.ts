@@ -17,7 +17,6 @@ import * as automazioni from './automazioni.ts'
 import * as misuraFeed from './misura-feed.ts'
 import { conta, numeri as numeriDi, type Genere, type Materiale, type RigaAzione, type RigaCompito, type RigaFeed, type Voce } from './resoconto-conta.ts'
 
-await misuraFeed.caricaModuli()
 
 export type Quale = 'questa' | 'scorsa' | 'inizio'
 export type VoceResoconto = Voce & { perso?: boolean }
@@ -38,6 +37,14 @@ export type Resoconto = {
 }
 
 const GIORNO = 86_400_000
+
+let misuraPronta = false
+/** Carica i moduli della misura del feed (P2) la prima volta: la rotta lo fa prima di leggere. */
+export async function prepara(): Promise<void> {
+  if (misuraPronta) return
+  await misuraFeed.caricaModuli()
+  misuraPronta = true
+}
 const QUALI: Quale[] = ['questa', 'scorsa', 'inizio']
 export const eQuale = (x: unknown): x is Quale => typeof x === 'string' && (QUALI as string[]).includes(x)
 
@@ -213,7 +220,8 @@ function costruisci(quale: Quale, da: string, a: string, lunedi: string, ini: st
     .map(r => { let dati: unknown = null; try { dati = JSON.parse(r.dati) } catch { dati = null } return { ...r, dati } })
 
   let segnalate: Resoconto['segnalate'] = null
-  if (quale !== 'questa') {
+  // la misura del feed vuole i suoi moduli caricati: `prepara()`, che chiama la rotta
+  if (quale !== 'questa' && misuraPronta) {
     const mf = misuraFeed.misura((Date.parse(a) - Date.parse(da)) / GIORNO, Date.parse(a))
     const k = mf.carte
     const utili = k.agite + k.fuori + k.tardive

@@ -4745,9 +4745,10 @@ app.get('/api/fonti/salute', (req, res) => {
  * il lunedì visto, che è un gesto suo. Nessun evento sul filo, nessuna riga
  * nel registro per richiesta.
  */
-app.get('/api/resoconto', (req, res) => {
+app.get('/api/resoconto', async (req, res) => {
   try {
     if (!resoconto.eQuale(req.query.quale)) return res.status(400).json({ errore: 'Non conosco questo periodo.' })
+    await resoconto.prepara()
     res.json({ resoconto: resoconto.resoconto(req.query.quale) })
   } catch (e) { errore(res, e) }
 })

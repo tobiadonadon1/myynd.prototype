@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { resocontoApi, type LunediResoconto, type QualeResoconto } from './api'
+import { inTempo } from './resoconto-gesti'
 
 const inAscolto = new Set<(q: QualeResoconto) => void>()
 const allaChiusura = new Set<() => void>()
@@ -19,17 +20,6 @@ export function resocontoChiuso() { for (const f of [...allaChiusura]) f() }
 export function ascoltaChiusura(f: () => void): () => void {
   allaChiusura.add(f)
   return () => { allaChiusura.delete(f) }
-}
-
-/** Una risposta che arriva più tardi di così dopo le carte spingerebbe giù la pagina sotto il cursore. */
-export const TOLLERANZA_MS = 300
-
-/**
- * Deve comparire la carta, adesso? Prima che le carte ci siano, sì; dopo,
- * solo se la risposta è arrivata entro `TOLLERANZA_MS`.
- */
-export function inTempo(arrivata: number, feedPronto: number | null): boolean {
-  return feedPronto === null || arrivata - feedPronto <= TOLLERANZA_MS
 }
 
 /**
