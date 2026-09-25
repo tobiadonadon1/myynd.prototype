@@ -771,10 +771,14 @@ test('la lettura non ripropone una cosa che è già sul feed con altre parole', 
 // rimanda per un giorno; e le sue ragioni cambiano la lettura dopo.
 
 const fraOre = (ore: number) => new Date(Date.now() - ore * 3_600_000).toISOString()
+/** Un mercoledì alle 15 ora locale: le prove sulle date relative non dipendono dall'ora in cui girano. */
+const POMERIGGIO = new Date(2026, 8, 23, 15, 0, 0).getTime()
 const GIORNI_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MESI_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-test('«tomorrow» nel testo di una carta diventa il giorno che voleva dire nella mail, e la pillola si salva assoluta', async () => {
+test('«tomorrow» nel testo di una carta diventa il giorno che voleva dire nella mail, e la pillola si salva assoluta', async t => {
+  // un mercoledì alle 15: «tomorrow» e «tonight» detti un'ora fa non scavallano la mezzanotte
+  t.mock.timers.enable({ apis: ['Date'], now: POMERIGGIO })
   store.azzeraTutto()
   const d = doc('posta:INBOX:1001', 'Review call', { corpo: 'Can you join the review call tomorrow at 9:30? We need your yes on the course price.', autore: 'Sam Ortiz <sam@lumen.example>', quando: fraOre(1) })
   store.salvaDocumenti([d])
@@ -794,7 +798,9 @@ test('«tomorrow» nel testo di una carta diventa il giorno che voleva dire nell
   assert.equal(in_pagina.urgenza, 'Tomorrow 9:30', 'la pagina legge la pillola relativa a oggi')
 })
 
-test('un’urgenza che scrive il giorno che «tomorrow» voleva dire nella mail nasce; un giorno che la mail non nomina no', async () => {
+test('un’urgenza che scrive il giorno che «tomorrow» voleva dire nella mail nasce; un giorno che la mail non nomina no', async t => {
+  // un mercoledì alle 15: «tomorrow» e «tonight» detti un'ora fa non scavallano la mezzanotte
+  t.mock.timers.enable({ apis: ['Date'], now: POMERIGGIO })
   store.azzeraTutto()
   const d = doc('posta:INBOX:1002', 'Review call', { corpo: 'Can you join the review call tomorrow at 9:30? We need your yes on the course price.', autore: 'Sam Ortiz <sam@lumen.example>', quando: fraOre(1) })
   store.salvaDocumenti([d])
@@ -1016,7 +1022,9 @@ test('la riga della misura si scrive una volta per lettura che arriva al modello
 
 // — le correzioni del primo giro di verifica —
 
-test('una mail che dice «tonight»: la carta nasce con il giorno della sera, si salva, e la pagina la mostra ancora', async () => {
+test('una mail che dice «tonight»: la carta nasce con il giorno della sera, si salva, e la pagina la mostra ancora', async t => {
+  // un mercoledì alle 15: «tomorrow» e «tonight» detti un'ora fa non scavallano la mezzanotte
+  t.mock.timers.enable({ apis: ['Date'], now: POMERIGGIO })
   store.azzeraTutto()
   const d = doc('posta:INBOX:1101', 'Signed contract', { corpo: 'Can you send me the signed contract tonight? I file it first thing.', autore: 'Nora Vance <nora@harbor.example>', quando: fraOre(1) })
   const ieri = doc('posta:INBOX:1102', 'Draft notes', { corpo: 'Anna sent you the draft yesterday. Can you send her your notes on it?', autore: 'Anna Ruiz <ana@harbor.example>', quando: fraOre(2) })
