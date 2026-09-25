@@ -16,7 +16,7 @@
 
 import { existsSync, mkdirSync, readdirSync, realpathSync } from 'node:fs'
 import { tmpdir, userInfo } from 'node:os'
-import { join, resolve, sep } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export type Argomenti = { seme: number | null; dati: string | null; conto: string | null; json: boolean; aiuto: boolean; sbagliato: string | null }
@@ -38,7 +38,14 @@ export function leggiArgomenti(argv: string[]): Argomenti {
 
 const USO = `Uso: HOME=<cartella temporanea> npm run velocita -- (--seme N --dati <cartella vuota> | --dati <copia> --conto <email>) [--json]`
 
-const vero = (p: string) => { try { return realpathSync(p) } catch { return resolve(p) } }
+/** Il percorso vero, anche di una cartella che non c'è ancora (si risolve il primo antenato che c'è). */
+const vero = (p: string): string => {
+  const r = resolve(p)
+  try { return realpathSync(r) } catch {
+    const su = dirname(r)
+    return su === r ? r : join(vero(su), basename(r))
+  }
+}
 const dentro = (figlio: string, padre: string) => figlio === padre || figlio.startsWith(padre.endsWith(sep) ? padre : padre + sep)
 
 /** Perché no, o null se si può partire. Si guarda prima di creare o aprire qualunque cosa. */

@@ -227,11 +227,12 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
   const affida = async () => {
     if (!lista || affidando) return
     setAffidando(true)
-    const id = await lista.affidaNuovo(carta.titolo, { doc: voce.doc, voce: voce.id, nota: offerta || null })
-    setAffidando(false)
-    if (!id) return
+    // P10 · nello stesso istante: la carta se ne va e la sua riga nasce, già al lavoro;
+    // se il server dice di no, tornano tutte e due com'erano
+    const dove = v.voci.findIndex(x => x.id === voce.id)
     v.viaDalFeed(voce.id)
-    v.mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
+    await lista.affidaDaCarta(voce, carta.titolo, offerta || null, () => v.rimettiVoce(voce, Math.max(0, dove)))
+    setAffidando(false)
   }
 
   // con la risposta già mandata dalla posta, «Fatto» è il bottone della riga anche su una priorità

@@ -49,6 +49,8 @@ import * as ordine from './ordine.ts'
 import { classificaAttenzione, validaVoceFeed, corpoAttuale, giornoFondato, contieneRichiesta, indirizzoAttenzione } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
 import { collegato as jevCollegato } from './jev.ts'
+import * as tempi from './tempi.ts'
+import { domandaSecca } from './domanda-secca.ts'
 import { rifinisci } from './rifinitura.ts'
 import { docsIgnoratiDalFeed } from './store.ts'
 // P2 · la lettura con l'asticella: quello che ha imparato dalle sue ragioni,
@@ -819,7 +821,7 @@ function regoleChat(puoCercare: boolean): string {
 
 const PIANO_SENZA_FONTI = 'Non ho trovato richieste assegnate attuali nelle fonti collegate per questo progetto. La copertura delle fonti è limitata: questo NON significa che la persona non debba nulla a nessuno. Usa l’obiettivo registrato per proporre passi pratici, indica che sono proposte e che lo stato attuale non è verificato. Non cercare vecchie menzioni per riempire i vuoti.'
 
-export function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false, compatto = false, puoCercare = !compatto, progettoInChat?: string, risultatoSalvato?: string): Anthropic.MessageCreateParamsNonStreaming {
+export function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false, compatto = false, puoCercare = !compatto, progettoInChat?: string, risultatoSalvato?: string, lavoro: 'risposta' | 'rispostaBreve' = 'risposta'): Anthropic.MessageCreateParamsNonStreaming {
   const pianoAttuale = progettiPerPiano(domanda).length > 0
   /*
    * Una chat nata da «Parliamone»: Myynd ha fatto due domande, e lei sta
@@ -842,7 +844,7 @@ export function corpoRichiesta(domanda: string, storico: Turno[], docs: Document
   const discorso = pianoAttuale ? domanda : [domanda, ...storico.filter(t => t.ruolo === 'u').slice(-3).map(t => t.testo), ...docs.map(d => d.titolo)].join(' ')
   return {
     // i parametri li decide `modello.ts`: sa quali accetta il modello scelto
-    ...parametri('risposta', 16000),
+    ...parametri(lavoro, 16000),
     // Il discorso serve a capire di quale cliente si sta parlando. Il blocco
     // è segnato da tenere in cache: nel giro degli strumenti si rimanda tale e
     // quale a ogni giro, e fra un messaggio e l'altro della stessa chat cambia
@@ -1614,7 +1616,34 @@ export function dettoDaLei(richiesta: string, messaggio: string): boolean {
   return dentro / parole.length >= 0.7
 }
 
+/**
+ * La chat, con le sue tappe misurate (P10): quanto ci mette il materiale, il
+ * prompt, la chiusura, la partenza del motore e la prima parola. `tappe` è
+ * facoltativo: senza, è la chat di sempre. Una risposta senza modello (un
+ * saluto, lo stato delle fonti) si scrive come «scorciatoia».
+ */
 export async function rispondiInStreaming(
+  domanda: string,
+  storico: Turno[],
+  onTesto: (delta: string) => void,
+  attrezzi?: Attrezzi,
+  segnale?: AbortSignal,
+  onRicomincia?: () => void,
+  opz?: { prova?: boolean },
+  tappe?: ReturnType<typeof tempi.tappeChat>
+): Promise<Risposta> {
+  const st: StatoTappe = { via: null, breve: false }
+  const conPrima = (d: string) => { tappe?.segna('prima-parola'); onTesto(d) }
+  try {
+    return await rispondiInStreamingDentro(domanda, storico, tappe ? conPrima : onTesto, attrezzi, segnale, onRicomincia, opz, tappe, st)
+  } finally {
+    tappe?.chiudi({ via: st.via ?? 'scorciatoia', breve: st.breve, entrata: st.entrata, cache: st.cache })
+  }
+}
+
+type StatoTappe = { via: tempi.Via | null; breve: boolean; entrata?: number; cache?: number }
+
+async function rispondiInStreamingDentro(
   domanda: string,
   storico: Turno[],
   onTesto: (delta: string) => void,
@@ -1639,7 +1668,9 @@ export async function rispondiInStreaming(
    * scorciatoie che salvano non si guardano nemmeno. Torna anche `estratti`:
    * quanti caratteri di ogni documento il modello ha visto.
    */
-  opz?: { prova?: boolean }
+  opz?: { prova?: boolean },
+  tappe?: ReturnType<typeof tempi.tappeChat>,
+  st: StatoTappe = { via: null, breve: false }
 ): Promise<Risposta> {
   segnale?.throwIfAborted()
   const prova = !!opz?.prova
@@ -1690,6 +1721,18 @@ export async function rispondiInStreaming(
    */
   const compatto = m?.tipo === 'compatibile'
   const docs = materialeChat(domanda, storico, compatto)
+  tappe?.segna('materiale')
+  /*
+   * Una domanda secca (P10): quando, chi, dove. Sull'account si chiede con
+   * meno sforzo, sulla chiave con il lavoro `rispostaBreve`; tutto il resto
+   * resta com'era. La chiusura di un progetto qui non c'è ancora: dove c'è
+   * (sotto) si rifà il conto.
+   */
+  const secca = (chiusura: boolean) => domandaSecca(domanda, {
+    progettoInChat: !!attrezzi?.progetto, compito: !!attrezzi?.compitoId, revisione: richiestaRevisione(domanda),
+    progettiNominati: progettiPerPiano(domanda).length, chiusura
+  })
+  st.breve = secca(false)
   // c'è della memoria nel prompt: decide se un [M] scritto dal modello vale
   const memoria = haMemoria()
   const vivi = progettiPerLAncora()
@@ -1725,6 +1768,7 @@ export async function rispondiInStreaming(
     let detto = 0
     const conta = (pezzo: string) => { detto += pezzo.length; onTesto(pezzo) }
     try {
+      st.via = 'abbonamento'
       const b = corpoRichiesta(domanda, storico, docs, false, false, false, attrezzi?.progetto)
       // L'ha già avvolto `corpoRichiesta`, e si riavvolge qui: la funzione è
       // idempotente apposta, e una garanzia sulla lingua deve vedersi dove il
@@ -1736,7 +1780,9 @@ export async function rispondiInStreaming(
         const testo = testoDi(m.content)
         return (m.role === 'user' || m.role === 'assistant') && testo ? [{ role: m.role, content: testo }] : []
       })
-      const testo = await abbonamento.inStreaming({ system, messages, silenzio: SILENZIO_MAX, onTesto: conta })
+      tappe?.segna('prompt')
+      tappe?.segna('avvio')
+      const testo = await abbonamento.inStreaming({ system, messages, silenzio: SILENZIO_MAX, onTesto: conta, lavoro: st.breve ? 'rispostaBreve' : 'risposta', sforzo: st.breve ? 'low' : undefined })
       // senza `cerca` il materiale entra intero: quattromila caratteri a documento
       const estratti = new Map(docs.map(d => [d.id, 4000]))
       return conEstratti(ancora(testo, {
@@ -1811,13 +1857,18 @@ export async function rispondiInStreaming(
     chiusura = await concludiDaTrascrizione(attrezzi.progetto, domanda, storico, attrezzi.aggiungiCompito)
       .catch(e => { console.error('myynd · non sono riuscito a chiudere la chat sul progetto:', e instanceof Error ? e.message : e); return null })
   }
+  tappe?.segna('chiusura')
+  st.breve = secca(!!chiusura)
+  // solo la chiave sceglie il lavoro: un fornitore compatibile, un modello di casa e ChatGPT restano come sono
+  const lavoroChat = st.breve && m.tipo === 'claude' ? 'rispostaBreve' as const : 'risposta' as const
+  st.via = m.tipo === 'claude' ? 'chiave' : m.tipo === 'chatgpt' ? 'chatgpt' : 'compatibile'
   const concluso = attrezzi?.risultatoSalvato || chiusura?.risultato
   // nella prova gli strumenti si offrono come dal vivo, e si negano dopo: la
   // risposta dev'essere quella che darebbe con gli strumenti in mano
   const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI, ...(attrezzi.progetto && !concluso ? [ATTREZZO_CONCLUDI] : [])] : prova ? [ATTREZZO_CERCA, ...STRUMENTI] : [ATTREZZO_CERCA]
   // La lista va nel prompt insieme agli strumenti che la toccano, e per la
   // stessa ragione: sono due metà della stessa cosa.
-  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi || prova, compatto, undefined, attrezzi?.progetto, concluso)
+  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi || prova, compatto, undefined, attrezzi?.progetto, concluso, lavoroChat)
   if ((attrezzi || prova) && Array.isArray(base.system)) base.system.push({ type: 'text', text: contestoRevisioni() || 'No previous delivered work.' })
   if (chiusura && Array.isArray(base.system)) {
     base.system.push({ type: 'text', text: `Hai appena salvato, davvero, con lo strumento: il risultato da inseguire sul progetto è «${chiusura.risultato}»${chiusura.passi.length ? `, e in lista, sulla sua prima pagina, ci sono questi primi passi: ${chiusura.passi.map(p => `«${p}»`).join(', ')}` : ''}. Rispondi in due frasi al massimo, riprendendo le sue parole: cosa hai segnato come risultato, e che i passi sono nella sua lista sulla prima pagina. Nessuna domanda, nessun altro strumento.` })
@@ -1825,6 +1876,7 @@ export async function rispondiInStreaming(
   const richiesta: Anthropic.MessageStreamParams = { ...base, tools: arnesi, ...(chiusura && arnesi.length ? { tool_choice: { type: 'none' } } : {}) }
   // tutto quello che il modello legge, giro dopo giro: un fatto che sta qui non è scoperto
   const letto: string[] = tuttoIlLetto(richiesta.system, richiesta.messages)
+  tappe?.segna('prompt')
 
   /*
    * Prima di tutto: c'è qualcuno dall'altra parte?
@@ -1854,8 +1906,13 @@ export async function rispondiInStreaming(
     if (segnale?.aborted) throw new Error('Nessuno sta più ascoltando.')
     // In streaming e con la guardia sul silenzio, su qualunque motore ci sia:
     // il testo arriva a pezzi a `onTesto`, e in fondo torna il messaggio intero.
+    tappe?.segna('avvio')
     const finale = await m.flusso({ ...richiesta, messages: messaggi }, onTesto, tempoPrimaParola, segnale, true)
-    segnaUso('risposta', finale.usage, `giro ${giro + 1} · ${m.nome}`)
+    segnaUso(lavoroChat, finale.usage, `giro ${giro + 1} · ${m.nome}`)
+    if (finale.usage) {
+      st.entrata = finale.usage.input_tokens
+      if (typeof finale.usage.cache_read_input_tokens === 'number') st.cache = finale.usage.cache_read_input_tokens
+    }
 
     if (finale.stop_reason === 'refusal') {
       return scorciatoia(leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', m.tipo)

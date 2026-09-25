@@ -794,6 +794,9 @@ export function soloAbbonamento(): boolean {
   return !chatgpt.scelto() && abbonamento.disponibile() && fornitore() === null
 }
 
+/** P10 · l'ultima volta che il fornitore compatibile ha risposto «ci sono», per indirizzo. */
+const rispostoIl = new Map<string, number>()
+
 export function motore(): Motore | null {
   if (chatgpt.scelto()) {
     const m = chatgpt.motore()
@@ -814,7 +817,11 @@ export function motore(): Motore | null {
       tipo: 'compatibile',
       nome: f.nome || f.modello,
       pronto: async () => {
-        if (await compatibile.risponde(f)) return
+        // P10 · ha risposto meno di trenta secondi fa: la chat non aspetta un'altra bussata
+        const ultima = rispostoIl.get(f.url)
+        if (ultima !== undefined && Date.now() - ultima < 30_000) return
+        if (await compatibile.risponde(f)) { rispostoIl.set(f.url, Date.now()); return }
+        rispostoIl.delete(f.url)
         throw tradotto(new Error('Il modello sul tuo computer non risponde: controlla che Ollama (o LM Studio) sia acceso.'))
       },
       crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { segnaSeOpenAI(e); throw tradotto(e) }) },

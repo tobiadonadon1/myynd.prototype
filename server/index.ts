@@ -29,7 +29,9 @@ import * as memoria from './memoria.ts'
 import * as conoscenza from './conoscenza.ts'
 import * as timone from './timone.ts'
 import * as tempi from './tempi.ts'
+import { rotteTempi } from './tempi-rotte.ts'
 import * as letturaChiesta from './lettura-chiesta.ts'
+import * as scalda from './scalda.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
@@ -3389,10 +3391,15 @@ app.post('/api/compiti/:id/delega', (req, res) => {
     return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
   }
   const modo = MODI.includes(String(req.body?.modo)) ? String(req.body.modo) : 'bozza'
-  compiti.affida(c.id, modo)
+  affidaRiga(c.id, modo)
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
+
+/** Quello che succede quando una riga passa a Myynd, dopo i controlli: lo stesso per `/delega` e per `/affida` (P10). */
+function affidaRiga(id: string, modo: string) {
+  compiti.affida(id, modo)
+}
 
 /**
  * Chiude un compito con le tue parole.
@@ -4488,6 +4495,9 @@ app.post('/api/chat/:id/progetto', (req, res) => {
  * partita con 200, quindi un 500 a metà non esiste più come opzione.
  */
 app.post('/api/chat/:id', async (req, res) => {
+  // P10 · la domanda vera ferma lo scaldare del modello di casa, se c'è
+  scalda.ferma()
+  const tappe = tempi.tappeChat()
   const chat = req.params.id
   const domanda: string = req.body?.testo ?? ''
   if (!domanda.trim()) return res.status(400).json({ errore: 'Scrivi qualcosa.' })
@@ -4573,7 +4583,7 @@ app.post('/api/chat/:id', async (req, res) => {
       // Claude Code è caduto dopo aver già scritto mezza risposta, e il motore
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
       // invece di vedersela accodare a quella intera.
-    }, controllo.signal, () => invia({ fase: 'ricomincio' }))
+    }, controllo.signal, () => invia({ fase: 'ricomincio' }), undefined, tappe)
     // il testo è già pulito da `ancora` (segni fuori elenco, lineette fuori dal codice); `verifica` è il verbale, che si registra e basta
     store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: senzaTrattiniFuoriCodice(r.testo), fonti: r.fonti, verifica: r.verifica })
     console.log(risposteVive.rigaRisposta(r.verifica))
@@ -4940,19 +4950,66 @@ app.post('/api/resoconto/visto', (req, res) => {
  * Mai su un server: dicono quando qualcuno lavora, e non servono a nessuno.
  */
 const QUATTORDICI_GIORNI = 14 * 24 * 3_600_000
-app.get('/api/tempi', (_req, res) => {
-  if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Questa strada non esiste.' })
-  const dal = new Date(Date.now() - QUATTORDICI_GIORNI).toISOString()
-  res.json({ ...tempi.riassunto(), bordo: tempi.bordo(store.ritardiCarte(dal), store.ritardiLavori(dal)) })
+rotteTempi(app, {
+  ospitato: () => ospitato.OSPITATO,
+  bordo: () => {
+    const dal = new Date(Date.now() - QUATTORDICI_GIORNI).toISOString()
+    return tempi.bordo(store.ritardiCarte(dal), store.ritardiLavori(dal))
+  }
 })
 
-app.post('/api/tempi', (req, res) => {
-  if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Questa strada non esiste.' })
-  const segni = tempi.segniDelClient(req.body)
-  if (!segni) return res.status(400).json({ errore: 'Segni non validi.' })
-  console.log(tempi.rigaSegni(segni))
-  res.json({ ok: true })
+/*
+ * «Affidalo a Myynd» da una carta, in un passo solo (P10): la riga nasce, la
+ * carta si chiude e il lavoro parte, o non succede niente. Prima erano due
+ * chiamate, crea e poi affida: senza motore la riga restava in lista aperta e
+ * la carta era già chiusa. Adesso i controlli vengono prima di ogni scrittura,
+ * e un guasto dopo la scrittura rimette tutto com'era.
+ */
+app.post('/api/compiti/affida', (req, res) => {
+  const testo = String(req.body?.testo ?? '').trim()
+  if (!testo) return res.status(400).json({ errore: 'Scrivi cosa c\'è da fare.' })
+  const idVoce = String(req.body?.voce ?? '')
+  const voce = idVoce ? store.voceFeed(idVoce) : undefined
+  if (!voce || voce.stato !== 'aperto') return res.status(409).json({ errore: 'Questa carta non c’è più.' })
+  if (!claude.collegato() || !mod.puoLavorare()) return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
+  const id = String(req.body?.id ?? '').trim() || `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+  let scritta = false
+  try {
+    const progetto = voce.progetto || progettoDelTesto(`${voce.titolo ?? ''}\n${voce.testo ?? ''}\n${testo}\n${String(req.body?.nota ?? '')}`)
+    store.scriviCompito({
+      id, testo,
+      nota: req.body?.nota ? String(req.body.nota) : null,
+      quando: 'oggi', giorno: null, ora: null, progetto, priorita: null,
+      ordine: ordine.dopo(store.ultimoOrdine('oggi')),
+      origine: 'feed',
+      voce: idVoce,
+      doc: req.body?.doc ? String(req.body.doc) : null
+    })
+    scritta = true
+    store.cambiaStatoFeed(idVoce, 'fatto', 'Passata nella lista.', 'lista')
+    affidaRiga(id, 'tutto')
+  } catch (e) {
+    if (scritta) {
+      try { store.scordaCompito(id) } catch { /* resta com'è */ }
+      try { store.cambiaStatoFeed(idVoce, 'aperto') } catch { /* resta com'è */ }
+    }
+    return errore(res, e)
+  }
+  res.json({ ok: true, id, compiti: compitiAttuali() })
+  compiti.annunciaCambio()
+  compiti.annunciaFeed()
 })
+
+
+/*
+ * Scaldare il modello di questo Mac quando la chat prende il fuoco (P10).
+ * Risponde subito; la chiamata va avanti da sola, e solo per un modello sul
+ * Mac. Non sta sotto /api/chat/*: `POST /api/chat/:id` se la prenderebbe.
+ */
+app.post('/api/modello/scalda', (_req, res) => {
+  res.json({ ok: true, ...scalda.scalda() })
+})
+
 // — P10: rotte, fine —
 
 // qualunque cosa sfugga ai singoli handler esce come JSON, non come stack HTML
@@ -5143,6 +5200,8 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // senza questa riga resta «da Myynd» per sempre, e la lista mente
   // la prima rilettura non è all'avvio ma dopo un minuto: accendere l'app non
   // deve voler dire aspettare che abbia finito di leggere la posta
+  // P10 · cosa sa fare il `claude` installato, guardato una volta di fondo: mai dentro una chat
+  perOgnuno('la sonda di claude non è riuscita', async () => abbonamento.sondaLeBandiere())()
   const rilettura = perOgnuno('la rilettura automatica si è fermata', rileggiDaSola)
   setTimeout(rilettura, 60_000)
   setInterval(rilettura, OGNI)
@@ -5237,13 +5296,19 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * nessun filo, e non è un errore.
    */
   const recupero = perOgnuno('il recupero dopo il risveglio non è riuscito', async () => {
+    // P10 · subito, come sempre (è il momento migliore del gemello: prima che lui guardi),
+    // ma misurato: quanto dopo il risveglio nasce la prima carta. I pezzi lunghi cedono il passo.
+    tempi.segnaSveglia()
+    await tempi.misuraLavoro('recupero', () => recuperoDentro())
+  })
+  const recuperoDentro = async () => {
     await rileggiDaSola()
     await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
     await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
     await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro()))
     await runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro()))
     await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
-  })
+  }
   sveglia.ascolta(() => {
     console.log('myynd · il computer si è svegliato: recupero quello che è successo nel frattempo')
     recupero()
