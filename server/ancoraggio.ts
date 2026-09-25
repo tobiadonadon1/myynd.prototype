@@ -383,23 +383,26 @@ export function passoPer(frase: string, estratto: string): string | undefined {
 
 /**
  * Per ogni comparsa del segno dato, nell'ordine del testo: la frase della
- * risposta che lo porta, e il suo pezzo, dal segno precedente (di qualunque
- * fonte, o dall'inizio della frase) fino a lui.
+ * risposta che lo porta, il suo pezzo, dal segno precedente (di qualunque
+ * fonte, o dall'inizio della frase) fino a lui, e il resto, da lui al segno
+ * dopo (di qualunque fonte) o alla fine della frase.
  *
  * Claude e GPT citano spesso ogni proposizione da sé: «X il 14 ottobre [1],
  * e la quota è 4.800 € [1].» è una frase sola con due segni, e il segno
  * dopo la quota deve provare la quota, non la data.
  */
-function frasiCol(testo: string, segno: string): { frase: string; pezzo: string }[] {
+function frasiCol(testo: string, segno: string): { frase: string; pezzo: string; resto: string }[] {
   const frasi = frasiCon(testo)
-  const fuori: { frase: string; pezzo: string }[] = []
+  const fuori: { frase: string; pezzo: string; resto: string }[] = []
   for (let i = testo.indexOf(segno); i >= 0; i = testo.indexOf(segno, i + segno.length)) {
     const f = frasi.find(x => i >= x.inizio && i < x.fine)
-    if (!f) { fuori.push({ frase: '', pezzo: '' }); continue }
+    if (!f) { fuori.push({ frase: '', pezzo: '', resto: '' }); continue }
     const prima = f.testo.slice(0, i - f.inizio)
     let da = 0
     for (const m of prima.matchAll(SEGNO)) da = m.index + m[0].length
-    fuori.push({ frase: f.testo, pezzo: prima.slice(da) })
+    const dopo = f.testo.slice(i - f.inizio + segno.length)
+    const prossimo = dopo.search(SEGNO)
+    fuori.push({ frase: f.testo, pezzo: prima.slice(da), resto: prossimo < 0 ? dopo : dopo.slice(0, prossimo) })
   }
   return fuori
 }
@@ -448,6 +451,7 @@ export function ancora(testo: string, o: {
   const prosa = senzaCodice(t)
   const citati = new Set<number>()
   for (const m of prosa.testo.matchAll(/\[(\d{1,3})\]/g)) citati.add(Number(m[1]))
+  const lettiTutti = fattiDuri(o.letto)
   const fonti: FonteAncorata[] = []
   o.visti.forEach((d, i) => {
     const n = i + 1
@@ -467,12 +471,21 @@ export function ancora(testo: string, o: {
     // Prima il pezzo di frase fino al segno: con due segni nella stessa
     // frase, quello dopo la quota prova la quota. Un pezzo senza fatti duri
     // e senza abbastanza parole in comune («e serve al tuo obiettivo [1]»)
-    // torna alla frase intera; un pezzo con un fatto che l'estratto non ha
-    // resta senza passo, perché la frase intera proverebbe un'altra cosa
-    const passi = frasiCol(prosa.testo, `[${n}]`).map(({ frase, pezzo }) => {
+    // torna alla frase intera. Un pezzo con un fatto che l'estratto non ha
+    // è di due specie. «Nella mail di Nora del 12 settembre [1], la quota è
+    // 4.800 €»: la data sta nell'intestazione che il modello ha letto, il
+    // pezzo presenta la fonte e il segno regge quello che viene dopo, fino
+    // al segno successivo; mai la frase intera, che porterebbe il passo di
+    // un'altra cosa. «Parte il 14 ottobre 2027 [1], e la quota è 4.800 €
+    // [1]»: il 2027 non sta in niente di letto, e sotto quel segno il passo
+    // della quota direbbe il falso: nessun passo
+    const passi = frasiCol(prosa.testo, `[${n}]`).map(({ frase, pezzo, resto }) => {
       const p = cerca(pezzo)
       if (p !== null || pezzo === frase) return p
-      return fattiDuri(senzaSegni(prosa.rimetti(pezzo))).length ? null : cerca(frase)
+      const fatti = fattiDuri(senzaSegni(prosa.rimetti(pezzo)))
+      if (!fatti.length) return cerca(frase)
+      if (fatti.some(x => !coperto(x, lettiTutti)) || !resto.trim()) return null
+      return cerca(resto)
     })
     if (passi[0]) f.passo = passi[0]
     if (passi.length > 1) f.passi = passi
@@ -485,7 +498,6 @@ export function ancora(testo: string, o: {
       ? { id: `memoria:progetto:${p.id}`, label: `[M] ${p.nome}`, fonte: 'memoria' }
       : { id: 'memoria', label: '[M]', fonte: 'memoria' })
   }
-  const lettiTutti = fattiDuri(o.letto)
   const scoperti = fattiDuri(t).filter(x => !coperto(x, lettiTutti))
   // «Non ce l'ho. La quota è 4.800 € [1].» ha citato una fonte: ha risposto,
   // non ha rifiutato. Un fatto scoperto nella frase dopo resta invece nel

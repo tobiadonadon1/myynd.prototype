@@ -241,6 +241,8 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
   lucchetto.segnale.addEventListener('abort', ferma, { once: true })
   if (o.segnale?.aborted) ferma()
   const dal = new Date().toISOString()
+  // letta adesso: dopo, leggere la configurazione rifarebbe la cartella di un conto cancellato a metà prova
+  const lingua = cfg.lingua()
   const { ferri } = await moduli()
   const partenza = ferri.adesso()
   try {
@@ -297,6 +299,10 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
           voce.errore = messaggio(e); voce.ms.totale = ferri.adesso() - t0
           voci.push(voce); interrotta = 'errore'; break
         }
+        // la cartella se n'è andata mentre la chat rispondeva («svuota la
+        // mente», l'addio al conto): da qui in poi niente tocca più l'indice,
+        // che riaprendosi rifarebbe la cartella appena tolta
+        if (segnale.aborted) { interrotta = 'annullata'; break }
         voce.ms = { primaParola: prima, totale: ferri.adesso() - t0 }
         voce.risposta = r.testo; voce.fonti = r.fonti; voce.verifica = r.verifica
         // «Non ce l'ho. L'affitto è 2.900 € al mese.» non è un rifiuto da
@@ -366,11 +372,13 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
     const via: Via | 'misto' = vie.size === 1 ? [...vie][0] as Via : vie.size > 1 ? 'misto' : strada?.via ?? 'nessuno'
     const conDoc = voci.filter(v => v.tipo === 'risponde')
     const rapporto: RapportoRisposte = {
-      quando, origine: o.origine, via, lingua: cfg.lingua(), secco: !!o.secco, voci, totali: t, perGruppo: gruppi(voci),
+      quando, origine: o.origine, via, lingua, secco: !!o.secco, voci, totali: t, perGruppo: gruppi(voci),
       recupero: { nelMateriale: conDoc.filter(v => v.codice.docNelMateriale).length, inCerca: conDoc.filter(v => v.codice.docInCerca).length, risponde: conDoc.length },
       accordo,
       tempi: { primaParolaMediana: mediana(voci.map(v => v.ms.primaParola).filter((x): x is number => x !== null)), totaleMediana: mediana(voci.filter(v => v.esito).map(v => v.ms.totale)) },
-      costo: await costoDal(dal), ritirate, soglia: SOGLIA, passa: !o.secco && !interrotta && passa(t),
+      // senza più il lucchetto la cartella non c'è: il registro dell'uso non si legge, o l'indice la rifarebbe
+      costo: lucchetto.tenuto() ? await costoDal(dal) : { chiamate: 0, entrata: 0, cache: 0, uscita: 0 },
+      ritirate, soglia: SOGLIA, passa: !o.secco && !interrotta && passa(t),
       ...(interrotta ? { interrotta } : {}), file: null
     }
     if (o.secco) return rapporto

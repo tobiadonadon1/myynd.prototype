@@ -12,6 +12,8 @@
   {"aspetta": 500},
   {"scatta": "sopra-fonte"},
   {"js": "(() => { const e = document.activeElement; if (!e || !/^Source:/.test(e.getAttribute('aria-label') || '')) return 'il fuoco non è sul segno'; let a = e.parentElement; while (a && !/auto|scroll/.test(getComputedStyle(a).overflowY)) a = a.parentElement; if (!a) return 'nessuna colonna che scorre'; a.dispatchEvent(new Event('scroll')); return new Promise(r => setTimeout(() => r('dopo lo scorrimento: ' + JSON.stringify({ fuoco: document.activeElement === e, nuvola: !!document.querySelector('[role=tooltip]'), anello: getComputedStyle(e).outlineStyle })), 300)) })()"},
+  {"js": "(() => { const e = document.activeElement; if (!e || !/^Source:/.test(e.getAttribute('aria-label') || '')) return 'il fuoco non è sul segno'; e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return new Promise(r => setTimeout(() => r('dopo Esc: ' + JSON.stringify({ fuoco: document.activeElement === e, nuvola: !!document.querySelector('[role=tooltip]'), anello: getComputedStyle(e).outlineStyle })), 300)) })()"},
+  {"scatta": "dopo-esc"},
   {"js": "(() => { const prima = document.activeElement; if (prima) prima.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); const e = document.querySelector('[aria-label=\"From your memory\"]'); if (!e) return 'nessun segno'; e.focus(); e.dispatchEvent(new FocusEvent('focusin', { bubbles: true })); return 'memoria' })()"},
   {"aspetta": 500},
   {"scatta": "sopra-memoria"},

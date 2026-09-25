@@ -38,6 +38,9 @@ type Vicini = { prima: boolean; dopo: boolean }
 function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: Fonte; passo?: string; onApri?: (id: string, passo?: string) => void; vicini?: Vicini }) {
   const [sopra, setSopra] = useState(false)
   const [fuoco, setFuoco] = useState(false)
+  // Esc chiude la nuvoletta del fuoco, non il fuoco: il segno resta quello
+  // attivo, con l'anello, finché il Tab o il mouse non lo lasciano
+  const [chiusa, setChiusa] = useState(false)
   const [dalMouse, setDalMouse] = useState(false)
   const [posto, setPosto] = useState<Posto | null>(null)
   // cresce a ogni scorrimento della colonna mentre il segno ha il fuoco: la nuvoletta si rimisura e lo segue
@@ -51,7 +54,7 @@ function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: F
   const attivo = !!fonte && !!onApri
   const titolo = fonte ? (memoria ? t('Dalla tua memoria') : titoloDi(fonte)) : ''
   const riga = fonte ? (memoria ? titoloDi(fonte) : rigaFonte(fonte)) : ''
-  const aperta = (sopra || fuoco) && !!titolo
+  const aperta = (sopra || (fuoco && !chiusa)) && !!titolo
   // la nuvoletta si chiude aprendo: il mouse non esce dal segno finché la finestra del documento è sopra
   const apri = () => { if (!fonte) return; setSopra(false); setFuoco(false); onApri?.(fonte.id, passo) }
 
@@ -73,7 +76,7 @@ function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: F
     // basta. Il Tab verso un segno sotto la piega fa scorrere la colonna da
     // sé, e chiudere lì spegneva anche il fuoco: chi arrivava da tastiera
     // trovava il segno senza anello e senza nuvoletta. Il fuoco se ne va
-    // solo col blur o con Esc.
+    // solo col blur; Esc chiude la nuvoletta e lascia l'anello.
     const scorre = () => { setSopra(false); setGiro(g => g + 1) }
     a?.addEventListener('scroll', scorre, { passive: true })
     return () => a?.removeEventListener('scroll', scorre)
@@ -81,7 +84,7 @@ function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: F
 
   const tasti = (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apri() }
-    if (e.key === 'Escape') { e.stopPropagation(); setFuoco(false); setSopra(false) }
+    if (e.key === 'Escape') { e.stopPropagation(); setChiusa(true); setSopra(false) }
   }
   const conFuocoDaTastiera = fuoco && !dalMouse
   // Il segno resta piccolo, la zona che risponde no: sedici pixel di
@@ -105,8 +108,8 @@ function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: F
         onMouseEnter={() => setSopra(true)}
         onMouseLeave={() => setSopra(false)}
         onMouseDown={() => setDalMouse(true)}
-        onFocus={() => setFuoco(true)}
-        onBlur={() => { setFuoco(false); setDalMouse(false) }}
+        onFocus={() => { setFuoco(true); setChiusa(false) }}
+        onBlur={() => { setFuoco(false); setChiusa(false); setDalMouse(false) }}
         onKeyDown={attivo ? tasti : undefined}
         onClick={apri}
         {...(attivo ? { role: 'button', tabIndex: 0, 'aria-label': memoria ? t('Dalla tua memoria') : `${t('Fonte')}: ${titolo}` } : {})}

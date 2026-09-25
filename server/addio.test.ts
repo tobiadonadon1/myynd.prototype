@@ -11,7 +11,7 @@
 
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -27,6 +27,9 @@ const store = await import('./store.ts')
 const gettoni = await import('./gettoni.ts')
 const addio = await import('./addio.ts')
 const fascicolo = await import('./fascicolo.ts')
+const archivio = await import('./risposte-archivio.ts')
+const ancoraggio = await import('./ancoraggio.ts')
+const vr = await import('./valuta-risposte.ts')
 
 let anna = ''
 let bruno = ''
@@ -152,6 +155,53 @@ test('l’indice si può riaprire subito dopo, senza strascichi', () => {
     store.salvaDocumenti([doc('posta:2:Anna', 'un’altra mail')])
     assert.equal(store.conteggi().totale, 2)
   })
+})
+
+test('l’addio a metà prova delle risposte ferma la prova, e la cartella non torna', async () => {
+  /*
+   * La prova delle risposte (P7) gira in questo processo, col lucchetto nella
+   * cartella del conto. Cancellare il conto mentre gira toglieva la cartella,
+   * ma la prova continuava con le domande che restavano: alla prima lettura
+   * dell'indice la cartella tornava, orfana, con dentro un mente.db nuovo.
+   */
+  const c = await conti.registra('carla@esempio.it', 'passwordlunga3')
+  assert.ok(c.ok)
+  const carla = c.ok ? c.id : ''
+  const dove = cfg.cartellaDi(carla)
+  const ieri = new Date(Date.now() - 86_400_000).toISOString()
+  const domanda = (i: number) => ({
+    id: `q0${i}`, domanda: `What is the fee ${i}?`, tipo: 'non_ce' as const, genere: 'stato' as const, attesa: '', doc: null, citazione: '', scarto: null,
+    origine: 'costruita' as const, interlingua: false, verificata: 'persona' as const, creata: ieri, assenza: { cercato: ['fee'], guardati: 0 }
+  })
+  chi.dentro(carla, () => {
+    cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, nome: 'Carla', motore: 'claude', claude: { apiKey: 'sk-ant-prova-finta' }, tetto: 0 })
+    store.salvaDocumenti([doc('posta:1:Carla', 'una mail per Carla')])
+    archivio.scriviInsieme({ versione: 1, lingua: 'en', creato: ieri, aggiornato: ieri, domande: [1, 2, 3, 4, 5, 6].map(domanda) })
+  })
+  let chiamate = 0
+  vr.perProva({
+    rispondi: (async () => {
+      chiamate++
+      // mentre la chat risponde alla prima domanda, lei dice addio
+      if (chiamate === 1) {
+        const esito = await addio.cancella(carla)
+        assert.equal(esito.file, true)
+        assert.equal(existsSync(dove), false, 'la cartella è ancora lì subito dopo l’addio')
+      }
+      return { ...ancoraggio.ancora('I don’t have that.', { visti: [], estratti: new Map(), letto: '', memoria: false, via: 'claude' }), estratti: {} }
+    }) as never
+  })
+  try {
+    const r = await chi.dentro(carla, () => vr.valutaRisposte({ origine: 'comando' }))
+    assert.equal(r.interrotta, 'annullata')
+    assert.equal(chiamate, 1, 'la prova è andata avanti con le domande dopo')
+    assert.equal(r.voci.length, 0)
+    assert.equal(r.file, null)
+  } finally {
+    vr.perProva(null)
+  }
+  assert.equal(existsSync(dove), false, `la cartella del conto cancellato è tornata: ${existsSync(dove) ? readdirSync(dove).join(', ') : ''}`)
+  assert.equal(conti.conto(carla), null)
 })
 
 test('la cartella nella radice non si cancella mai', async () => {

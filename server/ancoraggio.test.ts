@@ -360,6 +360,35 @@ test('una riga da compilare dopo il punto («Il sottoscritto.______, nato») non
   assert.deepEqual(sottolineato.fonti[0].passi, ['The fee is €4,800 for the first phase.', 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel.'])
 })
 
+test('il segno dopo la frase che presenta la fonte («Nella mail di Nora del 12 settembre [1], …») regge quello che viene dopo; un fatto inventato prima del segno lascia senza passo', () => {
+  const visti = [doc('a', 'Harbor pilot kickoff', HARBOR, { quando: '2026-09-12T10:00:00.000Z' })]
+  // quello che il modello legge davvero: l'intestazione con la data, poi il corpo (claude.ts, corpoRichiesta)
+  const testata = '[1] Harbor pilot kickoff\nid: a\nFonte: posta · Nora Vance · 12 September 2026\n'
+  const o = { visti, estratti: new Map([['a', 4000]]), letto: testata + HARBOR, memoria: false, via: 'claude' as const }
+  const quota = 'The fee is €4,800 for the first phase.'
+  const data = 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel.'
+  const intro = ancora('In Nora’s email of 12 September [1], the fee is €4,800 for the first phase.', o)
+  assert.equal(intro.fonti[0].passo, quota)
+  assert.deepEqual(intro.verifica.scoperti, [], 'la data dell’intestazione è letta')
+  // in italiano, con la data scritta all'italiana
+  assert.equal(ancora('Nella mail di Nora del 12 settembre [1], la quota è 4.800 € per la prima fase.', o).fonti[0].passo, quota)
+  // il resto arriva fino al segno dopo, non oltre: il secondo segno prova il suo pezzo
+  const due = ancora('In Nora’s email of 12 September [1], the fee is €4,800 [1], and the pilot starts on 14 October 2026 [1].', o)
+  assert.deepEqual(due.fonti[0].passi, [quota, quota, data])
+  // controcaso: il resto con un fatto che l'estratto non ha resta senza passo, e la frase intera non si prova mai
+  assert.equal(ancora('In Nora’s email of 12 September [1], the fee is €9,900 for the first phase.', o).fonti[0].passo, undefined)
+  // controcaso: la data prima del segno non sta in niente di letto: sotto quel segno il passo della quota direbbe il falso
+  const finto = ancora('The pilot starts on 14 October 2027 [1], and the fee is €4,800 [1].', o)
+  assert.deepEqual(finto.fonti[0].passi, [null, quota])
+  assert.deepEqual(finto.verifica.scoperti, ['2027-10-14'])
+  // controcaso: senza l'intestazione nel letto, la data della presentazione è un fatto inventato come un altro
+  const senzaTestata = ancora('In Nora’s email of 12 September [1], the fee is €4,800 for the first phase.', { ...o, letto: HARBOR })
+  assert.equal(senzaTestata.fonti[0].passo, undefined)
+  assert.deepEqual(senzaTestata.verifica.scoperti, ['09-12'])
+  // e niente dopo il segno: niente passo
+  assert.equal(ancora('In Nora’s email of 12 September [1].', o).fonti[0].passo, undefined)
+})
+
 test('due segni nella stessa frase: ognuno prova il suo pezzo, dal segno prima fino a lui', () => {
   const visti = [doc('a', 'Harbor pilot kickoff', HARBOR)]
   const o = { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'claude' as const }
