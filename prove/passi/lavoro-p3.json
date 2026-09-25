@@ -1,0 +1,50 @@
+[
+  {
+    "scatta": "prima"
+  },
+  {
+    "testo": "prima"
+  },
+  {
+    "passa": "Reply to Marco about the course quote"
+  },
+  {
+    "scatta": "voce"
+  },
+  {
+    "clicca": "Change: Write the kickoff note for the Harbor pilot"
+  },
+  {
+    "scatta": "cambia"
+  },
+  {
+    "scrivi": "Monday, October 5"
+  },
+  {
+    "premi": "Enter"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "scatta": "rifalla"
+  },
+  {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const fine = Date.now() + 85000; for (;;) { const r = await fetch('/api/compiti', { headers: h }); const j = await r.json(); const righe = j.compiti || j; const figlia = righe.find(x => x.madre === 'c-p1' && x.id.startsWith('rev-')); if (figlia && figlia.stato !== 'delegato') return figlia.id + ':' + figlia.stato; if (Date.now() > fine) return 'ancora: ' + (figlia ? figlia.stato : 'nessuna figlia'); await new Promise(x => setTimeout(x, 1000)) } })()"
+  },
+  {
+    "aspetta": 1200
+  },
+  {
+    "scatta": "rifatta"
+  },
+  {
+    "testo": "rifatta"
+  },
+  {
+    "js": "(async () => { const r = await fetch('/api/lavoro/misura?giorni=30', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }); return await r.json() })()"
+  },
+  {
+    "js": "(async () => { const r = await fetch('/api/compiti', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }); const j = await r.json(); const c = (j.compiti || j).find(x => x.id === 'c-s1'); return c ? { mandata: c.mandata, stato: c.stato } : 'c-s1 non trovata' })()"
+  }
+]
