@@ -20,13 +20,20 @@
 //
 //   node --test --disable-warning=ExperimentalWarning server/github.test.ts
 
-import { test, after, beforeEach } from 'node:test'
+import { test, after, before, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 import * as gh from './connettori/github.ts'
 
 const VERA = globalThis.fetch
 after(() => { globalThis.fetch = VERA })
+
+// Le risposte finte hanno date vere (una issue dell'11 settembre, una pull
+// request del 12) e il connettore guarda quattordici giorni indietro: senza un
+// orologio fermo, il 25 settembre la issue usciva dalla finestra e le prove
+// cadevano da sole. Il 15 settembre a mezzogiorno è dentro per tutte.
+before(() => { mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-15T12:00:00Z') }) })
+after(() => { mock.timers.reset() })
 
 /** Quello che il finto GitHub si è sentito chiedere: indirizzo e metodo. */
 let chiamate: { url: string; metodo: string }[] = []
