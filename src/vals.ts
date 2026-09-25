@@ -1147,12 +1147,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     registraPortaCose(() => { setScreen('oggi'); setSearch(false); setMenu(false) })
     return () => registraPortaCose(null)
   }, [])
-  useEffect(() => {
-    registraPortaFonti(() => { setScreen('conn'); setSearch(false); setMenu(false) })
-    return () => registraPortaFonti(null)
-  }, [])
 
-  // e quella delle Fonti, per una riga ferma in Da fare: vedi `portaAlleFonti`
+  // e quella delle Fonti, per «Come lavori» e per una riga ferma in Da fare: vedi `portaAlleFonti`
   useEffect(() => {
     registraPortaFonti(() => { setScreen('conn'); setSearch(false); setMenu(false) })
     return () => registraPortaFonti(null)
