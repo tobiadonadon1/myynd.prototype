@@ -941,7 +941,7 @@ async function faiPerDocumento(
   const scrive = faScrivere(modo)
   const perId = new Map(candidati.map(d => [d.id, d]))
   const concessi = { nomi: attrezzi.ripulisci(a.attrezzi), cartella: a.cartella ?? null,
-    ...selezioneCompito(a) }
+    origine: 'automazione' as const, ...selezioneCompito(a) }
   const giorno = giornoDi(opzioni.adesso ?? new Date())
   let bozze = bozzeOggi(s, opzioni.adesso)
   let lasciate = 0
@@ -1176,7 +1176,7 @@ Respond in ${cfgLingua() === 'it' ? 'Italian' : 'English'}.`,
     // di girare: fra stanotte e domattina la ricetta può essere cambiata, e
     // quello che vale è quello che era stato concesso quando la riga è nata.
     attrezzi: { nomi: attrezzi.ripulisci(a.attrezzi), cartella: a.cartella ?? null,
-      ...selezioneCompito(a) }
+      origine: 'automazione' as const, ...selezioneCompito(a) }
   })
 
   if (scelti) {

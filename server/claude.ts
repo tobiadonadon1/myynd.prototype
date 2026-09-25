@@ -676,7 +676,7 @@ export function evidenzePerPiano(domanda: string, docs: Documento[], fissati: Re
   })
 }
 
-type SelezioneLavoro = Pick<Concessione, 'selezione' | 'ambitoSelezione'>
+type SelezioneLavoro = Pick<Concessione, 'selezione' | 'ambitoSelezione' | 'origine'>
 
 /** A workflow's saved selection policy survives its later model tool calls.
  * Existing task rows are intentionally not excluded: this is their own work. */
@@ -3070,7 +3070,7 @@ export async function svolgi(
    * scoprirsi a leggere il web. Un prompt nemmeno: consegna la richiesta,
    * non fa la cosa.
    */
-  const leMani = !concessi.length && !selezioneAttiva && modo !== 'prompt'
+  const leMani = !concessi.length && !selezioneAttiva && selezione?.origine !== 'automazione' && modo !== 'prompt'
     ? mani.perQuestoCompito({ compito, nota, cartella, ospitato: OSPITATO })
     : []
   const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi), ...leMani, ...(appNativa ? [CREA_DOCUMENTO] : [])]

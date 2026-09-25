@@ -3536,6 +3536,11 @@ export type Concessione = {
   cartella?: string | null
   selezione?: 'richieste-dirette'
   ambitoSelezione?: string
+  /**
+   * Nata da un'automazione (P6): anche con `nomi` vuoto la riga non riceve le
+   * mani delle righe scritte a mano. Un attrezzo è un permesso di leggere.
+   */
+  origine?: 'automazione'
 }
 
 /** Una domanda con le risposte già pronte da toccare. */
@@ -3790,7 +3795,7 @@ export function scriviCompito(c: {
   `).run(
     c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ora ?? null, c.progetto ?? null, c.priorita ?? null, c.ordine,
     c.origine ?? 'mano', c.voce ?? null, c.doc ?? null, c.madre ?? null,
-    c.attrezzi?.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
+    c.attrezzi && (c.attrezzi.nomi?.length || c.attrezzi.origine) ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
 }
 
