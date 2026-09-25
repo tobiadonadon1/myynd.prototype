@@ -1,5 +1,6 @@
 // Official Codex app-server integration. Codex owns login and refresh tokens;
 // Myynd only sees account status and uses its existing guarded tool loop.
+import * as provaChiusa from './prova-chiusa.ts'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import type Anthropic from '@anthropic-ai/sdk'
@@ -126,7 +127,8 @@ async function connessione(): Promise<Ponte> {
   if (!exe) throw new Error('The ChatGPT connection component is missing. Update or reinstall Myynd.')
   const contesto = ambienteChatGPT()
   let p = ponti.get(contesto.chiave)
-  if (!p || p.chiuso) { p = new Ponte(exe, contesto); ponti.set(contesto.chiave, p) }
+  // creato fuori da una prova (P6): i suoi ascoltatori vivono più di lei
+  if (!p || p.chiuso) { p = provaChiusa.fuori(() => new Ponte(exe, contesto)); ponti.set(contesto.chiave, p) }
   try { await p.iniziato } catch (e) { p.stop(); if (ponti.get(contesto.chiave) === p) ponti.delete(contesto.chiave); throw e }
   return p
 }

@@ -21,6 +21,7 @@
 //   MYYND_SMTP_DA        da che indirizzo arrivano. Senza, l'utente SMTP.
 
 import { OSPITATO, DOMINIO, PORTA } from './ospitato.ts'
+import { vietato } from './prova-chiusa.ts'
 
 export const HOST = (process.env.MYYND_SMTP_HOST ?? '').trim()
 export const PORTA_SMTP = Number((process.env.MYYND_SMTP_PORTA ?? '').trim() || 587) || 587
@@ -107,6 +108,7 @@ async function trasporto() {
 }
 
 export async function manda(m: Messaggio): Promise<void> {
+  vietato('postaUscita.manda')
   if (!configurata()) throw new Error('La posta di questo server non è configurata.')
   if (spedisci) return spedisci(m)
   const posta = await trasporto()

@@ -32,6 +32,7 @@ import { APP_MICROSOFT, oauthWeb } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 import { riprendi, segna, resto, type Resto } from './ripresa.ts'
 import { riflua } from '../testo.ts'
+import { vietato } from '../prova-chiusa.ts'
 
 /** Le due metà, e cosa chiede ciascuna. */
 export const PARTI = {
@@ -381,6 +382,7 @@ export type Evento = { titolo: string; inizio: string; minuti?: number; dove?: s
  * funzionare — e non lo diceva. Con Outlook collegato adesso funziona ovunque.
  */
 export async function prossimi(giorni = 7): Promise<Evento[]> {
+  vietato('microsoft.prossimi')
   const da = new Date()
   const a = new Date(Date.now() + Math.min(30, Math.max(1, giorni)) * 86_400_000)
   const u = new URL(`${GRAFO}/me/calendarView`)

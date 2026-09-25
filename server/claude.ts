@@ -1,4 +1,5 @@
 import { recordUserDecision, recordNextResult, recordStateDecision } from './project-memory.ts'
+import * as provaChiusa from './prova-chiusa.ts'
 import { concludiDaTrascrizione, toccaConcludere, type Chiusura } from './chiusura-progetto.ts'
 import { richiestaSulleFonti, rispostaSulleFonti, type Lettura } from './fonti-in-chat.ts'
 import * as riferimento from './riferimento.ts'
@@ -32,7 +33,7 @@ import { documentoVero } from './veri.ts'
 import { attendibile, carta, cartaPerContesto, salvaProgettiEspliciti } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import * as progetti from './progetti.ts'
-import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsNelVassoio, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
 /**
  * La lista, per la chat che la tocca.
  *
@@ -595,7 +596,7 @@ export function sistema(discorso = '', conLaLista = false, compatto = false, con
   if (progetto) pezzi.push(`\nProgetti attuali e obiettivi registrati, con attività reali:\n${compatto ? aRighe(progetto, 1100) : progetto}\nUsali per orientare il lavoro. Un obiettivo non è una scadenza né una nuova attività; "pronto" significa da rivedere, non completato.`)
   const direzione = fuoco()
   if (direzione) pezzi.push(`\nPriorità attuale indicata dalla persona: ${direzione.slice(0, compatto ? 200 : 700)}`)
-  pezzi.push(`\nData attuale: ${new Date().toISOString().slice(0, 10)}. Controlla le date delle fonti prima di chiamare qualcosa attuale o urgente.`)
+  pezzi.push(`\nData attuale: ${new Date(provaChiusa.adesso()).toISOString().slice(0, 10)}. Controlla le date delle fonti prima di chiamare qualcosa attuale o urgente.`)
   pezzi.push('\nNon dichiarare di avere salvato o modificato progetti e obiettivi: una proposta scritta non è un salvataggio. I salvataggi espliciti sono confermati dal sistema dopo la scrittura in Memoria.')
 
   // In fondo, e solo con gli strumenti in mano. Sta dentro il blocco tenuto in
@@ -682,7 +683,7 @@ export function evidenzePerPiano(domanda: string, docs: Documento[], fissati: Re
   })
 }
 
-type SelezioneLavoro = Pick<Concessione, 'selezione' | 'ambitoSelezione'>
+type SelezioneLavoro = Pick<Concessione, 'selezione' | 'ambitoSelezione' | 'origine'>
 
 /** A workflow's saved selection policy survives its later model tool calls.
  * Existing task rows are intentionally not excluded: this is their own work. */
@@ -1744,6 +1745,7 @@ export async function rispondiInStreaming(
     } catch (e) {
       // il tetto di oggi non è un guasto dell'account, e la chiave non lo scavalca
       if (delTetto(e)) throw e
+      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla chat:',
         e instanceof Error ? e.message : e)
@@ -2153,7 +2155,8 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   const ids = candidati.map(d => d.id)
   // aperte, fatte, scartate o scadute da poco: quel documento ha già avuto la sua voce
   const giaSulFeed = docsSulFeed(ids)
-  const inLista = docsConRiga(ids)
+  // una mail che aspetta nel vassoio di prova (P6) non è anche una carta
+  const inLista = new Set([...docsConRiga(ids), ...docsNelVassoio(ids)])
   const ignorati = docsIgnoratiDalFeed(candidati)
   // e a chi ha già risposto: nel filo, dopo la mail, o per «risponde»
   const risposti = rispostiPerId(candidati.map(d => d.messageId ?? '').filter(Boolean))
@@ -3170,7 +3173,7 @@ export async function svolgi(
    * scoprirsi a leggere il web. Un prompt nemmeno: consegna la richiesta,
    * non fa la cosa.
    */
-  const leMani = !concessi.length && !selezioneAttiva && modo !== 'prompt'
+  const leMani = !concessi.length && !selezioneAttiva && selezione?.origine !== 'automazione' && modo !== 'prompt'
     ? mani.perQuestoCompito({ compito, nota, cartella, ospitato: OSPITATO })
     : []
   const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi), ...leMani, ...(appNativa ? [CREA_DOCUMENTO] : [])]
@@ -3240,6 +3243,7 @@ export async function svolgi(
       return { ...risultatoVerificato(uscito), fatti }
     } catch (e) {
       if (delTetto(e)) throw e
+      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
       // senza una chiave di riserva l'errore è la risposta: il compito torna
@@ -3324,6 +3328,7 @@ export async function svolgi(
         // Verification is checked before the side effect and again on return.
         risultatoVerificato('')
         passo({ passo: 'apro', dettaglio: appNativa })
+        provaChiusa.vietato('mani.crea_documento_app')
         const documentoCreato = await creaDocumento({...input, stile: {pagine:pagineRichieste, corpo: brief.tipografia.font, titolo: brief.tipografia.font, dimensione: brief.tipografia.punti, nome: brief.tipografia.origine === 'documento' ? 'From a relevant reference' : brief.tipografia.origine === 'preferenza_esplicita' ? 'Your requested style' : 'Editorial'}}, esecuzione?.signal)
         esecuzione?.signal.throwIfAborted()
         passo({passo:'scrivo', dettaglio: cfgLingua() === 'en' ? 'Checking the rendered pages' : 'Controllo le pagine impaginate'})

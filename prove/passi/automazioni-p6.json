@@ -1,0 +1,125 @@
+[
+ {
+  "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const c = await (await fetch('/api/compiti', { headers: h })).json(); const a = await (await fetch('/api/automazioni', { headers: h })).json(); const righe = c.compiti || c; return 'compiti ' + righe.length + ' · storia ' + a.automazioni.reduce((n, x) => n + x.storia.length, 0) })()"
+ },
+ {
+  "aspetta": 2000
+ },
+ {
+  "scatta": "casa"
+ },
+ {
+  "vai": "Automations"
+ },
+ {
+  "aspetta": 1200
+ },
+ {
+  "scatta": "pagina"
+ },
+ {
+  "scorri": 600
+ },
+ {
+  "aspetta": 400
+ },
+ {
+  "scatta": "pagina-giu"
+ },
+ {
+  "scorri": 0
+ },
+ {
+  "aspetta": 300
+ },
+ {
+  "clicca": "Move to list"
+ },
+ {
+  "aspetta": 1500
+ },
+ {
+  "scatta": "spostato"
+ },
+ {
+  "js": "(() => { const b = [...document.querySelectorAll('.auto-card-open')].find(x => (x.querySelector('h3') || {}).textContent === 'Quote follow-ups'); if (!b) return 'non trovata'; b.click(); return 'aperta' })()"
+ },
+ {
+  "aspetta": 800
+ },
+ {
+  "scatta": "editor"
+ },
+ {
+  "clicca": "Try it now"
+ },
+ {
+  "scatta": "avvio"
+ },
+ {
+  "aspetta": 25000
+ },
+ {
+  "scatta": "prova"
+ },
+ {
+  "js": "(() => { const r = document.querySelectorAll('.prova-apri'); if (!r[0]) return 'nessuna riga'; r[0].click(); return 'aperta' })()"
+ },
+ {
+  "aspetta": 500
+ },
+ {
+  "scatta": "aperto"
+ },
+ {
+  "js": "(() => { const r = document.querySelectorAll('.prova-riga'); const b = r[1] && r[1].querySelector('.prova-tocco.sbagliato'); if (!b) return 'nessuna seconda riga'; b.focus(); b.click(); return 'sbagliata' })()"
+ },
+ {
+  "aspetta": 300
+ },
+ {
+  "scatta": "segnata"
+ },
+ {
+  "chiudi": true
+ },
+ {
+  "js": "(() => { const b = [...document.querySelectorAll('.auto-card-open')].find(x => (x.querySelector('h3') || {}).textContent === 'Monday summary'); if (!b) return 'non trovata'; b.click(); return 'aperta' })()"
+ },
+ {
+  "aspetta": 600
+ },
+ {
+  "clicca": "Try it now"
+ },
+ {
+  "aspetta": 12000
+ },
+ {
+  "scatta": "parziale"
+ },
+ {
+  "chiudi": true
+ },
+ {
+  "js": "(() => { const b = [...document.querySelectorAll('.auto-card-open')].find(x => (x.querySelector('h3') || {}).textContent === 'Invoices arriving'); if (!b) return 'non trovata'; b.click(); return 'aperta' })()"
+ },
+ {
+  "aspetta": 800
+ },
+ {
+  "scatta": "in-prova"
+ },
+ {
+  "clicca": "Go live now"
+ },
+ {
+  "aspetta": 1000
+ },
+ {
+  "scatta": "dal-vivo"
+ },
+ {
+  "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const c = await (await fetch('/api/compiti', { headers: h })).json(); const a = await (await fetch('/api/automazioni', { headers: h })).json(); const righe = c.compiti || c; return 'compiti ' + righe.length + ' · storia ' + a.automazioni.reduce((n, x) => n + x.storia.length, 0) })()"
+ }
+]

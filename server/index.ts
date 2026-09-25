@@ -39,6 +39,8 @@ import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
 import * as scoperte from './scoperte.ts'
+import * as collaudo from './collaudo.ts'
+import * as vassoio from './vassoio.ts'
 import * as ordine from './ordine.ts'
 import * as attrezzi from './attrezzi.ts'
 import * as domande from './domande.ts'
@@ -802,7 +804,9 @@ app.get('/api/stato', async (_req, res) => {
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
     // le automazioni proposte che non ha ancora visto: accendono il fulmine
     // in colonna. Si legge il foglio e basta, mai un modello
-    suggerimentiNuovi: scoperte.nuovi().length,
+    suggerimentiNuovi: scoperte.nuovi().length && scoperte.nuoviInVetrina().length,
+    // i risultati nuovi del vassoio di prova (P6): accendono lo stesso punto
+    vassoioNuovi: vassoio.nonVisti(),
     // la scheda delle conversazioni offre l'interruttore di Claude Code solo se
     // la sua cartella c'è: un interruttore su una cartella vuota è un bottone che fallisce
     codiceConversazioni: !ospitato.OSPITATO && conversazioni.codicePossibile(),
@@ -2570,6 +2574,8 @@ async function rileggiDaSola() {
     // dà l'occasione, e quando ne ha scritte di nuove lo si dice in colonna,
     // sullo stesso filo che rilegge lo stato: il fulmine si accende da sé
     const proposte = await scoperte.inSottofondo().catch(() => null)
+    // appena scritte, si provano (P6): tre al giorno, e solo le passate si mostrano
+    if (proposte) { try { scoperte.provaLeIdee() } catch (e) { console.warn('myynd · prove d\'idea:', e instanceof Error ? e.message : e) } }
     if (proposte) {
       console.log(`myynd · scoperte · ${proposte.length} proposte`)
       if (proposte.length) compiti.annunciaCambio()
@@ -4010,7 +4016,13 @@ app.post('/api/iniziativa/prepara', async (_req, res) => {
 })
 
 app.get('/api/automazioni/suggerimenti', async (req, res) => {
-  try { res.json({ suggerimenti: await scoperte.suggerimenti(req.query.rifai === '1') }) } catch (e) { errore(res, e) }
+  try {
+    const rifai = req.query.rifai === '1'
+    const lista = await scoperte.suggerimenti(rifai)
+    // dopo averle riscritte, le prove d'idea (P6): la pagina mostra solo quelle passate
+    if (rifai) scoperte.provaLeIdee()
+    res.json({ suggerimenti: scoperte.inVetrina(lista), inProva: collaudo.ideeInProva() })
+  } catch (e) { errore(res, e) }
 })
 app.post('/api/automazioni/suggerimenti/:id', (req, res) => {
   try {
@@ -4090,12 +4102,14 @@ app.post('/api/automazioni', async (req, res) => {
 /** Cambiarne una. Quella dell'azienda si copre con una tua, senza toccare l'originale. */
 app.patch('/api/automazioni/:id', (req, res) => {
   try {
+    collaudo.annulla(req.params.id)
     automazioni.cambia(req.params.id, req.body ?? {})
     res.json({ ok: true, automazioni: automazioni.elenco() })
   } catch (e) { errore(res, e, 400) }
 })
 
 app.delete('/api/automazioni/:id', (req, res) => {
+  collaudo.annulla(req.params.id)
   if (!automazioni.butta(req.params.id)) {
     return res.status(400).json({ errore: 'Questa automazione non è tua da buttare.' })
   }
@@ -4113,6 +4127,10 @@ app.post('/api/automazioni/:id/accendi', (req, res) => {
 app.post('/api/automazioni/:id/adesso', async (req, res) => {
   const a = automazioni.ricette().find(x => x.id === req.params.id)
   if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
+  // dal vivo a mano solo quando è già dal vivo (P6): altrimenti si prova sul passato
+  const st = store.statoAutomazione(a.id)
+  if (a.spenta || st?.spenta) return res.status(409).json({ errore: 'È in pausa: provala sugli ultimi 30 giorni.' })
+  if (store.nelVassoio(a.id)) return res.status(409).json({ errore: 'È ancora in prova: provala sugli ultimi 30 giorni.' })
   try {
     // a mano: un dito che preme non è la spesa ricorrente che il tetto del
     // giorno tiene a bada, e «ha guardato e non c'era niente» sarebbe una bugia
@@ -4148,6 +4166,7 @@ app.get('/api/automazioni/:id/anteprima', (req, res) => {
 
 app.post('/api/automazioni/:id/riscrivi', async (req, res) => {
   try {
+    collaudo.annulla(req.params.id)
     const a = await automazioni.riscrivi(req.params.id, String(req.body?.richiesta ?? ''))
     res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
   } catch (e) { errore(res, e, 400) }
@@ -4156,7 +4175,10 @@ app.post('/api/automazioni/:id/riscrivi', async (req, res) => {
 /** Falla guardare a Claude e falla scrivere meglio. Solo su richiesta. */
 app.post('/api/automazioni/:id/ottimizza', async (req, res) => {
   try {
-    const a = await automazioni.ottimizza(req.params.id)
+    // quello che la prova ha trovato giusto e sbagliato entra nella richiesta (P6)
+    const esempi = collaudo.esempi(req.params.id)
+    collaudo.annulla(req.params.id)
+    const a = await automazioni.ottimizza(req.params.id, esempi)
     res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
   } catch (e) { errore(res, e, 400) }
 })
@@ -4744,6 +4766,75 @@ app.get('/api/lavoro/misura', async (req, res) => {
 // — P5: rotte, fine —
 
 // — P6: rotte, inizio —
+
+/** Un rifiuto della prova porta il suo stato (409, 404); il resto è un guasto. */
+function erroreProva(res: express.Response, e: unknown) {
+  if (e instanceof collaudo.Rifiuto) return res.status(e.status).json({ errore: e.message })
+  errore(res, e)
+}
+
+app.post('/api/automazioni/:id/prova', (req, res) => {
+  const a = automazioni.ricette().find(x => x.id === req.params.id)
+  if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
+  try { res.json({ prova: collaudo.avvia(a, 'editor') }) } catch (e) { erroreProva(res, e) }
+})
+
+app.get('/api/automazioni/:id/prova', (req, res) => {
+  try { res.json({ prova: collaudo.ultimaVistaDi(req.params.id) }) } catch (e) { erroreProva(res, e) }
+})
+
+app.get('/api/prove/:id', (req, res) => {
+  try {
+    const v = collaudo.vista(req.params.id)
+    if (!v) return res.status(404).json({ errore: 'Non conosco questa prova.' })
+    res.json(v)
+  } catch (e) { erroreProva(res, e) }
+})
+
+app.post('/api/prove/esiti/:id/giudizio', (req, res) => {
+  const suo = req.body?.suo === 'giusto' || req.body?.suo === 'sbagliato' ? req.body.suo : null
+  try { res.json({ prova: collaudo.giudica(req.params.id, suo) }) } catch (e) { erroreProva(res, e) }
+})
+
+app.post('/api/prove/esiti/:id/bozza', (req, res) => {
+  try { collaudo.scriviAncora(req.params.id); res.json({ ok: true }) } catch (e) { erroreProva(res, e) }
+})
+
+app.get('/api/vassoio', (_req, res) => {
+  try { res.json({ gruppi: vassoio.elenco() }) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/vassoio/visto', (_req, res) => {
+  try { vassoio.visto(); res.json({ ok: true }) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/vassoio/:id/lista', async (req, res) => {
+  try {
+    await vassoio.inLista(req.params.id)
+    res.json({ compiti: compitiAttuali(), vassoio: vassoio.elenco() })
+  } catch (e) {
+    if (e instanceof vassoio.Superata) return res.status(409).json({ errore: e.message, codice: 'superata', quando: e.quando })
+    if (e instanceof Error && e.message === 'Questo risultato non è più nel vassoio.') return res.status(409).json({ errore: e.message })
+    errore(res, e)
+  }
+})
+
+app.delete('/api/vassoio/:id', (req, res) => {
+  try { vassoio.scarta(req.params.id); res.json({ vassoio: vassoio.elenco() }) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/automazioni/:id/dalvivo', (req, res) => {
+  if (!automazioni.ricette().some(a => a.id === req.params.id)) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
+  try { vassoio.dalVivo(req.params.id); res.json({ automazioni: automazioni.elenco() }) } catch (e) { errore(res, e) }
+})
+
+app.get('/api/collaudo/misura', (_req, res) => {
+  if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Non trovato.' })
+  try { res.json(collaudo.misura()) } catch (e) { errore(res, e) }
+})
+
+// la scheda sa del suo vassoio e della sua ultima prova: automazioni.ts non conosce collaudo
+automazioni.arricchisci(v => ({ ...v, prova: collaudo.ultimaDi(v.id) }))
 // — P6: rotte, fine —
 
 // — P7: rotte, inizio —
@@ -5103,6 +5194,12 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const giro = perOgnuno('il giro delle automazioni si è fermato', () => runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro())))
   setTimeout(giro, 120_000)
   setInterval(giro, automazioni.OGNI)
+  // il vassoio di prova (P6): una bozza per giro, nella fila delle prove
+  const vassoioDiProva = perOgnuno('il vassoio di prova non è riuscito', () => runScheduled('practice_tray', 15 * 60_000, () => store.senzaToccare(() => vassoio.giro())))
+  setTimeout(vassoioDiProva, 165_000)
+  setInterval(vassoioDiProva, 15 * 60_000)
+  // le prove d'idea dei suggerimenti già sul foglio, dieci minuti dopo l'avvio
+  setTimeout(perOgnuno('le prove d\'idea non sono partite', async () => { store.senzaToccare(() => scoperte.provaLeIdee()) }), 10 * 60_000)
   const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro())))
   setTimeout(preparaInAnticipo, 150_000)
   setInterval(preparaInAnticipo, 15 * 60_000)
@@ -5244,6 +5341,8 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   }
   for (const u of conti.tutti()) {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
+    // le prove sul passato rimaste a metà: interrotte (P6)
+    try { chi.dentro(u, () => collaudo.riprendiAppese()) } catch { /* uno rotto non ferma gli altri */ }
   }
   // e le righe ferme su un permesso (P3): lui l'ha dato nelle Impostazioni di
   // sistema e ha riaperto Myynd, come la riga fissa gli ha chiesto (P8)

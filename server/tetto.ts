@@ -7,6 +7,7 @@
 // l'account Claude, e un registro dell'uso in cui quelle chiamate non
 // comparivano. Qui il tetto sta in un modulo che tutti e due possono chiamare.
 
+import * as provaChiusa from './prova-chiusa.ts'
 import { leggi } from './config.ts'
 import * as store from './store.ts'
 
@@ -40,6 +41,7 @@ const DEL_TETTO = new WeakSet<Error>()
  * Il tetto è una scelta sua e sta nelle preferenze; zero vuol dire nessuno.
  */
 export function controllaIlTetto(): void {
+  provaChiusa.controllaBudget()
   if (!usoDiOggi().raggiunto) return
   const e = new Error(TETTO_RAGGIUNTO)
   DEL_TETTO.add(e)

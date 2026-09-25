@@ -143,6 +143,8 @@ export type Stato = {
   suggerimentiDesktop: string[]
   /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende finché non apre la schermata. */
   suggerimentiNuovi: number
+  /** I risultati nuovi del vassoio di prova (P6): accendono lo stesso punto. */
+  vassoioNuovi?: number
   /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
   codiceConversazioni: boolean
   /** Quante sessioni di Claude Code ci sono lì: la scheda lo dice prima di accendere l'interruttore. */
@@ -411,6 +413,10 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
     if (typeof altro.dove === 'string' && /^https:\/\//.test(altro.dove)) (e as Error & { dove?: string }).dove = altro.dove
     const giorni = (corpo as { giorni?: unknown }).giorni
     if (typeof giorni === 'number' && giorni > 0) (e as Error & { giorni?: number }).giorni = giorni
+    // il risultato del vassoio superato (P6): il codice e il giorno, per la frase nella lingua giusta
+    const p6 = corpo as { codice?: unknown; quando?: unknown }
+    if (typeof p6.codice === 'string') (e as Error & { codice?: string }).codice = p6.codice
+    if (typeof p6.quando === 'string') (e as Error & { quando?: string }).quando = p6.quando
     /*
      * Il no che non è suo: l'ha deciso l'amministratore della sua azienda.
      *
@@ -892,6 +898,8 @@ export type RicettaComposta = {
 export type SuggerimentoAutomazione = {
   id: string; nome: string; spiega: string; quanti: number; esempi: string[]; attrezzi: string[]
   quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
+  /** La prova d'idea passata (P6): solo quelle passate si mostrano. */
+  prova?: RiassuntoProva
 }
 
 export type Automazione = {
@@ -933,6 +941,14 @@ export type Automazione = {
   inRitardo: boolean
   /** Le ultime volte, dalla più vecchia alla più recente. */
   storia: { quando: string; esito: string; quanti: number; risultato?: string }[]
+  /** Fino a quando è nel vassoio di prova (P6). Nel passato: già finito. */
+  vassoio?: string | null
+  /** Accesa e fuori dal vassoio: il bottone la fa girare dal vivo. */
+  dalVivo?: boolean
+  /** Quanti risultati aspettano nel suo vassoio. */
+  inVassoio?: number
+  /** L'ultima prova sugli ultimi 30 giorni. */
+  prova?: RiassuntoProva | null
 }
 
 /** Quello che un'automazione guarderebbe adesso, senza fare niente. */
@@ -2141,6 +2157,49 @@ export const misuraLavoro = (giorni = 30) => json<Misura>(`/api/lavoro/misura?gi
 // — P5: fine —
 
 // — P6: inizio —
+// la prova sugli ultimi 30 giorni e il vassoio dei primi 14 (server/collaudo.ts, server/vassoio.ts)
+
+export type VoceProva = {
+  doc: string | null; titolo: string; chi: string | null; quando: string | null
+  verdetto: 'giusto' | 'sbagliato' | 'incerto'; da: 'tuo' | 'mosse' | 'modello' | null; perche: string | null
+  estratto: string | null
+}
+export type ProvaPoi = { cosa: 'risposto' | 'fatto' | 'riga' | 'scartato'; quando: string }
+export type EsitoVista = {
+  id: string; quando: string; anche: string[]; tipo: 'riga' | 'proposta'; testo: string; voci: VoceProva[]
+  bozza: string | null; ipotesi: string[]; chiede: string | null; prova: ProvaPoi | null
+  risposta: { doc: string; quando: string } | null; stato: string; suo: 'giusto' | 'sbagliato' | null; scrive: boolean
+  forma: 'documento' | 'riga' | 'proposta'
+}
+export type RiassuntoProva = {
+  id: string; stato: string; esito: 'pronta' | 'poco' | 'non passa' | null; giusti: number; giudicati: number
+  tue: number; documenti: number; risultati: number; bozze: number; al: string | null; cambiata: boolean
+  parziale: ('agenda' | 'codice')[]; davanti: string | null
+}
+export type ProvaVista = RiassuntoProva & { esiti: EsitoVista[]; altri: number; puoScrivere: boolean }
+export type GruppoVassoio = { automazione: string; nome: string; esiti: EsitoVista[] }
+
+export const apiP6 = {
+  provaAutomazione: (id: string) =>
+    json<{ prova: ProvaVista }>(`/api/automazioni/${encodeURIComponent(id)}/prova`, { method: 'POST' }),
+  ultimaProva: (id: string) =>
+    json<{ prova: ProvaVista | null }>(`/api/automazioni/${encodeURIComponent(id)}/prova`),
+  prova: (id: string) => json<ProvaVista>(`/api/prove/${encodeURIComponent(id)}`),
+  giudicaEsito: (id: string, suo: 'giusto' | 'sbagliato' | null) =>
+    json<{ prova: RiassuntoProva }>(`/api/prove/esiti/${encodeURIComponent(id)}/giudizio`, { method: 'POST', body: JSON.stringify({ suo }) }),
+  bozzaEsito: (id: string) =>
+    json<{ ok: true }>(`/api/prove/esiti/${encodeURIComponent(id)}/bozza`, { method: 'POST' }),
+  vassoio: () => json<{ gruppi: GruppoVassoio[] }>('/api/vassoio'),
+  vassoioVisto: () => json<{ ok: true }>('/api/vassoio/visto', { method: 'POST' }),
+  inLista: (id: string) =>
+    json<{ compiti: unknown; vassoio: GruppoVassoio[] }>(`/api/vassoio/${encodeURIComponent(id)}/lista`, { method: 'POST' }),
+  scartaEsito: (id: string) =>
+    json<{ vassoio: GruppoVassoio[] }>(`/api/vassoio/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  dalVivo: (id: string) =>
+    json<{ automazioni: Automazione[] }>(`/api/automazioni/${encodeURIComponent(id)}/dalvivo`, { method: 'POST' }),
+  suggerimentiConProva: (rifai = false) =>
+    json<{ suggerimenti: SuggerimentoAutomazione[]; inProva?: number }>(`/api/automazioni/suggerimenti${rifai ? '?rifai=1' : ''}`)
+}
 // — P6: fine —
 
 // — P7: inizio —

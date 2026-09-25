@@ -40,6 +40,8 @@ import { createHash } from 'node:crypto'
 import * as store from './store.ts'
 import * as attrezzi from './attrezzi.ts'
 import * as auto from './automazioni.ts'
+import * as collaudo from './collaudo.ts'
+import * as chi from './chi.ts'
 import * as progetti from './progetti.ts'
 import { cartella, leggi, lingua, nellaLingua, tono, autonomia } from './config.ts'
 import { fuoco } from './timone.ts'
@@ -195,6 +197,10 @@ type Archivio = {
    * resta vista: non si riaccende per una cosa già letta.
    */
   visti?: string[]
+  /** Le prove d'idea finite (P6), per impronta della ricetta: solo le «pronta» si mostrano. */
+  provate?: { impronta: string; prova: string; esito: 'pronta' | 'poco' | 'non passa' | 'fermata'; giusti: number; giudicati: number; quando: string }[]
+  /** Quelle che non sono passate: non si riprovano per quattordici giorni. */
+  bocciate?: { impronta: string; quando: string }[]
 }
 
 const VUOTO: Archivio = { quando: null, lingua: '', suggerimenti: [], scartati: [], visti: [] }
@@ -897,16 +903,28 @@ export function adotta(id: string): auto.Automazione {
   if (esistente && !store.automazioniTolte().has(id)) return esistente
   const s = trova(id)
   if (!s) throw new Error('This suggestion is no longer available. Refresh and try again.')
+  const r = ricettaDi(s)
+  const a = auto.scrivi(r)
+  auto.accendi(id, false)
+  // la prova d'idea passa all'automazione adottata: la scheda mostra il suo conto (P6)
+  store.spostaProve(`idea:${auto.impronta(r)}`, id)
+  return a
+}
 
-  /*
-   * Le due lingue.
-   *
-   * Per i cinque modelli ci sono davvero: la ricetta nasce con la sua riga
-   * italiana e la sua riga inglese, e cambiare lingua la ridice. Per quelle
-   * scritte dal modello no — sono nate nella lingua del conto — e le due metà
-   * restano uguali finché non ci mette mano lei nell'editor. Meglio la stessa
-   * frase due volte che un campo vuoto: `valida()` rifiuterebbe la ricetta.
-   */
+/**
+ * La ricetta di un suggerimento, senza scriverla (P6): la stessa che `adotta`
+ * scrive, così la prova d'idea e l'automazione adottata hanno la stessa impronta.
+ *
+ * Le due lingue.
+ *
+ * Per i cinque modelli ci sono davvero: la ricetta nasce con la sua riga
+ * italiana e la sua riga inglese, e cambiare lingua la ridice. Per quelle
+ * scritte dal modello no — sono nate nella lingua del conto — e le due metà
+ * restano uguali finché non ci mette mano lei nell'editor. Meglio la stessa
+ * frase due volte che un campo vuoto: `valida()` rifiuterebbe la ricetta.
+ */
+export function ricettaDi(s: Suggerimento): auto.Automazione {
+  const id = s.id
   const m = MODELLI.find(x => `mind-${x.id}` === id)
   const due = m
     ? {
@@ -915,7 +933,7 @@ export function adotta(id: string): auto.Automazione {
     }
     : { it: { nome: s.nome, spiega: s.spiega }, en: { nome: s.nome, spiega: s.spiega } }
 
-  const a = auto.scrivi({
+  return {
     id,
     suggerita: true,
     nome: due.it.nome, spiega: due.it.spiega, fai: due.it.spiega,
@@ -929,7 +947,83 @@ export function adotta(id: string): auto.Automazione {
         : `Continue only when relevant documents are present: ${due.en.spiega}`
     }],
     en: { ...due.en, fai: due.en.spiega, ...(s.guarda.cerca ? { cerca: s.guarda.cerca } : {}) }
-  })
-  auto.accendi(id, false)
-  return a
+  } as auto.Automazione
 }
+
+
+// — P6: si mostrano solo dopo una prova passata —
+
+/** L'impronta del contesto con cui il foglio è stato scritto: la semina delle prove la scrive uguale. */
+export const contestoAttuale = () => improntaContesto()
+
+const BOCCIATA_PER = 14 * 86_400_000
+
+/** L'impronta di un suggerimento: quella della ricetta che `adotta` scriverebbe. */
+export function improntaDi(s: Suggerimento): string {
+  return auto.impronta(ricettaDi(s))
+}
+
+/**
+ * Solo quelli che hanno passato la prova d'idea, con la stessa impronta (P6).
+ * Quelli locali (`mind-`) non si possono provare: non si mostrano. Aprire la
+ * pagina non fa partire niente: qui si legge il foglio e basta.
+ */
+export function inVetrina(lista: Suggerimento[]): (Suggerimento & { prova?: collaudo.RiassuntoProva })[] {
+  const a = leggiArchivio()
+  const passate = new Map((a.provate ?? []).filter(p => p.esito === 'pronta').map(p => [p.impronta, p]))
+  return lista.flatMap(s => {
+    if (s.id.startsWith('mind-')) return []
+    const imp = improntaDi(s)
+    const p = passate.get(imp)
+    if (!p) return []
+    const r = collaudo.riassunto(p.prova)
+    return [{ ...s, ...(r ? { prova: r } : {}) }]
+  })
+}
+
+/** Le nuove per il fulmine, ma solo quelle in vetrina. */
+export function nuoviInVetrina(): Suggerimento[] {
+  return inVetrina(nuovi())
+}
+
+/**
+ * Le prove d'idea da fare: i candidati del foglio non ancora provati, nel suo
+ * ordine, al più tre al giorno (li conta collaudo), saltando quelli bocciati da
+ * meno di quattordici giorni. Senza modello non parte niente.
+ */
+export function provaLeIdee(): number {
+  if (!ferri.collegato()) return 0
+  const a = leggiArchivio()
+  const provate = new Set((a.provate ?? []).map(p => p.impronta))
+  const bocciate = new Set((a.bocciate ?? []).filter(b => Date.now() - Date.parse(b.quando) < BOCCIATA_PER).map(b => b.impronta))
+  const esistenti = new Set([...auto.ricette().map(x => x.id), ...store.automazioniTolte()])
+  let messe = 0
+  for (const s of a.suggerimenti) {
+    if (s.id.startsWith('mind-') || esistenti.has(s.id) || rifiutata(s)) continue
+    const imp = improntaDi(s)
+    if (provate.has(imp) || bocciate.has(imp)) continue
+    const id = collaudo.preprova(ricettaDi(s), imp)
+    if (!id) break
+    messe++
+  }
+  return messe
+}
+
+/** Una prova d'idea è finita: si scrive sul foglio. */
+export function provata(imp: string, r: collaudo.RiassuntoProva): void {
+  const a = leggiArchivio()
+  const esito: 'pronta' | 'poco' | 'non passa' | 'fermata' = r.stato === 'finita' ? (r.esito ?? 'poco') : 'fermata'
+  const quando = new Date().toISOString()
+  scriviArchivio({
+    ...a,
+    provate: [...(a.provate ?? []).filter(p => p.impronta !== imp), { impronta: imp, prova: r.id, esito, giusti: r.giusti, giudicati: r.giudicati, quando }].slice(-60),
+    bocciate: esito === 'poco' || esito === 'non passa'
+      ? [...(a.bocciate ?? []).filter(b => b.impronta !== imp), { impronta: imp, quando }].slice(-60)
+      : a.bocciate
+  })
+}
+
+collaudo.quandoProvata((utente, imp, r) => {
+  try { if (utente) chi.dentro(utente, () => provata(imp, r)); else provata(imp, r) }
+  catch (e) { console.warn('myynd · prova d\'idea:', e instanceof Error ? e.message : e) }
+})

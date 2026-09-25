@@ -1,0 +1,161 @@
+{
+ "modello": "finto",
+ "risposte": [
+  {
+   "se": "You check the results of a personal automation",
+   "in": "system",
+   "json": {
+    "giudizi": [
+     {
+      "n": 0,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 1,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 2,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 3,
+      "giusta": false,
+      "perche": "A newsletter, not a request."
+     },
+     {
+      "n": 4,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 5,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 6,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 7,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 8,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 9,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 10,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 11,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 12,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 13,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 14,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 15,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 16,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 17,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 18,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     },
+     {
+      "n": 19,
+      "giusta": true,
+      "perche": "A quote request waiting on Alex."
+     }
+    ]
+   },
+   "attesa": 1200
+  },
+  {
+   "se": "Monday summary",
+   "in": "tutto",
+   "chiama": "agenda_leggi"
+  },
+  {
+   "se": "Guardi il risultato di un compito affidato",
+   "in": "system",
+   "json": {
+    "chiede": false,
+    "manca": [],
+    "domanda": "",
+    "visto": ""
+   }
+  },
+  {
+   "se": "Sei il revisore di un lavoro",
+   "in": "system",
+   "json": {
+    "esito": "pass",
+    "per": "the reader",
+    "comeTe": "It holds.",
+    "comeLoro": "Clear.",
+    "problemi": [],
+    "verificato": [
+     "the facts against the sources"
+    ]
+   }
+  },
+  {
+   "se": "Un assistente ha appena finito un lavoro",
+   "in": "system",
+   "json": {
+    "prossimo": ""
+   }
+  },
+  {
+   "se": "Prendi una bozza scritta per una persona",
+   "in": "system",
+   "json": {
+    "a": "",
+    "oggetto": "",
+    "corpo": "",
+    "allegato": ""
+   }
+  }
+ ],
+ "predefinita": "Hi Dana, thanks for the request. The quote for the Northwind fit-out is attached in my next message; it covers labour and materials.\n\nIf you need it split by room, tell me and I will send it by Friday. Alex"
+}

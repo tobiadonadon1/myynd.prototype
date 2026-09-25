@@ -25,6 +25,7 @@ import * as apple from './agenda-apple.ts'
 import * as store from './store.ts'
 import { leggi as leggiConfig } from './config.ts'
 import { daDocumento } from './connettori/calendario.ts'
+import { vietato } from './prova-chiusa.ts'
 
 const esegui = promisify(execFile)
 
@@ -88,6 +89,7 @@ async function osascript(righe: string[]): Promise<string> {
  * mezzo minuto su un calendario di qualche anno.
  */
 export async function prossimi(giorni = 7): Promise<Evento[]> {
+  vietato('agenda.prossimi')
   const g = Math.min(30, Math.max(1, Math.round(giorni)))
   const S = '\u001f'   // separatore di unità: nei titoli non c'è mai
   const R = '\u001e'   // separatore di record
@@ -191,6 +193,7 @@ export function quando(iso: string): Date {
 export type ProvaAgenda = {id:string; verificato:true}
 const inCorso = new Map<string,Promise<ProvaAgenda[]>>()
 export async function aggiungiVerificati(eventi:Evento[], operazione:string, predefinito?:string, run=osascript):Promise<ProvaAgenda[]> {
+  vietato('agenda.aggiungiVerificati')
   if (!eventi.length || eventi.length>50 || !operazione.trim()) throw new Error('Invalid calendar operation.')
   const key=createHash('sha256').update(operazione+'\0'+JSON.stringify(eventi)).digest('hex')
   if(inCorso.has(key))return inCorso.get(key)!
@@ -222,6 +225,7 @@ export async function aggiungiVerificati(eventi:Evento[], operazione:string, pre
   try{return await promise}finally{inCorso.delete(key)}
 }
 export async function aggiungi(eventi:Evento[],predefinito?:string):Promise<number>{
+  vietato('agenda.aggiungi')
   if(!eventi.length)return 0
   return (await aggiungiVerificati(eventi,'legacy:'+JSON.stringify(eventi),predefinito)).length
 }
@@ -429,6 +433,7 @@ export function ritocco(corpo: unknown): apple.Ritocco {
 }
 
 export async function creaEvento(corpo: unknown): Promise<EventoAgenda> {
+  vietato('agenda.creaEvento')
   return apple.crea(nuovoEvento(corpo))
 }
 
@@ -436,11 +441,13 @@ export async function creaEvento(corpo: unknown): Promise<EventoAgenda> {
 const soloLettura = (id: string) => id === ID_ICAL || id.startsWith('calendario:')
 
 export async function modificaEvento(id: string, corpo: unknown): Promise<EventoAgenda> {
+  vietato('agenda.modificaEvento')
   if (soloLettura(id)) throw new apple.GuaioAgenda('Questa agenda si legge e basta.', 400)
   return apple.modifica(id, ritocco(corpo))
 }
 
 export async function eliminaEvento(id: string): Promise<void> {
+  vietato('agenda.eliminaEvento')
   if (soloLettura(id)) throw new apple.GuaioAgenda('Questa agenda si legge e basta.', 400)
   await apple.elimina(id)
 }

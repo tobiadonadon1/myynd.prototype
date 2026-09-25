@@ -8,6 +8,7 @@ import * as google from './connettori/google.ts'
 import * as posta from './connettori/posta.ts'
 import type { EmailPronta } from './store.ts'
 import type { Compito } from './store.ts'
+import { vietato } from './prova-chiusa.ts'
 
 export type BozzaCasella = { stato: 'salvata' | 'errore'; id?: string; url?: string; errore?: string }
 export type BozzaAttuale = {stato:'presente'|'sparita';source:string;id:string;corpo?:string;oggetto?:string;a?:string;messageId?:string;uidValidity?:string;impronta?:string}
@@ -59,6 +60,7 @@ async function crea(source: string, e: EmailPronta, messageId: string) {
   throw new Error('This email source cannot save mailbox drafts yet.')
 }
 export async function salvaBozzaCasella(task: string, source: string, e: EmailPronta, create: Crea = crea, profile = cfg.cartella()): Promise<BozzaCasella> {
+  vietato('mailbox-drafts.salvaBozzaCasella')
   const key = createHash('sha256').update(task + '\n' + source).digest('hex')
   const lock = profile + key
   if (occupati.has(lock)) return occupati.get(lock)!
@@ -96,6 +98,7 @@ async function aggiorna(source:string,oldId:string,e:EmailPronta,messageId:strin
  * again immediately before any provider mutation. */
 export async function salvaRevisioneCasella(c:Pick<Compito,'id'|'madre'|'doc'|'nota'>,e:EmailPronta,
   update:Aggiorna=aggiorna, get:typeof leggiBozzaAttuale=leggiBozzaAttuale, profile=cfg.cartella()):Promise<BozzaCasella> {
+  vietato('mailbox-drafts.salvaRevisioneCasella')
   if (!c.madre || !c.doc) throw new Error('A mailbox revision needs its original task and email source.')
   const marker=c.nota?.match(/(?:^|\n)REVISION BASELINE: (\{[^\n]+\})/)
   if (!marker) throw new Error('The mailbox revision has no current draft baseline.')

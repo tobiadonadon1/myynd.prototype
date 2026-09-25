@@ -33,6 +33,7 @@
 // con un indirizzo, come qualunque altro fornitore: si vede cosa lavora, e
 // quando non risponde lo si sa.
 
+import * as provaChiusa from './prova-chiusa.ts'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'node:crypto'
 import { aggiorna, leggi, lingua, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
@@ -786,8 +787,10 @@ export function motore(): Motore | null {
       crea: (p, attesa) => { controllaIlTetto(); return m.crea(p, attesa) },
       flusso: (p, onTesto, attesa, segnale, conversazione) => {
         controllaIlTetto()
-        segnaGuardato(true)
-        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => segnaGuardato(false))
+        // chi guarda è una persona: la stesura di una prova (P6) non fa aspettare la prova stessa
+        const suo = !provaChiusa.inProva()
+        if (suo) segnaGuardato(true)
+        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => { if (suo) segnaGuardato(false) })
       }
     }
   }
@@ -803,9 +806,10 @@ export function motore(): Motore | null {
       crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { segnaSeOpenAI(e); throw tradotto(e) }) },
       flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
-        segnaGuardato(true)
+        const suo = !provaChiusa.inProva()
+        if (suo) segnaGuardato(true)
         return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
-          .finally(() => segnaGuardato(false))
+          .finally(() => { if (suo) segnaGuardato(false) })
           .catch(e => {
             if (segnale?.aborted) throw new DOMException('The request was cancelled.', 'AbortError')
             segnaSeOpenAI(e)
@@ -1160,6 +1164,8 @@ export async function chiedi(o: {
       // il tetto non è un guasto dell'account: niente riposo, e niente chiave
       // di riserva, che costerebbe denaro per scavalcare una scelta sua
       if (tettoDiOggi.delTetto(e)) throw tradotto(e)
+      // nella prova (P6) niente riposo e niente chiave: la prova si ferma «occupato»
+      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn(`myynd · Claude Code non ce l'ha fatta su «${o.lavoro}», passo alla chiave:`,
         e instanceof Error ? e.message : e)

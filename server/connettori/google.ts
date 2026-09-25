@@ -35,6 +35,7 @@ import type { Documento } from '../store.ts'
 import { filoDi, idPulito, rispondeDi, destinatariDi } from '../filo.ts'
 import { postaAutomatica } from './segnaliPosta.ts'
 import { riflua } from '../testo.ts'
+import { vietato } from '../prova-chiusa.ts'
 
 const esegui = promisify(execFile)
 
@@ -423,6 +424,7 @@ export async function sincronizza(
 
 /** Nel cestino di Gmail. Che è un'etichetta, quindi si torna indietro. */
 export async function cestina(ids: string[]): Promise<number> {
+  vietato('google.cestina')
   const soli = ids.filter(i => i.startsWith('google:')).map(i => i.slice('google:'.length))
   if (!soli.length) return 0
   await api('https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify', {
@@ -434,6 +436,7 @@ export async function cestina(ids: string[]): Promise<number> {
 
 /** Fuori dalla casella, ma non nel cestino: è quello che Gmail chiama archiviare. */
 export async function archivia(ids: string[]): Promise<number> {
+  vietato('google.archivia')
   const soli = ids.filter(i => i.startsWith('google:')).map(i => i.slice('google:'.length))
   if (!soli.length) return 0
   await api('https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify', {
@@ -455,6 +458,7 @@ export type Evento = { titolo: string; inizio: string; minuti?: number; dove?: s
  * ha appena detto «sì, alle tre». L'evento comparirebbe, e sarebbe sbagliato.
  */
 export async function mettiInAgenda(eventi: Evento[]): Promise<number> {
+  vietato('google.mettiInAgenda')
   const fuso = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Rome'
   let fatti = 0
   for (const e of eventi) {
@@ -490,6 +494,7 @@ function locale(d: Date): string {
 
 /** Save a reply in Gmail Drafts. There is deliberately no send operation. */
 export async function salvaBozza(sourceId: string, e: import('../store.ts').EmailPronta, messageId: string): Promise<{ id: string; url: string }> {
+  vietato('google.salvaBozza')
   const { mimeBozza, destinatarioVerificato } = await import('../mailbox-drafts.ts')
   const original = await api<Messaggio>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(sourceId)}?format=metadata`)
   if ((original.labelIds ?? []).some(l => ['SENT', 'DRAFT', 'TRASH'].includes(l))) throw new Error('The source email is no longer an incoming request.')
@@ -522,6 +527,7 @@ export async function leggiBozza(id: string): Promise<{stato:'presente'|'sparita
 
 /** Re-read the exact Gmail message before a sender rule removes INBOX. */
 export async function verificaEArchiviaPerRegola(id: string, sender: string, expectedMessageId: string | null): Promise<number> {
+  vietato('google.verificaEArchiviaPerRegola')
   if (!/^google:[^\s:]+$/.test(id) || !expectedMessageId) throw new Error('Gmail message lacks a stable indexed identity.')
   const remote = id.slice('google:'.length)
   const url=`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(remote)}`
@@ -546,6 +552,7 @@ export async function verificaEArchiviaPerRegola(id: string, sender: string, exp
  * mutation, so a user edit made during model work cannot be silently lost. */
 export async function aggiornaBozza(sourceId:string,draftId:string,e:import('../store.ts').EmailPronta,messageId:string,
   baseline:import('../mailbox-drafts.ts').BozzaAttuale):Promise<{id:string;url:string}> {
+  vietato('google.aggiornaBozza')
   const {mimeBozza,destinatarioVerificato,verificaBozzaInvariata}=await import('../mailbox-drafts.ts')
   const original=await api<Messaggio>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(sourceId)}?format=metadata`)
   if ((original.labelIds??[]).some(l=>['SENT','DRAFT','TRASH'].includes(l))) throw new Error('The source email is no longer an incoming request.')

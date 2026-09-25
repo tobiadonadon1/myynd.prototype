@@ -292,3 +292,63 @@
 .auto-initiative h2 { font-size:16px; margin:0; }
 .auto-initiative p { font-size:13px; line-height:1.5; max-width:620px; margin:0 0 6px; }
 .auto-initiative-controls { display:flex; align-items:center; gap:10px; font-size:12px; }
+
+/* — P6: la prova sugli ultimi 30 giorni, il vassoio, la riga sulla scheda — */
+.auto-card-line{margin-top:7px;font-size:11px;color:var(--inchiostro-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.auto-card-prova{margin-top:7px;font-size:11.5px;font-weight:500;color:var(--salvia);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.auto-switch-word.prova{color:var(--inchiostro-3);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.editor-sub-link{font-size:11.5px;padding:0;color:rgba(var(--inchiostro-rgb),.62);text-decoration:underline;text-decoration-color:rgba(var(--inchiostro-rgb),.22);text-underline-offset:2px;white-space:nowrap;display:inline}
+.editor-sub-link:hover{color:var(--rame-testo)}
+
+.prova{display:flex;flex-direction:column;gap:10px;min-width:0}
+.prova-intestazione{display:flex;align-items:center;gap:12px;min-width:0}
+.prova-stato{flex:1;min-width:0;margin:0;font-size:13.5px;color:var(--inchiostro);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prova-stato .verde{color:var(--salvia);font-weight:500}
+.prova-intestazione .auto-link{flex:none;color:var(--rame-testo);font-weight:500}
+.prova-seconda{margin:-4px 0 0;font-size:11.5px;color:var(--inchiostro-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prova-righe{list-style:none;margin:4px 0 0;padding:0;border-top:1px solid rgba(var(--inchiostro-rgb),.07)}
+.prova-riga{border-bottom:1px solid rgba(var(--inchiostro-rgb),.07);min-width:0}
+.prova-testa{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 2px}
+.prova-apri{flex:1;display:flex;align-items:baseline;gap:10px;min-width:0;cursor:pointer;border-radius:10px;outline-offset:2px}
+.prova-apri time{flex:none;width:52px;font-size:11.5px;color:var(--inchiostro-3);font-variant-numeric:tabular-nums}
+.prova-cosa{flex:1;min-width:0;font-size:12.5px;color:var(--inchiostro);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prova-segni{flex:none;display:inline-flex;gap:4px;visibility:hidden}
+.prova-testa:hover .prova-segni,.prova-testa:focus-within .prova-segni,.prova-riga.aperta .prova-segni{visibility:visible}
+.prova-tocco{width:24px;height:24px;display:grid;place-items:center;padding:0;border-radius:99px;border:1px solid rgba(var(--inchiostro-rgb),.14);background:transparent;color:var(--inchiostro-2);font:inherit;font-size:12px;cursor:pointer}
+.prova-tocco.giusto[aria-pressed="true"]{border-color:var(--salvia);color:var(--salvia)}
+.prova-tocco.sbagliato[aria-pressed="true"]{border-color:var(--rame-testo);color:var(--rame-testo)}
+.prova-tocco:hover{border-color:rgba(var(--inchiostro-rgb),.3)}
+.prova-segno{flex:none;width:16px;display:grid;place-items:center;font-size:12px}
+.prova-segno.giusto{color:var(--salvia);font-weight:600}
+.prova-segno.sbagliato i{width:7px;height:7px;border-radius:99px;background:var(--rame)}
+.prova-dentro{padding:2px 2px 12px 62px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.prova-doc{min-width:0}
+.prova-doc-testa{font-size:12px;color:var(--inchiostro);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prova-doc-testa b{font-weight:500}
+.prova-doc-testa span{color:var(--inchiostro-3)}
+.prova-doc p,.prova-bozza p{margin:3px 0 0;font-size:12px;line-height:1.5;color:var(--inchiostro-2);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.prova-bozza{padding:8px 11px;border-radius:10px;border:1px solid rgba(var(--inchiostro-rgb),.08)}
+.prova-bozza p{-webkit-line-clamp:unset;display:block;white-space:pre-wrap;color:var(--inchiostro)}
+.prova-muto{margin:0;font-size:11.5px;color:var(--inchiostro-3);overflow-wrap:anywhere}
+.prova-perche{margin:0;font-size:11.5px;color:var(--rame-testo);overflow-wrap:anywhere}
+.prova-poi{font-size:11.5px;color:var(--inchiostro-2);overflow-wrap:anywhere}
+.prova-poi .auto-link{font-size:11.5px;padding:0;display:inline;text-decoration:underline;text-underline-offset:2px}
+.prova-sua{margin:6px 0 0;font-size:12px;line-height:1.5;white-space:pre-wrap;color:var(--inchiostro-2);border-left:2px solid rgba(var(--inchiostro-rgb),.12);padding-left:9px}
+.prova-altri{padding:9px 2px;font-size:12px;color:var(--inchiostro-3)}
+
+.vassoio{margin:0 0 22px;min-width:0}
+.vassoio h2{margin:0 0 10px;font-size:15px;font-weight:500;color:var(--inchiostro)}
+.vassoio-gruppo{margin-bottom:12px;min-width:0}
+.vassoio-gruppo h3{margin:0 0 6px;font-size:12px;font-weight:500;color:var(--inchiostro-2)}
+.vassoio-gruppo ul{list-style:none;margin:0;padding:0;border:1px solid var(--filo);border-radius:14px;overflow:hidden}
+.vassoio-voce{display:flex;align-items:center;gap:10px;padding:11px 14px;min-width:0;border-top:1px solid rgba(var(--inchiostro-rgb),.06)}
+.vassoio-voce:first-child{border-top:0}
+.vassoio-testo{flex:1;min-width:0}
+.vassoio-riga{display:flex;align-items:baseline;gap:10px;min-width:0}
+.vassoio-riga span{flex:1;min-width:0;font-size:13px;color:var(--inchiostro);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vassoio-riga time{flex:none;font-size:11.5px;color:var(--inchiostro-3)}
+.vassoio-testo p{margin:3px 0 0;font-size:12px;line-height:1.45;color:var(--inchiostro-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.vassoio-voce .auto-button{flex:none}
+.vassoio-no{flex:none;width:26px;height:26px;padding:0;border-radius:99px;border:0;background:transparent;color:var(--inchiostro-3);font:inherit;font-size:15px;cursor:pointer;visibility:hidden}
+.vassoio-voce:hover .vassoio-no,.vassoio-voce:focus-within .vassoio-no{visibility:visible}
+.vassoio-no:hover{color:var(--rame-testo)}

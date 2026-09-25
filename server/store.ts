@@ -1,6 +1,7 @@
 // L'indice locale: un file SQLite in ~/.myynd/mente.db.
 // Usa il modulo `node:sqlite` incluso in Node — nessuna dipendenza nativa.
 
+import * as provaChiusa from './prova-chiusa.ts'
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -119,6 +120,9 @@ export function senzaToccare<T>(f: () => T): T {
 }
 
 function mio(): DatabaseSync {
+  // dentro una prova (P6): la connessione di sola lettura, com'era a quell'ora
+  const p = provaChiusa.inProva()
+  if (p) return dellaProva(p)
   const dove = cartella()
   if (!disImpegnato) ultimoUso.set(dove, Date.now())
   let d = aperti.get(dove)
@@ -2062,6 +2066,17 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
  * automazioni «quando arriva una fattura» che si mettono a preparare risposte
  * alle sue stesse mail. Arrivare vuol dire arrivare da fuori.
  */
+/**
+ * Arrivati fra due istanti, per data del documento (P6): la prova sul passato
+ * non può andare per `indicizzato`, che alla prima lettura è uguale per tutti.
+ */
+export function arrivatiFra(da: string, al: string, limite = 30): Documento[] {
+  return db.prepare(`
+    SELECT ${CAMPI} FROM documenti WHERE quando > ? AND quando <= ? AND COALESCE(inviato, 0) = 0
+    ORDER BY quando DESC LIMIT ?
+  `).all(da, al, limite) as unknown as Documento[]
+}
+
 export function appenaArrivati(dal: string, limite = 30): Documento[] {
   return db.prepare(`
     SELECT ${CAMPI} FROM documenti WHERE indicizzato >= ? AND (inviato IS NULL OR inviato = 0)
@@ -2105,6 +2120,7 @@ export function svuotaFonte(fonte: string) {
   db.exec('BEGIN')
   try {
     scollegaDalFeed(righe.map(r => r.id))
+    togliEsitiDellaFonte(fonte)
     // niente da togliere a mano dall'indice: la cancellazione fa scattare il
     // trigger, che è l'unico posto che sa passargli i vecchi valori
     db.prepare('DELETE FROM documenti WHERE fonte = ?').run(fonte)
@@ -2465,7 +2481,7 @@ export function cerca(q: string, limite = 20, fonti?: string[], stretta = false)
 
   // il riordino per data sta qui e non nell'SQL apposta: è una scelta di
   // prodotto, e deve restare leggibile da chi la vorrà cambiare
-  const ora = Date.now()
+  const ora = provaChiusa.adesso()
   const punteggio = (d: Documento & { punti: number }) => {
     const giorni = d.quando ? (ora - Date.parse(d.quando)) / 86_400_000 : 3650
     const freschezza = Number.isFinite(giorni) ? Math.exp(-Math.max(0, giorni) / 180) : 0
@@ -2548,9 +2564,13 @@ export function segnaUso(u: Uso) {
    * Contare è accessorio; scrivere in un indice orfano no.
    */
   if (OSPITATO && !chi.adesso()) return
-  // con l'etichetta del contesto («prova:risposta»), se una prova sta girando: vedi etichetta-uso.ts
-  db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita) VALUES (?,?,?,?,?,?)')
-    .run(new Date().toISOString(), etichettato(u.lavoro), u.motore, u.entrata, u.cache, u.uscita)
+  // i gettoni sono soldi veri: anche dentro una prova si contano e si scrivono,
+  // ed è l'unica scrittura che una prova fa sul database vivo (P6); con
+  // l'etichetta del contesto («prova:risposta»), se una prova delle risposte
+  // sta girando (P7): vedi etichetta-uso.ts
+  provaChiusa.conta(u.entrata + u.uscita)
+  provaChiusa.fuori(() => db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita) VALUES (?,?,?,?,?,?)')
+    .run(new Date().toISOString(), etichettato(u.lavoro), u.motore, u.entrata, u.cache, u.uscita))
 }
 
 export type Totale = { chiamate: number; entrata: number; cache: number; uscita: number }
@@ -3549,6 +3569,11 @@ export type Concessione = {
   cartella?: string | null
   selezione?: 'richieste-dirette'
   ambitoSelezione?: string
+  /**
+   * Nata da un'automazione (P6): anche con `nomi` vuoto la riga non riceve le
+   * mani delle righe scritte a mano. Un attrezzo è un permesso di leggere.
+   */
+  origine?: 'automazione'
 }
 
 /** Una domanda con le risposte già pronte da toccare. */
@@ -3803,7 +3828,7 @@ export function scriviCompito(c: {
   `).run(
     c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ora ?? null, c.progetto ?? null, c.priorita ?? null, c.ordine,
     c.origine ?? 'mano', c.voce ?? null, c.doc ?? null, c.madre ?? null,
-    c.attrezzi?.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
+    c.attrezzi && (c.attrezzi.nomi?.length || c.attrezzi.origine) ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
 }
 
@@ -4526,6 +4551,8 @@ export type StatoAutomazione = {
   bozze?: number | null
   /** Fin dove ha guardato il materiale: si muove solo con un giro riuscito. */
   vista?: string | null
+  /** Fino a quando è nel vassoio di prova (P6). Nel passato: già finito. */
+  vassoio?: string | null
 }
 
 /**
@@ -4783,6 +4810,7 @@ export function accendiAutomazione(id: string, accesa: boolean) {
  */
 export function scordaAutomazione(id: string) {
   db.prepare('DELETE FROM automazioni WHERE id = ?').run(id)
+  togliProveDi(id)
 }
 
 /**
@@ -5046,5 +5074,251 @@ export function azzeraTutto() {
    */
   db.exec("INSERT INTO ricerca (ricerca) VALUES ('delete-all')")
 }
+
+// — P6: inizio —
+
+/*
+ * La connessione della prova (P6).
+ *
+ * Una per recinto, aperta la prima volta che serve e chiusa da `nellaProva`.
+ * Sola lettura (`query_only`): ogni INSERT, UPDATE, DELETE lancia, anche sulle
+ * tabelle che altri hanno aggiunto dopo. Con un'ora (`al`), cinque viste
+ * temporanee coprono le tabelle vere con il loro stato di quell'ora: le query
+ * senza schema leggono il passato senza cambiare firma.
+ */
+const ORA_DELLA_PROVA = /^\d{4}-\d\d-\d\dT[\d:.]+Z$/
+
+function colonneDi(d: DatabaseSync, t: string): string[] {
+  return (d.prepare(`PRAGMA main.table_info(${t})`).all() as { name: string }[]).map(c => c.name)
+}
+
+function vistePassate(d: DatabaseSync, al: string) {
+  if (!ORA_DELLA_PROVA.test(al)) throw new Error('Ora della prova non valida.')
+  const q = `'${al}'`
+  const tutte = (t: string, maschere: Record<string, string>) =>
+    colonneDi(d, t).map(c => maschere[c] ? `${maschere[c]} AS ${c}` : c).join(', ')
+  d.exec(`CREATE TEMP VIEW documenti AS SELECT * FROM main.documenti WHERE quando IS NULL OR quando <= ${q}`)
+  const cc = new Set(colonneDi(d, 'compiti'))
+  const dopo = (c: string) => cc.has(c) ? `(${c} IS NOT NULL AND ${c} > ${q})` : '0'
+  const riaperta = `(${dopo('chiuso')} OR ${dopo('sparito')})`
+  d.exec(`CREATE TEMP VIEW compiti AS SELECT ${tutte('compiti', {
+    chiuso: `CASE WHEN chiuso > ${q} THEN NULL ELSE chiuso END`,
+    sparito: `CASE WHEN sparito > ${q} THEN NULL ELSE sparito END`,
+    esito: `CASE WHEN ${riaperta} THEN NULL ELSE esito END`,
+    stato: `CASE WHEN ${riaperta} THEN 'aperto' ELSE stato END`
+  })} FROM main.compiti WHERE creato <= ${q}`)
+  const fc = new Set(colonneDi(d, 'feed'))
+  const risposta = fc.has('risposto') ? `(risposto IS NOT NULL AND risposto > ${q})` : '0'
+  d.exec(`CREATE TEMP VIEW feed AS SELECT ${tutte('feed', {
+    stato: `CASE WHEN ${risposta} THEN 'aperto' ELSE stato END`,
+    risposto: `CASE WHEN ${risposta} THEN NULL ELSE risposto END`,
+    ragione: `CASE WHEN ${risposta} THEN NULL ELSE ragione END`,
+    motivo: `CASE WHEN ${risposta} THEN NULL ELSE motivo END`
+  })} FROM main.feed WHERE quando <= ${q}`)
+  d.exec(`CREATE TEMP VIEW messaggi AS SELECT * FROM main.messaggi WHERE quando <= ${q}`)
+  d.exec(`CREATE TEMP VIEW azioni AS SELECT * FROM main.azioni WHERE quando <= ${q}`)
+}
+
+function dellaProva(p: provaChiusa.Contesto): DatabaseSync {
+  if (p.db) return p.db as DatabaseSync
+  const d = new DatabaseSync(join(cartella(), 'mente.db'))
+  try {
+    d.exec('PRAGMA busy_timeout = 5000')
+    if (p.al) vistePassate(d, p.al)
+    d.exec('PRAGMA query_only = ON')
+  } catch (e) {
+    try { d.close() } catch { /* già chiusa */ }
+    throw e
+  }
+  p.db = d
+  return d
+}
+
+/** Il lavoro dentro un recinto, e alla fine la sua connessione chiusa. Collaudo e vassoio passano sempre di qui. */
+export async function nellaProva<T>(c: provaChiusa.Contesto, fn: () => T | Promise<T>): Promise<T> {
+  try {
+    return await provaChiusa.dentroLaProva(c, fn)
+  } finally {
+    c.chiusa = true
+    if (c.db) { try { (c.db as DatabaseSync).close() } catch { /* già chiusa */ } }
+  }
+}
+
+export type RigaProva = {
+  id: string; automazione: string; tipo: 'prova' | 'vassoio'; origine: string | null
+  impronta: string | null; ricetta: string | null; dal: string | null; al: string | null
+  stato: string; documenti: number; occorrenze: number; gettoni: number; guaio: string | null
+  creata: string; finita: string | null
+}
+
+export type RigaEsito = {
+  id: string; prova: string; automazione: string; quando: string | null; tipo: string
+  testo: string | null; nota: string | null; doc: string | null; docs: string | null; inLista: string | null
+  modo: string | null; attrezzi: string | null; proposta: string | null; bozza: string | null
+  fonti: string | null; revisione: string | null; stato: string; giudizio: string | null
+  perche: string | null; jev: number | null; aPosteriori: string | null; risposta: string | null
+  suo: string | null; compito: string | null; creato: string
+}
+
+const CAMPI_PROVA = ['automazione', 'tipo', 'origine', 'impronta', 'ricetta', 'dal', 'al', 'stato', 'documenti', 'occorrenze', 'gettoni', 'guaio', 'creata', 'finita'] as const
+const CAMPI_ESITO = ['prova', 'automazione', 'quando', 'tipo', 'testo', 'nota', 'doc', 'docs', 'inLista', 'modo', 'attrezzi', 'proposta', 'bozza', 'fonti', 'revisione', 'stato', 'giudizio', 'perche', 'jev', 'aPosteriori', 'risposta', 'suo', 'compito', 'creato'] as const
+
+type Valore = string | number | null
+
+export function nuovaProva(p: Pick<RigaProva, 'id' | 'automazione' | 'tipo' | 'stato'> & Partial<RigaProva>): RigaProva {
+  const riga: RigaProva = {
+    origine: null, impronta: null, ricetta: null, dal: null, al: null, guaio: null, finita: null,
+    ...p, documenti: p.documenti ?? 0, occorrenze: p.occorrenze ?? 0, gettoni: p.gettoni ?? 0,
+    creata: p.creata ?? new Date().toISOString()
+  }
+  db.prepare(`INSERT INTO prove (id, ${CAMPI_PROVA.join(', ')}) VALUES (?, ${CAMPI_PROVA.map(() => '?').join(', ')})`)
+    .run(riga.id, ...CAMPI_PROVA.map(k => riga[k] as Valore))
+  return riga
+}
+
+export function aggiornaProva(id: string, patch: Partial<Omit<RigaProva, 'id'>>) {
+  const k = CAMPI_PROVA.filter(c => c in patch)
+  if (!k.length) return
+  db.prepare(`UPDATE prove SET ${k.map(c => `${c} = ?`).join(', ')} WHERE id = ?`)
+    .run(...k.map(c => (patch as Record<string, Valore>)[c] ?? null), id)
+}
+
+export function prova(id: string): RigaProva | null {
+  return (db.prepare('SELECT * FROM prove WHERE id = ?').get(id) as unknown as RigaProva) ?? null
+}
+
+export function proveDi(automazione: string, tipo: 'prova' | 'vassoio' = 'prova', limite = 5): RigaProva[] {
+  return db.prepare('SELECT * FROM prove WHERE automazione = ? AND tipo = ? ORDER BY creata DESC, rowid DESC LIMIT ?')
+    .all(automazione, tipo, limite) as unknown as RigaProva[]
+}
+
+export function proveInStato(stati: string[]): RigaProva[] {
+  return db.prepare(`SELECT * FROM prove WHERE tipo = 'prova' AND stato IN (${stati.map(() => '?').join(',')})`)
+    .all(...stati) as unknown as RigaProva[]
+}
+
+/** Le prove di oggi (giorno locale) di un'origine: «editor» o «suggerimento». */
+export function proveDiOggi(origine: string): number {
+  const inizio = new Date(); inizio.setHours(0, 0, 0, 0)
+  const r = db.prepare("SELECT COUNT(*) AS n FROM prove WHERE tipo = 'prova' AND origine = ? AND creata >= ?")
+    .get(origine, inizio.toISOString()) as { n: number }
+  return r.n
+}
+
+export function scriviEsito(e: Pick<RigaEsito, 'id' | 'prova' | 'automazione' | 'tipo' | 'stato'> & Partial<RigaEsito>): RigaEsito {
+  const riga = { ...Object.fromEntries(CAMPI_ESITO.map(k => [k, null])), ...e, creato: e.creato ?? new Date().toISOString() } as RigaEsito
+  db.prepare(`INSERT INTO esiti (id, ${CAMPI_ESITO.join(', ')}) VALUES (?, ${CAMPI_ESITO.map(() => '?').join(', ')})`)
+    .run(riga.id, ...CAMPI_ESITO.map(k => riga[k] as Valore))
+  return riga
+}
+
+export function aggiornaEsito(id: string, patch: Partial<Omit<RigaEsito, 'id'>>) {
+  const k = CAMPI_ESITO.filter(c => c in patch)
+  if (!k.length) return
+  db.prepare(`UPDATE esiti SET ${k.map(c => `${c} = ?`).join(', ')} WHERE id = ?`)
+    .run(...k.map(c => (patch as Record<string, Valore>)[c] ?? null), id)
+}
+
+export function esiti(prova: string): RigaEsito[] {
+  return db.prepare('SELECT * FROM esiti WHERE prova = ? ORDER BY quando DESC, rowid DESC').all(prova) as unknown as RigaEsito[]
+}
+
+export function esito(id: string): RigaEsito | null {
+  return (db.prepare('SELECT * FROM esiti WHERE id = ?').get(id) as unknown as RigaEsito) ?? null
+}
+
+/** Il risultato del vassoio va in lista, una volta sola: vero se l'ha preso adesso questa chiamata. */
+export function prendiEsito(id: string, compito: string): boolean {
+  const r = db.prepare(`UPDATE esiti SET compito = ?, stato = 'in lista' WHERE id = ? AND compito IS NULL
+    AND stato NOT IN ('in lista','scartata','superata')`).run(compito, id)
+  return Number(r.changes) === 1
+}
+
+const IN_ATTESA = "('senza bozza','da scrivere','scritta')"
+
+/** C'è un risultato del vassoio ancora in attesa, nato da questa automazione? La guardia della riga sola. */
+export function esitoVivoDa(automazione: string): boolean {
+  return !!db.prepare(`SELECT 1 FROM esiti e JOIN prove p ON p.id = e.prova
+    WHERE p.tipo = 'vassoio' AND e.automazione = ? AND e.stato IN ${IN_ATTESA} LIMIT 1`).get(automazione)
+}
+
+export function nelVassoio(id: string, adesso: Date = new Date()): boolean {
+  const r = db.prepare('SELECT vassoio FROM automazioni WHERE id = ?').get(id) as { vassoio: string | null } | undefined
+  return !!r?.vassoio && r.vassoio > adesso.toISOString()
+}
+
+/** I documenti che hanno un risultato nel vassoio (in qualunque stato ma non superato). */
+export function docsNelVassoio(ids: string[], automazione?: string): Set<string> {
+  const dentro = new Set<string>()
+  if (!ids.length) return dentro
+  const cercati = new Set(ids)
+  const righe = db.prepare(`SELECT e.doc, e.docs FROM esiti e JOIN prove p ON p.id = e.prova
+    WHERE p.tipo = 'vassoio' AND e.stato != 'superata'${automazione ? ' AND e.automazione = ?' : ''}`)
+    .all(...(automazione ? [automazione] : [])) as { doc: string | null; docs: string | null }[]
+  for (const r of righe) {
+    if (r.doc && cercati.has(r.doc)) dentro.add(r.doc)
+    if (r.docs) {
+      try {
+        const x = JSON.parse(r.docs) as { ids?: string[] }
+        for (const d of x.ids ?? []) if (cercati.has(d)) dentro.add(d)
+      } catch { /* un JSON storto non tiene fuori niente */ }
+    }
+  }
+  return dentro
+}
+
+/** I risultati del vassoio in attesa, di tutte le automazioni, dal più nuovo. */
+export function vassoioInAttesa(): RigaEsito[] {
+  return db.prepare(`SELECT e.* FROM esiti e JOIN prove p ON p.id = e.prova
+    WHERE p.tipo = 'vassoio' AND e.stato IN ${IN_ATTESA} ORDER BY e.creato DESC, e.rowid DESC`).all() as unknown as RigaEsito[]
+}
+
+/** Il primo risultato del vassoio da scrivere, il più vecchio. */
+export function daScrivereNelVassoio(): RigaEsito | null {
+  return (db.prepare(`SELECT e.* FROM esiti e JOIN prove p ON p.id = e.prova
+    WHERE p.tipo = 'vassoio' AND e.stato = 'da scrivere' ORDER BY e.creato ASC, e.rowid ASC LIMIT 1`).get() as unknown as RigaEsito) ?? null
+}
+
+export function apriVassoio(id: string, fino: string) {
+  vediAutomazione(id)
+  db.prepare('UPDATE automazioni SET vassoio = ? WHERE id = ? AND vassoio IS NULL').run(fino, id)
+}
+
+export function chiudiVassoio(id: string) {
+  db.prepare('UPDATE automazioni SET vassoio = ? WHERE id = ?').run(new Date().toISOString(), id)
+}
+
+/** Un'automazione già accesa prima del vassoio non ci entra mai. */
+export function nonnoVassoio(id: string) {
+  db.prepare("UPDATE automazioni SET vassoio = '1970-01-01T00:00:00.000Z' WHERE id = ? AND vassoio IS NULL").run(id)
+}
+
+export function togliProveDi(automazione: string) {
+  db.prepare('DELETE FROM esiti WHERE automazione = ?').run(automazione)
+  db.prepare('DELETE FROM prove WHERE automazione = ?').run(automazione)
+}
+
+/** Le ultime n prove di un'automazione restano; le altre, coi loro esiti, se ne vanno. */
+export function tieniUltimeProve(automazione: string, n = 5) {
+  const vecchie = db.prepare(`SELECT id FROM prove WHERE automazione = ? AND tipo = 'prova'
+    ORDER BY creata DESC, rowid DESC LIMIT -1 OFFSET ?`).all(automazione, n) as { id: string }[]
+  for (const v of vecchie) {
+    db.prepare('DELETE FROM esiti WHERE prova = ?').run(v.id)
+    db.prepare('DELETE FROM prove WHERE id = ?').run(v.id)
+  }
+}
+
+/** La prova di un suggerimento passa all'automazione adottata. */
+export function spostaProve(da: string, a: string) {
+  db.prepare('UPDATE prove SET automazione = ? WHERE automazione = ?').run(a, da)
+  db.prepare('UPDATE esiti SET automazione = ? WHERE automazione = ?').run(a, da)
+}
+
+/** Una fonte scollegata si porta via anche i risultati delle prove sui suoi documenti. */
+export function togliEsitiDellaFonte(fonte: string) {
+  db.prepare('DELETE FROM esiti WHERE doc IN (SELECT id FROM documenti WHERE fonte = ?)').run(fonte)
+}
+
+// — P6: fine —
 
 export default db

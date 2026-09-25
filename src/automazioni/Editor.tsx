@@ -24,7 +24,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Costruttore, fraseDi } from './Costruttore'
-import { api, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type Raccolta, type RicettaComposta } from '../api'
+import { api, apiP6, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type ProvaVista, type Raccolta, type RicettaComposta } from '../api'
+import { Prova } from './Prova'
+import { frasiProva } from '../prova'
 import { interpreta } from './interpreta'
 import { frasi, loc, t } from '../lingua'
 import { Cestino, Hov, LABEL, useFocoDialogo } from '../ui'
@@ -62,13 +64,14 @@ function Campo({ etichetta, children, nota }: {
 }
 
 /** Le due linguette. Sono due modi di dire la stessa cosa, non due schermate. */
-function Linguette({ dove, vai }: { dove: 'parole' | 'campi'; vai: (d: 'parole' | 'campi') => void }) {
+type Dove = 'parole' | 'campi' | 'prova'
+function Linguette({ dove, vai, conProva }: { dove: Dove; vai: (d: Dove) => void; conProva: boolean }) {
   return (
     <div role="tablist" style={{
       display: 'inline-flex', gap: 2, padding: 3, borderRadius: 99, flex: 'none',
       background: 'rgba(var(--inchiostro-rgb),.055)'
     }}>
-      {([['parole', 'A parole'], ['campi', 'Binari']] as const).map(([id, testo]) => (
+      {([['parole', 'A parole'], ['campi', 'Binari'], ...(conProva ? [['prova', 'Prova'] as const] : [])] as const).map(([id, testo]) => (
         <button key={id} type="button" role="tab" aria-selected={dove === id} onClick={() => vai(id)}
           style={{
             padding: '5px 13px', borderRadius: 99, cursor: 'pointer', fontSize: '12px',
@@ -200,8 +203,14 @@ function Anteprima({ id, catalogo, chiave }: {
   )
 }
 
-export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spostata }: {
+const IN_CORSO = new Set(['in coda', 'in corso'])
+const FINITE = new Set(['finita', 'fermata', 'tetto', 'occupato', 'interrotta', 'guaio'])
+
+export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spostata, inizio, vaiAlleFonti }: {
   a: Automazione
+  /** Da dove si apre: la linguetta «Prova» per un suggerimento appena adottato (P6). */
+  inizio?: 'prova'
+  vaiAlleFonti?: () => void
   catalogo: Attrezzo[]
   /** Le cartelle del desktop collegate: sono le sole in cui Claude Code può lavorare. */
   cartelle: string[]
@@ -212,7 +221,23 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 }) {
   // «The automation should open in the words panel»: si apre da leggere, a
   // parole; i binari sono per chi vuole cambiarne un pezzo
-  const [dove, setDove] = useState<'parole' | 'campi'>('parole')
+  const [dove, setDove] = useState<Dove>(inizio === 'prova' && a.prova ? 'prova' : 'parole')
+  /*
+   * La prova sugli ultimi 30 giorni (P6): l'ultima, se c'è, si legge aprendo.
+   * Premere il bottone passa alla linguetta subito, prima che il server
+   * risponda; se il server dice di no, si torna dov'eri.
+   */
+  const [vista, setVista] = useState<ProvaVista | null>(null)
+  useEffect(() => {
+    if (!a.prova) return
+    let vivo = true
+    apiP6.ultimaProva(a.id).then(r => { if (vivo && r.prova) setVista(r.prova) }).catch(() => {})
+    return () => { vivo = false }
+  }, [a.id, a.prova?.id])
+  /** «Termina la prova» premuto: la riga sotto il nome cambia subito, e torna se il server dice di no. */
+  const [dalVivoOra, setDalVivoOra] = useState(false)
+  const nelVassoio = !dalVivoOra && !!a.accesa && !!a.vassoio && a.vassoio > new Date().toISOString()
+  const dalVivo = !!a.dalVivo || (dalVivoOra && a.accesa)
 
   const [confermaChiusura, setConfermaChiusura] = useState(false)
   const chiediChiusura = () => { if (modificata) setConfermaChiusura(true); else chiudi() }
@@ -307,6 +332,32 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     setPenso('')
   }
 
+  const prova = async () => {
+    if (salvo || gira || penso) return
+    const prima = dove
+    setGira(true); setDetto(''); setGuaio('')
+    if (modificata && !await salva()) { setGira(false); return }
+    setDove('prova')
+    setVista(v => ({
+      id: '', stato: 'in corso', esito: null, giusti: 0, giudicati: 0, tue: 0, documenti: 0, risultati: 0, bozze: 0,
+      al: null, cambiata: false, parziale: [], davanti: null, esiti: [], altri: 0, puoScrivere: false, ...(v && IN_CORSO.has(v.stato) ? v : {})
+    }))
+    try {
+      const r = await apiP6.provaAutomazione(a.id)
+      setVista(r.prova)
+    } catch (e) {
+      setDove(prima); setVista(null)
+      setGuaio(e instanceof Error ? e.message : String(e))
+    }
+    setGira(false)
+  }
+
+  const terminaLaProva = async () => {
+    setDalVivoOra(true); setGuaio('')
+    try { cambiata((await apiP6.dalVivo(a.id)).automazioni) }
+    catch (e) { setDalVivoOra(false); setGuaio(e instanceof Error ? e.message : String(e)) }
+  }
+
   const adesso = async () => {
     if (salvo || gira || penso) return
     setGira(true); setDetto(''); setGuaio('')
@@ -372,9 +423,14 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
               fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 2,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
             }}>
-              {a.accesa
-                ? (a.prossima ? frasi.giraDaSolaProssima(quandoData(a.prossima)) : quandoGira(a))
-                : t('In pausa')}
+              {nelVassoio
+                ? <>{frasiProva.inProvaFino(a.vassoio!)} · <button type="button" className="auto-link editor-sub-link" onClick={terminaLaProva}>{t('Termina la prova')}</button></>
+                : a.accesa
+                  ? (a.prossima ? frasi.giraDaSolaProssima(quandoData(a.prossima)) : quandoGira(a))
+                  : t('In pausa')}
+              {a.prova && dove !== 'prova' && FINITE.has(a.prova.stato) && <> · <button type="button" className="auto-link editor-sub-link" onClick={() => setDove('prova')}>
+                {a.prova.giudicati >= 5 ? frasiProva.contoEditor(a.prova.giusti, a.prova.giudicati) : frasiProva.poche(a.prova.giudicati)}
+                {a.prova.cambiata ? ` · ${t('cambiata da allora')}` : ''}</button></>}
             </div>
           </div>
 
@@ -409,7 +465,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 
         <div className="auto-editor-body" inert={occupato} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15, flexWrap: 'wrap' }}>
-            <Linguette dove={dove} vai={setDove} />
+            <Linguette dove={dove} vai={setDove} conProva={!!vista || !!a.prova} />
             <div style={{ flex: 1 }} />
             {/* la cartella in cui sta: un menù, perché trascinare dentro un
                 pannello aperto non si può */}
@@ -421,7 +477,10 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             </select>}
           </div>
 
-          {dove === 'parole' ? (
+          {dove === 'prova' && vista ? (
+            <Prova vista={vista} cambia={setVista} riprova={prova} guaio={setGuaio}
+              vaiAlleFonti={() => { chiudi(); vaiAlleFonti?.() }} />
+          ) : dove === 'parole' ? (
             <div>
               {/* a parole, prima di tutto quello che fa adesso: è la stessa frase
                   che sta in cima ai binari, ed era la prima cosa che si leggeva
@@ -473,7 +532,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
               </Campo>
               </div>
               <details className="auto-history"><summary>{t('Cronologia esecuzioni')}</summary>
-                {a.storia.length ? <ol>{[...a.storia].reverse().map((r, i) => <li key={i}><time>{new Date(r.quando).toLocaleString(loc())}</time><span>{r.esito === 'fatta' ? t('Risultato preparato') : r.esito === 'niente' ? t('Niente da fare') : r.esito === 'guaio' ? t('Da controllare') : t('Rimandata')} · {r.quanti} {t('documenti')}</span>{r.risultato && <details className="auto-run-result"><summary>{t('Risultato')}</summary><p>{r.risultato}</p></details>}</li>)}</ol> : <p className="auto-muted">{t('Nessuna esecuzione. Provala per vedere il primo risultato.')}</p>}
+                {a.storia.length ? <ol>{[...a.storia].reverse().map((r, i) => <li key={i}><time>{new Date(r.quando).toLocaleString(loc())}</time><span>{r.esito === 'fatta' ? t('Risultato preparato') : r.esito === 'niente' ? t('Niente da fare') : r.esito === 'guaio' ? t('Da controllare') : t('Rimandata')} · {r.quanti} {t('documenti')}</span>{r.risultato && <details className="auto-run-result"><summary>{t('Risultato')}</summary><p>{r.risultato}</p></details>}</li>)}</ol> : <p className="auto-muted">{t('Non è ancora girata.')}</p>}
               </details>
             </div>
           )}
@@ -490,12 +549,17 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             </button>
           )}
 
-          {/* «Provala adesso» c'è anche quando è in pausa: è lì che serve. */}
-          <Hov as="button" onClick={adesso} disabled={gira || occupato}
+          {/*
+            Un bottone solo (P6). Dal vivo, fuori dal vassoio, la fa girare
+            adesso; altrimenti la prova sugli ultimi 30 giorni, che non scrive.
+          */}
+          <Hov as="button" onClick={dalVivo ? adesso : prova} disabled={gira || occupato}
             style={{ ...VUOTO, display: 'inline-flex', alignItems: 'center', gap: 7, cursor: gira ? 'default' : 'pointer' }}
             hover={gira ? {} : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
             {gira && <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />}
-            {gira ? t('Provo…') : modificata ? t('Salva e prova') : t('Provala adesso')}
+            {dalVivo
+              ? (gira ? t('La faccio girare…') : t('Falla girare adesso'))
+              : gira ? t('La provo…') : modificata ? t('Salva e prova') : t('Provala adesso')}
           </Hov>
 
           <div style={{ flex: 1, minWidth: 20 }} />

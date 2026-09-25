@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import * as chi from './chi.ts'
 import * as conti from './conti.ts'
 import * as postgres from './postgres.ts'
+import { vietato } from './prova-chiusa.ts'
 
 /**
  * I modelli fra cui si può scegliere, dal più economico al più capace.
@@ -1158,6 +1159,7 @@ export function scrivi(c: Config, opz: { togli?: readonly string[] } = {}) {
 }
 
 export function aggiorna(patch: Partial<Config>): Config {
+  vietato('config.aggiorna')
   // i campi undefined non sono "cancella": sono "non toccare"
   const puliti = Object.fromEntries(
     Object.entries(patch).filter(([, v]) => v !== undefined)
