@@ -26,6 +26,7 @@ import { existsSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { ConfigDesktop } from './config.ts'
+import { nienteOpen, openInProva } from './senza-open.ts'
 
 const esegui = promisify(execFile)
 
@@ -346,7 +347,7 @@ export async function porta(desktop: ConfigDesktop | null | undefined, d: Destin
 async function lancia(argomenti: string[]): Promise<void> {
   switch (comeAprire()) {
     case 'finta': perProva.apri!(argomenti); return
-    case 'registro': console.log(`myynd · scrivania · open non eseguito (prova): ${argomenti.join(' ')}`); return
+    case 'registro': openInProva('scrivania', argomenti); return
     default: await esegui('/usr/bin/open', argomenti)
   }
 }
@@ -354,11 +355,12 @@ async function lancia(argomenti: string[]): Promise<void> {
 /**
  * Come si apre: con la mano delle prove (`perProva.apri`), solo nel registro
  * (MYYND_PROVA_NIENTE_OPEN=1: una scena di prove/scena.sh, dove «Portami lì»
- * porterebbe davanti un'app sul Mac di chi la fa girare), o con `open` davvero.
+ * porterebbe davanti un'app sul Mac di chi la fa girare; il flag lo legge
+ * senza-open.ts, lo stesso di «Apri» su file e documenti), o con `open` davvero.
  */
 function comeAprire(): 'finta' | 'registro' | 'open' {
   if (perProva.apri) return 'finta'
-  if (process.env.MYYND_PROVA_NIENTE_OPEN === '1') return 'registro'
+  if (nienteOpen()) return 'registro'
   return 'open'
 }
 

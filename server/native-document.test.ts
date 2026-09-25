@@ -193,3 +193,31 @@ test('live Pages fixture readback sees an open edited body without itself saving
     await osascript('/usr/bin/osascript',['-l','JavaScript','-e',close,fixture.percorso],{timeout:30_000}).catch(()=>{})
   }
  })
+
+test('apriDocumento in una scena delle prove (MYYND_PROVA_NIENTE_OPEN=1) non lancia open: i controlli sul percorso restano, poi una riga nel registro', { skip: process.platform !== 'darwin' }, async () => {
+  const { apriDocumento } = await import('./native-document.ts')
+  const { cartella } = await import('./config.ts')
+  const { mkdirSync } = await import('node:fs')
+  const dir = join(cartella(), 'deliverables')
+  mkdirSync(dir, { recursive: true })
+  const file = join(dir, `prova-open-${process.pid}.rtf`)
+  writeFileSync(file, '{\\rtf1 x}')
+  const fuori = join(root, 'fuori.rtf')
+  writeFileSync(fuori, '{\\rtf1 x}')
+  const primaEnv = process.env.MYYND_PROVA_NIENTE_OPEN, log = console.log
+  const righe: string[] = []
+  process.env.MYYND_PROVA_NIENTE_OPEN = '1'
+  console.log = (...a: unknown[]) => { righe.push(a.map(String).join(' ')) }
+  try {
+    await apriDocumento({ app: 'TextEdit', percorso: file })
+    assert.equal(righe.length, 1)
+    assert.ok(righe[0].startsWith('myynd · documento · open non eseguito (prova): -b com.apple.TextEdit ') && righe[0].endsWith(realpathSync(file)), righe[0])
+    await assert.rejects(apriDocumento({ app: 'TextEdit', percorso: fuori }), /outside/)
+    await assert.rejects(apriDocumento({ app: 'Pages', percorso: file }), /outside/)
+    assert.equal(righe.length, 1, 'un percorso rifiutato non arriva al registro')
+  } finally {
+    console.log = log
+    if (primaEnv === undefined) delete process.env.MYYND_PROVA_NIENTE_OPEN; else process.env.MYYND_PROVA_NIENTE_OPEN = primaEnv
+    rmSync(file, { force: true })
+  }
+})

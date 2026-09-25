@@ -46,6 +46,7 @@ import { riflua } from './testo.ts'
 import * as lavoro from './lavoro.ts'
 import { landReport } from './esecuzione-isolata.ts'
 import { detectRuntime } from './agent-runtime.ts'
+import { openInProva } from './senza-open.ts'
 
 // — cosa è stato fatto —
 
@@ -122,12 +123,21 @@ const VERI: Ferri = {
   scrivania: () => join(homedir(), 'Desktop'),
   scaricati: () => join(homedir(), 'Downloads'),
   documenti: () => join(homedir(), 'Documents'),
-  apri: percorso => new Promise((ok, no) => execFile('/usr/bin/open', [percorso], { timeout: 15_000 }, e => e ? no(new Error('Non sono riuscito ad aprire il file.')) : ok())),
+  apri: percorso => apriSulMac(percorso),
   copie: () => join(cartellaProfilo(), 'project-work'),
   piattaforma: () => process.platform,
   ospitato: () => OSPITATO
 }
 let ferri: Ferri = VERI
+
+/**
+ * La mano vera di «Apri»: `open` sul Mac, o solo una riga nel registro in una
+ * scena delle prove (MYYND_PROVA_NIENTE_OPEN=1, come «Portami lì»).
+ */
+export function apriSulMac(percorso: string): Promise<void> {
+  if (openInProva('mani', [percorso])) return Promise.resolve()
+  return new Promise((ok, no) => execFile('/usr/bin/open', [percorso], { timeout: 15_000 }, e => e ? no(new Error('Non sono riuscito ad aprire il file.')) : ok()))
+}
 
 /** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
 export function perProva(f: Partial<Ferri> | null) {

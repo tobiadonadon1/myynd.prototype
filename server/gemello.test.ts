@@ -539,11 +539,20 @@ test('«Va bene» conta un documento solo se è un documento: un file consegnato
   chi.dentro(anna, () => {
     azzera()
     const T = new Date('2026-09-20T12:00:00.000Z')
-    const file = { id: 'k1', risultato: 'Piano in tre punti.', consegna: { app: 'File' as const, titolo: 'piano.md', percorso: '/x/piano.md', dove: 'scrivania' as never }, email: null }
+    const nudo = { consegna: null, email: null }
+    const file = { ...nudo, id: 'k1', risultato: 'Piano in tre punti.', consegna: { app: 'File' as const, titolo: 'piano.md', percorso: '/x/piano.md', dove: 'scrivania' as never } }
     assert.equal(gem.contaComeDocumento(file), false, 'la riga manda la sua nota, non il documento')
-    assert.equal(gem.contaComeDocumento({ risultato: 'Hi Nora', consegna: null, email: { a: 'nora@h.example' } as never }), false, 'una mail pronta la misura P3')
-    assert.equal(gem.contaComeDocumento({ risultato: 'Piano', consegna: null, email: null }), true)
-    assert.equal(gem.contaComeDocumento({ risultato: null, consegna: null, email: null }), false)
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Hi Nora', email: { a: 'nora@h.example' } as never }), false, 'una mail pronta la misura P3')
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Piano' }), true)
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: null }), false)
+    // una risposta senza la mail pronta (posta non collegata, modello che non ce l'ha fatta) resta una mail: la dicono i segni di P3 e la forma della bozza
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Piano', voceScritta: { destinatario: 'nora@h.example' } }), false, 'scritta a qualcuno')
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Piano', mandata: { doc: 'posta:Sent:1', quando: 'x', certezza: 'id', ritocco: 0 } }), false, 'partita dalla sua posta')
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Hi Nora,\n\nthe plan is ready.\n\nBest regards,\nAnna' }), false, 'la bozza saluta e firma')
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Gentile Nora, il piano è pronto.' }), false, 'la bozza saluta')
+    // il contrario: senza quei segni una bozza conta, anche se la voce ha una lingua ma nessun destinatario, e anche se la richiesta diceva «scrivi»
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Piano in tre punti.', voceScritta: { lingua: 'it' } }), true)
+    assert.equal(gem.contaComeDocumento({ ...nudo, risultato: 'Il piano del pilota, in tre punti, scritto per il team.' }), true)
     // il file preso com'è: identico, una volta sola
     assert.equal(gem.consegnaAccettata(file, T), true)
     assert.equal(gem.consegnaAccettata(file, new Date(T.getTime() + 1000)), false, 'una seconda chiusura non conta due volte')
@@ -604,18 +613,40 @@ test('«cancella le osservazioni» a metà del primo ripasso non scrive righe su
     const righe = () => store.default.prepare('SELECT chiave, genere, stato FROM abitudini').all() as { chiave: string; genere: string; stato: string }[]
     await gem.giro(MATTINA)
     assert.ok(seg.postaDaRipassare(), 'il primo giro non arriva in fondo')
-    // la rotta DELETE /api/osservatore/osservazioni: cancella e rifà le righe, subito
-    oss.cancellaOsservazioni(MATTINA); ab.ricalcolaDopoCancellazione(MATTINA)
+    // la rotta DELETE /api/osservatore/osservazioni: cancella e rifà le righe, subito, in una transazione sola
+    oss.cancellaOsservazioni(MATTINA)
     assert.ok(!righe().some(r => r.genere.startsWith('posta.')), `niente righe sulla posta a metà registro: ${JSON.stringify(righe())}`)
     assert.ok(!ab.perIlRitratto().includes('Nora'), 'e niente arriva al modello')
     // a registro in pari la stessa pressione rifà anche la posta, e Nora è una a cui risponde sempre
     for (let i = 1; i <= 12 && seg.postaDaRipassare(); i++) await gem.giro(new Date(MATTINA.getTime() + i * 15 * 60_000))
     assert.ok(!seg.postaDaRipassare())
-    oss.cancellaOsservazioni(MATTINA); ab.ricalcolaDopoCancellazione(new Date(MATTINA.getTime() + 4 * ORA))
+    oss.cancellaOsservazioni(new Date(MATTINA.getTime() + 4 * ORA))
     assert.ok(righe().some(r => r.chiave === 'posta.risponde_sempre:nora@h.example' && r.stato === 'osservata'), JSON.stringify(righe()))
     assert.ok(!righe().some(r => r.genere === 'posta.lascia'))
     // senza la posta, una riga sulla posta che c'è già non si tocca: non diventa «superata»
     ab.ricalcola(new Date(MATTINA.getTime() + 5 * ORA), { senzaPosta: true })
     assert.equal(righe().find(r => r.chiave === 'posta.risponde_sempre:nora@h.example')?.stato, 'osservata')
+  })
+})
+
+test('ieri chiuso con ogni affermazione annullata (una domenica col solo progetto del giorno) non è un conto: niente «Ieri · 0 su 0»; una sola giudicata, e ieri torna', () => {
+  chi.dentro(anna, () => {
+    azzera()
+    const ins = store.default.prepare("INSERT INTO previsioni (id, giorno, genere, ref, probabilita, dati, fatta, esito, verificata) VALUES (?,?,?,?,?,?,?,?,?)")
+    const chiudi = (giorno: string, giuste: number, annullate: number) => store.default.prepare('INSERT INTO punteggi (giorno, giuste, sbagliate, annullate, brier, base, calcolato) VALUES (?,?,?,?,?,?,?)').run(giorno, giuste, 0, annullate, null, 0, 'x')
+    // domenica 27: il progetto del giorno senza un minuto, annullato; lunedì mattina
+    ins.run('d1', '2026-09-27', 'progetto.del_giorno', 'nw', 0.7, '{"base":true}', 'x', 'annullata', 'x')
+    chiudi('2026-09-27', 0, 1)
+    const lunedi = new Date('2026-09-28T07:00:00.000Z')
+    assert.equal(gem.vista(lunedi).ieri, null, 'un giorno senza un conto non si mostra')
+    // lo stesso giorno ancora aperto si mostra come «ancora aperte»
+    store.default.exec("DELETE FROM punteggi; UPDATE previsioni SET esito = NULL, verificata = NULL WHERE id = 'd1'")
+    assert.equal(gem.vista(lunedi).ieri?.chiuso, false)
+    // una affermazione giudicata accanto a una annullata: ieri c'è, 1 su 1, e la annullata resta nella lista come «non conta»
+    store.default.exec("UPDATE previsioni SET esito = 'annullata', verificata = 'x' WHERE id = 'd1'")
+    ins.run('d2', '2026-09-27', 'posta.risponde', 'posta.arrivata|posta:INBOX:1', 0.9, '{"base":false}', 'x', 'giusta', 'x')
+    chiudi('2026-09-27', 1, 1)
+    const v = gem.vista(lunedi)
+    assert.deepEqual([v.ieri?.chiuso, v.ieri?.giuste, v.ieri?.totale, v.ieri?.base, v.ieri?.previsioni.length], [true, 1, 1, 0, 2])
   })
 })

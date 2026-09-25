@@ -28,6 +28,8 @@ import * as chi from './chi.ts'
 import db from './store.ts'
 import * as store from './store.ts'
 import * as fuso from './fuso.ts'
+import * as abitudini from './abitudini.ts'
+import * as segnali from './segnali.ts'
 import { progettoDelTesto } from './attenzione.ts'
 
 // — le liste, uguali carattere per carattere a desktop/sessioni.ts —
@@ -299,7 +301,13 @@ export function scriviSessioni(s: unknown[], adesso = new Date()): number {
 /**
  * Via tutto quello che ha osservato di questo conto: le sessioni, le righe
  * «app.*» di Come lavori, la previsione di oggi sul progetto se non è ancora
- * verificata. Una pressione, una transazione; poi `abitudini.ricalcola()`.
+ * verificata; poi le righe si rifanno dai fatti che restano. Una pressione,
+ * una transazione: se il ricalcolo cade, non è sparito niente, e la pagina
+ * che dice «non è andata» dice il vero.
+ *
+ * Le righe sulla posta si rifanno solo col registro in pari: a metà del primo
+ * ripasso sarebbero false, in vigore senza un tocco, e la notte dopo
+ * resterebbero novanta giorni sotto «Non valgono più» accanto al loro contrario.
  */
 export function cancellaOsservazioni(adesso = new Date()): void {
   const oggi = fuso.giornoIn(adesso)
@@ -309,6 +317,7 @@ export function cancellaOsservazioni(adesso = new Date()): void {
     // una riga tolta resta: è l'unico segno che non deve rinascere (e non porta niente del sensore, solo la chiave)
     db.exec("DELETE FROM abitudini WHERE genere LIKE 'app.%' AND stato != 'tolta'")
     db.prepare("DELETE FROM previsioni WHERE giorno = ? AND genere = 'progetto.del_giorno' AND verificata IS NULL").run(oggi)
+    abitudini.ricalcola(adesso, { senzaPosta: segnali.postaDaRipassare() })
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }
 }

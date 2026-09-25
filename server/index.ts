@@ -46,6 +46,7 @@ import * as traduci from './traduci.ts'
 import * as posta from './connettori/posta.ts'
 import * as invio from './invio.ts'
 import * as scrivania from './scrivania.ts'
+import { openInProva } from './senza-open.ts'
 import { apriDocumento } from './native-document.ts'
 import { landReport } from './esecuzione-isolata.ts'
 import * as mani from './mani.ts'
@@ -3835,7 +3836,7 @@ app.post('/api/lavoro/copia/apri', async (req,res) => {
   try {
     if(ospitato.OSPITATO) throw new Error('Open this copy on your computer.')
     const path=await copiaVerificata(String(req.body?.reportFile ?? ''))
-    await new Promise<void>((resolve,reject)=>execFile(process.platform==='darwin'?'/usr/bin/open':'explorer.exe',[path],e=>e?reject(e):resolve()))
+    if(!openInProva('lavoro',[path])) await new Promise<void>((resolve,reject)=>execFile(process.platform==='darwin'?'/usr/bin/open':'explorer.exe',[path],e=>e?reject(e):resolve()))
     res.json({ok:true})
   } catch(e){errore(res,e)}
 })
@@ -4573,9 +4574,8 @@ app.post('/api/osservatore/riprendi', (_req, res) => {
 app.delete('/api/osservatore/osservazioni', (_req, res) => {
   if (!osservatore.disponibile()) return senzaOsservatore(res)
   try {
+    // una pressione, una transazione: le sessioni, le righe app.*, la previsione di oggi, e le righe rifatte
     osservatore.cancellaOsservazioni()
-    // le righe sulla posta si rifanno solo col registro in pari: a metà ripasso sarebbero false, e in vigore
-    abitudini.ricalcolaDopoCancellazione()
     osservatore.annuncia()
     res.json({ ok: true })
   } catch (e) { errore(res, e) }

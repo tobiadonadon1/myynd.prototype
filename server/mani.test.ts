@@ -524,3 +524,17 @@ test('scrivi_file scrive nel luogo scelto quando lei ne ha scelto uno, e resta f
   assert.ok(!existsSync(join(scrivania, 'sopra2.md')))
 })
 
+
+test('la mano vera di «Apri» in una scena delle prove (MYYND_PROVA_NIENTE_OPEN=1) non lancia open: una riga nel registro', async () => {
+  const primaEnv = process.env.MYYND_PROVA_NIENTE_OPEN, log = console.log
+  const righe: string[] = []
+  process.env.MYYND_PROVA_NIENTE_OPEN = '1'
+  console.log = (...a: unknown[]) => { righe.push(a.map(String).join(' ')) }
+  try {
+    await mani.apriSulMac(join(scrivania, 'Myynd', 'piano.md'))
+    assert.deepEqual(righe, [`myynd · mani · open non eseguito (prova): ${join(scrivania, 'Myynd', 'piano.md')}`])
+  } finally {
+    console.log = log
+    if (primaEnv === undefined) delete process.env.MYYND_PROVA_NIENTE_OPEN; else process.env.MYYND_PROVA_NIENTE_OPEN = primaEnv
+  }
+})

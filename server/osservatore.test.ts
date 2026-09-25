@@ -275,3 +275,32 @@ test('il proprietario cancellato: le sessioni cadono, nessuna cartella nasce, il
   assert.equal(oss.scriviSessioni([sessione()], ADESSO), 0)
   assert.equal(existsSync(join(CASA, 'utenti', anna)), false, 'nessuna cartella per un conto che non c’è più')
 })
+
+test('«cancella le osservazioni» è una transazione sola: se il ricalcolo delle righe cade, le sessioni restano e la pagina che dice «non è andata» dice il vero', () => {
+  chi.dentro(anna, () => {
+    store.default.exec('DELETE FROM abitudini; DELETE FROM sessioni_app')
+    const ins = store.default.prepare('INSERT INTO sessioni_app (bundle, app, titolo, inizio, fine, secondi, giorno, progetto, cartella) VALUES (?,?,?,?,?,?,?,?,?)')
+    for (let i = 1; i <= 7; i++) { const g = `2026-09-${String(24 - i).padStart(2, '0')}`; ins.run('com.apple.Safari', 'Safari', null, `${g}T07:00:00.000Z`, `${g}T10:00:00.000Z`, 10800, g, null, null) }
+    const sessioni = () => (store.default.prepare('SELECT COUNT(*) AS n FROM sessioni_app').get() as { n: number }).n
+    const stato = (chiave: string) => (store.default.prepare('SELECT stato FROM abitudini WHERE chiave = ?').get(chiave) as { stato: string } | undefined)?.stato
+    assert.equal(sessioni(), 7)
+    // una riga sull'agenda che i fatti non reggono più: il ricalcolo la segnerebbe «superata»
+    store.default.prepare("INSERT INTO abitudini (chiave, genere, dati, prova, fiducia, stato, visto, aggiornato) VALUES ('agenda.finta','agenda.finta','{}','{}',1,'osservata','x','x')").run()
+    // il ricalcolo dentro la cancellazione cade su quella riga: la pressione intera torna indietro
+    store.default.exec("CREATE TRIGGER blocca_abitudini BEFORE UPDATE ON abitudini BEGIN SELECT RAISE(ABORT, 'no'); END")
+    try { assert.throws(() => oss.cancellaOsservazioni(ADESSO), /no/) } finally { store.default.exec('DROP TRIGGER blocca_abitudini') }
+    assert.equal(sessioni(), 7, 'le sessioni non sono sparite: la cancellazione è tornata indietro con il ricalcolo')
+    assert.equal(stato('agenda.finta'), 'osservata')
+    assert.equal(store.default.isTransaction, false, 'nessuna transazione lasciata aperta')
+    // senza l'inciampo, una pressione: sessioni via, righe app.* via, e le altre rifatte dai fatti che restano
+    ab.ricalcola(ADESSO)
+    assert.ok((store.default.prepare("SELECT COUNT(*) AS n FROM abitudini WHERE genere LIKE 'app.%'").get() as { n: number }).n >= 1)
+    store.default.exec("UPDATE abitudini SET stato = 'osservata' WHERE chiave = 'agenda.finta'")
+    oss.cancellaOsservazioni(ADESSO)
+    assert.equal(sessioni(), 0)
+    assert.equal((store.default.prepare("SELECT COUNT(*) AS n FROM abitudini WHERE genere LIKE 'app.%'").get() as { n: number }).n, 0)
+    assert.equal(stato('agenda.finta'), 'superata', 'il ricalcolo è passato nella stessa pressione')
+    assert.equal(store.default.isTransaction, false)
+    store.default.exec('DELETE FROM abitudini; DELETE FROM sessioni_app')
+  })
+})

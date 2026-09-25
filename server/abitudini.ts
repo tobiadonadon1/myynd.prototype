@@ -243,11 +243,15 @@ function righe(): Abitudine[] {
 }
 
 /**
- * Rifà tutte le righe dai fatti. Di notte, e dopo un «cancella le osservazioni».
+ * Rifà tutte le righe dai fatti. Di notte, e dentro «cancella le osservazioni».
  *
  * Una `tolta` non rinasce; una `corretta` tiene le sue parole; una che non regge
  * più diventa `superata` (dalla data in `aggiornato`), e se torna a reggere torna
  * `osservata`. Le superate da più di novanta giorni se ne vanno.
+ *
+ * Chiamata dentro una transazione già aperta (la cancellazione) si unisce a
+ * quella: una pressione, una transazione, e un errore qui riporta indietro
+ * anche le cancellazioni. Da sola, apre la sua.
  */
 export function ricalcola(adesso = new Date(), o: { senzaPosta?: boolean } = {}): { righe: number } {
   const ora = adesso.toISOString()
@@ -258,7 +262,8 @@ export function ricalcola(adesso = new Date(), o: { senzaPosta?: boolean } = {})
   const upd = db.prepare('UPDATE abitudini SET dati = ?, prova = ?, fiducia = ?, stato = ?, aggiornato = ? WHERE chiave = ?')
   const viste = new Set<string>()
   let n = 0
-  db.exec('BEGIN')
+  const mia = !db.isTransaction
+  if (mia) db.exec('BEGIN')
   try {
     for (const c of candidate) {
       viste.add(c.chiave)
@@ -278,19 +283,9 @@ export function ricalcola(adesso = new Date(), o: { senzaPosta?: boolean } = {})
       }
       db.prepare("UPDATE abitudini SET stato = 'superata', aggiornato = ? WHERE chiave = ?").run(ora, e.chiave)
     }
-    db.exec('COMMIT')
-  } catch (e) { db.exec('ROLLBACK'); throw e }
+    if (mia) db.exec('COMMIT')
+  } catch (e) { if (mia) db.exec('ROLLBACK'); throw e }
   return { righe: n }
-}
-
-/**
- * Dopo «cancella le osservazioni»: le righe si rifanno subito, ma quelle sulla
- * posta solo col registro in pari. Contate a metà del primo ripasso sarebbero
- * false, in vigore senza un tocco, e la notte dopo resterebbero novanta giorni
- * sotto «Non valgono più» accanto al loro contrario.
- */
-export function ricalcolaDopoCancellazione(adesso = new Date()): { righe: number } {
-  return ricalcola(adesso, { senzaPosta: segnali.postaDaRipassare() })
 }
 
 /**

@@ -43,6 +43,7 @@ import * as desktopConn from './connettori/desktop.ts'
 import { progettoDelTesto } from './attenzione.ts'
 import { esitoCarta } from './feed-esiti.ts'
 import { ritocco, classe as classeDi } from './ritocco.ts'
+import { sembraUnMessaggio } from './invio.ts'
 import type { Compito } from './store.ts'
 
 const GIORNO = 86_400_000
@@ -470,9 +471,18 @@ export function agendaLetta(e: { viste: segnali.VistaAgenda[]; finestra: { da: s
  * manda la sua nota, non il documento: quello passa da `consegnaAccettata`)
  * e senza una mail pronta (quella la misura P3 in `misure_compiti`, come
  * «bozza.email»).
+ *
+ * Una mail pronta manca anche quando la bozza è una risposta: la posta non è
+ * collegata, o il modello non l'ha smontata. Allora decidono i segni di P3
+ * (una voce scritta a un destinatario, una bozza partita dalla sua posta) e la
+ * forma della bozza stessa, un saluto in testa o una firma in coda. Non i verbi
+ * della richiesta: la rete larga con cui P3 decide se chiamare il modello
+ * («scrivi il piano») qui toglierebbe documenti veri.
  */
-export function contaComeDocumento(c: Pick<Compito, 'risultato' | 'consegna' | 'email'>): boolean {
-  return !!c.risultato && !c.consegna && !c.email
+export function contaComeDocumento(c: Pick<Compito, 'risultato' | 'consegna' | 'email' | 'voceScritta' | 'mandata'>): boolean {
+  if (!c.risultato || c.consegna || c.email) return false
+  if (c.voceScritta?.destinatario || c.mandata) return false
+  return !sembraUnMessaggio('', c.risultato)
 }
 
 /** Prima che la sua versione sovrascriva la bozza: quanto l'ha ritoccata. */
@@ -550,12 +560,15 @@ export function vista(adesso = new Date()): Gemello {
   }
   const diIeri = previsioniDel(ieri)
   const chiusoIeri = !!db.prepare('SELECT 1 FROM punteggi WHERE giorno = ?').get(ieri)
-  // ieri, sempre con chi non ti conosce accanto: la base sta in ogni riga giudicata
-  const vistaIeri = diIeri.length ? {
+  // ieri, sempre con chi non ti conosce accanto: la base sta in ogni riga giudicata.
+  // Un giorno chiuso con tutte le affermazioni annullate (una domenica col solo
+  // progetto del giorno e nessun minuto) non è un conto: niente «Ieri · 0 su 0»
+  const giudicateIeri = diIeri.filter(p => p.esito === 'giusta' || p.esito === 'sbagliata')
+  const vistaIeri = diIeri.length && (!chiusoIeri || giudicateIeri.length) ? {
     giorno: ieri, chiuso: chiusoIeri,
-    giuste: diIeri.filter(p => p.esito === 'giusta').length,
-    totale: diIeri.filter(p => p.esito === 'giusta' || p.esito === 'sbagliata').length,
-    base: diIeri.filter(p => (p.esito === 'giusta' || p.esito === 'sbagliata') && p.dati.base === true).length,
+    giuste: giudicateIeri.filter(p => p.esito === 'giusta').length,
+    totale: giudicateIeri.length,
+    base: giudicateIeri.filter(p => p.dati.base === true).length,
     previsioni: diIeri.map(p => vistaDi(p, chiusoIeri ? p.esito : null))
   } : null
   // la scala della fiducia sulla pagina: le bozze, i documenti, le carte. Le previsioni hanno già il
