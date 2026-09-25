@@ -29,8 +29,9 @@ export type EsitoRisposta = 'giusta' | 'senza_fonte' | 'sbagliata' | 'inventata'
 export const BUDGET_RUN = 1_200_000
 export const TEMPO_RUN = 25 * 60_000
 export const SOGLIA = { giuste: 0.9, inventate: 0, rifiutateMale: 0.05 } as const
-/** Sotto queste domande attive il lavoro settimanale non parte: lo stesso numero della riga nelle preferenze. */
-export const INSIEME_MINIMO = 6
+/** Sotto queste domande attive il lavoro settimanale non parte: lo stesso numero della riga nelle preferenze, preso da lì. */
+import { INSIEME_MINIMO } from './risposte-archivio.ts'
+export { INSIEME_MINIMO }
 const SETTE_GIORNI = 7 * 86_400_000
 
 export type Giudizio = { corrisponde: boolean; sostenuta: boolean; rispondeDavvero: boolean; motivo: string }
@@ -298,8 +299,12 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
         }
         voce.ms = { primaParola: prima, totale: ferri.adesso() - t0 }
         voce.risposta = r.testo; voce.fonti = r.fonti; voce.verifica = r.verifica
-        codice.rifiuto = r.verifica.rifiuto
+        // «Non ce l'ho. L'affitto è 2.900 € al mese.» non è un rifiuto da
+        // contare bene: la cifra non sta in niente di letto, e il prompt lo
+        // vieta. Passa dal giudice come ogni altra risposta, e può uscire
+        // «inventata»; è proprio quello che lo zero sulle inventate misura
         codice.scoperti = r.verifica.scoperti
+        codice.rifiuto = r.verifica.rifiuto && codice.scoperti.length === 0
         codice.nonValide = r.verifica.nonValide
         const estratti = r.estratti ?? {}
         const citati: DocVisto[] = r.fonti.filter(f => /^\[\d+\]/.test(f.label)).flatMap(f => {

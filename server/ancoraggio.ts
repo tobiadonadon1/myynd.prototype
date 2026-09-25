@@ -214,7 +214,9 @@ const RIGHE_DI_RIFIUTO = [
 /**
  * La risposta è un rifiuto: la riga canonica, da sola o con al massimo una
  * frase corta dopo. «Non ce l'ho fatta» non lo è, e nemmeno una risposta a
- * metà che rifiuta solo l'ultima parte.
+ * metà che rifiuta solo l'ultima parte. Qui si guarda solo la forma: se la
+ * frase dopo cita una fonte o porta un fatto che il modello non ha letto lo
+ * dicono `ancora` (le citazioni) e l'esame delle risposte (i fatti scoperti).
  */
 export function eUnRifiuto(testo: string): boolean {
   // il prompt mostra la riga fra virgolette: un modello che la ricopia con le
@@ -274,14 +276,24 @@ export function pulisciCitazioni(testo: string, quanti: number, memoria: boolean
 const senzaSegni = (s: string) => s.replace(SEGNO, '').replace(/\s{2,}/g, ' ').trim()
 
 /**
+ * Un segno o più subito dopo il punto («2026.[1] La quota…», anche con uno
+ * spazio in mezzo): chiudono la frase insieme al punto e restano con lei.
+ * Molti modelli mettono il segno dopo il punto, non prima; senza questo la
+ * frase non si chiudeva più e tutto il capoverso diventava una frase sola,
+ * con ogni segno che mostrava il passo sbagliato.
+ */
+const SEGNI_DOPO_IL_PUNTO = '(?:[ \\t]*\\[(?:\\d{1,3}|M)\\])*'
+const FRASE = new RegExp(`(?:[^.!?\\n]|[.!?](?!${SEGNI_DOPO_IL_PUNTO}(?:\\s|$)))+(?:[.!?]+${SEGNI_DOPO_IL_PUNTO}(?=\\s|$)|\\n|$)`, 'g')
+
+/**
  * Le frasi di un testo, con la posizione: prima le righe, poi le frasi dentro
- * ogni riga. Un punto chiude la frase solo davanti a uno spazio o alla fine:
- * quello dentro «1.200», «27.07.2026» o «1.0.3» è parte della frase.
+ * ogni riga. Un punto chiude la frase solo davanti a uno spazio o alla fine,
+ * o davanti a un segno seguito da uno spazio o dalla fine: quello dentro
+ * «1.200», «27.07.2026» o «1.0.3» è parte della frase.
  */
 function frasiCon(testo: string): { testo: string; inizio: number; fine: number }[] {
   const fuori: { testo: string; inizio: number; fine: number }[] = []
-  const re = /(?:[^.!?\n]|[.!?](?!\s|$))+(?:[.!?]+(?=\s|$)|\n|$)/g
-  for (const m of testo.matchAll(re)) {
+  for (const m of testo.matchAll(FRASE)) {
     const t = m[0]
     if (!t.trim()) continue
     fuori.push({ testo: t, inizio: m.index, fine: m.index + t.length })
@@ -437,7 +449,10 @@ export function ancora(testo: string, o: {
   }
   const lettiTutti = fattiDuri(o.letto)
   const scoperti = fattiDuri(t).filter(x => !coperto(x, lettiTutti))
-  const rifiuto = eUnRifiuto(t)
+  // «Non ce l'ho. La quota è 4.800 € [1].» ha citato una fonte: ha risposto,
+  // non ha rifiutato. Un fatto scoperto nella frase dopo resta invece nel
+  // verbale come tale: chi legge il verbale vede tutt'e due le cose
+  const rifiuto = eUnRifiuto(t) && citati.size === 0
   const frasi = frasiCon(senzaSegni(prosa.testo)).length
   const senzaFonti = !rifiuto && citati.size === 0 && !memoria && (fattiDuri(t).length >= 1 || frasi >= 2)
   return {

@@ -66,7 +66,8 @@ test('lo storico tiene gli ultimi 52, i rapporti gli ultimi 12', () => {
   const rapporti = readdirSync(DOVE).filter(n => /^2026-02/.test(n))
   assert.equal(rapporti.length, 12)
   assert.ok(rapporti.every(n => modo(join(DOVE, n)) === 0o600))
-  assert.deepEqual(a.ultimoRapporto(), { n: 14 })
+  // il rapporto su disco dice il suo percorso, come lo storico: chi lo apre da solo sa dov'è
+  assert.deepEqual(a.ultimoRapporto(), { n: 14, file: join(DOVE, '2026-02-01T00-00-14-000Z.json') })
   const f = a.perIlFascicolo()
   assert.ok(f && Array.isArray(f.storico) && f.domande)
 })

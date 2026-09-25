@@ -277,3 +277,40 @@ test('due segni sulla stessa fonte: ogni segno porta il passo della sua frase, e
   assert.equal(uno.fonti[0].passi, undefined)
   assert.equal(uno.fonti[0].passo, 'The fee is €4,800 for the first phase.')
 })
+
+test('il segno dopo il punto chiude la frase con lei: ogni segno porta il passo della sua frase, anche con lo spazio in mezzo', () => {
+  const visti = [doc('a', 'Harbor pilot kickoff', HARBOR)]
+  const o = { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'compatibile' as const }
+  const attesi = ['The fee is €4,800 for the first phase.', 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel.']
+  // «x.[1] y.[1]», la forma di GPT e dei modelli locali
+  const attaccato = ancora('The fee is €4,800 for the first phase.[1] The Harbor pilot starts on 14 October 2026.[1]', o)
+  assert.deepEqual(attaccato.fonti[0].passi, attesi)
+  assert.equal(attaccato.fonti[0].passo, attesi[0], 'il primo segno mostra la quota, non la data')
+  // «x. [1] y. [1]», con lo spazio
+  const staccato = ancora('The fee is €4,800 for the first phase. [1] The Harbor pilot starts on 14 October 2026. [1]', o)
+  assert.deepEqual(staccato.fonti[0].passi, attesi)
+  // e nell'ordine inverso il secondo segno porta la quota
+  const inverso = ancora('The Harbor pilot starts on 14 October 2026.[1] The fee is €4,800.[1]', o)
+  assert.deepEqual(inverso.fonti[0].passi, [attesi[1], attesi[0]])
+  // due segni attaccati dopo il punto stanno con la frase prima, e il conto delle frasi non cambia
+  const visti2 = [doc('a', 'Harbor pilot kickoff', HARBOR), doc('b', 'Consegna del logo', LOGO)]
+  const due = ancora('The fee is €4,800.[1][2] The logo comes on 14 October 2026.[2]', { ...o, visti: visti2, estratti: new Map([['a', 4000], ['b', 4000]]) })
+  assert.equal(due.fonti[0].passo, attesi[0])
+  assert.deepEqual(due.fonti[1].passi, [null, 'Ciao Alex, la consegna dei file del logo è confermata per venerdì 14 ottobre 2026.'])
+  // il punto dentro una cifra non chiude ancora niente
+  assert.equal(passoPer('Il preventivo resta 1.200 € più IVA.[1]', LOGO), 'Il preventivo resta 1.200 € più IVA.')
+})
+
+test('un rifiuto che cita una fonte non è un rifiuto nel verbale; la forma da sola resta un rifiuto', () => {
+  const visti = [doc('a', 'Harbor pilot kickoff', HARBOR)]
+  const conSegno = ancora('I don’t have that. The fee is €4,800 [1].', { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'compatibile' })
+  assert.equal(conSegno.verifica.rifiuto, false)
+  assert.equal(conSegno.verifica.citazioni, 1)
+  assert.equal(conSegno.verifica.senzaFonti, false)
+  assert.ok(eUnRifiuto('I don’t have that. The fee is €4,800 [1].'), 'eUnRifiuto guarda solo la forma')
+  assert.ok(eUnRifiuto('I don’t have that. The rent is €2,900 a month.'))
+  // la cifra inventata dopo il rifiuto resta scritta nel verbale come scoperta
+  const conCifra = ancora('I don’t have that. The rent is €2,900 a month.', { visti, estratti: new Map([['a', 4000]]), letto: HARBOR + '\nDomanda: what is the rent?', memoria: false, via: 'compatibile' })
+  assert.equal(conCifra.verifica.rifiuto, true)
+  assert.deepEqual(conCifra.verifica.scoperti, ['2900'])
+})

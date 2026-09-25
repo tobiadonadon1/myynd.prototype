@@ -243,7 +243,9 @@ export function salvaRapporto(rapporto: unknown, quando: string, cartella?: stri
   const dove = cartellaRisposte(cartella)
   if (!assicura(dove)) return null
   const file = join(dove, nomeRapporto(quando))
-  scriviAtomico(file, JSON.stringify(rapporto, null, 2))
+  // il rapporto su disco dice dove sta, come lo storico e lo stato: chi lo apre da solo trova il percorso
+  const conFile = rapporto && typeof rapporto === 'object' ? { ...rapporto, file } : rapporto
+  scriviAtomico(file, JSON.stringify(conFile, null, 2))
   const vecchi = readdirSync(dove).filter(eUnRapporto).sort()
   for (const n of vecchi.slice(0, Math.max(0, vecchi.length - RAPPORTI_MAX))) {
     try { unlinkSync(join(dove, n)) } catch { /* già via */ }

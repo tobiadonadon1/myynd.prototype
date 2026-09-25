@@ -548,3 +548,33 @@ test('«svuota la mente» a metà prova: la prova si ferma e le copie private no
   assert.equal(archivio.inCorso(), false)
   vr.perProva(null)
 })
+
+test('un rifiuto con una cifra inventata dopo non è «rifiutata bene»: passa dal giudice ed esce inventata', async () => {
+  archivio.togli(); archivio.scriviInsieme(INSIEME())
+  const giudice = giudiceFinto(c => c.includes('2,900') ? { sostenuta: false, corrisponde: false } : {})
+  vr.perProva({ rispondi: chatFinta({ ...COPIONE, 'What is the rent for the Lisbon office?': 'I don’t have that. The rent is €2,900 a month.' }) as never, chiediJSON: giudice.chiediJSON })
+  const r = await vr.valutaRisposte({ origine: 'comando', solo: ['q05'] })
+  assert.equal(r.voci[0].verifica?.rifiuto, true, 'il verbale dice la forma')
+  assert.deepEqual(r.voci[0].codice.scoperti, ['2900'])
+  assert.equal(r.voci[0].codice.rifiuto, false, 'ma per la prova non è un rifiuto')
+  assert.ok(giudice.chiamate.some(c => c.includes('Lisbon')), 'e il giudice lo legge')
+  assert.equal(r.voci[0].esito, 'inventata')
+  assert.equal(r.totali.inventata, 1)
+  assert.equal(r.passa, false)
+  // il rifiuto pulito resta un rifiuto giusto, senza giudice
+  const pulito = giudiceFinto()
+  vr.perProva({ rispondi: chatFinta(COPIONE) as never, chiediJSON: pulito.chiediJSON })
+  const r2 = await vr.valutaRisposte({ origine: 'comando', solo: ['q05'] })
+  assert.equal(r2.voci[0].esito, 'rifiutata_bene')
+  assert.equal(pulito.chiamate.length, 0)
+})
+
+test('«Non ce l’ho» seguito dalla risposta giusta con il segno è una risposta, non un rifiuto sbagliato', async () => {
+  archivio.togli(); archivio.scriviInsieme(INSIEME())
+  const giudice = giudiceFinto()
+  vr.perProva({ rispondi: chatFinta({ ...COPIONE, 'What is the fee for the first phase of the Harbor pilot?': 'I don’t have that. The fee is €4,800 [g].' }) as never, chiediJSON: giudice.chiediJSON })
+  const r = await vr.valutaRisposte({ origine: 'comando', solo: ['q01'] })
+  assert.equal(r.voci[0].codice.rifiuto, false)
+  assert.equal(r.voci[0].esito, 'giusta')
+  assert.equal(r.totali.rifiutata_male, 0)
+})

@@ -43,7 +43,9 @@ function Segno({ n, fonte, passo, onApri }: { n: number | 'M'; fonte?: Fonte; pa
   const nuvola = useRef<HTMLSpanElement>(null)
   const en = lingua() === 'en'
   const memoria = n === 'M'
-  const attivo = !!fonte
+  // un bottone solo dove premere apre qualcosa: un risultato di lavoro senza
+  // `onApri` mostra la nuvoletta al passaggio, ma il Tab non ci si ferma
+  const attivo = !!fonte && !!onApri
   const titolo = fonte ? (memoria ? t('Dalla tua memoria') : titoloDi(fonte)) : ''
   const riga = fonte ? (memoria ? titoloDi(fonte) : rigaFonte(fonte)) : ''
   const aperta = (sopra || fuoco) && !!titolo
@@ -95,8 +97,9 @@ function Segno({ n, fonte, passo, onApri }: { n: number | 'M'; fonte?: Fonte; pa
         style={{
           fontSize: '.66em', lineHeight: 0, verticalAlign: 'super',
           // il segno resta piccolo, la zona che risponde no: sedici pixel di
-          // imbottitura trasparente, ripresi dal margine
-          padding: '4px 3px', margin: '-4px -3px', borderRadius: 3,
+          // larghezza (la cifra ne occupa sei, il cerchietto quattro) di
+          // imbottitura trasparente, ripresi dal margine, e il testo non si muove
+          padding: memoria ? '4px 6px' : '4px 5px', margin: memoria ? '-4px -6px' : '-4px -5px', borderRadius: 3,
           cursor: attivo ? 'pointer' : 'default', fontWeight: 500,
           color: (sopra || fuoco) && attivo ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.4)',
           background: 'transparent', outline: conFuocoDaTastiera ? '2px solid rgba(var(--rame-rgb),.45)' : 'none', outlineOffset: 1,
