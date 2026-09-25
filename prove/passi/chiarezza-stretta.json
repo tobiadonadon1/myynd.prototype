@@ -1,0 +1,17 @@
+[
+  { "clicca": "Your account" },
+  { "vai": "Memory" },
+  { "aspetta": 800 },
+  { "scatta": "s1-memoria" },
+  { "clicca": "Projects" },
+  { "aspetta": 600 },
+  { "scatta": "s2-memoria-progetti" },
+  { "clicca": "Your account" },
+  { "vai": "Preferences" },
+  { "clicca": "Your Myynd" },
+  { "aspetta": 800 },
+  { "scatta": "s3-pref-myynd" },
+  { "clicca": "Account and app" },
+  { "aspetta": 800 },
+  { "scatta": "s4-pref-account" }
+]

@@ -32,7 +32,7 @@ export function campo(tema: Tema): CSSProperties {
   const scuro = tema === 'scuro'
   return {
     width: '100%', boxSizing: 'border-box', marginTop: 8, padding: '12px 15px',
-    borderRadius: 13,
+    borderRadius: scuro ? 13 : 14,
     border: `1px solid ${scuro ? 'rgba(244,239,232,.22)' : 'rgba(var(--inchiostro-rgb),.18)'}`,
     background: scuro ? 'rgba(244,239,232,.06)' : 'rgba(var(--luce-rgb),.7)',
     color: scuro ? CHIARO : 'var(--inchiostro)',
@@ -359,7 +359,7 @@ function Conferma({ onClick, occupato, disabilitato = false, tema, children }: {
       marginTop: 18, padding: '11px 22px', borderRadius: 99, border: 'none',
       background: spento
         ? (scuro ? 'rgba(244,239,232,.2)' : 'rgba(var(--inchiostro-rgb),.18)')
-        : (scuro ? CHIARO : 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))'),
+        : (scuro ? CHIARO : 'var(--gradiente-rame)'),
       color: spento ? (scuro ? 'rgba(244,239,232,.6)' : 'rgba(var(--inchiostro-rgb),.5)') : (scuro ? '#191715' : 'var(--avorio)'),
       fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
       cursor: spento ? 'default' : 'pointer'

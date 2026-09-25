@@ -130,6 +130,7 @@ import * as sveglia from './sveglia.ts'
 import * as osservatore from './osservatore.ts'
 import * as gemello from './gemello.ts'
 import * as abitudini from './abitudini.ts'
+import * as memoriaNuove from './memoria-nuove.ts'
 import * as oauth from './connettori/oauth.ts'
 import { riflua, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
 
@@ -825,6 +826,8 @@ app.get('/api/stato', async (_req, res) => {
     suggerimentiNuovi: scoperte.nuovi().length && scoperte.nuoviInVetrina().length,
     // i risultati nuovi del vassoio di prova (P6): accendono lo stesso punto
     vassoioNuovi: vassoio.nonVisti(),
+    // le cose da guardare nate dopo l'ultima visita alla Memoria: il punto nel menù (P5)
+    memoriaNuove: (() => { try { return memoriaNuove.nuove(cfg.leggi().memoriaVista ?? null) } catch { return { quante: 0, dove: null } } })(),
     // la scheda delle conversazioni offre l'interruttore di Claude Code solo se
     // la sua cartella c'è: un interruttore su una cartella vuota è un bottone che fallisce
     codiceConversazioni: !ospitato.OSPITATO && conversazioni.codicePossibile(),
@@ -3196,8 +3199,8 @@ app.get('/api/riferimento', (_req, res) => res.json(riferimento.leggi()))
 
 app.post('/api/riferimento', (req, res) => {
   try {
-    riferimento.scrivi(String(req.body?.testo ?? ''))
-    res.json({ ok: true, ...riferimento.leggi() })
+    const nuovi = riferimento.scrivi(String(req.body?.testo ?? ''))
+    res.json({ ok: true, ...riferimento.leggi(), nuovi })
   } catch (e) { errore(res, e, 400) }
 })
 
@@ -5131,6 +5134,52 @@ app.get('/api/avvio/pagina', (_req, res) => {
 // — P4: rotte, fine —
 
 // — P5: rotte, inizio —
+// La Memoria aperta: da qui il punto nel menù si spegne.
+app.post('/api/memoria/vista', (_req, res) => {
+  try { cfg.aggiorna({ memoriaVista: new Date().toISOString() }); res.json({ ok: true }) } catch (e) { errore(res, e) }
+})
+
+// I numeri delle note accanto alle sezioni della Memoria: SQL e config, niente modello, niente file.
+app.get('/api/memoria/sommario', (_req, res) => {
+  try {
+    const vive = store.convinzioni()
+    const daGuardare = vive.filter(k => !memoria.attendibile(k)).length
+    let comeLavori: { daGuardare: number } | null = null
+    try { comeLavori = { daGuardare: abitudini.tutte().filter(a => !a.inVigore && a.stato !== 'superata').length } } catch { comeLavori = null }
+    // il tempo risparmiato questa settimana (P9), per la nota di «Cosa ha fatto Myynd»
+    let fatto: { minuti: number } | null = null
+    try { const q = resoconto.sommario().righe.find(r => r.quale === 'questa'); fatto = q && q.numeri.minuti > 0 ? { minuti: q.numeri.minuti } : null } catch { fatto = null }
+    res.json({
+      progettiAttivi: progetti.elenco().filter(p => p.stato === 'attivo').length,
+      ritratto: { sa: vive.length - daGuardare, daGuardare },
+      comeLavori,
+      fatto
+    })
+  } catch (e) { errore(res, e) }
+})
+
+// Correggere una convinzione dove è scritta: la vecchia va in «Prima pensava», la nuova è sua.
+app.post('/api/memoria/convinzione/:id/correggi', (req, res) => {
+  const testo = String(req.body?.testo ?? '').trim()
+  if (!testo) return res.status(400).json({ errore: 'Scrivi la convinzione.' })
+  const vecchia = store.convinzioni().find(k => k.id === req.params.id)
+  if (!vecchia) return res.status(404).json({ errore: 'Questa convinzione non c’è più.' })
+  try {
+    const id = store.ricorda({ enunciato: senzaTrattini(testo), ambito: vecchia.ambito, genere: 'esplicita', fiducia: 1, origine: 'mano', sostituisce: vecchia.id })
+    res.json({ ok: true, id })
+  } catch (e) { errore(res, e) }
+})
+
+// Quello che la rassegna ha capito di lui, senza prepararla: nessun giornale, nessun modello.
+app.get('/api/rassegna/gusto', (_req, res) => {
+  try {
+    const g = gusto.gusto()
+    res.json({ vale: g.vale, testo: g.vale ? senzaTrattini(gusto.inParole(g, cfg.lingua() === 'en')) : '' })
+  } catch (e) { errore(res, e) }
+})
+
+// una convinzione nuova da guardare: le finestre aperte rileggono lo stato, e il punto si accende
+store.quandoNeAspettaUna(() => compiti.annunciaCambio())
 // — P5: rotte, fine —
 
 // — P6: rotte, inizio —

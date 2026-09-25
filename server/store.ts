@@ -570,7 +570,9 @@ const TABELLE = {
       fonte TEXT PRIMARY KEY, motivo TEXT NOT NULL, rimedio TEXT, frase TEXT,
       dal TEXT NOT NULL, fila INTEGER NOT NULL DEFAULT 1, visto TEXT NOT NULL
     );
-  `
+  `,
+  // P5 · le convinzioni scordate a mano: una deduzione uguale non torna
+  convinzioni_tolte: 'CREATE TABLE IF NOT EXISTS convinzioni_tolte (id TEXT PRIMARY KEY, quando TEXT NOT NULL);'
 } as const
 
 /**
@@ -1513,7 +1515,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     d.exec('CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)')
   },
   // 64 → 65 · P1B · chi ha invitato a un'occorrenza dell'agenda: serve alla riga «gli inviti di X li rifiuti».
-  d => colonna(d, 'agenda_viste', 'organizzatore', 'TEXT')
+  d => colonna(d, 'agenda_viste', 'organizzatore', 'TEXT'),
+  // 65 → 66 · P5 · una convinzione scordata non torna
+  d => d.exec(TABELLE.convinzioni_tolte)
 ]
 
 /**
@@ -4378,8 +4382,11 @@ function idConvinzione(enunciato: string, ambito: string): string {
 export function ricorda(c: Omit<Convinzione, 'id' | 'dal'> & { id?: string; dal?: string }): string {
   const ora = new Date().toISOString()
   const id = c.id ?? idConvinzione(c.enunciato, c.ambito)
+  // scordata a mano: quello che deduce da solo non la rimette; quello che dice lei sì (P5)
+  if (c.genere !== 'esplicita' && db.prepare('SELECT 1 FROM convinzioni_tolte WHERE id = ?').get(id)) return id
   db.exec('BEGIN')
   try {
+    if (c.genere === 'esplicita') db.prepare('DELETE FROM convinzioni_tolte WHERE id = ?').run(id)
     if (c.sostituisce) {
       db.prepare('UPDATE convinzioni SET al = ? WHERE id = ? AND al IS NULL').run(ora, c.sostituisce)
     }
@@ -4414,7 +4421,16 @@ export function ricorda(c: Omit<Convinzione, 'id' | 'dal'> & { id?: string; dal?
     db.exec('ROLLBACK')
     throw e
   }
+  // una che aspetta di essere guardata: chi ha la Memoria aperta lo sa subito (P5)
+  if (c.genere === 'indotta' && !c.confermata) for (const f of suInAttesa) { try { f() } catch { /* un ascoltatore non ferma la scrittura */ } }
   return id
+}
+
+/** Chi vuole sapere che è nata una convinzione da guardare (P5: il punto accanto a «Memoria»). */
+const suInAttesa = new Set<() => void>()
+export function quandoNeAspettaUna(f: () => void): () => void {
+  suInAttesa.add(f)
+  return () => { suInAttesa.delete(f) }
 }
 
 /**
@@ -4486,7 +4502,13 @@ export function convinzioniStoriche(): Convinzione[] {
 
 /** Cancellare a mano è un diritto: è la sua testa, deve poterci mettere le mani. */
 export function scordaConvinzione(id: string) {
-  db.prepare('DELETE FROM convinzioni WHERE id = ?').run(id)
+  // la lapide prima: la stessa frase dedotta domani non deve tornare (P5)
+  db.exec('BEGIN')
+  try {
+    db.prepare('INSERT OR REPLACE INTO convinzioni_tolte (id, quando) VALUES (?, ?)').run(id, new Date().toISOString())
+    db.prepare('DELETE FROM convinzioni WHERE id = ?').run(id)
+    db.exec('COMMIT')
+  } catch (e) { db.exec('ROLLBACK'); throw e }
 }
 
 export function chiudiConvinzione(id: string) {

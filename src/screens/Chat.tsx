@@ -192,7 +192,7 @@ export function Chat({ v }: { v: Vals }) {
         )}
         <button onClick={v.send} disabled={!daMandare} aria-label={t('Manda')} style={{
           width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none',
-          background: daMandare ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
+          background: daMandare ? 'var(--gradiente-rame)' : 'rgba(var(--inchiostro-rgb),.18)',
           color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: daMandare ? 'pointer' : 'default'
         }}>
           <IconSu />

@@ -803,6 +803,8 @@ export type Config = {
    * quel campo non si riscrive da solo mai più.
    */
   fuocoDaMe?: boolean
+  /** L'ultima volta che ha aperto la Memoria (ISO): il punto nel menù conta solo quello nato dopo (P5). */
+  memoriaVista?: string
   /**
    * Le undici automazioni che arrivano con il pacchetto: le vuole?
    *

@@ -429,5 +429,55 @@ if (p4) {
 }
 // — P4: fine —
 
+// — P5: inizio —
+// La Memoria chiara e le Preferenze: convinzioni (che aspettano, tenute, dette
+// da lei), le cinque risposte, il fuoco scritto da Myynd, qualche scelta di
+// configurazione, l'ultima visita alla Memoria, e una consegna per compito
+// (un file che c'è, uno spostato). Gira per ultimo: la convinzione più nuova
+// è sua, e la Memoria atterra sul ritratto.
+//   "convinzioni": [{ "enunciato": "…", "genere": "indotta", "fiducia": 0.6, "origine": "chiusura", "confermata": true }]
+//   "blocchi": [{ "etichetta": "come_decido", "valore": "…" }]
+//   "fuoco": "Supplier invoices and payments"
+//   "config": { "tono": "diretto", "tema": "sistema", "autonomia": "chiedere", "osservatore": true }
+//   "memoriaVista": "-1d"
+//   "compiti": [{ …, "consegna": { "titolo": "…", "percorso": "~/Documents/x.md" | "/non/c/e.md", "app": "File" } }]
+type ScenaP5 = {
+  convinzioni?: { enunciato: string; genere: 'esplicita' | 'dedotta' | 'indotta'; fiducia?: number; origine: string; ambito?: string; confermata?: boolean; dal?: string }[]
+  blocchi?: { etichetta: string; valore: string }[]
+  fuoco?: string
+  config?: { tono?: string; tema?: string; autonomia?: string; osservatore?: boolean }
+  memoriaVista?: string
+  compiti?: { id: string; consegna?: { titolo: string; percorso: string; app?: string } }[]
+}
+const p5 = scena as unknown as ScenaP5
+if (p5.convinzioni || p5.blocchi || p5.fuoco || p5.config || p5.memoriaVista || p5.compiti?.some(c => c.consegna)) {
+  const timone = await import(join(SERVER, 'timone.ts'))
+  const osservatoreP5 = await import(join(SERVER, 'osservatore.ts'))
+  chi.dentro(conto.id, () => {
+    if (p5.config) {
+      const { osservatore: oss, ...resto } = p5.config
+      cfg.aggiorna(resto)
+      if (oss) osservatoreP5.imposta({ acceso: true, titoli: true })
+    }
+    if (p5.fuoco) { timone.scriviFuoco(p5.fuoco); cfg.aggiorna({ fuocoDaMe: true }) }
+    for (const b of p5.blocchi ?? []) store.scriviBlocco({ etichetta: b.etichetta, descrizione: b.etichetta, valore: b.valore })
+    for (const c of p5.compiti ?? []) {
+      if (!c.consegna) continue
+      const percorso = c.consegna.percorso.startsWith('~/') ? join(CASA, c.consegna.percorso.slice(2)) : c.consegna.percorso
+      if (c.consegna.percorso.startsWith('~/')) { mkdirSync(dirname(percorso), { recursive: true }); writeFileSync(percorso, `# ${c.consegna.titolo}\n`) }
+      store.default.prepare('UPDATE compiti SET consegna = ? WHERE id = ?')
+        .run(JSON.stringify({ titolo: c.consegna.titolo, percorso, app: c.consegna.app ?? 'File' }), c.id)
+    }
+    if (p5.memoriaVista) cfg.aggiorna({ memoriaVista: tempo(p5.memoriaVista) })
+    // le convinzioni per ultime: la più nuova è quella che accende il punto
+    for (const k of p5.convinzioni ?? []) {
+      const id = store.ricorda({ enunciato: k.enunciato, ambito: k.ambito ?? 'persona', genere: k.genere, fiducia: k.fiducia ?? (k.genere === 'esplicita' ? 1 : 0.6), origine: k.origine, ...(k.dal ? { dal: tempo(k.dal) } : {}) })
+      if (k.confermata) store.confermaConvinzione(id)
+    }
+  })
+  console.log(`semina · P5: ${p5.convinzioni?.length ?? 0} convinzioni, ${p5.blocchi?.length ?? 0} risposte`)
+}
+// — P5: fine —
+
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

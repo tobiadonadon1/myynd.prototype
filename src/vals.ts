@@ -6,7 +6,8 @@ import { coloreProgetto } from './colori-progetto'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
-import { api, apiP2, apiP6, type Connettore, type Stato } from './api'
+import { api, apiP2, apiP6, memoriaP5, type Connettore, type Stato } from './api'
+import { chiediSezione } from './sezioni.ts'
 import type { RagioneNonUtile } from './feed-carta'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
@@ -1099,6 +1100,36 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
   }
 
+  /*
+   * P5: i campi delle Preferenze. Stesse scritture, ma il guaio non è un
+   * avviso che passa: torna al campo, che lo scrive sotto e tiene il testo.
+   */
+  const salvaFuocoCampo = async (testo: string) => {
+    const prima = fuoco
+    setFuoco(testo)
+    try { await api.scriviFuoco(testo) } catch (e) { setFuoco(prima); throw e }
+    setStato(s => ({ ...s, config: { ...s.config, fuocoDaMe: false } }))
+    setGenerando(true)
+    api.generaFeed().then(() => caricaFeed()).catch(() => {}).finally(() => setGenerando(false))
+  }
+  const salvaArgomentiCampo = async (testo: string) => {
+    const prima = stato.config.argomenti ?? ''
+    setStato(s => ({ ...s, config: { ...s.config, argomenti: testo } }))
+    try { await api.profilo({ argomenti: testo }) } catch (e) { setStato(s => ({ ...s, config: { ...s.config, argomenti: prima } })); throw e }
+  }
+  /** Nome o ruolo: la colonna cambia nello stesso fotogramma, e torna com'era se il server dice di no. */
+  const salvaIdentita = async (campo: 'nome' | 'ruolo', valore: string) => {
+    const pulito = valore.trim()
+    const prima = stato.config[campo]
+    setStato(s => ({ ...s, config: { ...s.config, [campo]: pulito } }))
+    try { await api.profilo({ [campo]: pulito }) } catch (e) { setStato(s => ({ ...s, config: { ...s.config, [campo]: prima } })); throw e }
+  }
+  /** La Memoria è aperta: il punto nel menù si spegne subito, poi lo si dice al server. */
+  const memoriaVista = () => {
+    setStato(s => (s.memoriaNuove?.quante ? { ...s, memoriaNuove: { quante: 0, dove: null } } : s))
+    memoriaP5.vista().catch(() => { /* il punto torna alla prossima lettura dello stato: meglio che un avviso */ })
+  }
+
   /** «Fatto» su una voce: via dalle aperte, fra le fatte, e il server lo sa un attimo dopo. */
   const risolvi = async (v: VoceFeed) => {
     const dove = aperti.findIndex(x => x.id === v.id)
@@ -1183,13 +1214,22 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     menuMappa: screen === 'mappa' ? MENU_ON : MENU_OFF,
     menuConn: screen === 'conn' ? MENU_ON : MENU_OFF,
     menuMemoria: screen === 'memoria' ? MENU_ON : MENU_OFF,
-    menuOpen: menu, toggleMenu: () => setMenu(m => !m),
+    menuOpen: menu, toggleMenu: () => setMenu(m => !m), chiudiMenu: () => setMenu(false),
     chevron: { display: 'flex', transform: menu ? 'none' : 'rotate(180deg)', transition: 'transform .2s' } as CSSProperties,
     goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'),
     goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'), goMemoria: go('memoria'),
+    /** P5: una pagina a sezioni, su una sezione e una scheda precise (la scheda si cerchia di rame). */
+    apri: (pagina: 'pref' | 'memoria', sezione?: string, scheda?: string) => { chiediSezione(pagina, sezione, scheda); go(pagina)() },
+    memoriaNuove: stato.memoriaNuove ?? { quante: 0, dove: null },
+    memoriaVista,
+    salvaFuocoCampo, salvaArgomentiCampo, salvaIdentita,
+    /** Di chi è questa sessione: la chiave con cui una pagina ricorda la sua sezione (mai scritta in chiaro). */
+    emailConto: stato.config.account?.email ?? (email || null),
 
     nome: stato.config.nome ?? t('tu'),
     ruolo: stato.config.ruolo ?? '',
+    /** Il nome com'è scritto, senza il «tu» di ripiego: è quello che il campo delle Preferenze mostra. */
+    nomeVero: stato.config.nome ?? '',
     /** Su un server, non sul suo computer: cambia cosa è vero dire sui dati. */
     ospitato: !!stato.ospitato,
     iniziali: (stato.config.nome ?? 'M').slice(0, 2).toUpperCase(),
@@ -1361,8 +1401,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     salvaArgomenti,
     /** Aprire il documento dietro una citazione, dal segno nel testo: sul passo, se c'è; «[M]» apre il progetto o la Memoria. */
     apriFonte: (id: string, passo?: string) => {
-      if (id === 'memoria') { go('memoria')(); return }
-      if (id.startsWith('memoria:progetto:')) { apriProgetto(id.slice('memoria:progetto:'.length)); return }
+      // P5: il segno della memoria atterra sulla sezione giusta, e un progetto sui Progetti col suo biglietto
+      if (id === 'memoria') { chiediSezione('memoria', 'ritratto'); go('memoria')(); return }
+      if (id.startsWith('memoria:progetto:')) { chiediProgetto(id.slice('memoria:progetto:'.length)); chiediSezione('memoria', 'progetti'); go('memoria')(); return }
       api.documento(id).then(d => setDoc(passo ? { ...d, _passo: passo } : d)).catch(() => mostraToast(t('Non trovo più il documento.')))
     },
     /** I progetti come li conosce il client: servono a dare un nome a un id. */
@@ -1707,10 +1748,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — preferenze —
     toni: TONI.map(x => ({
       ...x, label: t(x.label),
-      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) },
-      style: (x.id === stato.config.tono
-        ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-        : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
+      scelto: x.id === stato.config.tono,
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) }
     })),
     tonoEsempio: t(ESEMPIO_TONO[stato.config.tono] ?? ESEMPIO_TONO.diretto),
 
@@ -1814,17 +1853,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     autonomie: AUTONOMIE.map(a => ({
       ...a, titolo: t(a.titolo), nota: t(a.nota),
       scelto: stato.config.autonomia === a.id,
-      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) },
-      row: {
-        display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
-        background: stato.config.autonomia === a.id ? 'rgba(var(--luce-rgb),.85)' : 'transparent',
-        boxShadow: stato.config.autonomia === a.id ? '0 12px 30px rgba(var(--ombra-rgb),.1)' : 'none'
-      } as CSSProperties,
-      radio: {
-        width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
-        border: stato.config.autonomia === a.id ? '4px solid var(--rame)' : '1.5px solid rgba(var(--inchiostro-rgb),.35)',
-        background: stato.config.autonomia === a.id ? 'var(--avorio)' : 'transparent'
-      } as CSSProperties
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) }
     })),
     apriConnessioni,
 

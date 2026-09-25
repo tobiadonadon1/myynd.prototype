@@ -206,7 +206,7 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
           <label className="auto-campo">
             <span>{t('In che cartella lavora Claude Code')}</span>
             <select value={r.cartella ?? ''} onChange={e => cambia({ ...r, cartella: e.target.value })}>
-              <option value="">{t('— scegline una —')}</option>
+              <option value="">{t('Scegline una')}</option>
               {cartelle.map(c => <option key={c} value={c}>{c}</option>)}
               {r.cartella && !cartelle.includes(r.cartella) && <option value={r.cartella}>{r.cartella}</option>}
             </select>

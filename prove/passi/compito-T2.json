@@ -1,0 +1,11 @@
+[
+  { "clicca": "Your account" },
+  { "vai": "Preferences" },
+  { "clicca": "Your Myynd" },
+  { "aspetta": 800 },
+  { "js": "(document.querySelector('[data-scheda=fuoco] textarea')?.focus(), 1)" },
+  { "scrivi": "The Northwind launch" },
+  { "premi": "Tab" },
+  { "aspetta": 800 },
+  { "scatta": "T2-fine" }
+]

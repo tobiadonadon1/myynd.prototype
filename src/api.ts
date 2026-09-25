@@ -149,6 +149,8 @@ export type Stato = {
   suggerimentiNuovi: number
   /** I risultati nuovi del vassoio di prova (P6): accendono lo stesso punto. */
   vassoioNuovi?: number
+  /** P5: le cose da guardare nate dopo l'ultima visita alla Memoria. */
+  memoriaNuove?: { quante: number; dove: 'come-lavori' | 'ritratto' | null }
   /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
   codiceConversazioni: boolean
   /** Quante sessioni di Claude Code ci sono lì: la scheda lo dice prima di accendere l'interruttore. */
@@ -2183,6 +2185,23 @@ export const apiP4 = {
 // — P4: fine —
 
 // — P5: inizio —
+export type { Sommario } from './sezioni.ts'
+import type { Sommario as SommarioMemoria } from './sezioni.ts'
+/** Le cose da guardare nate dopo l'ultima visita alla Memoria: il punto accanto a «Memoria». */
+export type MemoriaNuove = { quante: number; dove: 'come-lavori' | 'ritratto' | null }
+export const memoriaP5 = {
+  /** La Memoria è aperta: il punto si spegne. */
+  vista: () => json<{ ok: true }>('/api/memoria/vista', { method: 'POST', body: '{}' }),
+  sommario: () => json<SommarioMemoria>('/api/memoria/sommario'),
+  /** Corregge una convinzione dove è scritta: la vecchia va in «Prima pensava». */
+  correggiConvinzione: (id: string, testo: string) =>
+    json<{ ok: true; id: string }>(`/api/memoria/convinzione/${encodeURIComponent(id)}/correggi`, { method: 'POST', body: JSON.stringify({ testo }) }),
+  /** Quello che la rassegna ha capito, senza prepararla. */
+  gusto: () => json<{ vale: boolean; testo: string }>('/api/rassegna/gusto'),
+  riferimento: () => json<{ testo: string; aggiornato: string | null }>('/api/riferimento'),
+  scriviRiferimento: (testo: string) =>
+    json<{ ok: true; testo: string; aggiornato: string | null; nuovi: string[] }>('/api/riferimento', { method: 'POST', body: JSON.stringify({ testo }) })
+}
 // — P5: fine —
 
 // — P6: inizio —

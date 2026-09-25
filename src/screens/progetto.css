@@ -64,6 +64,7 @@
 
 .prog-invito{display:block;margin:0 0 9px;font-size:14px;line-height:1.45;color:rgba(var(--inchiostro-rgb),.78)}
 .prog-barra{display:flex;min-width:0}
+.prog-barra>.f-campo{flex:1}
 .prog-aggiungi{flex:none;padding:5px 12px;border-radius:99px;border:0;background:var(--gradiente-rame);color:var(--avorio);
   font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap}
 .prog-aggiungi:hover{opacity:.92}
