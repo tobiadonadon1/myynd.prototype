@@ -2102,6 +2102,9 @@ export function svuotaFonte(fonte: string) {
     // niente da togliere a mano dall'indice: la cancellazione fa scattare il
     // trigger, che è l'unico posto che sa passargli i vecchi valori
     db.prepare('DELETE FROM documenti WHERE fonte = ?').run(fonte)
+    // e il guaio di adesso: una fonte scollegata non ha niente da sistemare.
+    // La storia dei giorni resta, è quello che è successo davvero
+    db.prepare('DELETE FROM stato_fonti WHERE fonte = ?').run(fonte)
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')

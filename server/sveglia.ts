@@ -47,5 +47,13 @@ export function ascolta(fai: () => unknown, filo?: Filo | null): boolean {
   return true
 }
 
+/**
+ * Quando è partito l'ultimo recupero dopo un risveglio (0 se mai).
+ *
+ * La salute delle fonti non conta i guai passeggeri dei primi due minuti: la
+ * rete del portatile appena aperto non è ancora tornata, e non è un guasto.
+ */
+export function ultimoRisveglio(): number { return ultima }
+
 /** Solo per le prove: si dimentica l'ultimo risveglio. */
 export function perProva() { ultima = 0 }

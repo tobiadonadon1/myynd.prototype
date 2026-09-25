@@ -64,6 +64,9 @@ import * as granolaMcp from './connettori/granolaMcp.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
 import { fontiIncomplete, osservaLettura } from './lettura-feed.ts'
+import * as saluteFonti from './salute-fonti.ts'
+import * as saluteTeste from './salute-teste.ts'
+import { fraseDi, rimedioDi } from './connettori/guaio.ts'
 import { aperturaProgetto } from './apertura-progetto.ts'
 import { recordCurrentWork, nextResultSince } from './project-memory.ts'
 import * as priorita from './priorita.ts'
@@ -501,6 +504,22 @@ app.use((req, res, next) => {
  * senza che nessuno prema niente: vale per tutti, è uno per macchina.
  */
 abbonamento.quandoCambia(() => compiti.annunciaCollegamento(true))
+/*
+ * E la salute del motore che lavora: una riga al giorno quando cambia stato.
+ * L'account di Claude Code è della macchina, quindi il suo cambio vale per
+ * ognuno; una chiamata riuscita o una chiave rifiutata valgono per chi l'ha
+ * fatta. Stanno qui e non in `modello.ts`, che non deve sapere della salute.
+ */
+abbonamento.quandoCambia(() => {
+  for (const u of conti.tutti()) {
+    try { chi.dentro(u, () => saluteTeste.segnaTesta()) } catch { /* uno rotto non ferma gli altri */ }
+  }
+})
+mod.quandoUsato(() => { try { saluteTeste.segnaTesta('ok') } catch { /* contare non rompe la chiamata contata */ } })
+mod.quandoRifiutata(() => {
+  try { saluteTeste.segnaTesta() } catch { /* idem */ }
+  compiti.annunciaCollegamento()
+})
 
 /**
  * Un guaio che si ripara collegando qualcosa.
@@ -647,9 +666,32 @@ app.get('/api/stato', async (_req, res) => {
    */
   mod.riparaIlMotore()
   abbonamento.riguarda()
+  // il giorno del motore si scrive anche senza chiamate: un account da cui si
+  // è usciti non chiama nessuno, e il suo giorno non deve sembrare spento
+  try { saluteTeste.segnaTesta() } catch { /* la pagina prima della riga */ }
   const c = cfg.leggi()
   const n = store.conteggi()
   const ragiona = mod.collegato()
+  const accessoDisco = ospitato.OSPITATO ? 'non-mac' : accesso.accessoCompleto()
+  const accessoNote = ospitato.OSPITATO ? { stato: 'non-mac', verificato: new Date().toISOString() } : accesso.accessoNote()
+  /*
+   * Le Note guariscono dal vivo: il permesso è appena tornato, l'episodio si
+   * chiude adesso e le Note si rileggono in sottofondo. Solo in casa.
+   */
+  if (!ospitato.OSPITATO) {
+    try { for (const f of saluteFonti.verificaPermessi({ note: accessoNote.stato })) leggiInSottofondo(f) }
+    catch (e) { console.error('myynd · fonti · il permesso delle Note non si è verificato:', e instanceof Error ? e.message : e) }
+  }
+  // i guai di adesso, per le schede: le fonti dal loro episodio, i motori dal vivo
+  const guai = new Map(saluteFonti.fontiIncomplete().map(f => [f.fonte, f.rimedio]))
+  const silenzi = saluteFonti.silenzi()
+  const problemaDi = (id: string) => {
+    if (id === 'claude' || id === 'openai') {
+      const p = saluteTeste.problemaTesta(id)
+      return p && p.rimedio !== 'credito' ? p.rimedio : undefined
+    }
+    return guai.get(id)
+  }
   res.json({
     // `pubblica()` guarda solo la chiave, perché da lì non si può chiedere a
     // `modello.ts` senza girare in tondo: la risposta vera — chiave *o*
@@ -706,7 +748,11 @@ app.get('/api/stato', async (_req, res) => {
       // i compiti NON si contano come documenti: gonfiavano il totale in alto
       // a ogni cosa aggiunta in lista, e quel numero che cresceva da solo
       // sembrava — giustamente — finto
-      documenti: n.perFonte.find(f => f.fonte === v.id)?.n ?? 0
+      documenti: n.perFonte.find(f => f.fonte === v.id)?.n ?? 0,
+      // il guaio che la scheda deve dire con la sua parola, e il silenzio
+      // (un fatto, non un guasto): solo quando ci sono
+      ...(problemaDi(v.id) ? { problema: problemaDi(v.id) } : {}),
+      ...(silenzi.has(v.id) ? { silenzio: silenzi.get(v.id) } : {})
     })),
     // su un server sarebbero le cartelle di root dentro il contenitore: non
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
@@ -740,11 +786,16 @@ app.get('/api/stato', async (_req, res) => {
      * niente — e deve dirlo con la strada per darlo, non con un errore dopo
      * il bottone. Su un server non ha senso: le Note non si offrono.
      */
-    accessoDisco: ospitato.OSPITATO ? 'non-mac' : accesso.accessoCompleto(),
-    accessoNote: ospitato.OSPITATO ? {stato:'non-mac',verificato:new Date().toISOString()} : accesso.accessoNote(),
+    accessoDisco,
+    accessoNote,
     // le fonti che l'ultima lettura non ha letto per intero: la prima pagina
     // le scrive in una riga fissa finché una lettura non le trova a posto
     letturaIncompleta: fontiIncomplete(chi.adesso() ?? ''),
+    // il guaio del motore che lavora (accesso o chiave), per la stessa riga
+    testa: saluteTeste.testaDaMostrare(),
+    // i titoli delle finestre accesi: allora la pagina chiede al guscio se il
+    // permesso di Accessibilità c'è davvero
+    osservaTitoli: !ospitato.OSPITATO && c.osservatore?.acceso === true && c.osservatore?.titoli === true,
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
     // la cartella vera: `MYYND_DATI` o `~/.myynd`. In casa non è un segreto,
@@ -1901,6 +1952,24 @@ const sincronizzazioniInCorso = new Set<string>()
 const sincronizzazioneInCorso = () => sincronizzazioniInCorso.has(chi.adesso() ?? '')
 
 /**
+ * Una fonte sola, riletta in sottofondo, se non c'è già una lettura in corso.
+ *
+ * Serve quando un permesso è appena tornato: la riga fissa è già sparita, e
+ * la lettura che segue lo conferma (o lo smentisce) senza aspettare il giro
+ * dei dieci minuti. Stessa coda delle altre letture: non si pestano i piedi.
+ */
+function leggiInSottofondo(fonte: string) {
+  const conto = chi.adesso() ?? ''
+  if (sincronizzazioniInCorso.has(conto)) return
+  sincronizzazioniInCorso.add(conto)
+  void (async () => {
+    try { await leggiTutto(fonte, () => {}) }
+    catch (e) { console.error(`myynd · la rilettura di ${fonte} non è riuscita:`, e instanceof Error ? e.message : e) }
+    finally { sincronizzazioniInCorso.delete(conto) }
+  })()
+}
+
+/**
  * Le riunioni lette dal server di Granola, nell'indice.
  *
  * Si cancella solo quello che Granola non elenca più *dentro* il tratto di
@@ -1941,7 +2010,7 @@ async function leggiTutto(
    * lettura dopo — a mano o delle sei ore — la toglie da sola quando trova
    * la fonte a posto. Per questo si osserva qui, dove passano tutte.
    */
-  const oss = osservaLettura(chi.adesso() ?? '', soloFonte)
+  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: () => compiti.annunciaCollegamento() })
   try {
     return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo)
   } finally { oss.chiudi(fermo()) }
@@ -1970,7 +2039,10 @@ async function leggiTuttoDentro(
       // scollegata mentre si leggeva: quello che ha scaricato non deve rientrare
       totale += await leggiSeAncoraCollegata(nome, leggi, avvisa)
     } catch (err) {
-      avvisa({ fase: nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
+      // il rimedio accanto alla frase: la salute delle fonti sa cosa fare; la
+      // frase si tiene solo se l'ha scritta un connettore
+      const frase = fraseDi(err)
+      avvisa({ fase: nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err), rimedio: rimedioDi(err), ...(frase ? { frase } : {}) })
     }
   }
 
@@ -2017,6 +2089,8 @@ async function leggiTuttoDentro(
       fase: 'desktop', stato: 'fatto', documenti: e.docs.length,
       saltati: e.saltatiProgetti.length, falliti: e.falliti,
       illeggibili: e.illeggibili, troncato: e.troncato, tolti, invariati: e.invariati,
+      // le cartelle che macOS ha negato: un permesso da dare, non un disco staccato
+      negate: e.negate.length, ...(e.negate.length ? { rimedio: 'permesso-disco' } : {}),
       // quello che si è visto e lasciato fuori: è la risposta a «ma ne ho molti
       // di più», e senza di questa quella domanda resta senza risposta
       // `saltati` qui sopra è già preso — le cartelle di codice saltate intere —
@@ -2419,7 +2493,7 @@ async function rileggiDaSola() {
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
     && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.note && !c.conversazioni
-    && !c.github) return
+    && !c.github && !c.x) return
   sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {
@@ -2448,6 +2522,8 @@ async function rileggiDaSola() {
       console.log(`myynd · scoperte · ${proposte.length} proposte`)
       if (proposte.length) compiti.annunciaCambio()
     }
+    // il motore, ogni dieci minuti anche senza chiamate: il suo giorno si scrive
+    abbonamento.riguarda(); saluteTeste.segnaTesta()
   } catch (e) {
     // una fonte che non risponde non è un guasto dell'app: si riprova fra sei ore
     console.error('myynd · la rilettura automatica non è riuscita:', e instanceof Error ? e.message : e)
@@ -4407,6 +4483,18 @@ app.post('/api/azzera', (req, res) => {
 // — P7: rotte, fine —
 
 // — P8: rotte, inizio —
+/*
+ * La salute delle fonti, giorno per giorno: la striscia dei trenta giorni nel
+ * pannello di una fonte, e il conto del traguardo per chi sviluppa. Fuori da
+ * `/api/connettori` apposta: una lettura non è un cambio di collegamento.
+ */
+app.get('/api/fonti/salute', (req, res) => {
+  try {
+    const giorni = Math.min(90, Math.max(1, Math.floor(Number(req.query.giorni)) || 30))
+    const fonte = typeof req.query.fonte === 'string' && /^[a-z][a-z0-9_-]{0,40}$/.test(req.query.fonte) ? req.query.fonte : undefined
+    res.json(saluteFonti.perRotta(giorni, fonte))
+  } catch (e) { errore(res, e) }
+})
 // — P8: rotte, fine —
 
 // — P9: rotte, inizio —
@@ -4701,6 +4789,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
     await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
     await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro()))
+    await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
   })
   sveglia.ascolta(() => {
     console.log('myynd · il computer si è svegliato: recupero quello che è successo nel frattempo')
@@ -4726,6 +4815,14 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro())))
   setTimeout(preparaInAnticipo, 150_000)
   setInterval(preparaInAnticipo, 15 * 60_000)
+  // la salute delle fonti: ogni ora si chiudono i giorni finiti; una volta al
+  // giorno la sonda di WhatsApp e la riga del giorno
+  const salute = perOgnuno('la salute delle fonti non si è chiusa', async () => {
+    store.senzaToccare(() => saluteFonti.chiudiGiorni())
+    await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
+  })
+  setTimeout(salute, 5 * 60_000)
+  setInterval(salute, 60 * 60_000)
 
   // E le ricette nuove: subito dopo l'avvio — è il momento in cui una persona
   // ha appena riaperto l'app e potrebbe averne una che l'aspetta — e poi ogni
