@@ -18,6 +18,7 @@
 import { nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
+import { eRagioneScarto, MOTIVO_SCARTO } from './feed-esiti.ts'
 
 /** L'etichetta del blocco dove vive il fuoco: uno solo, si riscrive. */
 const FUOCO = 'fuoco'
@@ -109,9 +110,22 @@ dubbio, lascia vuoto.`
  * tue parole come motivo. Una risposta scritta non deve andare persa perché
  * manca una chiave API.
  */
-export async function rispondiAVoce(id: string, risposta: string, statoDato?: string): Promise<Esito> {
+export async function rispondiAVoce(id: string, risposta: string, statoDato?: string, ragione?: string): Promise<Esito> {
   const voce = store.voceFeed(id)
   const pulita = risposta.trim()
+  /*
+   * «Non utile», con una delle quattro ragioni: vecchia, già fatta, non è
+   * mia, non si capisce. Non c'è niente da scrivere e niente da interpretare:
+   * il motivo è quello del vocabolario, in italiano, e la ragione insegna
+   * alla prossima lettura (feed-impara). Una ragione fuori dal vocabolario è
+   * un errore, non uno scarto qualunque.
+   */
+  if (ragione !== undefined) {
+    if (!eRagioneScarto(ragione)) throw new Error('Ragione sconosciuta.')
+    const motivo = MOTIVO_SCARTO[ragione]
+    store.cambiaStatoFeed(id, 'scartato', motivo, ragione)
+    return { stato: 'scartato', motivo, fonteVecchia: false, daRicordare: '' }
+  }
   if (!pulita) throw new Error('Scrivi qualcosa.')
 
   // Se lo stato arriva già deciso — è un tocco su una delle risposte pronte,
@@ -126,13 +140,14 @@ export async function rispondiAVoce(id: string, risposta: string, statoDato?: st
       fonteVecchia ? 'fatto'
       : statoDato === 'piu_tardi' ? 'aperto'
       : (['aperto', 'fatto', 'scartato'].includes(statoDato) ? statoDato : 'fatto') as Esito['stato']
-    store.cambiaStatoFeed(id, stato, pulita)
+    // fatto con le sue parole è «lui»; uno scarto senza ragione non insegna niente
+    store.cambiaStatoFeed(id, stato, pulita, stato === 'fatto' ? 'lui' : null)
     return { stato, motivo: pulita, fonteVecchia, daRicordare: '' }
   }
 
   /** Senza modello, o se non ci riesce: si prende alla lettera. Meglio grezzo che perso. */
   const allaLettera = (): Esito => {
-    store.cambiaStatoFeed(id, 'fatto', pulita)
+    store.cambiaStatoFeed(id, 'fatto', pulita, 'lui')
     return { stato: 'fatto', motivo: pulita, fonteVecchia: false, daRicordare: '' }
   }
   if (!voce) return allaLettera()
@@ -161,7 +176,7 @@ export async function rispondiAVoce(id: string, risposta: string, statoDato?: st
   // 'scartato' e 'piu_tardi' non sono 'fatto': la prima sparisce e non torna,
   // la seconda deve poter ricomparire domani
   const stato = esito.stato === 'piu_tardi' ? 'aperto' : esito.stato
-  store.cambiaStatoFeed(id, stato, motivo)
+  store.cambiaStatoFeed(id, stato, motivo, stato === 'fatto' ? 'lui' : null)
 
   if (esito.daRicordare?.trim()) {
     store.ricorda({
