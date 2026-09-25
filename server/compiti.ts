@@ -134,6 +134,18 @@ export function annunciaCollegamento(aTutti = false) {
 }
 
 /**
+ * «La salute di una fonte è cambiata, rileggi lo stato.»
+ *
+ * Lo stesso fatto sul filo, per la riga fissa delle fonti (P8): una fonte
+ * che si rompe o guarisce a una lettura. Non è un collegamento in più, e
+ * non riprende le righe ferme (P3): rifare un lavoro intero perché una
+ * fonte si è rotta, ogni giorno, per una settimana, non sbloccherebbe niente.
+ */
+export function annunciaSalute() {
+  annuncia({ fase: 'collegamento' })
+}
+
+/**
  * «Questa riga è pronta»: si apre da sola, come una bozza appena scritta.
  *
  * Serve alle automazioni che propongono. Il loro lavoro non passa da `affida()`
@@ -894,13 +906,13 @@ export function imparaDallaRisposta(
 /**
  * Le righe ferme su un blocco, riprese quando la fonte si collega (P3).
  *
- * «Collega la posta e la riprendo da qui» è una promessa: si mantiene qui.
+ * «Collega la posta e la riprendo da qui» è una promessa: si mantiene qui,
+ * a qualunque età della riga, perché la riga la dice finché resta ferma.
  * La posta riparte quando la posta è collegata, i file quando c'è una
- * cartella, gli altri due a ogni cambio di collegamento. Nessuna più di una
- * volta al giorno per riga (a memoria, per persona): un cambio di
- * collegamento arriva a ogni lettura, e una riga che torna a bloccarsi non
- * deve rifare il lavoro intero a ogni giro. Sette giorni, poi la riga resta
- * sua. Non lancia mai.
+ * cartella, gli altri due a ogni collegamento aggiunto o cambiato (non a un
+ * cambio di salute: `annunciaSalute`). Nessuna più di una volta al giorno
+ * per riga (a memoria, per persona): una riga che torna a bloccarsi non
+ * deve rifare il lavoro intero a ogni giro. Non lancia mai.
  */
 const ripresi = new Map<string, number>()
 const RIPRESA_OGNI = 24 * 3_600_000

@@ -14,6 +14,7 @@ const require = createRequire(import.meta.url)
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { testoMostrato } from './cornice.ts'
 
 const casa = mkdtempSync(join(tmpdir(), 'myynd-lavoro-rotte-'))
 process.env.MYYND_DATI = casa
@@ -185,7 +186,7 @@ test('«Cambia» su una riga semplice la rifà con la correzione, conta la corre
   const subito = ((r.corpo.compiti) as Riga[]).find(x => x.id === 'c-n1')
   assert.equal(subito?.stato, 'delegato')
   // la nota dice cosa cambia e al posto di cosa, nella lingua dell'app: chi rifà il lavoro sa dove va la correzione
-  assert.equal(subito?.nota, 'Instead of «I assumed Friday as the deadline.»: Monday, not now')
+  assert.equal(subito?.nota, 'Monday, not now, instead of «I assumed Friday as the deadline.»')
   const rifatta = await riga('c-n1', c => c?.stato === 'pronto')
   assert.equal(rifatta?.stato, 'pronto')
   assert.match(rifatta?.risultato ?? '', /Monday, October 5/)
@@ -204,6 +205,12 @@ test('«Cambia» su un file consegnato apre una revisione figlia e lascia la rig
   const righe = r.corpo.compiti as Riga[]
   const madre = righe.find(x => x.id === 'c-l1')
   assert.equal(madre?.stato, 'pronto')
+  // la riga «I assumed …» è passata alla figlia: la madre non la porta più, né sotto («Cambia») né nel testo
+  assert.equal(madre?.ipotesi ?? null, null)
+  assert.equal(madre?.risultato, 'Done: «q4-plan.md» is in Documents.')
+  assert.equal(testoMostrato(madre?.risultato, madre?.ipotesi), 'Done: «q4-plan.md» is in Documents.')
+  // (contro) una riga consegnata prima, con la frase nel testo e senza `ipotesi`, la tiene
+  assert.equal(testoMostrato('Done: the note.\n\nI assumed Friday.', null), 'Done: the note.\n\nI assumed Friday.')
   const figlia = righe.find(x => x.madre === 'c-l1' && x.id.startsWith('rev-'))
   assert.ok(figlia, 'nessuna riga figlia di revisione')
   assert.equal(figlia!.modo, 'tutto')
@@ -271,10 +278,13 @@ test('l\'email ricavata dopo tiene la lingua di chi riceve e propone il file da 
   assert.doesNotMatch(richiesta!, /anche quando il materiale che stai leggendo/)
   assert.match(richiesta!, /desktop:q4-plan\.md · q4-plan\.md/)
   // e l'email è salvata sulla riga così com'è: la seconda chiamata la rilegge senza il modello
+  // (si contano le richieste di email di questa riga: la riga rifatta da una prova prima prepara la sua nel frattempo)
+  const richiesteEmail = () => readFileSync(join(casa, 'modello.jsonl'), 'utf8').split('\n').filter(x => x.includes('Prendi una bozza scritta per una persona') && x.includes('Reply to Marco about the course quote')).length
+  const prima = richiesteEmail()
   const di_nuovo = await post('/api/compiti/c-r1/prepara-email')
   assert.equal(di_nuovo.stato, 200)
   assert.deepEqual((di_nuovo.corpo as { allegato?: unknown }).allegato, { id: 'desktop:q4-plan.md', titolo: 'q4-plan.md' })
-  assert.equal(registro.length, readFileSync(join(casa, 'modello.jsonl'), 'utf8').trim().split('\n').filter(Boolean).length)
+  assert.equal(richiesteEmail(), prima)
 })
 
 /** Le misure di una riga, lette dall'indice del conto della prova (il server ha il suo processo: si rilegge da disco). */

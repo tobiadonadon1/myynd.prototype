@@ -13,7 +13,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, correggiCompito, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest } from '../api'
-import { appenaFinite as appenaFiniteFra, siRivede } from '../lavoro-affidato'
+import { appenaFinite as appenaFiniteFra, siRivede, testoMostrato } from '../lavoro-affidato'
+import { quanteAspettano } from '../blocchi-feed'
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
@@ -474,10 +475,11 @@ export function useCompiti(
         risultato: null, fonti: null, email: null, consegna: null, chieste: null, ipotesi: null, revisione: null,
         proposta: null, guaio: null, esito: null, chiuso: null, sparito: null, voceScritta: null, mandata: null
       }
-      // la figlia sotto la madre, e la madre senza più la riga dell'ipotesi: la correzione è passata a lei
+      // la figlia sotto la madre, e la madre senza più la riga dell'ipotesi,
+      // né sotto né nel testo: la correzione è passata a lei (come il server)
       setCompiti(cs => {
         const i = cs.findIndex(x => x.id === id)
-        const madre = cs.map(x => (x.id === id ? { ...x, ipotesi: null } : x))
+        const madre = cs.map(x => (x.id === id ? { ...x, ipotesi: null, risultato: testoMostrato(x.risultato, x.ipotesi) || x.risultato } : x))
         return i < 0 ? [...madre, finta] : [...madre.slice(0, i + 1), finta, ...madre.slice(i + 1)]
       })
     } else {
@@ -681,17 +683,19 @@ export function useCompiti(
    *
    * Sono le stesse due che accendono il punto sulla voce «Da fare»: una bozza
    * pronta da leggere e una domanda che Myynd ha fatto e a cui nessuno ha
-   * ancora risposto. Non le righe aperte — quelle sono la lista, e una lista
-   * di dieci cose non è dieci interruzioni — e non quelle affidate, che
-   * stanno lavorando e non chiedono niente. Il segno nella barra dei menù e
-   * il numero sul Dock vogliono dire una cosa sola: c'è qualcosa che si
-   * sblocca solo se guardi.
+   * ancora risposto; e con loro una riga ferma su una fonte che manca o su
+   * un dato che nessuna fonte aveva (P3), che in prima pagina pesa come una
+   * domanda e come una domanda aspetta lui. Non le righe aperte — quelle
+   * sono la lista, e una lista di dieci cose non è dieci interruzioni — e
+   * non quelle affidate, che stanno lavorando e non chiedono niente. Il
+   * segno nella barra dei menù e il numero sul Dock vogliono dire una cosa
+   * sola: c'è qualcosa che si sblocca solo se guardi.
    *
    * Si manda solo quando cambia, e zero quando questa lista se ne va — cioè
    * quando si esce: un numero rimasto sul Dock dopo l'uscita parlerebbe di
    * un conto che non c'è più.
    */
-  const inAttesa = pronte + chiedono
+  const inAttesa = quanteAspettano(compiti)
   useEffect(() => { desktop()?.segnala(inAttesa) }, [inAttesa])
   useEffect(() => () => { desktop()?.segnala(0) }, [])
 

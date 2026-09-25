@@ -1351,11 +1351,37 @@ test('P3 · una fonte che manca è un blocco: la riga torna sua con la frase fis
   assert.equal(ricevute.length, 2)
   o2.smetti()
 
-  // dopo sette giorni la riga resta sua
+  // anche dopo sette giorni la riga dice ancora «la riprendo da qui»: si riprende, a qualunque età
   const vecchia = riga('Reply to Sam about the invoice')
   store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.posta, new Date(Date.now() - 8 * 86_400_000).toISOString(), vecchia)
-  assert.equal(await compiti.riprendiBloccati(), 0)
-  assert.equal(store.compito(vecchia)!.stato, 'aperto')
+  const o3 = orecchio(vecchia)
+  assert.equal(await compiti.riprendiBloccati(), 1)
+  await o3.aspetta('pronto')
+  assert.equal(store.compito(vecchia)!.stato, 'pronto')
+  o3.smetti()
+})
+
+test('P3 · (contro) un cambio di salute di una fonte (P8) non riprende una riga ferma; un collegamento sì', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  compiti.scordaRiprese()
+  const { svolgi, ricevute } = svolgiInFila(['Done: the note.\n\nThe note about the Notion page, long enough to be a note and not a status line.'])
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda })
+  const id = riga('Summarize the Notion page, again')
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, new Date().toISOString(), id)
+  const o = orecchio(id)
+  // una fonte che si rompe o guarisce a una lettura: il fatto arriva alle finestre, la riga resta ferma
+  const sentiti: string[] = []
+  const smetti = compiti.ascolta(e => { sentiti.push(e.fase) }, null)
+  compiti.annunciaSalute()
+  await pausa(150)
+  assert.ok(sentiti.includes('collegamento'), 'il fatto non è arrivato alle finestre')
+  assert.equal(ricevute.length, 0, 'ripresa per un cambio di salute')
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  // un collegamento aggiunto: si riprende
+  compiti.annunciaCollegamento()
+  await o.aspetta('pronto')
+  assert.equal(ricevute.length, 1)
+  smetti(); o.smetti()
 })
 
 test('P3 · (contro) un lavoro sul codice che finisce «chiede» e una revisione della bozza fallita non toccano domandeFatte né le misure', async () => {

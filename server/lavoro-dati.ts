@@ -12,6 +12,7 @@
 import db from './store.ts'
 import * as store from './store.ts'
 import { BLOCCHI } from './domanda-sola.ts'
+import { senzaRigaIpotesi } from './cornice.ts'
 
 const ora = () => new Date().toISOString()
 
@@ -44,6 +45,21 @@ export function contaDomanda(id: string) {
 export function scriviIpotesi(id: string, ipotesi: string[] | null) {
   db.prepare('UPDATE compiti SET ipotesi = ? WHERE id = ?')
     .run(ipotesi && ipotesi.length ? JSON.stringify(ipotesi) : null, id)
+}
+
+/**
+ * La correzione è passata a una riga figlia di revisione («Cambia» su un
+ * file consegnato o su una bozza salvata): la madre non ha più un'ipotesi da
+ * cambiare, e la riga «Ho supposto …» le si toglie anche dal testo. Lasciarla
+ * lì, senza «Cambia», mostrerebbe come riga della madre proprio il dato che
+ * lei ha appena corretto. Una riga consegnata prima, senza `ipotesi` (la
+ * frase nel testo e basta), non passa di qui e tiene la sua.
+ */
+export function passaIpotesi(id: string) {
+  const c = store.compito(id)
+  if (!c) return
+  const risultato = c.risultato && c.ipotesi?.[0] ? senzaRigaIpotesi(c.risultato) : c.risultato
+  db.prepare('UPDATE compiti SET ipotesi = NULL, risultato = ? WHERE id = ?').run(risultato, id)
 }
 
 export function scriviVoceScritta(id: string, v: store.Compito['voceScritta'] | null) {
@@ -133,15 +149,18 @@ export function postaInviataDal(iso: string): boolean {
   return !!db.prepare('SELECT 1 FROM documenti WHERE inviato = 1 AND quando >= ? LIMIT 1').get(iso)
 }
 
-/** Le righe ferme su un blocco, ancora aperte, toccate negli ultimi sette giorni. */
+/**
+ * Le righe ferme su un blocco, ancora aperte, a qualunque età: la riga dice
+ * «la riprendo da qui» finché resta ferma, e quello che lo schermo dice è
+ * vero. Le più vecchie prima (chi aspetta da più tempo passa per primo).
+ */
 export function bloccatiDaRiprendere(): store.Compito[] {
-  const da = new Date(Date.now() - 7 * 86_400_000).toISOString()
   const frasi = Object.values(BLOCCHI)
   const righe = db.prepare(`
     SELECT * FROM compiti
-    WHERE stato = 'aperto' AND sparito IS NULL AND aggiornato >= ? AND guaio IN (${frasi.map(() => '?').join(',')})
+    WHERE stato = 'aperto' AND sparito IS NULL AND guaio IN (${frasi.map(() => '?').join(',')})
     ORDER BY aggiornato
-  `).all(da, ...frasi) as Record<string, unknown>[]
+  `).all(...frasi) as Record<string, unknown>[]
   return righe.map(r => store.compito(String(r.id))).filter((c): c is store.Compito => !!c)
 }
 

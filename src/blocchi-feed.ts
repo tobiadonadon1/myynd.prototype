@@ -81,6 +81,16 @@ const pesoRiga = (c: { id: string; stato: string; guaio?: string | null }, fermi
 /** Una riga ferma su un blocco o su un dato che manca: l'ha affidata lui e aspetta lui. Le stesse frasi del server. */
 export const fermaDi = (c: { guaio?: string | null }): boolean => !!c.guaio && (BLOCCHI.includes(c.guaio) || c.guaio === MANCA_UN_DATO)
 
+/**
+ * Quante righe aspettano lui: le pronte da leggere, le domande senza
+ * risposta, e le righe aperte ferme su una fonte che manca o su un dato che
+ * nessuna fonte aveva (P3), che qui pesano come una domanda. Sono le stesse
+ * che accendono il punto nella barra dei menù e il numero sul Dock. Una riga
+ * aperta e basta, o una che sta lavorando, non aspetta nessuno.
+ */
+export const quanteAspettano = (compiti: readonly { stato: string; guaio?: string | null }[]): number =>
+  compiti.filter(c => c.stato === 'pronto' || c.stato === 'chiede' || (c.stato === 'aperto' && fermaDi(c))).length
+
 /** Una riga figlia di revisione («Cambia» su un file o su una bozza salvata): sta sotto sua madre. */
 const eRevisione = (c: { id: string; madre?: string | null }): c is { id: string; madre: string } =>
   !!c.madre && (c.id.startsWith('rev-'))

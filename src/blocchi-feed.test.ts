@@ -423,3 +423,20 @@ test('(P3) una riga ferma su un blocco o su un dato che manca aspetta lui: sta i
   assert.ok(!tutte.includes('altroGuaio'))
   assert.deepEqual(ids(b.find(x => x.nome === 'Nextas')!), ['bloccata', 'senzaDato'])
 })
+
+test('(P3) quanteAspettano: le pronte, le domande e le righe ferme su un blocco o su un dato che manca; non una riga aperta e basta, né una che lavora', async () => {
+  const { quanteAspettano } = await import('./blocchi-feed.ts')
+  assert.equal(quanteAspettano([
+    { stato: 'pronto' },
+    { stato: 'chiede' },
+    { stato: 'aperto', guaio: 'Collega la posta e la riprendo da qui.' },
+    { stato: 'aperto', guaio: 'Non sono riuscito a finirla senza un dato che manca.' },
+    // (contro) una riga aperta senza guaio, una con un guaio qualunque, e una che sta lavorando
+    { stato: 'aperto' },
+    { stato: 'aperto', guaio: 'Il modello non ha risposto.' },
+    { stato: 'delegato' },
+    // (contro) una riga già chiusa con un blocco addosso non aspetta più nessuno
+    { stato: 'fatto', guaio: 'Collega la posta e la riprendo da qui.' }
+  ]), 4)
+  assert.equal(quanteAspettano([]), 0)
+})

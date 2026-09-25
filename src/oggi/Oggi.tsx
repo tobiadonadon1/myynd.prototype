@@ -1239,11 +1239,12 @@ function Manda(p: { c: Compito; l: Lista; testo: string } & Pannello) {
     {casella.stato === 'salvata' ? <><p>{p.c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p><a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a></>
       : <p role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {casella.errore}</p>}
   </div>
-  // un segnaposto nel corpo (P3): non si manda, la riga dell'ipotesi dice cosa manca
-  if (!puoMandare(p.c) || haSegnaposto(p.testo)) return null
+  // un segnaposto nel corpo (P3): non si manda, la riga dell'ipotesi dice
+  // cosa manca; il file da allegare resta scritto, come in prima pagina
+  if (!puoMandare(p.c) || haSegnaposto(p.testo)) return <DaAllegare c={p.c} />
   const azione = azioneEmail(p.c, p.testo)
   if (azione.tipo === 'nessuna') return null
-  if (azione.tipo === 'copia') return <CopiaEmail c={p.c} l={p.l} bozza={azione} />
+  if (azione.tipo === 'copia') return <><DaAllegare c={p.c} /><CopiaEmail c={p.c} l={p.l} bozza={azione} /></>
   return <><DaAllegare c={p.c} /><InvioEmail {...p} /></>
 }
 

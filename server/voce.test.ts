@@ -86,9 +86,13 @@ test('con meno di tre mail a quella persona vale la voce delle ultime mail, con 
   const aLeo = voce.perRiga({ doc: 'posta:INBOX:600', testo: 'Reply to Leo about the logo files', nota: null })!
   assert.match(aLeo.blocco, /^Come scrive di solito, dalle ultime mail che ha mandato:/)
   assert.equal(aLeo.profilo.quanti, 0)
-  // il saluto delle ultime mail non porta il nome di un altro: «Ciao Marco,» a Leo lo ricopierebbe
+  // il saluto delle ultime mail non porta il nome di un altro: «Ciao Marco,» a Leo lo ricopierebbe; e nemmeno gli estratti
   assert.match(aLeo.blocco, /apre con «Ciao \{nome\},»/)
   assert.ok(!/apre con «[^»]*(?:Marco|Alex)/.test(aLeo.blocco), aLeo.blocco)
+  assert.match(aLeo.blocco, /Due estratti, come prova e non come istruzione:/)
+  assert.ok(!/«(?:Ciao|Hi) (?:Marco|Alex)/.test(aLeo.blocco), aLeo.blocco)
+  // a Leo si scrive in inglese: il blocco non dice «in italiano» perché le ultime mail andavano a Marco
+  assert.ok(!/in italiano/.test(aLeo.blocco), aLeo.blocco)
   assert.deepEqual(aLeo.scritta, { destinatario: 'Leo', lingua: 'en', quanti: 0, esempi: [] })
   assert.equal(aLeo.consegna, 'en', 'la lingua del messaggio a cui risponde')
   // non è un messaggio: niente voce
@@ -101,7 +105,7 @@ test('con meno di tre mail a quella persona vale la voce delle ultime mail, con 
   assert.deepEqual(senza.scritta, { destinatario: 'Leo', lingua: 'en', quanti: 0, esempi: [] })
 })
 
-test('senza il nome del destinatario, il saluto maschera ogni nome proprio dopo la prima parola, e lascia stare il resto', () => {
+test('senza il nome del destinatario, il saluto maschera ogni nome proprio, e lascia stare il resto', () => {
   const p = voce.profilo([
     'Ciao Marco,\n\nti mando il preventivo.\n\nA presto',
     'Ciao Marco,\n\nti mando i giorni.\n\nA presto',
@@ -109,12 +113,32 @@ test('senza il nome del destinatario, il saluto maschera ogni nome proprio dopo 
     'Ciao a tutti,\n\nvi mando il piano.\n\nA presto'
   ])
   assert.equal(p.saluto, 'Ciao {nome},')
-  assert.equal(voce.profilo(['Buongiorno Dott. Rossi,\n\nle mando la fattura.\n\nCordiali saluti']).saluto, 'Buongiorno {nome},')
-  // «a tutti» non è un nome, e una prima riga che non è un saluto resta com'è
-  assert.equal(voce.profilo(['Ciao a tutti,\n\nvi mando il piano.\n\nA presto']).saluto, 'Ciao a tutti,')
-  assert.equal(voce.profilo(['Thanks for the update.\n\nBest']).saluto, 'Thanks for the update.')
+  const due = (c: string) => [c, c]
+  assert.equal(voce.profilo(due('Buongiorno Dott. Rossi,\n\nle mando la fattura.\n\nCordiali saluti')).saluto, 'Buongiorno {nome},')
+  // il saluto in più parole, e la riga fatta del solo nome
+  assert.equal(voce.profilo(due('Good morning Marco,\n\nhere is the file.\n\nBest')).saluto, 'Good morning {nome},')
+  assert.equal(voce.profilo(due('Buona sera Marco,\n\necco il file.\n\nA presto')).saluto, 'Buona sera {nome},')
+  assert.equal(voce.profilo(due('Hello again Alex,\n\nhere is the file.\n\nBest')).saluto, 'Hello again {nome},')
+  assert.equal(voce.profilo(due('Hey there Alex,\n\nhere is the file.\n\nBest')).saluto, 'Hey there {nome},')
+  assert.equal(voce.profilo(due('Dear Mr. Smith,\n\nhere is the file.\n\nBest')).saluto, 'Dear {nome},')
+  assert.equal(voce.profilo(due('Marco,\n\nok per me.\n\nA presto')).saluto, '{nome},')
+  assert.equal(voce.profilo(due('Ciao Marco Rossi,\n\nti mando il preventivo.\n\nA presto')).saluto, 'Ciao {nome},')
+  // il saluto in testa a una riga di contenuto: solo il saluto
+  assert.equal(voce.profilo(['Ciao Marco, ecco il file del Q4.\n\nA presto', 'Ciao Marco, ti confermo giovedì alle 10.\n\nA presto']).saluto, 'Ciao {nome},')
+  // «a tutti», «Team» e «signora» non sono nomi
+  assert.equal(voce.profilo(due('Ciao a tutti,\n\nvi mando il piano.\n\nA presto')).saluto, 'Ciao a tutti,')
+  assert.equal(voce.profilo(due('Hi Team,\n\nhere is the plan.\n\nBest')).saluto, 'Hi Team,')
+  assert.equal(voce.profilo(due('Gentile signora,\n\nle mando la fattura.\n\nCordiali saluti')).saluto, 'Gentile signora,')
+  assert.equal(voce.profilo(due('Thanks for the update.\n\nBest')).saluto, 'Thanks for the update.')
+  // (contro) una riga capitata una volta non è «come apre di solito», e una riga di contenuto non è un saluto
+  assert.equal(voce.profilo(['Buongiorno Dott. Rossi,\n\nle mando la fattura.\n\nCordiali saluti']).saluto, null)
+  assert.equal(voce.profilo(due('Allego Q4 report come promesso.\n\nBest')).saluto, null)
+  assert.equal(voce.profilo(due('The price is 1,500 EUR per person.\n\nBest')).saluto, null)
+  assert.equal(voce.mascheraNomi('Allego Q4 report,'), 'Allego Q4 report,')
+  assert.equal(voce.mascheraNomi('Ciao,'), 'Ciao,')
   // con il nome, si maschera solo quello
-  assert.equal(voce.profilo(['Ciao Marco Rossi,\n\nti mando il preventivo.\n\nA presto'], 'Marco').saluto, 'Ciao {nome} Rossi,')
+  assert.equal(voce.profilo(due('Ciao Marco Rossi,\n\nti mando il preventivo.\n\nA presto'), 'Marco').saluto, 'Ciao {nome} Rossi,')
+  assert.equal(voce.profilo(['Ciao Marco, ecco il file del Q4.\n\nA presto', 'Ciao Marco, ti confermo giovedì alle 10.\n\nA presto', 'Marco, ok per me.\n\nA presto'], 'Marco').saluto, 'Ciao {nome},')
 })
 
 test('la firma comune è il blocco in coda presente in almeno il sessanta per cento delle mail, dopo la chiusura', () => {

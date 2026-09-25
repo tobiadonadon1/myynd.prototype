@@ -152,12 +152,67 @@ export function senzaFirma(corpo: string, firmaDa: string[] = firma()): string {
   return corpo.trim()
 }
 
-function piuFrequente(valori: string[]): string | null {
+function piuFrequente(valori: string[], almeno = 1): string | null {
   const conta = new Map<string, number>()
   for (const v of valori) if (v) conta.set(v, (conta.get(v) ?? 0) + 1)
   let vince: string | null = null; let max = 0
   for (const [v, n] of conta) if (n > max) { vince = v; max = n }
-  return vince
+  return max >= almeno ? vince : null
+}
+
+/**
+ * La riga di apertura, se ne ha la forma: corta e chiusa da una virgola o
+ * da due punti («Ciao Marco,», anche in testa a «Ciao Marco, ecco il file»),
+ * oppure poche parole. Una riga qualunque di contenuto non è un saluto, e
+ * una cifra con la virgola dentro nemmeno.
+ */
+export function salutoDi(prima: string): string | null {
+  const r = prima.trim()
+  const m = r.match(/^([^,:;!?]{1,40}[,:])(?=\s|$)/)
+  if (m) return m[1].trim()
+  if (r.length <= 40 && r.split(/\s+/).length <= 4) return r
+  return null
+}
+
+/** Le parole che aprono un saluto senza essere un nome: non si mascherano. */
+const NON_NOMI = new Set(['ciao', 'salve', 'buongiorno', 'buonasera', 'buona', 'buon', 'gentile', 'gentilissimo', 'gentilissima', 'egregio', 'egregia', 'spettabile', 'caro', 'cara', 'carissimo', 'carissima', 'grazie', 'signora', 'signore', 'signori', 'signorina', 'team', 'tutti', 'tutte', 'ragazzi', 'colleghi', 'hi', 'hello', 'hey', 'dear', 'good', 'morning', 'afternoon', 'evening', 'thanks', 'thank', 'greetings', 'all', 'again', 'there', 'everyone', 'folks', 'sir', 'madam', 'friends'])
+const TITOLO = /^(?:dott|dott\.ssa|dr|mr|mrs|ms|miss|sig|sig\.ra|prof|ing|avv|on)\.?$/i
+/** Un nome proprio: maiuscola in testa e almeno una minuscola («Marco», «D'Angelo»; non «Q4», non «SVG»). */
+const NOME = /^\p{Lu}(?=[\p{L}'’-]*\p{Ll})[\p{L}'’-]*$/u
+
+/**
+ * Ogni nome proprio nel saluto diventa «{nome}», titolo compreso: «Ciao
+ * Marco,» «Good morning Marco,» «Dear Mr. Smith,» e la riga fatta del solo
+ * nome («Marco,»). «Ciao a tutti,» e «Hi Team,» restano come sono: non c'è
+ * nessuno da non nominare.
+ */
+export function mascheraNomi(saluto: string): string {
+  const parole = saluto.split(/\s+/).filter(Boolean)
+  const coda = (p: string) => p.match(/[,:!.]+$/)?.[0] ?? ''
+  // una virgola chiude il nome («Ciao Marco, Rossi» sono due cose); il punto di un titolo («Dott.») no
+  const chiude = (p: string) => /[,:!]$/.test(p)
+  const nudo = (p: string) => p.replace(/[,:!.]+$/, '')
+  const titolo = (p: string) => TITOLO.test(nudo(p))
+  const nome = (p: string) => NOME.test(nudo(p)) && !NON_NOMI.has(nudo(p).toLowerCase())
+  // la riga fatta del solo nome (con o senza cognome): tutta un nome
+  const da = parole.length <= 2 && nome(parole[0]) ? 0 : 1
+  for (let i = da; i < parole.length; i++) {
+    if (!titolo(parole[i]) && !nome(parole[i])) continue
+    let j = i
+    while (j < parole.length && (titolo(parole[j]) || nome(parole[j])) && (j === i || !chiude(parole[j - 1]))) j++
+    // un titolo da solo non è un nome
+    if (!parole.slice(i, j).some(nome)) { i = j; continue }
+    return [...parole.slice(0, i), `{nome}${coda(parole[j - 1])}`, ...parole.slice(j)].join(' ')
+  }
+  return saluto
+}
+
+/** La testa di un estratto senza il nome di chi lo riceveva: il resto com'è. */
+function senzaNomeInTesta(corpo: string): string {
+  const [prima, ...resto] = corpo.split('\n')
+  const s = salutoDi(prima)
+  if (!s) return corpo
+  return [prima.replace(s, mascheraNomi(s)), ...resto].join('\n')
 }
 
 const LEI = /\b(?:gentile|egregi[oa]|spett\.?|lei|la ringrazio|le scrivo|le mando|le invio|sua|suo|cordiali)\b/i
@@ -169,13 +224,16 @@ export function profilo(corpi: string[], nome = ''): Profilo {
   let it = 0, en = 0
   for (const c of corpi) { if (sembraItaliano(c)) it++; else if (sembraInglese(c)) en++ }
   const lingua: Profilo['lingua'] = it > en ? 'it' : en > it ? 'en' : null
-  // il nome nel saluto diventa «{nome}»: quello del destinatario se lo si sa,
-  // altrimenti ogni nome proprio dopo la prima parola («Ciao Marco,» delle sue
-  // ultime mail non è il saluto per Giulia, e un modello lo ricopierebbe)
+  // il saluto è la riga di apertura quando ne ha la forma, e vale solo se
+  // torna almeno due volte: una riga di contenuto capitata una volta non è
+  // «come apre di solito». Il nome dentro diventa «{nome}»: quello del
+  // destinatario se lo si sa, altrimenti ogni nome proprio («Ciao Marco,»
+  // delle sue ultime mail non è il saluto per Giulia, e un modello lo
+  // ricopierebbe)
   const maschera = (r: string) => nome
     ? r.replace(new RegExp(`\\b${nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), '{nome}')
-    : r.replace(/^(\S+\s+)(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)*)/u, '$1{nome}')
-  const saluto = piuFrequente(tutte.map(r => maschera(r[0])))
+    : mascheraNomi(r)
+  const saluto = piuFrequente(tutte.map(r => { const s = salutoDi(r[0]); return s ? maschera(s) : '' }), 2)
   const chiusura = piuFrequente(tutte.map(r => { const fine = r.slice(1).reverse().find(x => CHIUSURA.test(x)); return fine ?? '' }))
   const conteggi = corpi.map(c => c.split(/\s+/).filter(Boolean).length).sort((a, b) => a - b)
   const a = (q: number) => conteggi.length ? conteggi[Math.min(conteggi.length - 1, Math.floor((conteggi.length - 1) * q))] : 0
@@ -242,7 +300,12 @@ export function perRiga(c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>): Voce 
       : null
   }
   const p = profilo(ultime)
-  const blocco = bloccoDi(p, 'Come scrive di solito, dalle ultime mail che ha mandato:', ultime)
+  // la voce di tutti i giorni, ma per questa persona: gli estratti senza il
+  // nome di chi li riceveva, e la lingua solo se è quella in cui si scrive a
+  // lei (a chi scrive in inglese non si dice «in italiano» perché le ultime
+  // mail andavano a Marco)
+  const perLei = { ...p, lingua: linguaDoc && p.lingua && linguaDoc !== p.lingua ? null : p.lingua }
+  const blocco = bloccoDi(perLei, 'Come scrive di solito, dalle ultime mail che ha mandato:', ultime.map(senzaNomeInTesta))
   return {
     blocco, consegna: linguaDoc, profilo: { ...p, quanti: 0 }, destinatario,
     scritta: destinatario ? { destinatario: destinatario.nome, lingua: linguaDoc, quanti: 0, esempi: [] } : null

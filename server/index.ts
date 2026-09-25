@@ -1879,7 +1879,7 @@ app.post('/api/connettori/whatsapp', async (req, res) => {
     if (!e.ok) return res.status(400).json({ errore: e.errore })
     cfg.aggiorna({ whatsapp: { ...c, etichetta: e.etichetta, arrivati: 0 } })
     // la sonda è appena riuscita: il guaio del token si chiude adesso, non domani
-    if (saluteFonti.sondaWhatsapp(e, Date.now() - inizio).cambiato) compiti.annunciaCollegamento()
+    if (saluteFonti.sondaWhatsapp(e, Date.now() - inizio).cambiato) compiti.annunciaSalute()
     res.json({ ok: true, etichetta: e.etichetta })
   } catch (e) { errore(res, e) }
 })
@@ -2026,7 +2026,8 @@ async function leggiTutto(
    * lettura dopo — a mano o delle sei ore — la toglie da sola quando trova
    * la fonte a posto. Per questo si osserva qui, dove passano tutte.
    */
-  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: () => compiti.annunciaCollegamento() })
+  // un cambio di salute è un fatto per la riga fissa, non un collegamento in più: le righe ferme (P3) non si riprendono per questo
+  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: () => compiti.annunciaSalute() })
   try {
     return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo)
   } finally { oss.chiudi(fermo()) }
@@ -4582,17 +4583,22 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
       const r = await revisioni.rivediDaCorrezione(c.id, testo)
       // la stessa correzione due volte è una revisione sola, e una correzione sola
       contata = !r.giaAvviato
-      // la correzione è passata alla figlia: la riga madre non ha più un'ipotesi da cambiare
-      lavoroDati.scriviIpotesi(c.id, null)
+      // la correzione è passata alla figlia: la riga madre non ha più un'ipotesi
+      // da cambiare, e la riga «Ho supposto …» le esce anche dal testo (sotto
+      // la figlia che la rifà, il dato appena corretto non resta come riga sua)
+      lavoroDati.passaIpotesi(c.id)
     } else {
       // la nota dice cosa cambia e al posto di cosa: «Friday» da solo, senza
       // l'ipotesi che corregge, chi rifà il lavoro non sa dove metterlo.
       // Nella lingua dell'app, perché la riga la mostra mentre lavora
       const en = cfg.lingua() === 'en'
       const manca = /^(?:manca|mancano|missing)\b/i.test(riga)
+      // La correzione prima, la riga che sostituisce dopo: la riga che lavora
+      // mostra la nota in due righe, e una riga lunga citata per prima
+      // nascondeva quello che aveva appena scritto lei
       const correzione = manca
-        ? (en ? `In place of «${riga}»: ${testo}` : `Al posto di «${riga}»: ${testo}`)
-        : (en ? `Instead of «${riga}»: ${testo}` : `Invece di «${riga}»: ${testo}`)
+        ? (en ? `${testo}, in place of «${riga}»` : `${testo}, al posto di «${riga}»`)
+        : (en ? `${testo}, instead of «${riga}»` : `${testo}, invece di «${riga}»`)
       store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${correzione}` : correzione })
       store.cambiaStatoCompito(c.id, 'aperto')
       store.sbozzaCompito(c.id)
