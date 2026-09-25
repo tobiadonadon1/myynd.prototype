@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  Il mostriciattolo sullo schermo: una pagina ferma, un'immagine e un puntino.
+  Lo stato (guarda, attesa) lo manda il guscio; i gesti li legge compagno.js.
+-->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; script-src 'self'; style-src 'unsafe-inline'">
+<title>Myynd</title>
+<style>
+  html, body { margin: 0; width: 64px; height: 64px; overflow: hidden; background: transparent; user-select: none; -webkit-user-select: none; cursor: default }
+  img { position: absolute; left: 8px; top: 8px; width: 48px; height: 48px; display: block; -webkit-user-drag: none; pointer-events: none }
+  body.animata img { transition: filter .2s, opacity .2s }
+  body.spenta img { filter: grayscale(1); opacity: .45 }
+  #punto { position: absolute; right: 7px; bottom: 7px; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #22271F; box-shadow: 0 0 0 2px #F2E9DC; display: none }
+  body.attesa #punto { display: block }
+</style>
+</head>
+<body class="spenta">
+<img src="icone/compagno.png" width="48" height="48" alt="" draggable="false">
+<div id="punto"></div>
+<script src="compagno.js"></script>
+</body>
+</html>
