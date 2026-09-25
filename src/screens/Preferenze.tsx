@@ -111,7 +111,7 @@ function LApp() {
   const inCorso = chiedo || agg?.stato === 'controllo' || agg?.stato === 'scarico'
 
   return (
-    <Carta titolo={t('L’app')} id="app" stato={guaio || undefined} statoRame>
+    <Carta titolo={t('L’app')} id="app" larga stato={guaio || undefined} statoRame>
       <div className="f-riga">
         <div>
           <div className="f-nome">{t('Versione')} {d.versione} · {nomePiattaforma(d.piattaforma)}</div>
@@ -300,7 +300,7 @@ function Fascicolo({ v }: { v: Vals }) {
   }
 
   return (
-    <Carta titolo={t('I tuoi dati')} id="dati">
+    <Carta titolo={t('I tuoi dati')} id="dati" larga>
       <div className="f-stato">
         {v.ospitato ? frasi.doveStannoIDatiServer() : <code>{dati || '~/.myynd'}</code>}
       </div>

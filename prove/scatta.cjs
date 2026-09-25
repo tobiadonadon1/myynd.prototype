@@ -39,8 +39,9 @@ const PASSI = process.env.PASSI ? JSON.parse(fs.readFileSync(process.env.PASSI, 
 
 if (!URL) { console.error('scatta · manca URL'); process.exit(1) }
 
-// il cane da guardia: qualunque cosa succeda, fra due minuti si esce
-setTimeout(() => { console.error('scatta · 120 s passati: esco'); app.exit(1) }, 120_000).unref()
+// il cane da guardia: qualunque cosa succeda, fra due minuti si esce (col passo a passo di P5, dieci minuti per passo)
+let cane = setTimeout(() => { console.error('scatta · 120 s passati: esco'); app.exit(1) }, 120_000)
+cane.unref()
 
 // i dati di Electron: nella cartella che dà scena.sh (che la butta alla fine),
 // o in una temporanea che si butta uscendo
@@ -75,7 +76,9 @@ async function main() {
   const w = new BrowserWindow({
     show: false, width: LARGA, height: ALTA, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 19, y: 15 },
     backgroundColor: TEMA === 'scuro' ? '#1F1A17' : '#F2E9DC',
-    webPreferences: { preload: path.join(__dirname, 'finto-guscio.cjs'), contextIsolation: false, sandbox: false }
+    // — P5: inizio — (una finestra nascosta non deve rallentare: le misure dei tempi sarebbero false)
+    webPreferences: { preload: path.join(__dirname, 'finto-guscio.cjs'), contextIsolation: false, sandbox: false, backgroundThrottling: false }
+    // — P5: fine —
   })
   const js = codice => w.webContents.executeJavaScript(codice)
   await w.loadURL(URL)
@@ -87,7 +90,8 @@ async function main() {
   if (!LASCIA_FINESTRE) for (let i = 0; i < 4 && await js(VIA_DIALOGHI); i++) await pausa(500)
 
   const file = (nome, est) => path.join(OUT, `${nome}-${TEMA}-${LARGA}.${est}`)
-  for (const p of PASSI) {
+  for await (const p of p5Passi(PASSI, OUT, () => { clearTimeout(cane); cane = setTimeout(() => { console.error('scatta · 10 min senza un passo: esco'); app.exit(1) }, 600_000); cane.unref() })) {
+    if (await p5Passo(p, { w, js, OUT, TEMA, LARGA, pausa, TROVA, PREMIBILI, SEMAFORI })) continue
     if (p.vai || p.clicca) {
       const nome = p.vai || p.clicca
       let ok = false
@@ -142,5 +146,87 @@ async function main() {
   }
   app.quit()
 }
+
+// — P5: inizio —
+// Tre passi nuovi e il passo a passo, per le prove di chiarezza (P5):
+//   { "elenco": "nome" }    <OUT>/<nome>-<tema>-<larga>.json: gli elementi che si premono o si scrivono, visibili, col nome accessibile
+//   { "misura": "nome" }    preme quell'elemento e aggiunge a <OUT>/misure.jsonl i ms fino al primo cambio dentro la sua scheda
+//   { "metriche": "nome" }  cinque secondi fermi, poi <OUT>/<nome>-<tema>-<larga>-metriche.json: CPU e GPU sommate di Electron
+// MODO=passo: niente PASSI; dopo ogni azione passo-N.png e passo-N.json in OUT, poi si aspetta OUT/azione-N.json
+// ({ "clicca": "…" } | { "scrivi": "…", "in": "…" } | { "premi": "Enter" } | { "fine": true }), ogni 200 ms, per dieci minuti al più.
+// Chi cammina vede solo le foto e l'elenco: niente indirizzi, niente codice nella pagina.
+const ELENCO = `(() => {
+  const sel = 'a,button,input,textarea,select,[role=button],[role=switch],[role=radio],[role=menuitem],[role=tab],[role=link],summary'
+  return [...document.querySelectorAll(sel)].filter(e => { const r = e.getBoundingClientRect(); const st = getComputedStyle(e); return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.opacity !== '0' && r.bottom > 0 && r.top < innerHeight }).map(e => {
+    const r = e.getBoundingClientRect()
+    const ruolo = e.getAttribute('role') || (e.tagName === 'A' ? 'link' : e.tagName === 'INPUT' ? (e.type === 'checkbox' ? 'checkbox' : 'campo') : e.tagName === 'TEXTAREA' ? 'campo' : e.tagName.toLowerCase())
+    const lab = e.getAttribute('aria-labelledby') ? (document.getElementById(e.getAttribute('aria-labelledby')) || {}).textContent : ''
+    const perLabel = e.id ? (document.querySelector('label[for="' + e.id + '"]') || {}).textContent : ''
+    const nome = (e.getAttribute('aria-label') || lab || perLabel || e.getAttribute('title') || e.getAttribute('placeholder') || e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120)
+    const stato = e.getAttribute('aria-checked') ?? e.getAttribute('aria-current') ?? e.getAttribute('aria-expanded')
+    return { ruolo, nome, testo: ('value' in e && e.tagName !== 'BUTTON' ? String(e.value) : '').slice(0, 200), ...(stato != null ? { stato } : {}), rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] }
+  })
+})()`
+const MISURA = (nome, trova) => `new Promise(fatto => {
+  const e = ${trova}
+  if (!e) return fatto(null)
+  const casa = e.closest('[data-scheda],article,section,main') || document.body
+  const t0 = performance.now()
+  const o = new MutationObserver(() => { o.disconnect(); fatto(Math.round((performance.now() - t0) * 10) / 10) })
+  o.observe(casa, { subtree: true, childList: true, attributes: true, characterData: true })
+  setTimeout(() => { o.disconnect(); fatto(-1) }, 3000)
+  e.click()
+})`
+
+async function* p5Passi(passi, out, rinnova) {
+  if (process.env.MODO !== 'passo') { yield* passi; return }
+  for (let n = 0; ; n++) {
+    yield { p5Foto: `passo-${n}` }
+    const f = path.join(out, `azione-${n}.json`)
+    rinnova()
+    let a = null
+    for (let i = 0; i < 3000 && !a; i++) {
+      try { a = JSON.parse(fs.readFileSync(f, 'utf8')) } catch { await new Promise(r => setTimeout(r, 200)) }
+    }
+    if (!a || a.fine) return
+    yield a
+    yield { aspetta: 700 }
+  }
+}
+
+async function p5Passo(p, { w, js, OUT, TEMA, LARGA, pausa, TROVA, PREMIBILI, SEMAFORI }) {
+  const file = (nome, est) => path.join(OUT, `${nome}-${TEMA}-${LARGA}.${est}`)
+  if (p.elenco) {
+    fs.writeFileSync(file(p.elenco, 'json'), JSON.stringify(await js(ELENCO), null, 1))
+    console.log(`scatta · elenco ${p.elenco}`)
+    return true
+  }
+  if (p.misura) {
+    const ms = await js(MISURA(p.misura, TROVA(p.misura, PREMIBILI + ',[role=switch],[role=radio]')))
+    fs.appendFileSync(path.join(OUT, 'misure.jsonl'), JSON.stringify({ nome: p.misura, ms, tema: TEMA, larga: LARGA }) + '\n')
+    console.log(`scatta · misura «${p.misura}»: ${ms === null ? 'NON TROVATO' : ms + ' ms'}`)
+    await pausa(400)
+    return true
+  }
+  if (p.metriche) {
+    const somma = () => app.getAppMetrics().reduce((a, m) => { a.cpu += m.cpu.percentCPUUsage; if (m.type === 'GPU') a.gpu += m.cpu.percentCPUUsage; return a }, { cpu: 0, gpu: 0 })
+    somma()
+    await pausa(5000)
+    const s = somma()
+    fs.writeFileSync(file(`${p.metriche}-metriche`, 'json'), JSON.stringify({ cpu: Math.round(s.cpu * 10) / 10, gpu: Math.round(s.gpu * 10) / 10 }))
+    console.log(`scatta · metriche ${p.metriche}: cpu ${s.cpu.toFixed(1)}%, gpu ${s.gpu.toFixed(1)}%`)
+    return true
+  }
+  if (p.p5Foto) {
+    await js(SEMAFORI)
+    await pausa(350)
+    fs.writeFileSync(path.join(OUT, `${p.p5Foto}.png`), (await w.webContents.capturePage()).toPNG())
+    fs.writeFileSync(path.join(OUT, `${p.p5Foto}.json`), JSON.stringify(await js(ELENCO), null, 1))
+    console.log(`scatta · ${p.p5Foto}`)
+    return true
+  }
+  return false
+}
+// — P5: fine —
 
 app.whenReady().then(main).catch(e => { console.error('scatta ·', e && e.message ? e.message : e); app.exit(1) })

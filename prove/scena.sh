@@ -104,7 +104,7 @@ if [[ "${FOTO:-1}" != "0" ]]; then
     # il tema sta anche sul profilo, e il profilo vince sul browser: si dice a tutti e due
     curl -s -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -X POST $B/api/profilo -d "{\"tema\":\"$tema\"}" > /dev/null
     for larga in ${=LARGHEZZE}; do
-      env -i $AMBIENTE URL=$B/ OUT="$OUT" TEMA=$tema LARGA=$larga TOKEN=$TOKEN DATI_ELECTRON="$T/electron-$tema-$larga" ${PASSI:+PASSI="$PASSI"} ${AGENDA_FINTA:+AGENDA_FINTA=$AGENDA_FINTA} \
+      env -i $AMBIENTE URL=$B/ OUT="$OUT" TEMA=$tema LARGA=$larga TOKEN=$TOKEN DATI_ELECTRON="$T/electron-$tema-$larga" ${PASSI:+PASSI="$PASSI"} ${AGENDA_FINTA:+AGENDA_FINTA=$AGENDA_FINTA} ${MODO:+MODO=$MODO} ${ALTA:+ALTA=$ALTA} \
         node_modules/.bin/electron prove/scatta.cjs 2>> "$OUT/electron.log" | tee -a "$OUT/scatta.log"
     done
   done
