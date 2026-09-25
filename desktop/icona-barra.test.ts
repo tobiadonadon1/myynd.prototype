@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { iconaPer, suggerimento, vociCompagno, vociMenu } from './icona-barra.ts'
+import { iconaPer, smorto, suggerimento, vociCompagno, vociMenu } from './icona-barra.ts'
 import { imposta, t } from './lingua.ts'
 
 const ICONE = fileURLToPath(new URL('./icone/', import.meta.url))
@@ -23,12 +23,21 @@ test('iconaPer: le otto combinazioni, e ogni file c’è', () => {
     const mac = iconaPer({ guarda, attesa, piattaforma: 'darwin' })
     const win = iconaPer({ guarda, attesa, piattaforma: 'win32' })
     assert.equal(mac, `${nome}.png`)
-    assert.equal(win, `${nome}.ico`)
+    // su Windows l'osservatore non c'è: mai smorto
+    assert.equal(win, `${nome.replace('Spenta', '')}.ico`)
     assert.ok(existsSync(ICONE + mac), mac)
     assert.ok(existsSync(ICONE + `${nome}@2x.png`), `${nome}@2x.png`)
     assert.ok(existsSync(ICONE + win), win)
+    assert.ok(existsSync(ICONE + `${nome}.ico`), `${nome}.ico`)
   }
   assert.ok(existsSync(ICONE + 'compagno.png'))
+})
+
+test('smorto: solo sul Mac e solo quando non guarda', () => {
+  assert.equal(smorto({ guarda: false, piattaforma: 'darwin' }), true)
+  assert.equal(smorto({ guarda: true, piattaforma: 'darwin' }), false)
+  assert.equal(smorto({ guarda: false, piattaforma: 'win32' }), false)
+  assert.equal(smorto({ guarda: true, piattaforma: 'win32' }), false)
 })
 
 test('iconaPer: i segni di prima restano nella cartella', () => {

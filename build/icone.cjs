@@ -124,8 +124,12 @@ function mascotteA(ritaglio, lato) {
 }
 
 /**
- * Il mostriciattolo nella barra a `n` pixel: a colori, o smorto (grigio al
- * 45%), con o senza il puntino. Il puntino è quello del segno di Windows:
+ * Il mostriciattolo nella barra a `n` pixel: a colori, o smorto, con o senza
+ * il puntino. Smorto vuol dire grigio e non trasparente: al 45% di opacità
+ * sulla barra scura era grigio scuro su quasi nero (contrasto 1,8 a 1) e non
+ * si trovava più il posto dove si clicca per aprire Myynd. Grigio pieno,
+ * schiarito di un 5%, ha lo stesso contrasto del mostriciattolo a colori su
+ * tutte e due le barre (circa 3,8 a 1) e dice «spento» col colore che manca. Il puntino è quello del segno di Windows:
  * inchiostro con un anello color crema, in basso a destra, a piena opacità
  * anche sul mostriciattolo smorto. Misure a 18 px, scalate: raggio 3,2,
  * anello 1,2, centro a 14,3.
@@ -135,7 +139,7 @@ function htmlBarra(ritaglio, n, { spenta, attesa }) {
   const m = mascotteA(ritaglio, Math.round(n - margine * 2))
   const x = Math.round((n - m.w) / 2)
   const y = Math.round((n - m.h) / 2)
-  const filtro = spenta ? 'filter:grayscale(1);opacity:.45;' : ''
+  const filtro = spenta ? 'filter:grayscale(1) brightness(1.05);' : ''
   const k = n / 18
   const punto = !attesa ? ''
     : `<svg width="${n}" height="${n}" viewBox="0 0 ${n} ${n}" style="position:absolute;left:0;top:0">`
