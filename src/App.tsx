@@ -451,9 +451,10 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             <IconSpunta size={15} style={{ flex: 'none' }} />
             {!rail && <span style={{ flex: 1 }}>{t('Da fare')}</span>}
             {/* l'accento qui vuol dire quello che vuol dire dappertutto:
-                qualcosa aspetta una persona */}
-            {(lista.pronte > 0 || lista.chiedono > 0) && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? 'var(--avorio)' : 'var(--rame)' }} />}
-            {!rail && lista.pronte === 0 && lista.chiedono === 0 && lista.daFare > 0 && <span style={v.badge}>{lista.daFare}</span>}
+                qualcosa aspetta una persona (le stesse righe che contano
+                il Dock e la barra dei menù: una regola sola) */}
+            {lista.inAttesa > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? 'var(--avorio)' : 'var(--rame)' }} />}
+            {!rail && lista.inAttesa === 0 && lista.daFare > 0 && <span style={v.badge}>{lista.daFare}</span>}
           </a>
           <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             {/* Myynd ha scritto: il fumetto si accende di rame e il pallino salta, finché non gli rispondi */}

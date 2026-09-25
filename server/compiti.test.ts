@@ -1384,6 +1384,41 @@ test('P3 · (contro) un cambio di salute di una fonte (P8) non riprende una riga
   smetti(); o.smetti()
 })
 
+test('P3 · (contro) con la chiave del motore respinta (P8) una riga ferma non si riprende, e tiene «la riprendo da qui»; con la chiave a posto sì', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  const lavoroDati = await import('./lavoro-dati.ts')
+  compiti.scordaRiprese()
+  // il motore respinge la chiave: ogni lavoro muore sulla chiave
+  let respinta = true
+  let chiamate = 0
+  const svolgi: Ferri['svolgi'] = async () => {
+    chiamate++
+    if (respinta) throw new Error('Claude ha rifiutato la chiave: controllala nelle Fonti.')
+    return { testo: 'Done: the note.\n\nThe note about the Notion page, long enough to be a note and not a status line.', fonti: [], lette: [] }
+  }
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, motoreRifiutato: () => respinta })
+  const id = riga('Summarize the Notion page, with the key refused')
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, new Date().toISOString(), id)
+  assert.ok(lavoroDati.bloccatiDaRiprendere().some(c => c.id === id))
+  const o = orecchio(id)
+  // un collegamento annunciato mentre la chiave è respinta: la riga non parte,
+  // e non perde la frase del blocco (prima ci finiva sopra il guaio della chiave)
+  compiti.annunciaCollegamento()
+  await pausa(200)
+  assert.equal(chiamate, 0, 'ripresa con la chiave respinta')
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  assert.equal(store.compito(id)!.guaio, BLOCCHI.fonte)
+  assert.ok(lavoroDati.bloccatiDaRiprendere().some(c => c.id === id), 'non è più una riga ferma')
+  assert.ok(!o.sentiti.some(e => e.fase === 'guaio'))
+  // la chiave torna buona (incollata di nuovo: POST sui connettori, quindi un collegamento): si riprende, senza aspettare un giorno
+  respinta = false
+  compiti.annunciaCollegamento()
+  await o.aspetta('pronto')
+  assert.equal(chiamate, 1)
+  assert.equal(store.compito(id)!.guaio, null)
+  o.smetti()
+})
+
 test('P3 · (contro) un lavoro sul codice che finisce «chiede» e una revisione della bozza fallita non toccano domandeFatte né le misure', async () => {
   const lavoroDati = await import('./lavoro-dati.ts')
   // il lavoro sul codice (la rotta `lavora` di index.ts) scrive il risultato da sé, con lo stato del giro

@@ -681,11 +681,11 @@ export function useCompiti(
   /**
    * Quante cose aspettano una persona, dette al guscio dell'app.
    *
-   * Sono le stesse due che accendono il punto sulla voce «Da fare»: una bozza
-   * pronta da leggere e una domanda che Myynd ha fatto e a cui nessuno ha
-   * ancora risposto; e con loro una riga ferma su una fonte che manca o su
-   * un dato che nessuna fonte aveva (P3), che in prima pagina pesa come una
-   * domanda e come una domanda aspetta lui. Non le righe aperte — quelle
+   * Sono le stesse che accendono il punto sulla voce «Da fare», una regola
+   * sola per i due segni: una bozza pronta da leggere e una domanda che Myynd
+   * ha fatto e a cui nessuno ha ancora risposto; e con loro una riga ferma su
+   * una fonte che manca o su un dato che nessuna fonte aveva (P3), che in
+   * prima pagina pesa come una domanda e come una domanda aspetta lui. Non le righe aperte — quelle
    * sono la lista, e una lista di dieci cose non è dieci interruzioni — e
    * non quelle affidate, che stanno lavorando e non chiedono niente. Il
    * segno nella barra dei menù e il numero sul Dock vogliono dire una cosa
@@ -711,6 +711,8 @@ export function useCompiti(
     ripristinata: (id: string) => ripristinate.current.has(id),
     quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
+    /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
+    inAttesa,
     aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita

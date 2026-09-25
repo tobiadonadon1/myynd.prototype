@@ -175,15 +175,21 @@ export function salutoDi(prima: string): string | null {
 }
 
 /** Le parole che aprono un saluto senza essere un nome: non si mascherano. */
-const NON_NOMI = new Set(['ciao', 'salve', 'buongiorno', 'buonasera', 'buona', 'buon', 'gentile', 'gentilissimo', 'gentilissima', 'egregio', 'egregia', 'spettabile', 'caro', 'cara', 'carissimo', 'carissima', 'grazie', 'signora', 'signore', 'signori', 'signorina', 'team', 'tutti', 'tutte', 'ragazzi', 'colleghi', 'hi', 'hello', 'hey', 'dear', 'good', 'morning', 'afternoon', 'evening', 'thanks', 'thank', 'greetings', 'all', 'again', 'there', 'everyone', 'folks', 'sir', 'madam', 'friends'])
+const NON_NOMI = new Set(['ciao', 'salve', 'buongiorno', 'buonasera', 'buona', 'buon', 'gentile', 'gentilissimo', 'gentilissima', 'egregio', 'egregia', 'spettabile', 'caro', 'cara', 'carissimo', 'carissima', 'grazie', 'signora', 'signore', 'signori', 'signorina', 'team', 'tutti', 'tutte', 'ragazzi', 'colleghi', 'hi', 'hello', 'hey', 'dear', 'good', 'morning', 'afternoon', 'evening', 'thanks', 'thank', 'greetings', 'all', 'again', 'there', 'everyone', 'folks', 'sir', 'madam', 'friends',
+  // i saluti delle altre lingue: non sono nomi nemmeno loro
+  'hola', 'buenos', 'buenas', 'días', 'dias', 'tardes', 'noches', 'querido', 'querida', 'estimado', 'estimada', 'salut', 'bonjour', 'bonsoir', 'cher', 'chère', 'chere', 'hallo', 'guten', 'tag', 'morgen', 'abend', 'liebe', 'lieber', 'moin', 'servus', 'hej', 'hei', 'hoi', 'olá', 'ola', 'oi', 'bom', 'boa', 'dia', 'tarde', 'noite'])
 const TITOLO = /^(?:dott|dott\.ssa|dr|mr|mrs|ms|miss|sig|sig\.ra|prof|ing|avv|on)\.?$/i
 /** Un nome proprio: maiuscola in testa e almeno una minuscola («Marco», «D'Angelo»; non «Q4», non «SVG»). */
 const NOME = /^\p{Lu}(?=[\p{L}'’-]*\p{Ll})[\p{L}'’-]*$/u
+/** Quello che lega due nomi in un saluto a due persone: «Marco e Giulia», «Marco and Giulia», «Marco & Giulia». */
+const GIUNTA = /^(?:e|ed|and|&|et|und|y)$/i
 
 /**
  * Ogni nome proprio nel saluto diventa «{nome}», titolo compreso: «Ciao
  * Marco,» «Good morning Marco,» «Dear Mr. Smith,» e la riga fatta del solo
- * nome («Marco,»). «Ciao a tutti,» e «Hi Team,» restano come sono: non c'è
+ * nome («Marco,»). Due persone salutate insieme («Ciao Marco e Giulia,»,
+ * «Ciao Marco, Giulia,») sono un solo «{nome}»: nessuno dei due va
+ * ricopiato. «Ciao a tutti,» e «Hi Team,» restano come sono: non c'è
  * nessuno da non nominare.
  */
 export function mascheraNomi(saluto: string): string {
@@ -194,14 +200,27 @@ export function mascheraNomi(saluto: string): string {
   const nudo = (p: string) => p.replace(/[,:!.]+$/, '')
   const titolo = (p: string) => TITOLO.test(nudo(p))
   const nome = (p: string) => NOME.test(nudo(p)) && !NON_NOMI.has(nudo(p).toLowerCase())
-  // la riga fatta del solo nome (con o senza cognome): tutta un nome
-  const da = parole.length <= 2 && nome(parole[0]) ? 0 : 1
-  for (let i = da; i < parole.length; i++) {
-    if (!titolo(parole[i]) && !nome(parole[i])) continue
+  // un nome con il suo titolo, da `i` in poi: dove finisce (`i` se non c'è)
+  const corsa = (i: number) => {
     let j = i
     while (j < parole.length && (titolo(parole[j]) || nome(parole[j])) && (j === i || !chiude(parole[j - 1]))) j++
     // un titolo da solo non è un nome
-    if (!parole.slice(i, j).some(nome)) { i = j; continue }
+    return parole.slice(i, j).some(nome) ? j : i
+  }
+  // la riga fatta del solo nome (con o senza cognome, o di due nomi legati): tutta un nome
+  const da = nome(parole[0]) && (parole.length <= 2 || GIUNTA.test(parole[1] ?? '')) ? 0 : 1
+  for (let i = da; i < parole.length; i++) {
+    let j = corsa(i)
+    if (j === i) continue
+    // e il secondo nome, legato al primo da «e», «and», «&» o da una virgola
+    // e chiuso come si chiude un saluto («Ciao Marco, Giulia,»; non «Ciao Marco, Rossi»)
+    for (;;) {
+      const legame = j < parole.length && GIUNTA.test(parole[j]) && !chiude(parole[j]) ? j + 1 : /,$/.test(parole[j - 1]) ? j : -1
+      if (legame < 0) break
+      const fine = corsa(legame)
+      if (fine === legame || (legame === j && !chiude(parole[fine - 1]))) break
+      j = fine
+    }
     return [...parole.slice(0, i), `{nome}${coda(parole[j - 1])}`, ...parole.slice(j)].join(' ')
   }
   return saluto
@@ -240,8 +259,10 @@ export function profilo(corpi: string[], nome = ''): Profilo {
   let registro: Profilo['registro'] = null
   if (lingua === 'it') {
     const tutto = corpi.join('\n')
-    const lei = (tutto.match(LEI) ?? []).length
-    const tu = (tutto.match(TU) ?? []).length
+    // si contano tutte le volte, non la prima: un «Gentile» in trenta mail del tu non fa pari
+    const conta = (re: RegExp) => [...tutto.matchAll(new RegExp(re.source, 'gi'))].length
+    const lei = conta(LEI)
+    const tu = conta(TU)
     registro = lei > tu ? 'lei' : tu > lei ? 'tu' : null
   }
   const elenchi = corpi.some(c => /^\s*(?:[-*•]|\d{1,2}[.)])\s+/m.test(c))
@@ -301,10 +322,13 @@ export function perRiga(c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>): Voce 
   }
   const p = profilo(ultime)
   // la voce di tutti i giorni, ma per questa persona: gli estratti senza il
-  // nome di chi li riceveva, e la lingua solo se è quella in cui si scrive a
-  // lei (a chi scrive in inglese non si dice «in italiano» perché le ultime
-  // mail andavano a Marco)
-  const perLei = { ...p, lingua: linguaDoc && p.lingua && linguaDoc !== p.lingua ? null : p.lingua }
+  // nome di chi li riceveva, e la lingua (con il tu o il Lei, che è una cosa
+  // dell'italiano) solo se è quella in cui si scrive a lei: a chi scrive in
+  // inglese non si dice «in italiano» perché le ultime mail andavano a
+  // Marco, e a chi non si sa in che lingua legga non si dice nessuna, perché
+  // la regola della lingua dell'app sta già in testa e in coda al prompt
+  const stessaLingua = !!linguaDoc && linguaDoc === p.lingua
+  const perLei = { ...p, lingua: stessaLingua ? p.lingua : null, registro: stessaLingua ? p.registro : null }
   const blocco = bloccoDi(perLei, 'Come scrive di solito, dalle ultime mail che ha mandato:', ultime.map(senzaNomeInTesta))
   return {
     blocco, consegna: linguaDoc, profilo: { ...p, quanti: 0 }, destinatario,

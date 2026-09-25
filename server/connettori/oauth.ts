@@ -374,8 +374,14 @@ export function avviaWeb(s: Sportello, dopo: (g: Gettoni) => Promise<void>): { d
   return { dove: s.autorizza({ redirect, sfida, stato }), biglietto: biglietto(stato) }
 }
 
-/** Secondo tempo: il codice è tornato. Lancia con una frase da mostrare. */
-export async function completaWeb(stato: string, codice: string | null, errore: string | null, portato = '', descrizione: string | null = null): Promise<{ nome: string; scheda: boolean }> {
+/**
+ * Secondo tempo: il codice è tornato. Lancia con una frase da mostrare.
+ *
+ * Torna anche di chi era il collegamento (`utente`): questa richiesta arriva
+ * dal browser senza sessione, e chi la serve deve poter dire il fatto alle
+ * finestre di quella persona (e alle sue righe ferme sulla posta, P3).
+ */
+export async function completaWeb(stato: string, codice: string | null, errore: string | null, portato = '', descrizione: string | null = null): Promise<{ nome: string; scheda: boolean; utente: string | null }> {
   const s = sospesi.get(stato)
   if (!s) throw new Error('Questo collegamento non lo stavo aspettando, o è passato troppo tempo: riprova da Myynd.')
   const atteso = Buffer.from(biglietto(stato)), avuto = Buffer.from(portato)
@@ -401,7 +407,7 @@ export async function completaWeb(stato: string, codice: string | null, errore: 
   }
   const salva = () => s.dopo(g)
   await (s.utente ? chi.dentro(s.utente, salva) : salva())
-  return { nome: s.sportello.nome, scheda: !!s.sportello.scheda }
+  return { nome: s.sportello.nome, scheda: !!s.sportello.scheda, utente: s.utente ?? null }
 }
 
 /** La pagina che vede chi torna da Google o Microsoft. Nelle due lingue: qui non si sa ancora quale. */

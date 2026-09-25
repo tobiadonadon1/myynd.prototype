@@ -43,6 +43,7 @@ import * as mani from './mani.ts'
 import * as ordine from './ordine.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as voce from './voce.ts'
+import { rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi } from './stesura.ts'
 import { corpoPerChiRiceve, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
@@ -301,6 +302,8 @@ type Ferri = {
   /** Se c'è una casella da cui mandare: senza, non si prepara niente. */
   salvaBozzaCasella: typeof salvaBozzaCasella
   postaCollegata: () => boolean
+  /** Il motore che lavora ha la chiave respinta (P8): riprendere una riga ferma adesso la manderebbe a sbattere. */
+  motoreRifiutato: () => boolean
   /** La rilettura del lavoro, come lei e come chi lo riceve: quinta chiamata, stesso motivo. */
   giudica: typeof giudica
   /** La cosa dopo, in una riga: sesta, e l'ultima. */
@@ -329,6 +332,10 @@ const VERI: Ferri = {
   postaCollegata: () => {
     const c = cfg.leggi()
     return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
+  },
+  motoreRifiutato: () => {
+    const t = testaAlLavoro()
+    return (t === 'claude' || t === 'openai') && !!rifiutata(t)
   }
 }
 let ferri: Ferri = VERI
@@ -913,12 +920,19 @@ export function imparaDallaRisposta(
  * cambio di salute: `annunciaSalute`). Nessuna più di una volta al giorno
  * per riga (a memoria, per persona): una riga che torna a bloccarsi non
  * deve rifare il lavoro intero a ogni giro. Non lancia mai.
+ *
+ * E nessuna finché il motore che lavora ha la chiave respinta (P8): il
+ * lavoro ripreso morirebbe sulla chiave, e il guaio della chiave si
+ * scriverebbe sulla riga al posto di «la riprendo da qui», che a quel punto
+ * non sarebbe più una riga ferma e non riprenderebbe mai più. Si aspetta,
+ * senza contare il giorno: la chiave rimessa a posto passa di qui.
  */
 const ripresi = new Map<string, number>()
 const RIPRESA_OGNI = 24 * 3_600_000
 export async function riprendiBloccati(): Promise<number> {
   let quante = 0
   try {
+    if (ferri.motoreRifiutato()) return 0
     const conf = cfg.leggi()
     const posta = ferri.postaCollegata()
     const file = !!conf.desktop?.cartelle?.length

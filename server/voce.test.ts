@@ -105,6 +105,23 @@ test('con meno di tre mail a quella persona vale la voce delle ultime mail, con 
   assert.deepEqual(senza.scritta, { destinatario: 'Leo', lingua: 'en', quanti: 0, esempi: [] })
 })
 
+test('senza sapere in che lingua legge chi riceve, il blocco delle ultime mail non dice né la lingua né il tu; li dice quando la mail a cui risponde è nella stessa lingua', () => {
+  semina()
+  // scritta a mano, senza una mail di partenza: nessuno sa in che lingua legga Giulia, e il blocco non lo pretende
+  const aGiulia = voce.perRiga({ doc: null, testo: 'Send the course quote to Giulia', nota: null })!
+  assert.match(aGiulia.blocco, /^Come scrive di solito, dalle ultime mail che ha mandato:/)
+  assert.ok(!/in italiano|in inglese/.test(aGiulia.blocco), aGiulia.blocco)
+  assert.ok(!/del tu|del Lei/.test(aGiulia.blocco), aGiulia.blocco)
+  assert.match(aGiulia.blocco, /apre con «Ciao \{nome\},»/)
+  assert.equal(aGiulia.consegna, undefined)
+  // (contro) risponde a una mail italiana di Sara, a cui non ha mai scritto: le ultime mail sono in italiano, del tu, e lo si dice
+  store.salvaDocumenti([{ id: 'posta:INBOX:610', fonte: 'posta', tipo: 'email', titolo: 'Corso', corpo: 'Ciao Alex, mi mandi il preventivo del corso per le venti persone della mia squadra? Grazie mille, Sara', autore: 'Sara Bianchi <sara@lumen.example>', quando: giorniFa(1), filo: 'f-sara' }])
+  const aSara = voce.perRiga({ doc: 'posta:INBOX:610', testo: 'Reply to Sara about the course', nota: null })!
+  assert.equal(aSara.profilo.quanti, 0)
+  assert.match(aSara.blocco, /in italiano, del tu/)
+  assert.equal(aSara.consegna, 'it')
+})
+
 test('senza il nome del destinatario, il saluto maschera ogni nome proprio, e lascia stare il resto', () => {
   const p = voce.profilo([
     'Ciao Marco,\n\nti mando il preventivo.\n\nA presto',
@@ -136,6 +153,24 @@ test('senza il nome del destinatario, il saluto maschera ogni nome proprio, e la
   assert.equal(voce.profilo(due('The price is 1,500 EUR per person.\n\nBest')).saluto, null)
   assert.equal(voce.mascheraNomi('Allego Q4 report,'), 'Allego Q4 report,')
   assert.equal(voce.mascheraNomi('Ciao,'), 'Ciao,')
+  // due persone salutate insieme: un solo «{nome}», nessuno dei due resta
+  assert.equal(voce.mascheraNomi('Hi Marco and Giulia,'), 'Hi {nome},')
+  assert.equal(voce.mascheraNomi('Ciao Marco e Giulia,'), 'Ciao {nome},')
+  assert.equal(voce.mascheraNomi('Ciao Marco & Giulia,'), 'Ciao {nome},')
+  assert.equal(voce.mascheraNomi('Ciao Marco, Giulia,'), 'Ciao {nome},')
+  assert.equal(voce.mascheraNomi('Dear Mr. Smith and Mrs. Jones,'), 'Dear {nome},')
+  assert.equal(voce.mascheraNomi('Marco e Giulia,'), '{nome},')
+  assert.equal(voce.profilo(due('Ciao Marco e Giulia,\n\nvi mando il piano.\n\nA presto')).saluto, 'Ciao {nome},')
+  // (contro) «e tutti» non è un secondo nome, e «Marco, Rossi» sono due cose
+  assert.equal(voce.mascheraNomi('Ciao Marco e tutti,'), 'Ciao {nome} e tutti,')
+  assert.equal(voce.mascheraNomi('Ciao Marco, Rossi'), 'Ciao {nome}, Rossi')
+  // i saluti delle altre lingue non sono nomi
+  assert.equal(voce.mascheraNomi('Hola Marco,'), 'Hola {nome},')
+  assert.equal(voce.mascheraNomi('Salut Pierre,'), 'Salut {nome},')
+  assert.equal(voce.mascheraNomi('Hallo Jan,'), 'Hallo {nome},')
+  assert.equal(voce.mascheraNomi('Bonjour Marie,'), 'Bonjour {nome},')
+  assert.equal(voce.mascheraNomi('Hej Anna,'), 'Hej {nome},')
+  assert.equal(voce.mascheraNomi('Buenos días Carlos,'), 'Buenos días {nome},')
   // con il nome, si maschera solo quello
   assert.equal(voce.profilo(due('Ciao Marco Rossi,\n\nti mando il preventivo.\n\nA presto'), 'Marco').saluto, 'Ciao {nome} Rossi,')
   assert.equal(voce.profilo(['Ciao Marco, ecco il file del Q4.\n\nA presto', 'Ciao Marco, ti confermo giovedì alle 10.\n\nA presto', 'Marco, ok per me.\n\nA presto'], 'Marco').saluto, 'Ciao {nome},')

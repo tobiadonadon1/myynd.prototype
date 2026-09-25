@@ -345,7 +345,13 @@ app.get('/api/oauth/ritorno', async (req, res) => {
     return res.send(oauth.paginaConsenso(!guaio && String(req.query.admin_consent).toLowerCase() === 'true'))
   }
   try {
-    const { nome, scheda } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
+    const { nome, scheda, utente } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
+    // un collegamento in più, detto alle finestre di chi l'ha fatto e alle
+    // sue righe ferme sulla posta (P3): questa richiesta torna dal browser
+    // senza sessione, quindi la regola sui connettori qui sopra non la vede
+    const dillo = () => compiti.annunciaCollegamento()
+    if (utente) chi.dentro(utente, dillo)
+    else dillo()
     res.send(oauth.paginaWeb(true, nome, '', scheda))
   } catch (e) {
     res.status(400).send(oauth.paginaWeb(false, '', e instanceof Error ? e.message : String(e)))
@@ -530,7 +536,9 @@ abbonamento.quandoCambia(() => {
 mod.quandoUsato(() => { try { saluteTeste.segnaTesta('ok') } catch { /* contare non rompe la chiamata contata */ } })
 mod.quandoRifiutata(() => {
   try { saluteTeste.segnaTesta() } catch { /* idem */ }
-  compiti.annunciaCollegamento()
+  // un fatto di salute, non un collegamento in più: le finestre lo sanno,
+  // le righe ferme restano ferme (riprenderle adesso le manderebbe sulla chiave respinta)
+  compiti.annunciaSalute()
 })
 
 /**
