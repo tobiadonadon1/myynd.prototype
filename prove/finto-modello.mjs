@@ -33,6 +33,8 @@
 
 import { createServer } from 'node:http'
 import { appendFileSync, readFileSync } from 'node:fs'
+import { dirname, join, normalize } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const PORTA = Number(process.env.FINTO_PORTA || process.argv[2] || 0)
 const REGISTRO = process.env.FINTO_REGISTRO || ''
@@ -128,8 +130,39 @@ function leggiCorpo(req) {
   })
 }
 
+// — P4: inizio —
+/*
+ * File statici per le scene (P4): `GET /statici/<nome>` da FINTO_STATICI (di
+ * serie `prove/statici`), in sola lettura e mai fuori da lì. Nei file di testo
+ * «@@-10d 09:00@@» diventa una data iCal in UTC, tanti giorni da oggi a
+ * quell'ora: un calendario finto resta dentro la sua finestra anche domani.
+ * `?attesa=<ms>` risponde dopo quei millisecondi (una fonte lenta).
+ */
+const STATICI = process.env.FINTO_STATICI || join(dirname(fileURLToPath(import.meta.url)), 'statici')
+function dataIcal(giorni, ora) {
+  const d = new Date(Date.now() + Number(giorni) * 86_400_000)
+  const [h, m] = (ora || '09:00').split(':').map(Number)
+  d.setUTCHours(h, m, 0, 0)
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+}
+async function statico(req, res) {
+  const url = new URL(req.url || '/', 'http://x')
+  const nome = decodeURIComponent(url.pathname.slice('/statici/'.length))
+  const dove = normalize(join(STATICI, nome))
+  if (!nome || nome.includes('..') || !dove.startsWith(normalize(STATICI + '/'))) { res.writeHead(404); return res.end() }
+  let testo
+  try { testo = readFileSync(dove, 'utf8') } catch { res.writeHead(404); return res.end() }
+  const attesa = Math.min(60_000, Number(url.searchParams.get('attesa') || 0))
+  if (attesa > 0) await new Promise(r => setTimeout(r, attesa))
+  testo = testo.replace(/@@([+-]?\d+)d(?: (\d\d:\d\d))?@@/g, (_, g, o) => dataIcal(g, o))
+  res.writeHead(200, { 'content-type': nome.endsWith('.ics') ? 'text/calendar; charset=utf-8' : 'text/plain; charset=utf-8' })
+  res.end(testo)
+}
+// — P4: fine —
+
 const server = createServer(async (req, res) => {
   const percorso = (req.url || '').split('?')[0]
+  if (req.method === 'GET' && percorso.startsWith('/statici/')) return statico(req, res)
   if (req.method === 'GET' && /\/models$/.test(percorso)) {
     res.writeHead(200, { 'content-type': 'application/json' })
     return res.end(JSON.stringify({ object: 'list', data: [{ id: copione().modello || 'finto', object: 'model' }] }))

@@ -577,7 +577,21 @@ export type Esito = {
   saltati: { media: number; codice: number; sistema: number; altro: number }
   /** Le cartelle non aperte di proposito: gli elenchi dei salti, e i nomi col punto davanti. */
   saltateCartelle: number
+  /**
+   * I file più vecchi di `dal`, visti e lasciati al giro dopo (P4): stanno
+   * fra i `visti`, non si estraggono e non contano per il tetto.
+   */
+  rimandati: number
+  /**
+   * Il giro si è fermato perché ha letto `nuoviMax` documenti nuovi. Non è
+   * `troncato`, che scatta anche per la profondità su ogni albero fondo: questo
+   * dice che c'è ancora da leggere, e che il giro dopo deve continuare.
+   */
+  pieno: boolean
 }
+
+/** Come si legge questo giro: i file più vecchi di `dal` si rimandano, e al massimo `nuoviMax` nuovi. */
+export type OpzioniLettura = { dal?: number; nuoviMax?: number }
 
 /** La data di modifica già in indice, per id: chi ce l'ha uguale non si rilegge. */
 export type GiaIndicizzati = Map<string, string | null | undefined>
@@ -591,10 +605,17 @@ const letti = (e: Esito) => e.docs.length + e.versati + e.invariati
 let elenca: typeof readdir = readdir
 export function usaElenco(f: typeof readdir | null) { elenca = f ?? readdir }
 
-async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaIndicizzati, profondita = 0, regole: Regole = REGOLE) {
+/** Quanti documenti nuovi ha dato questo giro: estratti, tenuti o già versati. */
+const nuovi = (e: Esito) => e.docs.length + e.versati
+/** Come avanza la lettura: chi guarda riceve il conto intero ogni duecento documenti nuovi. */
+type Passo = { opzioni: OpzioniLettura; avanzamento?: (fatti: number) => void; detto: number }
+const OGNI = 200
+
+async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaIndicizzati, profondita = 0, regole: Regole = REGOLE, passo?: Passo) {
   // fermarsi è legittimo, farlo in silenzio no: chi si ferma qui senza dirlo
   // fa credere a riconcilia() che il resto della cartella non esista più
   if (letti(fuori) >= tetto) { fuori.troncato = true; return }
+  if (passo?.opzioni.nuoviMax !== undefined && nuovi(fuori) >= passo.opzioni.nuoviMax) { fuori.troncato = true; fuori.pieno = true; return }
   if (profondita > regole.profondita) { fuori.troncato = true; return }
   let voci
   try {
@@ -622,6 +643,7 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
 
   for (const v of voci) {
     if (letti(fuori) >= tetto) { fuori.troncato = true; return }
+    if (passo?.opzioni.nuoviMax !== undefined && nuovi(fuori) >= passo.opzioni.nuoviMax) { fuori.troncato = true; fuori.pieno = true; return }
     if (v.name.startsWith('.') || regole.salta(v.name)) {
       // una cartella lasciata fuori di proposito si conta: è la differenza fra
       // «non ho guardato» e «ho guardato e ho deciso di no», e sono le due
@@ -633,7 +655,7 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
     const p = join(radice, v.name)
 
     if (v.isDirectory()) {
-      await cammina(p, fuori, tetto, gia, profondita + 1, regole)
+      await cammina(p, fuori, tetto, gia, profondita + 1, regole, passo)
       continue
     }
     /*
@@ -674,6 +696,14 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
       if (gia && gia.has(id) && gia.get(id) === s.mtime.toISOString()) {
         fuori.visti.push(id); fuori.invariati++; continue
       }
+      /*
+       * Più vecchio della finestra di questo giro, e mai letto: si rimanda.
+       * Resta fra i visti, così `riconcilia` non lo prende per sparito, e il
+       * giro dopo (che non ha `dal`) lo legge perché non è nell'indice.
+       */
+      if (passo?.opzioni.dal !== undefined && s.mtime.getTime() < passo.opzioni.dal && !(gia && gia.has(id))) {
+        fuori.visti.push(id); fuori.rimandati++; continue
+      }
       // Un file che esiste ma che stavolta non indicizziamo va comunque
       // dichiarato vivo. Senza questa riga finiva fuori dall'elenco dei visti,
       // la radice veniva lo stesso dichiarata «completa» — nessun errore,
@@ -703,6 +733,11 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
         fuori.versati += lotto.length
         await fuori.versa(lotto)
       }
+      // la riga si muove mentre legge, non solo alla fine di ogni radice
+      if (passo?.avanzamento && nuovi(fuori) - passo.detto >= OGNI) {
+        passo.detto = nuovi(fuori)
+        passo.avanzamento(passo.detto)
+      }
     } catch {
       fuori.falliti++
     }
@@ -720,6 +755,17 @@ export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: str
     }
   }
   if (!buone.length) return { ok: false, errore: 'Nessuna cartella valida.' }
+  /*
+   * Tutto il Mac: si aprono adesso Scrivania, Documenti e Download, una volta.
+   * macOS chiede il permesso per ognuna la prima volta che qualcuno ci
+   * guarda dentro, e così le finestre arrivano subito dopo il bottone, mentre
+   * la persona sta guardando, e non minuti dopo in mezzo alla lettura (P4).
+   */
+  if (c.tutto) {
+    for (const nome of ['Desktop', 'Documents', 'Downloads']) {
+      try { await elenca(join(homedir(), nome)) } catch { /* negata o assente: lo dirà la lettura */ }
+    }
+  }
   return { ok: true, cartelle: buone }
 }
 
@@ -732,30 +778,37 @@ export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: str
  * vivo, non il giro delle sei ore.
  */
 export async function leggiCartella(cartella: string, tetto = 200, tutto = false): Promise<Esito> {
-  const esito: Esito = { docs: [], versati: 0, saltatiProgetti: [], falliti: 0, illeggibili: [], negate: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
+  const esito: Esito = { docs: [], versati: 0, saltatiProgetti: [], falliti: 0, illeggibili: [], negate: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0, rimandati: 0, pieno: false }
   await cammina(resolve(cartella), esito, tetto, undefined, 0, regoleDi(tutto))
   return esito
 }
 
+/**
+ * `avanzamento` riceve il conto intero dei documenti nuovi di questo giro,
+ * ogni duecento e alla fine di ogni radice. `opzioni` (P4): la prima lettura
+ * passa `dal` (novanta giorni fa) e un tetto di nuovi per giro.
+ */
 export async function sincronizza(
   c: ConfigDesktop,
   avanzamento?: (fatti: number) => void,
   gia?: GiaIndicizzati,
-  versa?: (docs: Documento[]) => Promise<void>
+  versa?: (docs: Documento[]) => Promise<void>,
+  opzioni: OpzioniLettura = {}
 ): Promise<Esito> {
-  const esito: Esito = { docs: [], versati: 0, versa, saltatiProgetti: [], falliti: 0, illeggibili: [], negate: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
+  const esito: Esito = { docs: [], versati: 0, versa, saltatiProgetti: [], falliti: 0, illeggibili: [], negate: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0, rimandati: 0, pieno: false }
   const cartelle = radici(c)
   const regole = regoleDi(c.tutto)
   // il tetto è per cartella: una cartella enorme non deve affamare le altre
   const totale = c.tutto ? MAX_TOTALE_TUTTO : MAX_TOTALE
   const perCartella = Math.max(200, Math.floor(totale / Math.max(1, cartelle.length)))
+  const passo: Passo = { opzioni, avanzamento, detto: 0 }
   for (const cartella of cartelle) {
-    const prima = esito.docs.length + esito.versati
+    if (esito.pieno) break
     const illeggibiliPrima = esito.illeggibili.length
     const fallitiPrima = esito.falliti
     const radice = resolve(cartella)
 
-    await cammina(radice, esito, letti(esito) + perCartella, gia, 0, regole)
+    await cammina(radice, esito, letti(esito) + perCartella, gia, 0, regole, passo)
 
     // Una radice si può riconciliare solo se è stata percorsa tutta: niente
     // tetto raggiunto, nessuna cartella figlia illeggibile, nessun file caduto.
@@ -766,7 +819,8 @@ export async function sincronizza(
       && esito.falliti === fallitiPrima
     if (pulita) esito.complete.push(radice)
 
-    if (avanzamento) avanzamento(esito.docs.length + esito.versati - prima)
+    passo.detto = nuovi(esito)
+    if (avanzamento) avanzamento(passo.detto)
   }
   delete esito.versa
   return esito

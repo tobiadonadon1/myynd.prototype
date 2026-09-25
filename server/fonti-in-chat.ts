@@ -88,7 +88,7 @@ export type StatoFonti = {
 }
 
 /** Le chiavi della configurazione che sono una fonte collegata. */
-const COLLEGABILI: (keyof Config)[] = ['posta', 'desktop', 'notion', 'github', 'granola', 'note', 'conversazioni', 'x', 'calendario', 'slack', 'google', 'microsoft', 'drive', 'dropbox', 'whatsapp']
+const COLLEGABILI: (keyof Config)[] = ['posta', 'desktop', 'notion', 'github', 'granola', 'note', 'conversazioni', 'x', 'calendario', 'slack', 'google', 'microsoft', 'drive', 'dropbox', 'whatsapp', 'agendamac', 'postamac']
 
 export function statoFonti(c: Config = configurazione()): StatoFonti {
   const n = conteggi()

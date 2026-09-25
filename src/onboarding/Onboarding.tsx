@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type TextareaHTMLAttributes } from 'react'
 import { giornoLocale, spostaGiorno } from '../oggi/giorni'
-import { api, type Stato, type StatoAvvio } from '../api'
+import { api, apiP4, type PaginaAvvio, type Stato, type StatoAvvio } from '../api'
 import { frasi, t } from '../lingua'
-import { daGuardare, leggiPoiScegli, nonLette } from '../lettura-fonti'
+import { aperta as rigaAperta, daGuardare, leggiPoiScegli, nonLette } from '../lettura-fonti'
+import { trovato, trovatoDurante } from '../conta-fonti'
 import { letturaFonti, useLettura } from '../lettura-app'
 import { ConnectorIcon } from '../components/ConnectorIcon'
 import { Form } from '../components/forms'
@@ -11,11 +12,27 @@ import { BottoneSicuro } from '../ui'
 import { IconFreccia } from '../icons'
 import { Scena, OnboardAttesa, OnboardErrore, type Momento } from './Scena'
 import { Introduzione } from './Introduzione'
-import { momentoAllaRipresa } from './passi'
+import { momentoAllaRipresa, riprendeLeggendo } from './passi'
 
 // i modelli non si leggono: OpenAI stava fra le fonti e il server lo rifiutava
 const NON_FONTI = new Set(['claude', 'openai', 'compatibile', 'mind2do'])
-const PRIORITA_FONTI = ['desktop', 'google', 'posta', 'notion', 'slack', 'calendario']
+/*
+ * Le prime schede (P4). Su un Mac, nove: Mail e Calendario del Mac subito
+ * dopo il Mac, senza niente da incollare; WhatsApp Business, Granola, Dropbox
+ * e GitHub stanno dietro «Tutte le fonti» (spostate, non tolte). Altrove, sei.
+ */
+const PRIORITA_MAC = ['desktop', 'postamac', 'agendamac', 'posta', 'calendario', 'notion', 'slack', 'note', 'conversazioni']
+const PRIORITA_FONTI = ['desktop', 'posta', 'notion', 'slack', 'calendario', 'github']
+/** I tre modi di collegare chi ragiona, quando nessuno è collegato: la stessa scheda delle Fonti. */
+const MODELLI: { id: string; etichetta: string }[] = [
+  { id: 'claude', etichetta: 'Anthropic' }, { id: 'openai', etichetta: 'OpenAI' }, { id: 'compatibile', etichetta: 'Altro modello' }
+]
+/** Quanto si aspetta prima che «Continua» si possa premere mentre legge. */
+const CONTINUA_DOPO_MS = 10_000
+/** Quanto aspetta al massimo la fine dell'avvio, con i conti che salgono, prima di entrare. */
+const FINE_MASSIMO_MS = 20_000
+/** La scheda aperta, per chi riapre l'app (anche dopo averla riaperta per un permesso). */
+const chiaveScheda = (id: string) => `myynd.avvio.fonte.${id}`
 /**
  * Il passo che vede la persona, per un indicatore «2 di 3»: le fonti e i loro
  * estratti sono un passo solo, perché gli estratti sono quello che la lettura ha trovato.
@@ -100,6 +117,23 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const [giorno, setGiorno] = useState('')
   const [tutteFonti, setTutteFonti] = useState(false)
   const [cercaFonte, setCercaFonte] = useState('')
+  /** Chiedere un modello su questo passo: solo se nessuno ragionava quando il passo è comparso, deciso una volta (P4). */
+  const [chiediModello, setChiediModello] = useState<boolean | null>(null)
+  /** Quando si è premuto «Leggi»: «Continua» si può premere dieci secondi dopo (P4). */
+  const [leggiDa, setLeggiDa] = useState<number | null>(null)
+  const [adesso, setAdesso] = useState(() => Date.now())
+  /** Quello che la lettura ha trovato, per genere, e se sta ancora leggendo (P4). */
+  const [pagina, setPagina] = useState<PaginaAvvio | null>(null)
+  /** La fine dell'avvio: i conti che salgono per al massimo venti secondi, poi si entra (P4). */
+  const [fine, setFine] = useState<{ dal: number; eraPrima: boolean; finitaIl: number | null } | null>(null)
+  /** Una lettura da riprendere al caricamento: il server la sta ancora facendo (P4). */
+  const [riattacca, setRiattacca] = useState(false)
+  /** «Continua» premuto durante la lettura: le fonti sono già salvate, la fine della lettura non le risalva. */
+  const giaScelte = useRef(false)
+  const entrato = useRef(false)
+  const primario = useRef<HTMLButtonElement>(null)
+  const ultimo = useRef<StatoAvvio | null>(null)
+  ultimo.current = avvio
   const lock = useRef(false)
   const titolo = useRef<HTMLHeadingElement>(null)
   const nome = useRef<HTMLInputElement>(null)
@@ -126,10 +160,17 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       if (ritorno) { url.searchParams.delete('torno'); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
       let leggeva = false
       try { leggeva = !!sessionStorage.getItem(chiaveLettura(n.id)); sessionStorage.removeItem(chiaveLettura(n.id)) } catch { /* senza memoria della scheda si riparte dal server */ }
-      setMomento(momentoAllaRipresa(n.fase, { ritorno, leggeva }))
+      const leggendo = !!n.leggendo
+      const aMetaLettura = !!n.aMetaLettura
+      setMomento(momentoAllaRipresa(n.fase, { ritorno, leggeva, leggendo, aMetaLettura }))
+      // la lettura non si è fermata con la pagina: non si ripassa dal benvenuto, e si torna a
+      // guardarla a righe se non è stato un «Continua» a metà a mandarla avanti da sé (P4)
+      if (leggendo) { setAccountConfermato(true); if (riprendeLeggendo(leggendo, aMetaLettura)) setRiattacca(true) }
       try {
-        const salvata = sessionStorage.getItem(`myynd.avvio.fonte.${n.id}`)
+        // in localStorage e non nella scheda del browser: sopravvive a «Riapri Myynd» dopo un permesso
+        const salvata = localStorage.getItem(chiaveScheda(n.id))
         if (salvata && !n.risultato) setAperta(salvata)
+        if (n.risultato) localStorage.removeItem(chiaveScheda(n.id))
       } catch { /* The saved server session remains usable with storage disabled. */ }
     } catch (e) { setErrore(messaggio(e)) }
     finally { setCarico(false) }
@@ -153,7 +194,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     const pannello = titolo.current?.closest('.onboard-panel')
     const campo = pannello?.querySelector<HTMLElement>('textarea, input:not([type=date]):not([type=checkbox]):not([type=search])')
     ;(campo ?? titolo.current)?.focus()
-  }, [momento, carico, avvio?.risultato, accountConfermato])
+  }, [momento, carico, avvio?.risultato, accountConfermato, !!fine])
 
   // Refresh the revision after a lost response/conflict without discarding form drafts.
   const fai = async (lavoro: () => Promise<void>) => {
@@ -195,15 +236,15 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     const nuova = aperta === id ? '' : id
     setAperta(nuova); setErrore(''); setModifica(false)
     if (avvio) try {
-      if (nuova) sessionStorage.setItem(`myynd.avvio.fonte.${avvio.id}`, nuova)
-      else sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`)
+      if (nuova) localStorage.setItem(chiaveScheda(avvio.id), nuova)
+      else localStorage.removeItem(chiaveScheda(avvio.id))
     } catch { /* optional return hint */ }
   }
   const salta = () => fai(async () => {
     if (!avvio) return
     const n = await api.avvioFonti({ fonti: [], revisione: avvio.revisione })
     setAperta(''); setConfermati([])
-    try { sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`) } catch { /* optional return hint */ }
+    try { localStorage.removeItem(chiaveScheda(avvio.id)) } catch { /* optional return hint */ }
     const confermato = await api.avvioConferma({ ids: [], revisione: n.revisione }); setAvvio(confermato); vai(3)
   })
   /** Il server ha detto sì: la tessera diventa verde adesso, e la scheda si chiude sulla sua frase. */
@@ -225,31 +266,67 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
    * Tutte le fonti collegate, lette in una volta, con una riga ciascuna.
    *
    * La lettura è quella di sempre, `/api/sincronizza` senza una fonte: la
-   * stessa del bottone «Rileggi tutto» e del giro dei dieci minuti, che legge
-   * ogni fonte collegata e non si ferma se una non risponde. Qui si guarda
-   * passare, fonte per fonte. Le fonti si salvano nell'avvio solo a lettura
-   * finita (vedi `leggiPoiScegli`). Se sono andate tutte, si passa da soli a
-   * quello che hanno dato; se una non si è letta, o solo in parte, si resta,
-   * perché il motivo va letto.
+   * stessa del bottone «Rileggi tutto» e del giro dei dieci minuti. Qui si
+   * guarda passare, fonte per fonte. Non sta dentro `fai` (P4): durante la
+   * lettura i bottoni restano vivi, e dopo dieci secondi «Continua» porta
+   * avanti mentre il server continua a leggere. Solo il salvataggio delle
+   * fonti passa da `fai`. Se la lettura finisce prima, si passa da soli a
+   * quello che ha dato; se una fonte non si è letta, si resta.
    */
-  const leggiFonti = () => fai(async () => {
-    if (!avvio) return
+  const leggiFonti = async () => {
+    const a = ultimo.current
+    if (!a || lock.current) return
     const ids = collegate.map(c => c.id)
-    setVistaLettura(true); setNonSalvate(false); setAperta(''); setModifica(false); setRiparate([])
-    try { sessionStorage.setItem(chiaveLettura(avvio.id), '1') } catch { /* il segno serve solo a chi ricarica */ }
-    let esito: Awaited<ReturnType<typeof leggiPoiScegli>>
+    giaScelte.current = false
+    setVistaLettura(true); setNonSalvate(false); setAperta(''); setModifica(false); setRiparate([]); setErrore('')
+    setLeggiDa(Date.now())
+    try { sessionStorage.setItem(chiaveLettura(a.id), '1') } catch { /* il segno serve solo a chi ricarica */ }
+    let esito: Awaited<ReturnType<typeof leggiPoiScegli>> | null = null
     try {
       esito = await leggiPoiScegli(letturaFonti, ids, async fonti => {
-        const n = await api.avvioFonti({ fonti, revisione: avvio.revisione })
-        setAvvio(n); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
+        // «Continua» le ha già salvate: un secondo salvataggio sotto gli estratti farebbe 409
+        if (giaScelte.current) return
+        let fatto = false
+        await fai(async () => {
+          const corrente = ultimo.current
+          if (!corrente) return
+          const n = await api.avvioFonti({ fonti, revisione: corrente.revisione })
+          setAvvio(n); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
+          fatto = true
+        })
+        if (!fatto) throw new Error('')
       })
-    } finally {
-      try { sessionStorage.removeItem(chiaveLettura(avvio.id)) } catch { /* come sopra */ }
+    } catch { esito = null }
+    finally {
+      try { sessionStorage.removeItem(chiaveLettura(a.id)) } catch { /* come sopra */ }
     }
-    await ricarica()
-    if (!esito.salvate) { setNonSalvate(true); setErrore(letturaFonti.stato().guaio ?? ''); return }
+    await ricarica().catch(() => {})
+    if (giaScelte.current) return
+    if (!esito?.salvate) { setNonSalvate(true); setErrore(e => e || (letturaFonti.stato().guaio ?? '')); return }
     // le righe verdi restano in vista un attimo: è la conferma che le ha lette tutte
-    if (!daGuardare(esito.righe)) { await pausa(900); vai(2) }
+    if (!daGuardare(esito.righe)) { await pausa(900); if (!giaScelte.current) vai(2) }
+  }
+  /**
+   * «Continua» mentre legge (P4): si salvano le fonti che si stanno leggendo e
+   * si va agli estratti subito. Se il salvataggio non riesce si torna alle
+   * righe della lettura, con il motivo.
+   */
+  const continuaDurante = () => fai(async () => {
+    const a = ultimo.current
+    if (!a) return
+    const fonti = (letturaFonti.stato().righe ?? []).map(r => r.id)
+    giaScelte.current = true
+    vai(2)
+    try {
+      // la sua lettura non è finita, anche se aspetta ancora il suo turno: gli estratti si fermano a qui
+      const n = await api.avvioFonti({ fonti, revisione: a.revisione, durante: true })
+      setAvvio(n); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
+      try { sessionStorage.removeItem(chiaveLettura(a.id)) } catch { /* il segno serve solo a chi ricarica */ }
+    } catch (e) {
+      giaScelte.current = false
+      setMomento(1); setVistaLettura(true)
+      throw e
+    }
   })
   const conferma = () => fai(async () => {
     if (!avvio) return
@@ -268,30 +345,49 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       corrente = await api.avvioConferma({ ids: [], revisione: corrente.revisione }); setAvvio(corrente)
     }
     const n = await api.avvioCompleta({ azione: azione.trim(), giorno: giorno || null, revisione: corrente.revisione })
+    // L'attività è salvata e si vede nella lista. Con delle fonti lette, un
+    // momento con quello che ha trovato (al massimo venti secondi, P4); senza,
+    // si entra subito.
+    await api.profilo({ onboarding: true, giro: true })
     setAvvio(n)
-    // L'attività è salvata e si vede nella lista: si entra, senza una schermata
-    // in mezzo che lo dica e chieda di premere ancora.
-    await api.profilo({ onboarding: true, giro: true }); fatto()
+    try { localStorage.removeItem(chiaveScheda(n.id)) } catch { /* optional return hint */ }
+    if (n.fonti.length > 0) {
+      const p = await apiP4.avvioPagina().catch(() => null)
+      if (p) setPagina(p)
+      setFine({ dal: Date.now(), eraPrima: p?.lettura === 'prima', finitaIl: p?.lettura === 'prima' ? null : Date.now() })
+    } else fatto()
   })
+  /** Si entra una volta sola: dal bottone, o da soli quando i conti si sono fermati. */
+  const entraOra = () => { if (entrato.current) return; entrato.current = true; fatto() }
   // Leaving setup never claims completion or creates a project/task.
   const esci = () => { if (stato.config.onboarding) fatto(); else void cambiaAccount() }
 
   const fonti = s.connettori.filter(c => (c.pronto || c.collegato) && !NON_FONTI.has(c.id))
+  // su un Mac (dove il server offre Calendario del Mac) nove schede, altrove sei
+  const suMac = s.connettori.some(c => c.id === 'agendamac')
+  const priorita = suMac ? PRIORITA_MAC : PRIORITA_FONTI
+  const quante = priorita.length
   const ordinate = [...fonti].sort((a, b) => {
-    const ia = PRIORITA_FONTI.indexOf(a.id), ib = PRIORITA_FONTI.indexOf(b.id)
+    const ia = priorita.indexOf(a.id), ib = priorita.indexOf(b.id)
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
   })
   const collegata = (c: { id: string; collegato: boolean }) => c.collegato || appena.includes(c.id)
   const collegate = ordinate.filter(collegata)
-  // una fonte collegata resta in vista anche oltre le prime sei: è una di quelle che si leggeranno
-  const visibili = (tutteFonti ? ordinate : ordinate.filter((c, i) => i < 6 || c.collegato)).filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cercaFonte.toLocaleLowerCase()))
-  const scelta = fonti.find(c => c.id === aperta)
+  // una fonte collegata resta in vista anche oltre le prime: è una di quelle che si leggeranno
+  const visibili = (tutteFonti ? ordinate : ordinate.filter((c, i) => i < quante || c.collegato)).filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cercaFonte.toLocaleLowerCase()))
+  /** Chi ragiona, se sul passo delle fonti si chiede: le tre strade, con la loro scheda. */
+  const modelli = s.connettori.filter(c => MODELLI.some(m => m.id === c.id))
+  const modelloCollegato = modelli.find(collegata)
+  const scelta = fonti.find(c => c.id === aperta) ?? (chiediModello ? modelli.find(c => c.id === aperta) : undefined)
+  const eModello = !!scelta && MODELLI.some(m => m.id === scelta.id)
   const nomeFonte = (id: string) => t(s.connettori.find(c => c.id === id)?.nome ?? id)
   /** Le fonti che l'avvio ha già letto: sulla prima attività si mostrano quelle. */
   const lette = (avvio?.fonti ?? []).map(id => s.connettori.find(c => c.id === id)).filter(c => !!c)
   const lettura = vistaLettura ? letturaStato.righe : null
   // il titolo segue le righe: finché una è in coda o in lettura si sta leggendo
   const inLettura = !!lettura?.some(r => r.stato === 'attesa' || r.stato === 'leggo')
+  // le fonti la cui riga dice ancora «In coda»: la riga dei conti non le conta (P4)
+  const inCoda = lettura?.filter(r => r.stato === 'attesa').map(r => r.id) ?? []
   /** La fonte che l'ultima lettura non ha letto (o solo in parte), finché non la si ricollega. */
   const nonLetta = (id: string) => riparate.includes(id) ? undefined
     : letturaStato.righe?.find(r => r.id === id && (r.stato === 'guaio' || r.stato === 'avviso'))
@@ -299,6 +395,69 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const risultato = avvio?.risultato
   const oggi = giornoLocale(), domani = spostaGiorno(oggi, 1)
   const altroGiorno = !!giorno && giorno !== oggi && giorno !== domani
+  /** La lettura di tutta l'app sta ancora girando: gli estratti non hanno ancora tutto (P4). */
+  const leggeAncora = !!letturaStato.righe?.some(rigaAperta)
+  // «Continua» dopo dieci secondi di lettura
+  const presto = inLettura && leggiDa !== null && adesso - leggiDa < CONTINUA_DOPO_MS
+
+  // P4 · chi ragiona: chiesto su questo passo solo se nessuno ragionava quando è comparso
+  useEffect(() => {
+    if (momento === 1 && accountConfermato && !carico && chiediModello === null) setChiediModello(!s.ragiona)
+    if (momento !== 1 && chiediModello !== null) setChiediModello(null)
+  }, [momento, accountConfermato, carico, chiediModello, s.ragiona])
+  // P4 · il bottone si sveglia a dieci secondi
+  useEffect(() => {
+    if (leggiDa === null) return
+    const resta = leggiDa + CONTINUA_DOPO_MS - Date.now()
+    if (resta <= 0) { setAdesso(Date.now()); return }
+    const x = setTimeout(() => setAdesso(Date.now()), resta + 20)
+    return () => clearTimeout(x)
+  }, [leggiDa])
+  // P4 · quello che ha trovato: ogni secondo e mezzo mentre si guarda la lettura, ogni secondo alla fine
+  const chiediPagina = (momento === 1 && vistaLettura) || !!fine
+  useEffect(() => {
+    if (!chiediPagina) return
+    let vivo = true
+    const giro = () => { void apiP4.avvioPagina().then(p => { if (vivo) setPagina(p) }).catch(() => {}) }
+    giro()
+    const x = setInterval(giro, fine ? 1000 : 1500)
+    return () => { vivo = false; clearInterval(x) }
+  }, [chiediPagina, fine])
+  // P4 · e subito, ogni volta che una fonte finisce: il conto non aspetta il prossimo giro
+  const finite = lettura?.filter(r => !rigaAperta(r)).length ?? 0
+  useEffect(() => {
+    if (!finite || !vistaLettura) return
+    let vivo = true
+    void apiP4.avvioPagina().then(p => { if (vivo) setPagina(p) }).catch(() => {})
+    return () => { vivo = false }
+  }, [finite, vistaLettura])
+  // P4 · la fine: si entra un secondo e mezzo dopo che la prima lettura ha finito, due se aveva già finito, venti al massimo
+  useEffect(() => {
+    if (!fine) return
+    if (fine.finitaIl === null && pagina && pagina.lettura !== 'prima') { setFine({ ...fine, finitaIl: Date.now() }); return }
+    const quando = Math.min(fine.dal + FINE_MASSIMO_MS, fine.finitaIl === null ? Infinity : fine.finitaIl + (fine.eraPrima ? 1500 : 2000))
+    const x = setTimeout(entraOra, Math.max(0, quando - Date.now()))
+    return () => clearTimeout(x)
+  }, [fine, pagina])
+  // P4 · al caricamento, una lettura che il server sta ancora facendo: ci si riattacca
+  useEffect(() => {
+    if (!riattacca || carico || !avvio) return
+    setRiattacca(false)
+    void leggiFonti()
+  }, [riattacca, carico, avvio])
+  // P4 · Invio preme il bottone principale mentre si guarda la lettura, e alla fine
+  useEffect(() => {
+    if (!(momento === 1 && vistaLettura) && !fine) return
+    const suInvio = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing) return
+      const dove = e.target as HTMLElement | null
+      if (dove && /^(INPUT|TEXTAREA|BUTTON|SELECT|A)$/.test(dove.tagName)) return
+      const b = primario.current
+      if (b && !b.disabled) { e.preventDefault(); b.click() }
+    }
+    window.addEventListener('keydown', suInvio)
+    return () => window.removeEventListener('keydown', suInvio)
+  }, [momento, vistaLettura, fine])
 
   // la luce sale con i passi, che adesso sono obiettivo, fonti, estratti, attività
   const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 2.2 : momento === 2 ? 2.6 : risultato ? 5 : 3
@@ -325,7 +484,9 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       {accountConfermato && momento === 1 && <>
         <h2 ref={titolo} tabIndex={-1}>{!lettura ? t('Cosa deve leggere Myynd?') : inLettura ? t('Leggo le tue fonti…') : nonLette(lettura) ? frasi.fontiNonLetteInsieme(nonLette(lettura)) : t('Ho letto le tue fonti.')}</h2>
         {!lettura && <p className="onboard-why">{t('Collegane quante vuoi. Myynd le legge tutte insieme.')}</p>}
-        {lettura ? <RigheLettura righe={lettura} classe="onboard" icona={18} nome={nomeFonte} /> : <fieldset disabled={occupato} className="onboard-fieldset">
+        {/* quello che ha trovato finora, per genere: una riga di stato, e niente finché non c'è niente */}
+        {lettura && trovatoDurante(pagina, inCoda) && <p className="onboard-why" role="status">{trovatoDurante(pagina, inCoda)}</p>}
+        {lettura ? <RigheLettura righe={lettura} classe="onboard" icona={18} nome={nomeFonte} corte /> : <fieldset disabled={occupato} className="onboard-fieldset">
           {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca connessioni…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca connessioni…')} /></label>}
           {/* Le collegate si vedono da lontano: il bordo e la riga verdi, che qui vogliono dire solo «collegata».
               Una collegata che l'ultima lettura non ha letto non è verde: dice «non letta», e aprendola si ripara. */}
@@ -337,7 +498,17 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
                 : collegata(c) && <em className="onboard-source-state" aria-hidden="true">✓ {t('Collegato')}</em>}
             </button>
           })}</div>
-          {fonti.length > 6 && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
+          {fonti.length > quante && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
+          {/* chi ragiona, solo se nessuno ragionava quando il passo è comparso: tre strade, la scheda si apre qui sotto (P4) */}
+          {chiediModello && <div className="onboard-option onboard-model-row">
+            <span className="onboard-option-label">{t('Modello')}</span>
+            {modelloCollegato
+              ? <span className="onboard-connected" style={{ marginLeft: 0, fontSize: 12, overflowWrap: 'anywhere' }}>✓ {t('Collegato')} · {t(modelloCollegato.nome)}</span>
+              : <div className="onboard-provider-choice" style={{ marginBottom: 0, flexWrap: 'wrap' }} role="group" aria-label={t('Modello')}>
+                {MODELLI.map(m => <button key={m.id} type="button" aria-pressed={aperta === m.id} onClick={() => apri(m.id)}>{t(m.etichetta)}</button>)}
+              </div>}
+            <span />
+          </div>}
           {scelta && (() => {
             const guasta = collegata(scelta) ? nonLetta(scelta.id) : undefined
             return <div className="onboard-source-detail" key={scelta.id}>
@@ -350,7 +521,12 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
                 <button type="button" className="onboard-secondary" onClick={() => setModifica(true)}>{t('Cambia')}</button>
                 <BottoneSicuro chiaro titolo={t('Scollega')} guaio={m => setErrore(t(m))} fai={() => scollega(scelta.id)} style={{ fontSize: 11 }}>{t('Scollega')}</BottoneSicuro>
               </div>}
-              {moduloAperto && <Form id={scelta.id} tema="scuro" ok={() => { setModifica(false); void ricarica().catch(() => {}) }} collegato={conferma => collegataOra(scelta.id, conferma)} />}
+              {moduloAperto && <Form id={scelta.id} tema="scuro" ok={() => {
+                setModifica(false)
+                // un modello collegato chiude la sua scheda: la riga dice «✓ Collegato»
+                if (eModello) { setAppena(a => a.includes(scelta.id) ? a : [...a, scelta.id]); apri(scelta.id) }
+                void ricarica().catch(() => {})
+              }} collegato={conferma => collegataOra(scelta.id, conferma)} />}
             </div>
           })()}
         </fieldset>}
@@ -359,8 +535,9 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
           {/* dopo una lettura con un guaio, Indietro riporta alle schede: lì si ricollega quella che non si è letta */}
           {/* a sinistra anche quando è da solo: la regola «l'unico va a destra» lo lasciava lontano dal suo posto */}
           <button className="onboard-secondary onboard-back" disabled={occupato} onClick={() => lettura ? setVistaLettura(false) : vai(0)}>{t('Indietro')}</button>
+          {/* mentre legge: «Leggo…» per dieci secondi, poi «Continua» salva le fonti e va avanti; la lettura continua da sé (P4) */}
           {lettura
-            ? !nonSalvate && <button className="onboard-primary" disabled={occupato} onClick={() => vai(2)}>{inLettura ? t('Leggo…') : t('Continua')}<Avanti /></button>
+            ? !nonSalvate && <button ref={primario} className="onboard-primary" disabled={occupato || presto} onClick={() => inLettura ? void continuaDurante() : vai(2)}>{presto ? t('Leggo…') : t('Continua')}<Avanti /></button>
             /* un modulo aperto ha il suo bottone pieno, «Collega …»: di primario ce n'è uno, e intanto «Leggi» fa un passo indietro */
             : moduloAperto
               ? !!collegate.length && <button className="onboard-secondary" disabled={occupato} onClick={leggiFonti}>{frasi.leggiFonti(collegate.length)}</button>
@@ -379,11 +556,18 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
             {/* da dove viene, e basta: la freccia apriva la stessa frase, parola per parola */}
             <p className="onboard-fact-source">{f.evidenza.fonte ? `${nomeFonte(f.evidenza.fonte)} · ${f.evidenza.titolo}` : f.evidenza.titolo}</p>
           </article>)}</div>
-        </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p><div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti nelle fonti lette.')}</div></div>}
+        </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p>{/* mentre legge ancora, o scelte a metà lettura, «non ho trovato» non è vero: la riga non c'è (P4) */}{(avvio.fonteSaltata || (!leggeAncora && !avvio.aMetaLettura)) && <div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti nelle fonti lette.')}</div>}</div>}
         <OnboardErrore testo={errore} />
         <div className="onboard-actions"><button className="onboard-secondary" disabled={occupato} onClick={() => vai(1)}>{t('Cambia fonti')}</button><button className="onboard-primary" disabled={occupato} onClick={conferma}>{occupato ? t('Salvo…') : confermati.length ? t('Conferma') : t('Continua senza estratti')}<Avanti /></button></div>
       </>}
-      {accountConfermato && momento === 3 && <>
+      {/* la fine dell'avvio (P4): quello che ha trovato, per al massimo venti secondi, e «Apri Myynd» subito premibile */}
+      {accountConfermato && fine && <>
+        <h2 ref={titolo} tabIndex={-1}>{pagina?.lettura === 'prima' ? t('Leggo le tue fonti…') : t('Ho letto le tue fonti.')}</h2>
+        {trovato(pagina?.trovato) && <p className="onboard-why" role="status">{trovato(pagina?.trovato)}</p>}
+        {pagina?.lettura === 'prima' && <div className="onboard-working" style={{ minHeight: 40 }}><span aria-hidden="true" className="onboard-working-mark" /></div>}
+        <div className="onboard-actions"><button ref={primario} className="onboard-primary" onClick={entraOra}>{t('Apri Myynd')}<Avanti /></button></div>
+      </>}
+      {accountConfermato && momento === 3 && !fine && <>
         <h2 ref={titolo} tabIndex={-1}>{risultato ? t('Il tuo primo passo è pronto.') : t('Qual è la prima attività?')}</h2>
         {!risultato && <p className="onboard-why">{t('Finisce nella lista: è la prima cosa che vedrai.')}</p>}
         {risultato ? <div className="onboard-result">

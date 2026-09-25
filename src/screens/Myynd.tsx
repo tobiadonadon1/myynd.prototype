@@ -19,6 +19,7 @@ import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
 import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
+import { PrimaPagina, inVista, usePrimaPagina } from '../prima-pagina'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { rigaFonti } from '../salute-fonti'
 import { RimedioFonte, osservatore } from '../components/RimedioFonte'
@@ -1234,6 +1235,9 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   // quello che c'è in pagina: ogni riga che si vede, e le domande nella loro
   // carta. Lo stesso conto del menù, per costruzione.
   const inPagina = sulTavolo(blocchi, cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
+  // P4 · la prima pagina di un conto nuovo: finché la prepara, una riga che lavora sotto la riga fissa
+  const primaPagina = usePrimaPagina()
+  const preparando = inVista(primaPagina)
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1264,13 +1268,15 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
               «più piccolo, più umile». Un occhio accanto alle fonti, e basta:
               la lettura ormai parte da sola ogni dieci minuti, questo è per
               chi non vuole aspettarli. Il nome lo dice al passaggio. */}
+          {/* mentre prepara la prima pagina l'occhio ha l'aria di chi lavora, e resta premibile (P4) */}
           <Hov as="button" type="button" onClick={v.genera} disabled={v.generando}
-            title={v.generando ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
+            title={v.generando || preparando ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
+            {...(preparando ? { 'aria-pressed': true } : {})}
             style={{
               flex: 'none', marginTop: 6, width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: '50%', border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.7)',
               color: 'var(--rame)', cursor: v.generando ? 'wait' : 'pointer', padding: 0,
-              opacity: v.generando ? 0.55 : 1, animation: v.generando ? 'pulse 1.2s ease-in-out infinite' : undefined
+              opacity: v.generando ? 0.55 : 1, animation: v.generando || preparando ? 'pulse 1.2s ease-in-out infinite' : undefined
             }}
             hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>
             <IconOcchio size={15} />
@@ -1279,6 +1285,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
       </div>
 
       <Avviso v={v} />
+      <PrimaPagina s={primaPagina} />
 
       {/* Myynd ha scritto: le domande per conoscerti aspettano in chat. Sta in
           cima a tutto, perché rispondergli viene prima del resto. */}

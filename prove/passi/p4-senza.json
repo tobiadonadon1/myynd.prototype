@@ -1,0 +1,110 @@
+[
+  {
+    "aspetta": 1500
+  },
+  {
+    "clicca": "Skip the intro"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "scrivi": "Launch the new website by October",
+    "in": "Put the new website online by October"
+  },
+  {
+    "scrivi": "New website",
+    "in": "New website"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1800
+  },
+  {
+    "scatta": "fonti"
+  },
+  {
+    "testo": "fonti"
+  },
+  {
+    "clicca": "Anthropic"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "scatta": "fonti-modello"
+  },
+  {
+    "clicca": "Anthropic"
+  },
+  {
+    "clicca": "Mail on this Mac"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "clicca": "Connect Mail on this Mac"
+  },
+  {
+    "aspetta": 2500
+  },
+  {
+    "clicca": "Read 3 sources"
+  },
+  {
+    "aspetta": 11000
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1200
+  },
+  {
+    "scatta": "estratti-durante"
+  },
+  {
+    "testo": "estratti-durante"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1500
+  },
+  {
+    "scrivi": "Write the homepage copy",
+    "in": "Write the copy for the home page"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1000
+  },
+  {
+    "scatta": "fine"
+  },
+  {
+    "testo": "fine"
+  },
+  {
+    "aspetta": 21000
+  },
+  {
+    "chiudi": true
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "casa"
+  },
+  {
+    "testo": "casa"
+  }
+]

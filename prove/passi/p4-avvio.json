@@ -1,0 +1,164 @@
+[
+  {
+    "aspetta": 1500
+  },
+  {
+    "clicca": "Skip the intro"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "scrivi": "Launch the new website by October",
+    "in": "Put the new website online by October"
+  },
+  {
+    "scrivi": "New website",
+    "in": "New website"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1800
+  },
+  {
+    "scatta": "fonti"
+  },
+  {
+    "testo": "fonti"
+  },
+  {
+    "clicca": "Calendar on this Mac"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "clicca": "Connect Calendar on this Mac"
+  },
+  {
+    "aspetta": 1500
+  },
+  {
+    "scatta": "agenda-guardia"
+  },
+  {
+    "clicca": "Mail on this Mac"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "clicca": "Connect Mail on this Mac"
+  },
+  {
+    "aspetta": 2500
+  },
+  {
+    "scatta": "mail-collegata"
+  },
+  {
+    "testo": "mail-collegata"
+  },
+  {
+    "clicca": "Read 3 sources"
+  },
+  {
+    "aspetta": 2500
+  },
+  {
+    "scatta": "lettura"
+  },
+  {
+    "testo": "lettura"
+  },
+  {
+    "js": "(() => { setTimeout(() => location.reload(), 50); return 1 })()"
+  },
+  {
+    "aspetta": 6000
+  },
+  {
+    "scatta": "ripresa"
+  },
+  {
+    "testo": "ripresa"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => (/60 emails/.test(document.body.innerText) || Date.now() - t0 > 25000) ? r(/60 emails/.test(document.body.innerText)) : setTimeout(g, 80); g() })"
+  },
+  {
+    "scatta": "lettura-fatta"
+  },
+  {
+    "testo": "lettura-fatta"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => (/Which excerpts|start with your goal/i.test(document.body.innerText) || Date.now() - t0 > 30000) ? r(document.querySelector('h2')?.textContent) : setTimeout(g, 150); g() })"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "scatta": "estratti"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1500
+  },
+  {
+    "scrivi": "Write the homepage copy",
+    "in": "Write the copy for the home page"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1000
+  },
+  {
+    "scatta": "fine"
+  },
+  {
+    "testo": "fine"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => (document.querySelector('[data-riga-che-lavora]') || /Here|things/i.test(document.querySelector('h1')?.textContent || '') && Date.now() - t0 > 4000 || Date.now() - t0 > 12000) ? r(!!document.querySelector('[data-riga-che-lavora]')) : setTimeout(g, 150); g() })"
+  },
+  {
+    "aspetta": 400
+  },
+  {
+    "chiudi": true
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "casa"
+  },
+  {
+    "testo": "casa"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => (!document.querySelector('[data-riga-che-lavora]') || Date.now() - t0 > 40000) ? r(!!document.querySelector('[data-riga-che-lavora]')) : setTimeout(g, 200); g() })"
+  },
+  {
+    "aspetta": 1800
+  },
+  {
+    "chiudi": true
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "casa-carte"
+  },
+  {
+    "testo": "casa-carte"
+  }
+]

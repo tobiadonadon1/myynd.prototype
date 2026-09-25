@@ -31,7 +31,7 @@ export const OBIETTIVO = 29
 /** I motori: contano solo quando lavorano, e mai come un episodio. */
 export const TESTE = new Set(['claude', 'openai'])
 /** Fonti la cui lettura porta l'inventario intero; tutte le altre portano arrivi. */
-export const INVENTARIO = new Set(['calendario', 'note', 'x'])   // e 'granola' quando si legge dalla cache (lo decide chi chiama)
+export const INVENTARIO = new Set(['calendario', 'agendamac', 'note', 'x'])   // e 'granola' quando si legge dalla cache (lo decide chi chiama)
 
 export type Verdetto = 'pulito' | 'muto' | 'guasto' | 'spento'
 

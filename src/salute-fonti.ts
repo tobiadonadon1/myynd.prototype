@@ -223,8 +223,8 @@ export function lineaPannello(m: Mancanza, adesso = new Date()): string {
  * quanti ne ha trovati l'ultima lettura.
  */
 export function lineaSilenzio(id: string, s: Silenzio): string {
-  if (s.forma === 'inventario' && ['calendario', 'note', 'granola'].includes(id)) {
-    const [zero, uno, tanti] = id === 'calendario'
+  if (s.forma === 'inventario' && ['calendario', 'agendamac', 'note', 'granola'].includes(id)) {
+    const [zero, uno, tanti] = id === 'calendario' || id === 'agendamac'
       ? ['Nessun evento nell’ultima lettura', 'Solo un evento nell’ultima lettura', 'Solo {n} eventi nell’ultima lettura']
       : id === 'note'
         ? ['Nessuna nota nell’ultima lettura', 'Solo una nota nell’ultima lettura', 'Solo {n} note nell’ultima lettura']
@@ -232,7 +232,7 @@ export function lineaSilenzio(id: string, s: Silenzio): string {
     return s.n === 0 ? t(zero) : s.n === 1 ? t(uno) : riempi(t(tanti), { n: s.n })
   }
   const n = Math.max(0, s.giorni)
-  const frase = id === 'posta' ? 'Ultima mail {n} giorni fa'
+  const frase = id === 'posta' || id === 'postamac' ? 'Ultima mail {n} giorni fa'
     : id === 'slack' || id === 'whatsapp' ? 'Ultimo messaggio {n} giorni fa'
     : id === 'granola' ? 'Ultima riunione {n} giorni fa'
     : id === 'desktop' ? 'Ultimo file {n} giorni fa'

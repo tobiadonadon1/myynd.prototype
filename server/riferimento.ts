@@ -39,7 +39,7 @@ export function leggi(): Riferimento {
   return { testo: b?.valore?.trim() ?? '', aggiornato: b?.aggiornato ?? null }
 }
 
-export function scrivi(testo: string) {
+export function scrivi(testo: string, o: { registra?: boolean } = {}) {
   const pulito = testo.trim()
   if (!pulito) throw new Error('Scrivi qualcosa.')
   store.scriviBlocco({
@@ -48,7 +48,9 @@ export function scrivi(testo: string) {
     valore: pulito,
     tetto: TETTO
   })
-  registraProgettiNominati(pulito)
+  // il primo avvio scrive il riferimento prima di creare il progetto: lì non
+  // si registra niente, o il progetto nascerebbe due volte (P4)
+  if (o.registra !== false) registraProgettiNominati(pulito)
 }
 
 /**

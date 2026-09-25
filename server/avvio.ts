@@ -12,6 +12,9 @@ import { parti } from './fuso.ts'
 import { CATALOGO } from './connettori/registro.ts'
 import { fonteCollegata } from './fonti-collegate.ts'
 import { recordSourceObservation } from './project-memory.ts'
+import * as riferimento from './riferimento.ts'
+import * as cancellati from './cancellati.ts'
+import { senzaTrattini } from './testo.ts'
 
 /** Quanto indietro si guarda per spiegare un progetto che comincia adesso. */
 const GIORNI_EVIDENZE = 180
@@ -34,6 +37,8 @@ export type RisultatoAvvio = {
 export type StatoAvvio = {
   id: string
   revisione: number
+  /** Una prima lettura sta girando adesso (la rotta lo aggiunge, P4). */
+  leggendo?: boolean
   fase: 'progetto' | 'fonte' | 'verifica' | 'azione' | 'completo'
   progetto: { nome: string; obiettivo: string } | null
   /** Le fonti lette insieme per questo avvio, nell'ordine in cui le ha messe la persona. */
@@ -41,6 +46,8 @@ export type StatoAvvio = {
   /** La prima di `fonti`: resta per chi parla ancora con una fonte sola. */
   fonte: string | null
   fonteSaltata: boolean
+  /** Scelte a metà lettura: «non ho trovato estratti» non si può dire, le fonti non si sono lette tutte (P4). */
+  aMetaLettura?: boolean
   fatti: FattoAvvio[]
   azione: string
   risultato: RisultatoAvvio | null
@@ -61,6 +68,16 @@ type Salvato = {
   fonte: string | null; fonti?: string[]; fonteScelta: boolean; verificato: boolean; confermati: string[]
   azione: string; risultato: RisultatoAvvio | null; aggiornato: string
   inCorso?: Intenzione | null
+  /**
+   * Fin dove si guarda per gli estratti (P4): quando ha scelto le fonti. La
+   * lettura continua dopo, in sottofondo, e un documento entrato dopo non deve
+   * spostare gli estratti sotto i suoi occhi (né far rispondere 409 a «Conferma»).
+   */
+  lettoFino?: string
+  /** Il riferimento come l'ha scritto l'avvio: finché è uguale, è nostro e si può completare. */
+  riferimentoNostro?: string
+  /** Le fonti si sono scelte mentre la lettura andava ancora («Continua», P4): gli estratti non hanno visto tutto. */
+  aMetaLettura?: boolean
 }
 
 function fontiDi(s: Salvato): string[] {
@@ -82,6 +99,7 @@ export class ErroreAvvio extends Error {
 
 const file = () => join(cartella(), 'avvio.json')
 function salva(s: Salvato) {
+  if (cancellati.cancellata(cartella())) throw new ErroreAvvio(cancellati.CONTO_CANCELLATO, 410)
   mkdirSync(cartella(), { recursive: true, mode: 0o700 })
   const temporaneo = `${file()}.${randomUUID()}.tmp`
   writeFileSync(temporaneo, JSON.stringify(s, null, 2), { mode: 0o600, flush: true })
@@ -121,6 +139,11 @@ function cambia(s: Salvato): StatoAvvio {
   return pubblico(s)
 }
 
+/** Le fonti i cui documenti sono eventi scritti da `corpoEvento` del calendario: la prima riga è la data. */
+const EVENTI = new Set(['calendario', 'agendamac'])
+/** La riga della data di un evento: corta, con l'anno, finita col punto (vedi `corpo` in calendario.ts). */
+const rigaDiData = (r: string) => r.trim().length <= 100 && /\b(?:19|20)\d{2}\b/.test(r) && /\.\s*$/.test(r)
+
 /** At most three literal excerpts, from the selected sources and real project matches. */
 function evidenze(s: Salvato): FattoAvvio[] {
   const fonti = fontiDi(s)
@@ -158,8 +181,14 @@ function evidenze(s: Salvato): FattoAvvio[] {
    */
   const soglia = Date.now() - GIORNI_EVIDENZE * 86_400_000
   const recente = (d: store.Documento) => !d.quando || Date.parse(d.quando) >= soglia
+  // quello entrato dopo la scelta delle fonti non sposta gli estratti (P4)
+  const fino = s.lettoFino ? Date.parse(s.lettoFino) : NaN
+  const giaLetto = (d: store.Documento) => {
+    const quando = (d as store.Documento & { indicizzato?: string | null }).indicizzato
+    return Number.isNaN(fino) || !quando || Date.parse(quando) <= fino
+  }
   const unici = [...new Map(documenti.map(d => [d.id, d])).values()]
-    .filter(d => !d.massa && recente(d) && progetti.tocca(p, `${d.titolo}\n${d.corpo}`))
+    .filter(d => !d.massa && recente(d) && giaLetto(d) && progetti.tocca(p, `${d.titolo}\n${d.corpo}`))
   /*
    * A turno fra le fonti: il primo documento di ognuna, poi il secondo.
    *
@@ -177,7 +206,16 @@ function evidenze(s: Salvato): FattoAvvio[] {
     // about the project. Remove only structural lines, keeping body excerpts
     // literal so every displayed character remains verifiable at the source.
     const corpo = d.corpo.replace(/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/, '')
-    const linee = corpo.split(/\r?\n/)
+    const tutte = corpo.split(/\r?\n/)
+    /*
+     * La prima riga di un evento è la sua data e ora («Friday, 2 October 2026
+     * at 06:00 — 07:00.»), scritta dal calendario per rileggerla nella vista
+     * della settimana: non è un fatto del progetto, e la sua lineetta finiva
+     * sullo schermo dell'avvio. Il documento resta com'è; qui non si cita (P4).
+     */
+    const prima = tutte.findIndex(r => r.trim())
+    const data = EVENTI.has(d.fonte) && prima >= 0 && rigaDiData(tutte[prima]!) ? prima : -1
+    const linee = data >= 0 ? tutte.filter((_, i) => i !== data) : tutte
     /*
      * Anche il titolo di un file di testo è un titolo.
      *
@@ -228,11 +266,25 @@ function pubblico(s: Salvato): StatoAvvio {
     fase: s.risultato ? 'completo' : !s.progetto ? 'progetto' : !s.fonteScelta ? 'fonte'
       : s.verificato ? 'azione' : 'verifica',
     progetto: s.progetto, fonti, fonte: fonti[0] ?? null, fonteSaltata: s.fonteScelta && !fonti.length,
+    ...(s.aMetaLettura && s.fonteScelta && fonti.length ? { aMetaLettura: true } : {}),
     // un avvio salvato prima riempiva l'attività con l'obiettivo: non si mostra come scritta da lei
     fatti, azione: !s.risultato && s.azione === s.progetto?.obiettivo ? '' : s.azione, risultato: s.risultato, aggiornato: s.aggiornato }
 }
 
 export function stato(): StatoAvvio { return pubblico(leggi()) }
+
+/**
+ * Le fonti dell'avvio sono state scelte (o saltate), o l'avvio è finito. Si
+ * guarda il file senza crearlo: il lavoro di fondo non scrive mai l'avvio.
+ * `null` se l'avvio non è mai cominciato, o non si lascia leggere.
+ */
+export function fontiScelte(): boolean | null {
+  if (!existsSync(file())) return null
+  try {
+    const s = JSON.parse(readFileSync(file(), 'utf8')) as Partial<Salvato>
+    return !!s.fonteScelta || !!s.risultato
+  } catch { return null }
+}
 
 export function progetto(b: { nome?: unknown; obiettivo?: unknown; revisione?: unknown }): StatoAvvio {
   const s = leggi(); esigiRevisione(s, b.revisione)
@@ -245,7 +297,31 @@ export function progetto(b: { nome?: unknown; obiettivo?: unknown; revisione?: u
   // la prima attività parte vuota, con il suo esempio: riempita con
   // l'obiettivo, bastava un Invio per salvare un'attività uguale all'obiettivo
   s.progetto = { nome, obiettivo }
+  scriviRiferimento(s, `${nome}: ${senzaPunto(obiettivo)}.`)
   return cambia(s)
+}
+
+/** Una frase sua, senza il punto in fondo (lo rimette chi compone) e senza lineette. */
+const senzaPunto = (t: string) => senzaTrattini(t.trim()).replace(/[.。]+$/u, '').trim()
+
+/**
+ * Le sue parole del primo avvio diventano il riferimento, se non ne ha uno.
+ *
+ * Le priorità partono dal riferimento («su cosa lavora adesso»), e la prima
+ * pagina gira mentre lui è ancora qui: senza, la prima domanda che vedrebbe
+ * entrando è proprio quella a cui ha appena risposto. Si scrive solo se è
+ * vuoto o se è ancora quello scritto da qui; uno scritto da lui non si tocca.
+ */
+function scriviRiferimento(s: Salvato, testo: string, registra = false): void {
+  try {
+    const attuale = riferimento.leggi().testo.trim()
+    if (attuale && attuale !== s.riferimentoNostro) return
+    if (attuale === testo) return
+    riferimento.scrivi(testo, { registra })
+    s.riferimentoNostro = testo
+  } catch (e) {
+    console.warn('myynd · avvio · il riferimento non si è scritto:', e instanceof Error ? e.message : e)
+  }
 }
 
 /**
@@ -255,7 +331,7 @@ export function progetto(b: { nome?: unknown; obiettivo?: unknown; revisione?: u
  * quando se ne sceglieva una: un client rimasto indietro la manda ancora, e
  * vale come una lista di una.
  */
-export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown }): StatoAvvio {
+export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown }, o: { durante?: boolean } = {}): StatoAvvio {
   const s = leggi(); esigiRevisione(s, b.revisione)
   if (s.risultato) return pubblico(s)
   if (!s.progetto) throw new ErroreAvvio('Scegli prima il progetto e l’obiettivo.')
@@ -271,6 +347,10 @@ export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown
   const prima = fontiDi(s)
   const uguali = s.fonteScelta && prima.length === fonti.length && fonti.every(f => prima.includes(f))
   s.fonti = fonti; s.fonte = fonti[0] ?? null; s.fonteScelta = true
+  s.lettoFino = new Date().toISOString()
+  // scelte con la lettura ancora in corso: gli estratti si fermano a qui, ma le fonti non sono lette tutte
+  if (o.durante) s.aMetaLettura = true
+  else delete s.aMetaLettura
   // ma l'ordine decide chi parla per primo nel giro a turno: se un estratto
   // confermato non c'è più fra i tre, la conferma non vale più
   const ancora = uguali && s.confermati.length ? new Set(evidenze(s).map(f => f.id)) : null
@@ -363,6 +443,10 @@ function finalizza(s: Salvato): Salvato {
   s.risultato = { tipo: 'prima_traccia', progetto: { id: p.id, ...progetto },
     compito: { id, testo: gia?.testo ?? azione, giorno: gia?.giorno ?? giorno }, traccia: { ...traccia, prossimaAzione: gia?.testo ?? azione } }
   s.inCorso = null
+  // il riferimento, se è ancora quello scritto al primo passo, si completa con la prima attività
+  scriviRiferimento(s, en
+    ? `${progetto.nome}: ${senzaPunto(progetto.obiettivo)}. Now: ${senzaPunto(azione)}.`
+    : `${progetto.nome}: ${senzaPunto(progetto.obiettivo)}. Adesso: ${senzaPunto(azione)}.`, true)
   s.revisione++
   s.aggiornato = new Date().toISOString()
   salva(s)

@@ -392,5 +392,42 @@ if ((scena as Record<string, unknown>).p9) {
 }
 // — P9: fine —
 
+// — P4: inizio —
+/*
+ * Il primo avvio di un conto nuovo: `scena.p4` = { onboarding?: false,
+ * imbuto?: true, senzaModello?: true, calendario?: { url, nome },
+ * postaMac?: { caselle, inArrivo, inviate, vecchie, spazzatura },
+ * fileDatati?: { nome, testo, giorni }[] }. Mail del Mac la collegano i passi;
+ * qui si scrive solo la sua cartella finta, sotto la casa finta.
+ */
+type ScenaP4 = {
+  onboarding?: boolean; imbuto?: boolean; senzaModello?: boolean
+  calendario?: { url: string; nome?: string }
+  postaMac?: { caselle: number; inArrivo: number; inviate: number; vecchie: number; spazzatura: number }
+  fileDatati?: { nome: string; testo: string; giorni: number }[]
+}
+const p4 = (scena as Record<string, unknown>).p4 as ScenaP4 | undefined
+if (p4) {
+  const { utimesSync } = await import('node:fs')
+  const imbuto = await import(join(SERVER, 'imbuto.ts'))
+  const { costruisciMail } = await import(join(SERVER, 'posta-mac-finta.ts'))
+  for (const f of p4.fileDatati ?? []) {
+    const p = join(cartella, f.nome)
+    writeFileSync(p, f.testo)
+    const quando = new Date(Date.now() - Math.abs(f.giorni) * 86_400_000)
+    utimesSync(p, quando, quando)
+  }
+  if (p4.postaMac) costruisciMail(CASA, p4.postaMac)
+  chi.dentro(conto.id, () => {
+    const c = cfg.leggi()
+    if (p4.onboarding === false) { c.onboarding = false; c.giro = false }
+    if (p4.calendario) c.calendario = { url: p4.calendario.url, ...(p4.calendario.nome ? { nome: p4.calendario.nome } : {}) }
+    if (p4.senzaModello) { delete c.compatibile; delete c.motore }
+    cfg.scrivi(c, { togli: p4.senzaModello ? ['compatibile', 'motore', 'credenzialiModelli'] : [] })
+    if (p4.imbuto) imbuto.nasce()
+  })
+}
+// — P4: fine —
+
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

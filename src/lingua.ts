@@ -377,7 +377,7 @@ const EN: Record<string, string> = {
   "Salvo il progetto, gli estratti confermati e questa attività.": "Save your project, confirmed excerpts and this task.",
   "Prepara la prima traccia": "Prepare the first outline",
   "Modello collegato": "Model connected",
-  "Altro modello": "Another model",
+  "Altro modello": "Other model",
   "Il primo avvio": "First setup",
   "Puoi chiudere. Ripartirai da qui.": "You can close this. Your progress is saved.",
   'Il tuo primo progetto': 'Your first project',
@@ -3110,6 +3110,21 @@ const EN: Record<string, string> = {
   // — P3: fine —
 
   // — P4: inizio —
+  // il primo avvio: Mail e Calendario del Mac, la riga che prepara la prima pagina, i conti per genere
+  'Mail del Mac': 'Mail on this Mac',
+  'Calendario del Mac': 'Calendar on this Mac',
+  'Le email di Mail su questo Mac, in sola lettura.': 'Your email in Mail on this Mac, read only.',
+  'I calendari di Calendario su questo Mac.': 'Your calendars in Calendar on this Mac.',
+  'Legge le email di Mail su questo Mac: arrivate e inviate.': 'Reads the email in Mail on this Mac: received and sent.',
+  'Legge i calendari di Calendario su questo Mac.': 'Reads the calendars in Calendar on this Mac.',
+  'Preparo la prima pagina': 'Preparing your first page',
+  'In pausa finché Calendario è chiuso': 'Paused while Calendar is closed',
+  'Mail non è su questo Mac, o non è mai stata aperta.': 'Mail is not on this Mac, or has never been opened.',
+  'Per leggere Mail serve l’accesso completo al disco.': 'Reading Mail needs Full Disk Access.',
+  'Per leggere Mail serve l’accesso completo al disco': 'Reading Mail needs Full Disk Access',
+  'Mail ha cambiato formato: serve un aggiornamento di Myynd.': 'Mail has changed its format: Myynd needs an update.',
+  'Questo conto è stato cancellato.': 'This account has been deleted.',
+  'apro la posta': 'opening the mail',
   // — P4: fine —
 
   // — P5: inizio —
