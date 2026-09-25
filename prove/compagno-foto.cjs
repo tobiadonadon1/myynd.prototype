@@ -43,6 +43,7 @@ window.addEventListener('DOMContentLoaded', () => { if (fondo) document.document
 contextBridge.exposeInMainWorld('compagno', {
   premuto: () => ipcRenderer.send('prova:gesto', 'premuto'),
   menu: () => ipcRenderer.send('prova:gesto', 'menu'),
+  afferra: () => ipcRenderer.send('prova:gesto', 'afferra'),
   trascina: (dx, dy) => ipcRenderer.send('prova:gesto', 'trascina', dx, dy),
   lascia: () => ipcRenderer.send('prova:gesto', 'lascia'),
   pronto: () => ipcRenderer.send('prova:gesto', 'pronto'),
@@ -98,9 +99,12 @@ app.whenReady().then(async () => {
   for (let i = 1; i <= 6; i++) { topo('mouseMove', 64 + i * 8, 64, 'left', { modifiers: ['leftButtonDown'] }); await pausa(30) }
   topo('mouseUp', 112, 64)
   await pausa(150)
-  const dx = gesti.filter(g => g[0] === 'trascina').reduce((a, g) => a + g[1], 0)
-  verifica(dx > 0 && gesti.some(g => g[0] === 'lascia') && !gesti.some(g => g[0] === 'premuto'),
+  const passi = gesti.filter(g => g[0] === 'trascina').map(g => g[1])
+  verifica(gesti[0]?.[0] === 'afferra' && passi.length > 0 && passi.at(-1) > 0 && gesti.some(g => g[0] === 'lascia') && !gesti.some(g => g[0] === 'premuto'),
     `trascinare sposta e non apre (${JSON.stringify(gesti)})`)
+  // ogni passo è lo spostamento dalla presa, non dal passo prima: crescono e non si sommano
+  verifica(passi.every((v, i) => i === 0 || v >= passi[i - 1]) && passi.at(-1) <= 48 * 2,
+    `ogni passo si conta dalla presa (${JSON.stringify(passi)})`)
   gesti.length = 0
   topo('mouseDown', 64, 64, 'right'); topo('mouseUp', 64, 64, 'right')
   await pausa(150)

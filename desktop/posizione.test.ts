@@ -88,4 +88,17 @@ test('mostriciattolo trascinato: segue, resta dentro, e fuori da tutto sta fermo
   assert.deepEqual(trascinaCompagno(aree, { x: 1300, y: 200 }, 200, 0), { x: 1500, y: 200 }, 'passa sul secondo schermo')
   assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 800 }, 0, 50), { x: 100, y: 25 + 875 - LATO_COMPAGNO })
   assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 800 }, -500, 0), { x: 100, y: 800 })
+  assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 800 }, -500, 0, { x: 60, y: 800 }), { x: 60, y: 800 }, 'fuori da tutto: resta dov’è adesso')
+})
+
+test('mostriciattolo spinto contro il bordo e riportato indietro: torna sotto il puntatore', () => {
+  const aree = [PRINCIPALE, SECONDO]
+  const presa = { x: 100, y: 700 }
+  const giu = { x: 100, y: 25 + 875 - LATO_COMPAGNO }
+  // il puntatore scende di 400 punti oltre il fondo: il mostriciattolo si ferma al bordo
+  assert.deepEqual(trascinaCompagno(aree, presa, 0, 150), giu)
+  assert.deepEqual(trascinaCompagno(aree, presa, 0, 400, giu), giu)
+  // e risale: appena il puntatore torna sopra il bordo, il mostriciattolo è di nuovo sotto di lui
+  assert.deepEqual(trascinaCompagno(aree, presa, 0, 50, giu), { x: 100, y: 750 })
+  assert.deepEqual(trascinaCompagno(aree, presa, 0, 0, giu), presa)
 })

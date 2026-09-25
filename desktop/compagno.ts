@@ -19,7 +19,7 @@
 import { BrowserWindow, Menu, ipcMain, screen, type IpcMainEvent, type MenuItemConstructorOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import * as impostazioni from './impostazioni.ts'
-import { vociCompagno, type Voce } from './icona-barra.ts'
+import { smorto, vociCompagno, type Voce } from './icona-barra.ts'
 import { t } from './lingua.ts'
 import type { StatoLocale } from './osservatore.ts'
 import { LATO_COMPAGNO, posizioneCompagno, trascinaCompagno } from './posizione.ts'
@@ -28,8 +28,8 @@ import { scriviRegistro } from './server.ts'
 const PAGINA = fileURLToPath(new URL('./compagno.html', import.meta.url))
 const PRELOAD = fileURLToPath(new URL('./compagno-preload.cjs', import.meta.url))
 const MAC = process.platform === 'darwin'
-/** Uno spostamento più grande di così in un colpo solo non viene da un trascinamento. */
-const PASSO_MASSIMO = 2000
+/** Uno spostamento dalla presa più grande di così non viene da un trascinamento. */
+const PASSO_MASSIMO = 20_000
 
 export type Azioni = { alPremere(): void; apri(): void; pausa(): void; riprendi(): void }
 
@@ -39,6 +39,8 @@ let osservatore: Pick<StatoLocale, 'disponibile' | 'acceso' | 'pausaFino' | 'gua
   { disponibile: false, acceso: false, pausaFino: null, guarda: false }
 let inAttesa = 0
 let ascolti = false
+/** Dov'era la finestra quando la si è presa: ogni passo del trascinamento si conta da qui. */
+let presa: { x: number; y: number } | null = null
 
 function attuale(): BrowserWindow | null {
   return finestra && !finestra.isDestroyed() ? finestra : null
@@ -62,7 +64,7 @@ function suo(e: IpcMainEvent): BrowserWindow | null {
 function mandaStato() {
   const w = attuale()
   if (!w) return
-  w.webContents.send('compagno:stato', { guarda: osservatore.guarda, attesa: inAttesa > 0 })
+  w.webContents.send('compagno:stato', { guarda: !smorto({ guarda: osservatore.guarda, piattaforma: process.platform }), attesa: inAttesa > 0 })
 }
 
 function riposiziona() {
@@ -94,17 +96,26 @@ function ascolta() {
   ascolti = true
   ipcMain.on('compagno:premuto', e => { if (suo(e)) azioni?.alPremere() })
   ipcMain.on('compagno:menu', e => { const w = suo(e); if (w) menu(w) })
+  ipcMain.on('compagno:afferra', e => {
+    const w = suo(e)
+    if (!w) return
+    const [x, y] = w.getPosition()
+    presa = { x, y }
+  })
+  // dx e dy: tutto lo spostamento del puntatore dalla presa, non dall'ultimo passo
   ipcMain.on('compagno:trascina', (e, dx: unknown, dy: unknown) => {
     const w = suo(e)
     if (!w || typeof dx !== 'number' || typeof dy !== 'number') return
     if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.abs(dx) > PASSO_MASSIMO || Math.abs(dy) > PASSO_MASSIMO) return
     const [x, y] = w.getPosition()
-    const p = trascinaCompagno(aree(), { x, y }, Math.round(dx), Math.round(dy))
+    if (!presa) presa = { x, y }
+    const p = trascinaCompagno(aree(), presa, Math.round(dx), Math.round(dy), { x, y })
     if (p.x !== x || p.y !== y) w.setPosition(p.x, p.y)
   })
   ipcMain.on('compagno:lascia', e => {
     const w = suo(e)
     if (!w) return
+    presa = null
     const [x, y] = w.getPosition()
     impostazioni.scrivi({ compagno: { ...impostazioni.leggi().compagno, acceso: true, x, y } })
   })

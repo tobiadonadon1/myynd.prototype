@@ -79,11 +79,15 @@ export function posizioneCompagno(aree: Area[], voluta: { x?: number; y?: number
 }
 
 /**
- * Mentre lo si trascina: segue il puntatore, ma resta su uno schermo. Se il
- * centro uscirebbe da tutti, sta fermo dov'era invece di saltare altrove.
+ * Mentre lo si trascina: dov'era quando lo si è preso (`origine`) più tutto
+ * lo spostamento del puntatore da allora, spinto dentro lo schermo che ne
+ * contiene il centro. Se il centro uscirebbe da tutti, sta dov'è (`adesso`)
+ * invece di saltare altrove. Ogni passo si conta dalla presa e non dal passo
+ * prima: spinto contro un bordo e riportato indietro, torna sotto il
+ * puntatore invece di restarne scostato.
  */
-export function trascinaCompagno(aree: Area[], da: Punto, dx: number, dy: number): Punto {
-  const p = { x: da.x + dx, y: da.y + dy }
+export function trascinaCompagno(aree: Area[], origine: Punto, dx: number, dy: number, adesso: Punto = origine): Punto {
+  const p = { x: origine.x + dx, y: origine.y + dy }
   const a = areaDelCentro(aree, p)
-  return a ? dentro(a, p) : { x: da.x, y: da.y }
+  return a ? dentro(a, p) : { x: adesso.x, y: adesso.y }
 }
