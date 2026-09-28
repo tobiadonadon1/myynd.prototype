@@ -23,6 +23,8 @@ In `OUT` finiscono `<passo>-<tema>-<larghezza>.png` e `.txt`, e i registri:
 `server.log`, `modello.jsonl` (ogni richiesta al modello: prompt, schema, risposta), `semina.log`, `scatta.log`.
 Guarda sempre le foto (Read del PNG) prima di dire che una cosa va.
 
+Una scena in italiano: `"lingua": "it"` nella scena cambia la lingua del server (quello che scrive il modello), non quella della finestra, che la legge una volta all'avvio da `localStorage['myynd.lingua.2']` (`src/main.tsx`). Per le foto in italiano serve anche quella: un passo `{ "js": "localStorage.setItem('myynd.lingua.2','it'); location.reload(); 1" }` e un'attesa.
+
 ## I pezzi
 
 - `finto-modello.mjs`: un fornitore compatibile OpenAI (`/v1/chat/completions`, intero e in streaming). Il copione (`prove/copioni/base.json`) sceglie la risposta con un'espressione regolare sul prompt (`"in": "system" | "utente" | "tutto"`), anche JSON e con un'attesa; senza regola che combaci risponde `predefinita`, o una risposta vuota ma valida per lo schema chiesto.
