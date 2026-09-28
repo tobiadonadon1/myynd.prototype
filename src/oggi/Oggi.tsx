@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { createPortal } from 'react-dom'
 import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
 import { frasi, loc, t } from '../lingua'
-import { IconAvanti, IconGiu, IconSpunta } from '../icons'
+import { IconGiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { MenuGiu } from '../components/MenuGiu'
 import { Testo } from '../Testo'
@@ -33,7 +33,6 @@ import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
 import { Tavola } from './Tavola'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
-import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 import { RigaIpotesi } from './RigaIpotesi'
@@ -180,57 +179,6 @@ function Casella({ scelto, lavora, onClick, id, nome, cosa, riga }: {
       )}
     </Hov>
   )
-}
-
-/**
- * Una riga, e adesso è una lastra per conto suo.
- *
- * Stavano tutte dentro un blocco solo, separate da un filo grigio: un elenco,
- * cioè la forma che si dà alle cose quando l'unica cosa che conta è che siano
- * in ordine. Ma queste non sono voci di un elenco — ognuna è una cosa che sta
- * succedendo, con un suo stato e una sua attesa, e meritano di essere oggetti
- * separati che si possono prendere uno alla volta.
- *
- * Quindi: vetro proprio, bordo proprio, ombra propria, e sotto il cursore si
- * alza di un pixel prendendo il colore di quello che aspetta. La grammatica è
- * identica per tutte — stessa forma, stessa misura, stesso gesto — e cambia
- * solo la tinta, che è quello che le distingue davvero.
- */
-function CartaCalendario({ c, l, modifica, ritardo }: { c: Compito; l: Lista; modifica: (c: Compito) => void; ritardo?: string }) {
-  const attende = c.stato === 'pronto' || c.stato === 'chiede'
-  const classi = ['task-planning-card', attende && 'waiting', c.stato === 'delegato' && 'working', ritardo && 'late'].filter(Boolean).join(' ')
-  const apri = () => {
-    l.apriChiudi(c.id)
-    if (!l.aperti.has(c.id)) requestAnimationFrame(() => document.getElementById(`task-result-${c.id}`)?.scrollIntoView({ block: 'nearest', behavior: 'auto' }))
-  }
-  return <li className={classi} draggable onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move' }}>
-    {/* «From that view, I should also be able to easily delete one of the
-        items»: il cestino della lista, qui in alto a destra, quando la carta
-        è sotto il mouse o ha il fuoco. Togliere si disfa, quindi non chiede. */}
-    <span className="task-planning-cestino"><Cestino fai={() => l.elimina(c.id)} titolo={t('Toglila')} dim={22} icona={11} subito /></span>
-    <div className="task-planning-main"><Cerchio c={c} onClick={() => l.chiudi(c.id)} />
-      {/* l'ora, quando c'è, sta prima del titolo e sottovoce: è un dato, non
-          il titolo della riga */}
-      <button type="button" className="task-planning-title" onClick={() => modifica(c)}>
-        {/* la data di quando scadeva prende il posto dell'ora, nel rosso del
-            ritardo: la riga è nella colonna di oggi, e questo dice da quando.
-            La parola sta nascosta accanto, perché il colore da solo non parla
-            a chi la sente leggere. */}
-        {ritardo && <span className="task-planning-late">{ritardo}<span className="task-sr">, {t('Da recuperare')}</span></span>}
-        {oraDi(c) && <span className="task-planning-time">{oraDi(c)}</span>}{c.testo}
-      </button>
-    </div>
-    <div className="task-planning-footer">
-      <select aria-label={`${t('Assegnazione')}: ${c.testo}`} value={c.modo}
-        onChange={e => { if (e.target.value === 'io') l.richiama(c.id); else l.delega(c.id, e.target.value) }}>
-        {MODI.map(m => <option key={m.id} value={m.id} title={t(m.cosa)}>{t(m.nome)}</option>)}
-      </select>
-      {c.priorita && <span className={`task-priorita ${c.priorita}`}>{c.priorita === 'alta' ? t('Alta') : t('Bassa')}</span>}
-      {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} <IconAvanti size={11} /></button>
-        : c.stato === 'delegato' ? <span className="task-planning-status">{t('Al lavoro')}</span> : null}
-    </div>
-    {c.guaio && (bloccoDi(c) ? <Ferma guaio={c.guaio} carta /> : <p className="task-planning-error">{t(c.guaio)}</p>)}
-  </li>
 }
 
 /**
@@ -1707,7 +1655,7 @@ function Finito({ l }: { l: Lista }) {
  * calendario e della lista: niente di nuovo da imparare, solo un posto
  * dove si vede. Esc, la croce o un clic fuori lo chiudono.
  */
-function Foglio({ c, l, stretta, modifica, chiudi }: { c: Compito; l: Lista; stretta: boolean; modifica: (c: Compito) => void; chiudi: () => void }) {
+export function Foglio({ c, l, stretta, modifica, chiudi }: { c: Compito; l: Lista; stretta: boolean; modifica: (c: Compito) => void; chiudi: () => void }) {
   const d = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const x = d.current
@@ -1772,6 +1720,16 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
   const chiudiFoglio = () => {
     if (foglio && l.aperti.has(foglio)) l.apriChiudi(foglio)
     setFoglio(null)
+  }
+  /*
+   * Un lavoro consegnato o una domanda si apre in un foglio sopra la pagina,
+   * dal quaderno come dalla bacheca: sotto, dopo i giorni o le corsie, non lo
+   * si vedrebbe. Una riga senza un lavoro da mostrare apre il dettaglio.
+   */
+  const apriFoglio = (c: Compito) => {
+    if (c.stato !== 'pronto' && c.stato !== 'chiede') { setModifica(c); return }
+    if (!l.aperti.has(c.id)) l.apriChiudi(c.id)
+    setFoglio(c.id)
   }
   // chiesta da fuori (una riga del punto): si apre il dettaglio e la richiesta si consuma
   useEffect(() => {
@@ -1889,12 +1847,9 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', fontSize: '13.5px', color: 'var(--rame-testo)' }}>{t(l.guasto)}</div>
       )}
 
-      {l.caricato && !l.guasto && vista === 'calendario' && <Calendario compiti={l.compiti} oggi={dataOggi}
-        giorno={giorno} scegli={setGiorno} lingua={lingua} senzaData={senzaData} setSenzaData={setSenzaData}
-        espandi={() => setEspansa(true)}
-        pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
-        aggiungi={(r, g) => { void l.aggiungi(r.testo, secchioDelGiorno(g), g, r.ora, { progetto: r.progetto, priorita: r.priorita }) }}
-        renderRiga={(c, ritardo) => <CartaCalendario key={c.id} c={c} l={l} modifica={setModifica} ritardo={ritardo} />} />}
+      {l.caricato && !l.guasto && vista === 'calendario' && <Calendario l={l} oggi={dataOggi}
+        inizio={giorno} setInizio={g => { setGiorno(g); setSenzaData(false) }} lingua={lingua}
+        espandi={() => setEspansa(true)} apri={apriFoglio} modifica={setModifica} />}
 
       {espansa && <Agenda compiti={l.compiti} oggi={dataOggi} giorno={senzaData ? dataOggi : giorno}
         scegli={g => { setGiorno(g); setSenzaData(false) }} lingua={lingua}
@@ -1906,19 +1861,9 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         chiudi={() => setEspansa(false)} />}
 
       {l.caricato && !l.guasto && vista === 'bacheca' && <Tavola l={l} oggi={dataOggi} modifica={setModifica}
-        apri={c => {
-          // un lavoro consegnato o una domanda si apre in un foglio sopra la
-          // bacheca: sotto, dopo cinque corsie alte, non lo si vedrebbe. Una
-          // riga ferma su un guaio non ha un lavoro da mostrare: il dettaglio
-          if (c.stato !== 'pronto' && c.stato !== 'chiede') { setModifica(c); return }
-          if (!l.aperti.has(c.id)) l.apriChiudi(c.id)
-          setFoglio(c.id)
-        }} />}
+        apri={apriFoglio} />}
 
-      {vista === 'bacheca' && cartaDelFoglio && <Foglio c={cartaDelFoglio} l={l} stretta={stretta} modifica={setModifica} chiudi={chiudiFoglio} />}
-
-      {vista === 'calendario' && l.compiti.filter(c => l.aperti.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede')).map(c =>
-        <section key={c.id} id={`task-result-${c.id}`} className="task-calendar-result"><ul className="task-agenda-list"><Riga c={c} l={l} stretta={stretta} modifica={setModifica} /></ul></section>)}
+      {vista !== 'lista' && cartaDelFoglio && <Foglio c={cartaDelFoglio} l={l} stretta={stretta} modifica={setModifica} chiudi={chiudiFoglio} />}
 
       {l.caricato && !l.guasto && !vuota && vista === 'lista' && (
         <>

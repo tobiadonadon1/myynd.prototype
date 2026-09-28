@@ -21,7 +21,7 @@ import { Casella } from '../components/forme'
 import { coloreProgetto } from '../colori-progetto'
 import type { Lista } from './useCompiti'
 import { secchioDelGiorno } from './giorni'
-import { CORSIE, consegnata, cosaAspetta, perCorsia, provenienza, SI_LASCIA, staControllando, type Corsia, type Provenienza } from './bacheca'
+import { CORSIE, consegnata, cosaAspetta, perCorsia, provenienza, quandoParte, SI_LASCIA, staControllando, type Corsia, type Provenienza } from './bacheca'
 import './tavola.css'
 
 const NOME_CORSIA: Record<Corsia, string> = {
@@ -360,15 +360,8 @@ function RigaTurno({ s, l }: { s: StatoTurno; l: Lista }) {
  * sei, o la notte prima del suo giorno. Se il turno è fermo, lo dice lei.
  */
 function Quando({ c, s }: { c: Compito; s: StatoTurno | null | undefined }) {
-  let testo = ''
-  if (c.stato === 'delegato') testo = t('Prossima')
-  else if (!s?.acceso || !s.motore) testo = t('Aspetta il turno')
-  else if (s.pausaFino) testo = t('In pausa')
-  else if (c.tocca === 'adesso') testo = s.avviate >= s.carte ? t('Domani') : t('Prossima')
-  else if (c.tocca === 'notte') testo = t('Stanotte')
-  else if (c.tocca === 'via') testo = t('Quando non ci sei')
-  else if (c.tocca?.startsWith('prima:')) testo = frasi.laNottePrima(c.tocca.slice(6))
-  if (!testo) return null
-  const prossima = c.tocca === 'adesso' || c.stato === 'delegato'
-  return <p className="tavola-quando" data-prossima={prossima || undefined}><i aria-hidden="true" />{testo}</p>
+  const q = quandoParte(c, s)
+  if (!q) return null
+  const testo = q.giorno ? frasi.laNottePrima(q.giorno) : t(q.chiave)
+  return <p className="tavola-quando" data-prossima={q.prossima || undefined}><i aria-hidden="true" />{testo}</p>
 }

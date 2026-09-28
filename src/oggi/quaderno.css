@@ -1,0 +1,106 @@
+/*
+ * Il quaderno: il calendario delle cose da fare come pagine a righe.
+ *
+ * Preso da TeuxDeux per la forma — i giorni in colonna, le righe tirate, si
+ * scrive sulla riga vuota — e da Myynd per tutto il resto: il serif dei
+ * titoli sul nome del giorno, il rame per oggi, il verde solo per «ci sta
+ * lavorando lui», la carta della scrivania sotto. Niente riquadri attorno
+ * alle righe: una riga è una riga.
+ */
+.quaderno {padding:22px 22px 20px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
+.quaderno button {font-family:inherit;cursor:pointer;}
+.quaderno-testa {display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:22px;}
+.quaderno-mese {margin:0;font-size:20px;font-weight:400;letter-spacing:-.02em;}
+.quaderno-mese::first-letter {text-transform:uppercase;}
+.quaderno-comandi {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.quaderno-quanti {display:inline-flex;padding:3px;background:rgba(var(--inchiostro-rgb),.05);border:1px solid rgba(var(--luce-rgb),.7);border-radius:10px;}
+.quaderno-quanti button {min-width:30px;border:0;padding:5px 9px;background:transparent;border-radius:10px;font-size:12px;font-variant-numeric:tabular-nums;color:rgba(var(--inchiostro-rgb),.55);}
+.quaderno-quanti button:hover {color:var(--rame-testo);}
+.quaderno-quanti button[aria-pressed=true] {background:var(--carta-piena);box-shadow:0 2px 6px rgba(var(--ombra-rgb),.09);color:var(--inchiostro);}
+.quaderno-oggi,.quaderno-espandi {display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 13px;border-radius:10px;font-size:12.5px;background:transparent;border:1px solid rgba(var(--inchiostro-rgb),.14);color:rgba(var(--inchiostro-rgb),.72);}
+.quaderno-oggi:disabled {opacity:.45;cursor:default;}
+.quaderno-espandi {border-color:rgba(var(--rame-rgb),.34);color:var(--rame-testo);}
+.quaderno-oggi:hover:not(:disabled),.quaderno-espandi:hover {border-color:rgba(var(--rame-rgb),.5);color:var(--rame-testo);}
+.quaderno-frecce {display:inline-flex;}
+.quaderno-frecce button {min-width:30px;min-height:32px;border:0;background:transparent;border-radius:10px;font-size:18px;line-height:1;color:rgba(var(--inchiostro-rgb),.55);}
+.quaderno-frecce button:hover {color:var(--rame-testo);}
+
+/* I giorni: colonne di pagine, larghe quanto la finestra permette. */
+.quaderno-giorni {display:grid;gap:26px;align-items:start;}
+.quaderno-giorno {min-width:0;}
+.quaderno-giorno > header {display:flex;flex-direction:column;gap:3px;padding:0 2px 10px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.16);}
+.quaderno-data {font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.42);font-variant-numeric:tabular-nums;}
+.quaderno-giorno h3 {margin:0;font-family:'Iowan Old Style','Baskerville','Times New Roman',serif;font-size:26px;font-weight:400;line-height:1.1;letter-spacing:-.025em;color:var(--inchiostro);}
+.quaderno-giorno.oggi h3 {color:var(--rame-testo);}
+.quaderno-giorno.oggi .quaderno-data {color:var(--rame-testo);}
+.quaderno-giorno.passato > header {opacity:.6;}
+.quaderno-giorno.compatto h3 {font-size:21px;}
+
+/* Le righe: tirate, alte abbastanza per un dito, senza riquadri. */
+.quaderno-righe {list-style:none;margin:0;padding:0;}
+.quaderno-righe[data-sopra] {background:rgba(var(--rame-rgb),.05);border-radius:10px;}
+.quaderno-riga {position:relative;display:flex;align-items:center;gap:8px;min-height:38px;padding:0 2px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.08);}
+.quaderno-riga[draggable=true] {cursor:grab;}
+.quaderno-riga.sopra {box-shadow:inset 0 2px 0 var(--rame);}
+.quaderno-riga.vuota {cursor:text;}
+.quaderno-spunta {flex:none;width:15px;height:15px;padding:0;border-radius:50%;border:1.5px solid rgba(var(--inchiostro-rgb),.22);background:transparent;opacity:.55;transition:opacity .14s,border-color .14s;}
+.quaderno-riga:hover .quaderno-spunta,.quaderno-spunta:focus-visible {opacity:1;}
+.quaderno-spunta:hover {border-color:var(--inchiostro);}
+.quaderno-riga.di-pronta .quaderno-spunta,.quaderno-riga.di-chiede .quaderno-spunta,.quaderno-riga.di-dafinire .quaderno-spunta {border-color:var(--rame);border-width:2px;opacity:1;}
+.quaderno-spunta.fatta {display:inline-grid;place-items:center;border:0;opacity:1;font-size:9px;background:var(--fatto-fondo, rgba(92,118,96,.16));color:var(--fatto-segno, #3E5140);}
+.quaderno-testo {flex:1 1 60%;min-width:0;display:flex;align-items:baseline;gap:7px;padding:9px 0;border:0;background:transparent;text-align:left;font-size:14px;line-height:1.38;color:var(--inchiostro);}
+.quaderno-parole {min-width:0;overflow-wrap:anywhere;}
+.quaderno-testo:hover .quaderno-parole {color:var(--rame-testo);}
+.quaderno-riga.fatta .quaderno-parole {text-decoration:line-through;text-decoration-color:rgba(var(--inchiostro-rgb),.35);color:rgba(var(--inchiostro-rgb),.42);}
+.quaderno-riga.fatta .quaderno-testo {cursor:default;}
+.quaderno-ora {flex:none;font-size:12px;font-variant-numeric:tabular-nums;color:rgba(var(--inchiostro-rgb),.5);}
+.quaderno-tardi {flex:none;font-size:12px;font-weight:500;color:var(--ritardo);}
+.quaderno-punto {flex:none;align-self:center;width:6px;height:6px;border-radius:50%;}
+.quaderno-riga.alta .quaderno-parole::after {content:' !';color:var(--rame-testo);font-weight:600;}
+
+/* La parola a destra: chi aspetta chi. */
+/* la parola cede sempre il passo al testo: al massimo due quinti della riga, e va a capo lei */
+.quaderno-stato {flex:0 1 auto;max-width:40%;display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;font-size:11px;font-weight:500;line-height:1.25;text-align:right;overflow-wrap:break-word;color:rgba(var(--inchiostro-rgb),.5);}
+.quaderno-stato.lavora,.quaderno-stato.coda {color:var(--verde-cupo, #3E5140);}
+.quaderno-stato.pronta,.quaderno-stato.chiede,.quaderno-stato.dafinire,.quaderno-stato.ferma {color:var(--rame-testo);}
+.quaderno-stato > i {flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--salvia-rgb),.95);animation:tavola-battito 1.6s ease-in-out infinite;}
+
+/* Sotto la mano: «A Myynd», il dettaglio, il cestino. Galleggiano, non tengono posto. */
+.quaderno-gesti {position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:4px;padding:3px;border-radius:99px;background:var(--carta-piena);box-shadow:0 4px 14px -6px rgba(var(--ombra-rgb),.35);opacity:0;pointer-events:none;transition:opacity .14s;}
+.quaderno-riga:hover .quaderno-gesti,.quaderno-riga:focus-within .quaderno-gesti {opacity:1;pointer-events:auto;}
+.quaderno-a-myynd,.quaderno-piu,.quaderno-riapri {border:1px solid rgba(var(--inchiostro-rgb),.16);background:var(--carta-piena);border-radius:99px;padding:3px 10px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.72);white-space:nowrap;}
+.quaderno-piu {padding:3px 8px;line-height:1;}
+.quaderno-a-myynd:hover,.quaderno-piu:hover,.quaderno-riapri:hover {border-color:var(--rame);color:var(--rame-testo);}
+.quaderno-riapri {position:absolute;right:0;opacity:0;pointer-events:none;}
+.quaderno-riga.fatta:hover .quaderno-riapri,.quaderno-riapri:focus-visible {opacity:1;pointer-events:auto;}
+
+/* Dove si scrive: una riga come le altre, con il cursore. */
+.quaderno-scrivi,.quaderno-modifica {flex:1;min-width:0;padding:9px 0 9px 23px;border:0;background:transparent;font-family:inherit;font-size:14px;line-height:1.38;color:var(--inchiostro);outline:none;}
+.quaderno-modifica {padding-left:0;}
+.quaderno-scrivi::placeholder {color:transparent;}
+.quaderno-righe:hover .quaderno-scrivi::placeholder,.quaderno-scrivi:focus::placeholder {color:rgba(var(--inchiostro-rgb),.32);}
+.quaderno-riga.nuova:focus-within {border-bottom-color:rgba(var(--rame-rgb),.5);}
+
+/* Da pianificare: sotto i giorni, su un fondo appena più scuro, in più colonne. */
+.quaderno-pagina {margin-top:30px;padding:16px 18px 10px;border-radius:14px;background:rgba(var(--inchiostro-rgb),.03);}
+.quaderno-pagina > header {display:flex;align-items:baseline;gap:10px;padding:0 2px 6px;}
+.quaderno-pagina h3 {margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.5);}
+.quaderno-pagina > header > span {font-size:11.5px;color:rgba(var(--inchiostro-rgb),.45);font-variant-numeric:tabular-nums;}
+.quaderno-righe[data-colonne] {display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));column-gap:26px;}
+
+/* La colonna di destra della prima pagina, quando la finestra è larga. */
+.quaderno-lato {position:sticky;top:0;display:flex;flex-direction:column;gap:26px;width:360px;flex:none;padding:18px 20px 16px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
+.quaderno-lato button {font-family:inherit;cursor:pointer;}
+.quaderno-tutto {align-self:flex-start;border:0;background:transparent;padding:0;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.55);}
+.quaderno-tutto:hover {color:var(--rame-testo);}
+
+.quaderno button:focus-visible,.quaderno-lato button:focus-visible,.quaderno-scrivi:focus-visible,.quaderno-modifica:focus-visible {outline:2px solid var(--rame);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce) {
+  .quaderno-stato > i {animation:none;}
+  .quaderno-spunta,.quaderno-gesti {transition:none;}
+}
+/* di notte niente velo: il bruno non sopporta i rialzi */
+:root[data-theme="dark"] .quaderno-righe[data-sopra] {background:transparent;}
+@media (prefers-color-scheme:dark) {
+  :root:not([data-theme="light"]) .quaderno-righe[data-sopra] {background:transparent;}
+}

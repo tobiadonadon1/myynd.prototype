@@ -9,7 +9,7 @@
 //
 // Pura: niente React, niente rete. La legge `Tavola.tsx`, la provano le prove.
 
-import type { Compito, PassoCompito } from '../api'
+import type { Compito, PassoCompito, StatoTurno } from '../api'
 import { giornoCompito } from './giorni.ts'
 
 export const CORSIE = ['tue', 'coda', 'lavora', 'attende', 'fatte'] as const
@@ -122,4 +122,35 @@ export function cosaAspetta(c: Compito): string {
   if (c.guaio) return c.guaio
   if (c.prova?.esito === 'fail') return c.prova.perche
   return ''
+}
+
+/**
+ * Quando parte una carta in coda (F2), come chiave da tradurre: la prossima,
+ * stanotte, quando non ci sei, o la notte prima del suo giorno (`giorno`).
+ * Se il turno è fermo, lo dice lei. Null se non c'è niente da dire.
+ */
+export function quandoParte(c: Compito, s: StatoTurno | null | undefined): { chiave: string; giorno?: string; prossima: boolean } | null {
+  if (c.stato === 'delegato') return { chiave: 'Prossima', prossima: true }
+  if (!s?.acceso || !s.motore) return { chiave: 'Aspetta il turno', prossima: false }
+  if (s.pausaFino) return { chiave: 'In pausa', prossima: false }
+  if (c.tocca === 'adesso') return s.avviate >= s.carte ? { chiave: 'Domani', prossima: false } : { chiave: 'Prossima', prossima: true }
+  if (c.tocca === 'notte') return { chiave: 'Stanotte', prossima: false }
+  if (c.tocca === 'via') return { chiave: 'Quando non ci sei', prossima: false }
+  // la frase la compone `frasi.laNottePrima(giorno)`: la chiave qui non si legge
+  if (c.tocca?.startsWith('prima:')) return { chiave: 'prima', giorno: c.tocca.slice(6), prossima: false }
+  return null
+}
+
+/** Lo stato di una riga del quaderno, in una parola: chi aspetta chi. Null per una riga sua e basta. */
+export type StatoRiga = { tipo: 'lavora' | 'coda' | 'pronta' | 'dafinire' | 'chiede' | 'ferma'; chiave: string; giorno?: string }
+export function statoRiga(c: Compito, passo: PassoCompito | null | undefined, s: StatoTurno | null | undefined): StatoRiga | null {
+  if (c.stato === 'chiede') return { tipo: 'chiede', chiave: 'ti chiede' }
+  if (c.stato === 'pronto') return c.prova?.esito === 'fail' ? { tipo: 'dafinire', chiave: 'da finire' } : { tipo: 'pronta', chiave: 'pronta' }
+  if (c.stato === 'delegato') return passo ? { tipo: 'lavora', chiave: 'Al lavoro' } : { tipo: 'coda', chiave: 'Prossima' }
+  if (c.guaio) return { tipo: 'ferma', chiave: 'ferma' }
+  if (c.stato === 'aperto' && c.modo && c.modo !== 'io') {
+    const q = quandoParte(c, s)
+    return q ? { tipo: 'coda', chiave: q.chiave, giorno: q.giorno } : { tipo: 'coda', chiave: 'Prossima' }
+  }
+  return null
 }

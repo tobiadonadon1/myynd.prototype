@@ -140,7 +140,7 @@ button.tavola-fatto:hover {border-color:rgba(var(--rame-rgb),.36);}
 .tavola-turno > span > i {flex:none;width:7px;height:7px;border-radius:50%;background:rgba(var(--inchiostro-rgb),.25);}
 .tavola-turno.vivo > span > i {background:rgba(var(--salvia-rgb),.95);animation:tavola-battito 1.6s ease-in-out infinite;}
 .tavola-turno.pausa > span > i,.tavola-turno.spento > span > i {background:transparent;border:1.5px solid rgba(var(--inchiostro-rgb),.3);}
-.tavola-quando {display:flex;align-items:center;gap:6px;margin:0;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.55);}
+.tavola-quando {display:flex;align-items:center;gap:6px;margin:0;font-size:11.5px;overflow-wrap:anywhere;color:rgba(var(--inchiostro-rgb),.55);}
 .tavola-quando > i {flex:none;width:6px;height:6px;border-radius:50%;border:1.5px solid rgba(var(--inchiostro-rgb),.3);}
 .tavola-quando[data-prossima] {color:var(--verde-cupo, #3E5140);}
 .tavola-quando[data-prossima] > i {border-color:transparent;background:rgba(var(--salvia-rgb),.9);}

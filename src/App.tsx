@@ -15,7 +15,9 @@ import { Chat } from './screens/Chat'
 import { Connettori } from './screens/Connettori'
 import { Mappa, MappaPiena } from './screens/Mappa'
 import { Myynd } from './screens/Myynd'
-import { Oggi } from './oggi/Oggi'
+import { Foglio, Oggi } from './oggi/Oggi'
+import { ListaDiLato } from './oggi/Calendario'
+import { Dettaglio } from './oggi/Dettaglio'
 import { useCompiti } from './oggi/useCompiti'
 import { blocchiFeed, cheAspettano, sulTavolo } from './blocchi-feed'
 import { Preferenze } from './screens/Preferenze'
@@ -352,7 +354,20 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
    * pixel perde le parole e resta una fila di icone. Il posto va a quello
    * che si sta guardando, che è la cosa giusta su una finestra piccola.
    */
-  const { rail, colonna } = taglia(useLarghezza())
+  const larghezza = useLarghezza()
+  const { rail, colonna } = taglia(larghezza)
+  /*
+   * La lista sulla destra della prima pagina, quando la finestra è larga.
+   *
+   * «As soon as it spreads out my window… the to-do list goes to my feed on
+   * the right. Claiming that empty space and reframing the feed based on the
+   * size of the window.» Sotto questa misura la prima pagina è una colonna,
+   * com'era; sopra, il feed resta di 760 e la lista ne prende 360 accanto.
+   * I 64 sono le due imbottiture della colonna centrale, i 36 lo spazio fra.
+   */
+  const conLista = larghezza - colonna - 64 >= 760 + 36 + 340
+  const [foglioCasa, setFoglioCasa] = useState<string | null>(null)
+  const [dettaglioCasa, setDettaglioCasa] = useState<string | null>(null)
 
   /**
    * La striscia in cima, dentro l'app sul Mac.
@@ -600,7 +615,28 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         scrollbarGutter: 'stable both-edges',
         padding: rail ? `${16 + striscia}px 14px 24px 14px` : `${22 + striscia}px 34px 30px 30px`
       }}>
-        {v.isMyynd && <Myynd v={v} lista={lista} blocchi={blocchi} />}
+        {v.isMyynd && (conLista ? (
+          <div style={{ display: 'flex', gap: 36, alignItems: 'flex-start', maxWidth: '100%' }}>
+            <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato />
+            <ListaDiLato l={lista} lingua={stato.config.lingua ?? 'en'} vaiALista={() => v.goOggi()}
+              apri={c => {
+                if (c.stato !== 'pronto' && c.stato !== 'chiede') { setDettaglioCasa(c.id); return }
+                if (!lista.aperti.has(c.id)) lista.apriChiudi(c.id)
+                setFoglioCasa(c.id)
+              }}
+              modifica={c => setDettaglioCasa(c.id)} />
+          </div>
+        ) : <Myynd v={v} lista={lista} blocchi={blocchi} />)}
+        {v.isMyynd && foglioCasa && (() => {
+          const c = lista.compiti.find(x => x.id === foglioCasa)
+          if (!c) return null
+          return <Foglio c={c} l={lista} stretta={false} modifica={x => setDettaglioCasa(x.id)}
+            chiudi={() => { if (lista.aperti.has(c.id)) lista.apriChiudi(c.id); setFoglioCasa(null) }} />
+        })()}
+        {v.isMyynd && dettaglioCasa && (() => {
+          const c = lista.compiti.find(x => x.id === dettaglioCasa)
+          return c ? <Dettaglio c={c} l={lista} chiudi={() => setDettaglioCasa(null)} /> : null
+        })()}
         {v.isOggi && (
           <Oggi
             l={lista}

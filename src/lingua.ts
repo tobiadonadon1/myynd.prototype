@@ -3384,6 +3384,14 @@ const EN: Record<string, string> = {
   'Prossima': 'Next',
   'Aspetta il turno': 'Waiting for the shift',
   'Quando non ci sei': 'When you’re away',
+  'ferma': 'stopped',
+  'Giorni da vedere': 'Days to show',
+  'Giorno precedente': 'Previous day',
+  'Giorno successivo': 'Next day',
+  'Riaprila': 'Reopen',
+  'Scrivi una cosa da pianificare': 'Write something to plan',
+  'Scrivi qui': 'Write here',
+  'Tutta la settimana': 'The whole week',
   'Turno di notte': 'Night shift',
   'Spento': 'Off',
   'Myynd lavora la bacheca da solo': 'Myynd works the board on its own',
@@ -4063,6 +4071,13 @@ export const frasi = {
   /** La prova sotto il lavoro: controllato contro il suo «fatto». */
   provaRegge: (perche: string) => corrente === 'en' ? `Checked against done means: ${perche}` : `Controllata contro il suo «fatto»: ${perche}`,
   provaNonRegge: (perche: string) => corrente === 'en' ? `Not done yet: ${perche}` : `Non ancora fatta: ${perche}`,
+  /** Il quaderno: quanti giorni vedere, e dove si scrive. */
+  giorniDaVedere: (n: number) => corrente === 'en' ? (n === 1 ? 'One day' : `${n} days`) : (n === 1 ? 'Un giorno' : `${n} giorni`),
+  scriviPer: (giorno: string) => {
+    const d = new Date(`${giorno}T12:00:00`)
+    const detto = Number.isNaN(d.getTime()) ? giorno : d.toLocaleDateString(corrente === 'en' ? 'en-US' : 'it-IT', { weekday: 'long', month: 'long', day: 'numeric' })
+    return corrente === 'en' ? `Write a line for ${detto}` : `Scrivi una riga per ${detto}`
+  },
   /** F2 · il turno in una riga. */
   carteDelTurno: (n: number, max: number) => corrente === 'en' ? `${n} of ${max} today` : `${n} di ${max} oggi`,
   stanotteDalle: (ora: string) => corrente === 'en' ? `Tonight from ${ora}` : `Stanotte dalle ${ora}`,
@@ -4070,11 +4085,13 @@ export const frasi = {
   stanotteFatte: (fatte: number, attende: number) => corrente === 'en'
     ? `Last night: ${fatte} done${attende ? `, ${attende} need${attende === 1 ? 's' : ''} you` : ''}`
     : `Stanotte: ${fatte === 1 ? '1 fatta' : `${fatte} fatte`}${attende ? `, ${attende === 1 ? '1 aspetta te' : `${attende} aspettano te`}` : ''}`,
-  /** La notte prima di un giorno, «AAAA-MM-GG»: «The night before Thursday». */
+  /** La notte prima di un giorno, «AAAA-MM-GG», detta con il giorno di quella notte: «Wednesday night». */
   laNottePrima: (giorno: string) => {
     const d = new Date(`${giorno}T12:00:00`)
-    const nome = Number.isNaN(d.getTime()) ? giorno : d.toLocaleDateString(corrente === 'en' ? 'en-US' : 'it-IT', { weekday: 'long' })
-    return corrente === 'en' ? `The night before ${nome}` : `La notte prima di ${nome}`
+    if (Number.isNaN(d.getTime())) return giorno
+    d.setDate(d.getDate() - 1)
+    const nome = d.toLocaleDateString(corrente === 'en' ? 'en-US' : 'it-IT', { weekday: 'long' })
+    return corrente === 'en' ? `${nome} night` : `${nome.charAt(0).toLocaleUpperCase()}${nome.slice(1)} notte`
   },
   // — F1: fine —
 

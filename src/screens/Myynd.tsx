@@ -1219,7 +1219,15 @@ function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
   )
 }
 
-export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista; blocchi?: BloccoPagina[] }) {
+export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false }: {
+  v: Vals; lista?: Lista; blocchi?: BloccoPagina[]
+  /**
+   * La lista sta già sulla destra (finestra larga): le righe sue e basta —
+   * aperte, sue, senza niente di Myynd dentro — stanno lì e non anche qui.
+   * Restano sul tavolo il feed e il lavoro di Myynd: quello che aspetta lui.
+   */
+  listaDiLato?: boolean
+}) {
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
@@ -1242,7 +1250,12 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   const tieni = pronta && visto.current !== null && visto.current.salvato === salvato
   const chiavi = tieni ? ordineStabile(ordinati.map(chiaveBlocco), visto.current!.chiavi) : ordinati.map(chiaveBlocco)
   useEffect(() => { if (pronta) visto.current = { chiavi, salvato } })
-  const blocchi = chiavi.map(k => ordinati.find(b => chiaveBlocco(b) === k)!)
+  const tutti = chiavi.map(k => ordinati.find(b => chiaveBlocco(b) === k)!)
+  const soloSua = (c: Compito) => c.stato === 'aperto' && (!c.modo || c.modo === 'io') && !c.guaio
+  const blocchi = listaDiLato
+    ? tutti.map(b => ({ ...b, righe: b.righe.filter(r => !(r.genere === 'compito' && soloSua(r.compito))) }))
+      .filter(b => b.righe.length > 0 || (v.progettiNuovi ?? []).includes(b.progetto ?? ''))
+    : tutti
   const muovi = (da: number, a: number) => {
     // dentro il suo gruppo e basta: un normale sopra un alto tornerebbe giù da solo
     if (da === a || !stessoGruppo(blocchi, da, a)) return
