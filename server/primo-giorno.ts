@@ -157,8 +157,15 @@ export async function ritratto(adesso = new Date()): Promise<number | null> {
   if (via()) return null
   await ferri.codice(adesso)
   if (via()) return null
+  // il conto è sincrono e passa novanta giorni di posta, agenda e codice: prima si
+  // lascia passare quello che aspetta (una richiesta della finestra), e si misura
+  await unGiroDopo()
+  if (via()) return null
+  const t0 = Date.now()
   // con il registro ancora indietro le righe sulla posta aspettano la notte, come nel giro del gemello
   abitudini.ricalcola(adesso, finito && !segnali.ripassoInCorso() ? {} : { senzaPosta: true })
+  const ms = Date.now() - t0
+  if (ms > 200) console.warn(`myynd · primo giorno · il conto di «Come lavori» ha tenuto il server fermo ${ms} ms`)
   const ora = adesso.toISOString()
   store.segnaCursore(CURS.ritratto, ora)
   if (!primaLettura.inCorso().length) store.segnaCursore(CURS.novanta, ora)
@@ -234,6 +241,11 @@ export function scegli(adesso = Date.now(), quante = CARTE_MAX): Scelta[] {
     if (p && p.stato !== 'attivo') continue
     if (!p && toccaUnProgettoChiuso(d)) continue
     if (!iniziativa.liberi([{ doc: d, tipo: 'risposta' }]).length) continue
+    // anche un'offerta del feed è una risposta da preparare: a chi non risponde mai, no.
+    // Mancava, e la bacheca del primo giorno mostrava «Send Leo the launch checklist»
+    // accanto a «Leo Martin's mail usually goes unanswered (9 of 9)».
+    const pm = perMittente(d)
+    if (pm && pm.risponde <= LASCIA) continue
     const offerta = v.offerta.trim()
     perDoc.set(d.id, {
       doc: d, testo: v.titolo, progetto: p?.id ?? null, voce: v.id,
@@ -302,7 +314,9 @@ export function fonteValida(c: Pick<store.Compito, 'doc' | 'voce'>, adesso = Dat
   if (!c.doc) return false
   const d = store.documento(c.doc)
   if (!d || store.docsIgnoratiDalFeed([d]).has(d.id) || iniziativa.rispostoNelFilo(d)) return false
-  if (c.voce) return true
+  // una carta nata da un'offerta del feed è una risposta: regge finché lui, per quello che dice
+  // «Come lavori», a quel mittente risponde
+  if (c.voce) { const pm = perMittente(d); return !(pm && pm.risponde <= LASCIA) }
   return iniziativa.candidati([d], adesso, { giorni: GIORNI_VALIDA }).length > 0
 }
 

@@ -258,3 +258,18 @@ test('nessuna bozza di risposta a chi di solito resta senza risposta', async () 
     assert.deepEqual(await pg.carte(), [])
   })
 })
+
+test('nemmeno da un’offerta del feed: nessuna bozza a chi di solito resta senza risposta, e la carta già nata non regge', async () => {
+  await chi.dentro(anna, async () => {
+    // Leo: sei mail vecchie mai risposte, e quella di oggi portata in prima pagina con un'offerta
+    const vecchie = Array.from({ length: 6 }, (_, i) => mail('leo@stampa.test', 'Leo', 20 + i * 5)).flat()
+    const [oggi] = mail('leo@stampa.test', 'Leo', 1, { corpo: 'Here is the launch checklist.' })
+    store.salvaDocumenti([...vecchie, oggi!, ...mail('ada@esempio.test', 'Ada', 60, { risposta: 60 })])
+    store.salvaFeed([{ tipo: 'Priorità', titolo: 'Send Leo the checklist back', testo: 'Leo is waiting.', doc: oggi!.id, offerta: 'I can draft the reply to Leo.' }])
+    await pg.ritratto()
+    assert.ok(ab.tutte().some(a => a.chiave === 'posta.lascia:leo@stampa.test'), 'la riga «resta senza risposta» c’è')
+    assert.equal(pg.scegli().some(s => s.doc.id === oggi!.id), false, 'l’offerta del feed è diventata una bozza per Leo')
+    // e una carta nata prima che «Come lavori» lo sapesse non regge più
+    assert.equal(pg.fonteValida({ doc: oggi!.id, voce: store.feedAperto(10)[0]?.id ?? 'v' }), false)
+  })
+})
