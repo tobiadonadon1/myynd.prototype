@@ -224,3 +224,20 @@ test('la deduzione sui temi scartati è una regola in vigore subito, e la chat d
   // e le convinzioni indotte non si riempiono più di deduzioni che nessuno legge
   assert.equal(store.convinzioni().filter(k => k.origine === 'scarti').length, 0)
 })
+
+test('alla lettura i filtri si rifanno al massimo una volta l’ora; gli scarti li rifanno subito', () => {
+  store.azzeraTutto()
+  const adesso = new Date()
+  ab.ricalcolaFiltriSeServe(adesso)
+  const primo = store.cursore('abitudini:filtri')
+  assert.ok(primo, 'la prima lettura non ha contato i filtri')
+  ab.ricalcolaFiltriSeServe(new Date(adesso.getTime() + 10 * 60_000))
+  assert.equal(store.cursore('abitudini:filtri'), primo, 'dieci minuti dopo ha ricontato')
+  const dopo = new Date(adesso.getTime() + 61 * 60_000)
+  ab.ricalcolaFiltriSeServe(dopo)
+  assert.equal(store.cursore('abitudini:filtri'), dopo.toISOString())
+  // uno scarto non aspetta l'ora: la sua rotta chiama `ricalcolaFiltri`, che conta sempre
+  const ancora = new Date(dopo.getTime() + 60_000)
+  ab.ricalcolaFiltri(ancora)
+  assert.equal(store.cursore('abitudini:filtri'), ancora.toISOString())
+})

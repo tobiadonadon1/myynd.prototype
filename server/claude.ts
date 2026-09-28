@@ -2207,7 +2207,9 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
    * persona entra se chiede qualcosa; un genere di carta si guarda dopo il
    * modello; un tema spinge in fondo e basta.
    */
-  const filtri = abitudini.filtriInVigore()
+  // una regola che non si legge non ferma la lettura: senza, il feed è quello di prima di F7
+  let filtri: abitudini.Filtri = { macchine: new Map(), persone: new Map(), domini: new Map(), tipi: new Map(), temi: [] }
+  try { filtri = abitudini.filtriInVigore() } catch (e) { console.warn('myynd · filtri del feed non letti:', e instanceof Error ? e.message : e) }
   const esame = new Map<string, { fase: Fase; motivo?: string | null }>()
   const finito = (d: Documento, fase: Fase, motivo?: string | null) => { esame.set(d.id, { fase, motivo: motivo ?? null }) }
   const scriviEsame = () => {
@@ -2580,7 +2582,8 @@ Scrivi in ${nellaLingua()}.`),
   const filtrate = new Set<string>()
   const tenute = rifinite.filter(v => {
     const d = documento(v.doc)
-    const regola = abitudini.filtroTipo(v, d ? corpoAttuale(d) : '', filtri)
+    // senza il documento non si sa se dentro c'è una domanda: nel dubbio la carta passa
+    const regola = d ? abitudini.filtroTipo(v, corpoAttuale(d), filtri) : null
     if (!regola) return true
     if (d) finito(d, 'filtro', regola)
     filtrate.add(v.doc)

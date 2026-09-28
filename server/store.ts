@@ -584,7 +584,8 @@ const TABELLE = {
  */
 const INDICI = [
   'CREATE INDEX IF NOT EXISTS idx_doc_risponde ON documenti(risponde)',
-  'CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)'
+  'CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)',
+  'CREATE INDEX IF NOT EXISTS idx_feed_stato ON feed(stato)'
 ]
 
 /**
@@ -1527,7 +1528,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     colonna(d, 'compiti', 'diario', 'TEXT')
   },
   // 67 → 68 · F2 · il turno di una carta: chi l'ha messa in coda, quando, quante volte è partita.
-  d => colonna(d, 'compiti', 'turno', 'TEXT')
+  d => colonna(d, 'compiti', 'turno', 'TEXT'),
+  // 68 → 69 · F7 · le regole del feed si contano dagli scarti: senza indice su `stato` era tutta la tabella
+  d => d.exec('CREATE INDEX IF NOT EXISTS idx_feed_stato ON feed(stato)')
 ]
 
 /**

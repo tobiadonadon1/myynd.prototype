@@ -22,7 +22,7 @@
 
 import { basename } from 'node:path'
 import { createHash } from 'node:crypto'
-import db, { documento, DOMINI_DI_TUTTI } from './store.ts'
+import db, { cursore, documento, DOMINI_DI_TUTTI, segnaCursore } from './store.ts'
 import * as chi from './chi.ts'
 import * as fuso from './fuso.ts'
 import * as segnali from './segnali.ts'
@@ -703,7 +703,26 @@ export type Imparata = { chiave: string; genere: string; dati: Record<string, st
  */
 export function ricalcolaFiltri(adesso = new Date()): Imparata[] {
   const { entrate } = applica(righeFeed(adesso), (genere, chiave) => genere === 'feed.filtro' && !eTema(chiave), adesso)
+  segnaCursore(CURSORE_FILTRI, adesso.toISOString())
   return entrate.map(c => ({ chiave: c.chiave, genere: c.genere, dati: c.dati }))
+}
+
+const CURSORE_FILTRI = 'abitudini:filtri'
+const ORA = 3_600_000
+
+/**
+ * Il conto dei filtri alla lettura del feed, al massimo una volta l'ora.
+ *
+ * Rifarlo a ogni lettura voleva dire ripassare tutta la storia del feed, in
+ * una scrittura, ogni dieci minuti. Non serve: uno scarto, un «Annulla» e il
+ * cestino lo rifanno subito dalle loro rotte, e la notte lo rifà `ricalcola`.
+ * Qui resta per quello che cambia senza un gesto nel feed (una riga della
+ * lista lasciata, uno scarto che esce dalla finestra dei novanta giorni).
+ */
+export function ricalcolaFiltriSeServe(adesso = new Date()): void {
+  const ultimo = cursore(CURSORE_FILTRI)
+  if (ultimo && adesso.getTime() - Date.parse(ultimo) < ORA && adesso.getTime() >= Date.parse(ultimo)) return
+  ricalcolaFiltri(adesso)
 }
 
 /**

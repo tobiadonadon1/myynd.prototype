@@ -26,7 +26,7 @@
 import db, { documento } from './store.ts'
 import { indirizzoAttenzione, mittenteAutomatico } from './rilevanza.ts'
 import { SOGLIA_CHIARA } from './giudizi.ts'
-import { filtriInVigore, ricalcolaFiltri } from './abitudini.ts'
+import { filtriInVigore, ricalcolaFiltriSeServe } from './abitudini.ts'
 
 const GIORNO = 86_400_000
 /** Quanto indietro guardano «vecchia» e «non si capisce»: sono sul gusto di adesso. */
@@ -142,7 +142,7 @@ export function impara(adesso = Date.now()): Imparato {
    */
   let nonSuoi = new Set<string>()
   try {
-    ricalcolaFiltri(new Date(adesso))
+    ricalcolaFiltriSeServe(new Date(adesso))
     nonSuoi = new Set(filtriInVigore().persone.keys())
   } catch (e) { console.warn('myynd · filtri del feed:', e instanceof Error ? e.message : e) }
 
