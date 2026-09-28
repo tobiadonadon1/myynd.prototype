@@ -24,6 +24,7 @@ import { fontiCollegate } from './collegamenti'
 import { avvisiAccesi, desktop } from './desktop.ts'
 import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
 import { segna, tempiChat } from './tempi.ts'
+import { rigaImparata } from './gemello-frasi.ts'
 
 /**
  * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
@@ -983,6 +984,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const finisceRef = useRef(finisce)
   finisceRef.current = finisce
 
+  // F7 · una regola nata altrove (una bozza corretta partita dalla sua posta): l'avviso la dice anche qui
+  useEffect(() => api.flussoCompiti(e => {
+    if (e.fase === 'imparato') mostraToast(frasi.imparato(rigaImparata(e.regola)))
+  }), [mostraToast])
+
   // la lettura sul filo: il passo che cambia, la fine, il guaio
   useEffect(() => api.flussoCompiti(e => {
     if (e.fase !== 'lettura') return
@@ -1074,8 +1080,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const dove = aperti.findIndex(x => x.id === v.id)
     setAperti(a => a.filter(x => x.id !== v.id))
     try {
-      await apiP2.scartaFeed(v.id, ragione)
-      mostraToast(t('Via. Non te la rimetto davanti.'), () => {
+      const r = await apiP2.scartaFeed(v.id, ragione)
+      // F7 · se lo scarto ha fatto nascere una regola, l'avviso la dice; «Annulla» riapre la carta e la regola cade con lei
+      mostraToast(r.imparato ? frasi.imparato(rigaImparata(r.imparato), t('Via.')) : t('Via. Non te la rimetto davanti.'), () => {
         rimettiVoce(v, dove)
         api.segnaFeed(v.id, 'aperto').catch(() => {
           setAperti(a => a.filter(x => x.id !== v.id))

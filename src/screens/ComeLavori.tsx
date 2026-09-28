@@ -15,15 +15,19 @@ import { preparaApertura } from '../navigazione'
 import { senzaTrattini } from '../../server/testo.ts'
 import * as g from '../gemello-frasi'
 
-type Gruppo = 'posta' | 'agenda' | 'lavoro'
-/** I tagli «Tutte (n)»: cinque righe per mittente (posta e agenda), tre per cartella; il resto si apre con un tocco. */
+type Gruppo = 'bozze' | 'feed' | 'posta' | 'agenda' | 'lavoro'
+/** I tagli «Tutte (n)»: cinque righe per mittente (posta e agenda) e per regola nata dai gesti, tre per cartella; il resto si apre con un tocco. */
 const TAGLI: Record<Gruppo, { generi: Set<string>; quante: number }> = {
+  bozze: { generi: new Set(['bozza.tono']), quante: 5 },
+  feed: { generi: new Set(['feed.filtro']), quante: 5 },
   posta: { generi: new Set(['posta.risponde_sempre', 'posta.lascia']), quante: 5 },
   agenda: { generi: new Set(['agenda.rifiuta']), quante: 5 },
   lavoro: { generi: new Set(['codice.con_agenti']), quante: 3 }
 }
+// F7 · le regole nate dalle sue correzioni e dai suoi scarti stanno in cima: sono quelle che ha fatto lei
 const gruppoDi = (genere: string): Gruppo =>
-  genere.startsWith('posta.') ? 'posta' : genere.startsWith('agenda.') ? 'agenda' : 'lavoro'
+  genere.startsWith('bozza.') ? 'bozze' : genere.startsWith('feed.') ? 'feed'
+    : genere.startsWith('posta.') ? 'posta' : genere.startsWith('agenda.') ? 'agenda' : 'lavoro'
 
 type Prova = { riga: string; esempi: AbitudineVista['esempi'] }
 
@@ -35,7 +39,8 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuo
   testo: string; prova: Prova; inAttesa: boolean; superata?: boolean; fino?: string | null
   /** Un guaio nato fuori dalla scheda (un «togli» non riuscito): si mostra qui, sotto la riga premuta. */
   guaioFuori?: string
-  correggi: (testo: string) => Promise<void>; tieni?: () => Promise<void>; scorda: () => Promise<void>
+  /** Senza, niente «Correggi»: un filtro del feed fa quello che dice la sua chiave, non le parole. */
+  correggi?: (testo: string) => Promise<void>; tieni?: () => Promise<void>; scorda: () => Promise<void>
 }) {
   const { attiva, props } = useAttiva()
   const [aperta, setAperta] = useState(false)
@@ -56,6 +61,7 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuo
     setModifico(false)
     if (!nuovo || nuovo === mostrato) { setBozza(mostrato); return }
     const prima = mostrato
+    if (!correggi) return
     setMostrato(nuovo); setGuaio('')
     try { await correggi(nuovo) } catch {
       // torna com'era, riapre con le sue parole, e lo dice
@@ -104,7 +110,7 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuo
         {/* i gesti stanno in fondo alla riga dei numeri: la frase tiene tutta la larghezza */}
         {!superata && !modifico && (
           <div className="cl-gesti">
-            <button type="button" className="cl-correggi" onClick={() => setModifico(true)}>{t('Correggi')}</button>
+            {correggi && <button type="button" className="cl-correggi" onClick={() => setModifico(true)}>{t('Correggi')}</button>}
             <Cestino fai={scordala} titolo={t('Toglila')} visibile={attiva} subito />
           </div>
         )}
@@ -246,10 +252,11 @@ export function ComeLavori() {
     if (tolta) return <Tolta key={a.chiave} annulla={() => void annulla(a)()} />
     return (
       <RigaAbitudine key={a.chiave} testo={g.rigaAbitudine(a)} prova={{ riga: g.provaAbitudine(a), esempi: a.esempi }}
-        inAttesa={!a.inVigore} guaioFuori={guai.get(a.chiave)} correggi={correggi(a)} tieni={a.inVigore ? undefined : tieni(a)} scorda={scorda(a)} />
+        inAttesa={!a.inVigore} guaioFuori={guai.get(a.chiave)} correggi={a.genere === 'feed.filtro' ? undefined : correggi(a)} tieni={a.inVigore ? undefined : tieni(a)} scorda={scorda(a)} />
     )
   }
   const gruppi: { chiave: Gruppo; titolo: string }[] = [
+    { chiave: 'bozze', titolo: t('Bozze') }, { chiave: 'feed', titolo: t('Feed') },
     { chiave: 'posta', titolo: t('Posta') }, { chiave: 'agenda', titolo: t('Agenda') }, { chiave: 'lavoro', titolo: t('Lavoro') }
   ]
   const punteggio = d.punteggio ? g.frasePunteggio(d.punteggio.giuste, d.punteggio.totale, d.punteggio.base) : ''
@@ -320,7 +327,7 @@ export function ComeLavori() {
             <div className="cl-griglia" style={{ marginTop: 8 }}>
               {superate.map(a => (
                 <RigaAbitudine key={a.chiave} testo={g.rigaAbitudine(a)} prova={{ riga: g.provaAbitudine(a), esempi: a.esempi }}
-                  inAttesa={false} superata fino={a.fino} correggi={correggi(a)} scorda={scorda(a)} />
+                  inAttesa={false} superata fino={a.fino} correggi={a.genere === 'feed.filtro' ? undefined : correggi(a)} scorda={scorda(a)} />
               ))}
             </div>
           )}

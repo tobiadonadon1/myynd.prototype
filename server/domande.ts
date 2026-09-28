@@ -18,7 +18,8 @@
 
 import { lingua, nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
-import { linguaSbagliata, soloInLingua } from './testo.ts'
+import { linguaSbagliata, senzaTrattini, soloInLingua } from './testo.ts'
+import * as abitudini from './abitudini.ts'
 import * as store from './store.ts'
 import * as riferimento from './riferimento.ts'
 import * as progetti from './progetti.ts'
@@ -99,8 +100,8 @@ non torna.`
 export type Proposta = { chiesta: boolean; deduzione?: string }
 
 /** Le mani con cui chiede, sostituibili solo nelle prove. */
-type Ferri = { chiediJSON: typeof chiediJSON }
-const VERI: Ferri = { chiediJSON: o => chiediJSON(o) }
+type Ferri = { chiediJSON: typeof chiediJSON; regolaTema: typeof abitudini.regolaTema }
+const VERI: Ferri = { chiediJSON: o => chiediJSON(o), regolaTema: (t, f, ti) => abitudini.regolaTema(t, f, ti) }
 let ferri: Ferri = VERI
 /** Solo per le prove: sostituisce il modello, o lo rimette (con `null`). */
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
@@ -210,20 +211,24 @@ export async function forseChiedi(): Promise<Proposta> {
   // 4 · si può dedurre? allora si deduce, e non si disturba nessuno
   if (!e.vaChiesto || !e.domanda?.trim()) {
     if (e.deduzione?.trim()) {
-      store.ricorda({
-        enunciato: e.deduzione.trim(),
-        ambito: 'persona',
-        genere: 'indotta',            // l'ha notata lui, non gliel'ha detta lei
-        fiducia: 0.55,
-        premesse: tema.titoli.slice(0, 5),
-        origine: 'scarti'
-      })
+      /*
+       * F7 · la deduzione è una regola del feed, in vigore subito
+       * (`abitudini.regolaTema`): le carte su quel tema vanno in fondo e il
+       * modello della lettura lo sa. Prima si salvava una convinzione indotta,
+       * che nessun prompt legge finché lei non la tiene, e in chat si scriveva
+       * «smetto di riproportela»: una promessa che il feed non sapeva di aver
+       * fatto. Adesso la frase dice quello che succede, e dove toglierla.
+       */
+      const frase = senzaTrattini(e.deduzione.trim())
+      const regola = ferri.regolaTema(tema.tema, frase, tema.titoli)
       // anche quello che ha capito da solo glielo si dice: un sistema che
       // impara in silenzio è indistinguibile da uno che non impara
       // nella lingua dell'app: la cornice è nostra, la frase in mezzo è del modello
-      scriviInChat(lingua() === 'en'
-        ? `I noticed something: ${e.deduzione.trim()} I am noting it, and I will stop suggesting it.`
-        : `Ho notato una cosa: ${e.deduzione.trim()} Me la segno, e smetto di riproportela.`)
+      if (regola) {
+        scriviInChat(lingua() === 'en'
+          ? `I noticed something: ${frase} From now on these go to the bottom of your feed. The rule is in Memory if you want to remove it.`
+          : `Ho notato una cosa: ${frase} D'ora in poi queste le metto in fondo al feed. La regola è nella Memoria, se vuoi toglierla.`)
+      }
       // il tema si segna come già affrontato: dedotto una volta, basta.
       // `apriDomanda` può tornare null se il tema c'era già — e chiudere la
       // stringa vuota non chiude niente, ma non rompe nulla: il controllo qui
@@ -231,7 +236,7 @@ export async function forseChiedi(): Promise<Proposta> {
       const aperta = store.apriDomanda({ tema: tema.tema, testo: e.deduzione.trim(), spunto: tema.titoli })
       if (aperta) store.chiudiDomanda(aperta.id, 'ignorata', undefined, 'dedotta senza chiedere')
       chiudiIVicini()
-      return { chiesta: false, deduzione: e.deduzione.trim() }
+      return { chiesta: false, deduzione: frase }
     }
     return { chiesta: false }
   }

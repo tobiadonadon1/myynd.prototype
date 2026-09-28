@@ -54,14 +54,17 @@ before(async () => {
     store.salvaDocumenti([
       { id: 'posta:INBOX:1', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo <leo@studio.example>', quando: fa(4), percorso: 'INBOX', messageId: 'leo1@ex', filo: 'leo1@ex' },
       { id: 'posta:Sent:1', fonte: 'posta', tipo: 'email', titolo: 'Re: Logo files', corpo: 'Here are the logo files.', autore: 'Alex <alex@northwind.example>', quando: fa(1), percorso: 'Sent', inviato: true, risponde: 'leo1@ex', destinatari: 'leo@studio.example', filo: 'leo1@ex', messageId: 's1@ex' },
-      { id: 'posta:INBOX:2', fonte: 'posta', tipo: 'email', titolo: 'Pilot scope', corpo: 'Can you confirm the pilot scope?', autore: 'Nora <nora@harbor.example>', quando: fa(2), percorso: 'INBOX', messageId: 'nora2@ex', filo: 'nora2@ex' }
+      { id: 'posta:INBOX:2', fonte: 'posta', tipo: 'email', titolo: 'Pilot scope', corpo: 'Can you confirm the pilot scope?', autore: 'Nora <nora@harbor.example>', quando: fa(2), percorso: 'INBOX', messageId: 'nora2@ex', filo: 'nora2@ex' },
+      // F7 · tre mail di Tom, tre carte da scartare come «non è mia»
+      ...[1, 2, 3].map(i => ({ id: `posta:INBOX:7${i}`, fonte: 'posta', tipo: 'email', titolo: ['Hiring plan', 'Offsite budget', 'Vendor shortlist'][i - 1]!, corpo: `The document number ${i}, for the team.`, autore: 'Tom Reed <tom@reed.example>', quando: fa(5 + i), percorso: 'INBOX', messageId: `tom${i}@ex`, filo: `tom${i}@ex` }))
     ])
     store.salvaFeed([
       { tipo: 'Da decidere', titolo: 'Send Leo the logo files', testo: 'Leo is waiting on the files.', perche: 'Leo is waiting on the files to finish the site.', fonte: 'posta', doc: 'posta:INBOX:1' },
       { tipo: 'Da decidere', titolo: 'Confirm the pilot scope with Nora', testo: 'Nora asks you to confirm the pilot scope.', perche: 'Nora waits for the scope.', fonte: 'posta', doc: 'posta:INBOX:2' },
       { tipo: 'Da decidere', titolo: 'A card to dismiss', testo: 'Something that is not useful at all.', perche: 'Nobody waits for this.', fonte: 'posta' },
       { tipo: 'Da decidere', titolo: 'A card for the list', testo: 'Something that goes to the list.', perche: 'It goes to the list.', fonte: 'posta' },
-      { tipo: 'Da decidere', titolo: 'A card to see', testo: 'Something he will look at.', perche: 'He looks at it.', fonte: 'posta' }
+      { tipo: 'Da decidere', titolo: 'A card to see', testo: 'Something he will look at.', perche: 'He looks at it.', fonte: 'posta' },
+      ...['Read the hiring plan for spring', 'Review the offsite budget draft', 'Check the vendor shortlist'].map((titolo, i) => ({ tipo: 'Da leggere', titolo, testo: `Tom shared a document, number ${i + 1}.`, perche: 'Tom shared it with the team.', fonte: 'posta', doc: `posta:INBOX:7${i + 1}` }))
     ])
     for (const v of store.elencoFeed('aperto')) ids[v.titolo] = v.id
   })
@@ -183,4 +186,24 @@ test('la misura dalla rotta è quella del modulo, sui giorni chiesti', async () 
   assert.equal(sotto.giorni, 1)
   const zero = await (await chiama('/api/feed/misura?giorni=0')).json() as { giorni: number }
   assert.equal(zero.giorni, 14)
+})
+
+test('F7 · il terzo «non è mia» sulla stessa persona torna «imparato»; «Annulla» riapre la carta e la regola non vale più', async () => {
+  const TITOLI = ['Read the hiring plan for spring', 'Review the offsite budget draft', 'Check the vendor shortlist']
+  const scarta = async (i: number) => {
+    const r = await chiama(`/api/feed/${encodeURIComponent(ids[TITOLI[i - 1]!]!)}/rispondi`, 'POST', { testo: '', stato: 'scartato', ragione: 'non_mia' })
+    assert.equal(r.status, 200)
+    return await r.json() as { imparato?: { chiave: string; genere: string; dati: Record<string, string> } }
+  }
+  assert.ok(TITOLI.every(t => ids[t]), JSON.stringify(ids))
+  assert.equal((await scarta(1)).imparato, undefined)
+  assert.equal((await scarta(2)).imparato, undefined)
+  const terzo = await scarta(3)
+  assert.deepEqual(terzo.imparato, { chiave: 'feed.filtro:mittente:tom@reed.example', genere: 'feed.filtro', dati: { specie: 'persona', nome: 'Tom Reed', indirizzo: 'tom@reed.example' } })
+  const regola = async () => ((await (await chiama('/api/gemello')).json()) as { abitudini: { chiave: string; inVigore: boolean; casi: number }[] }).abitudini.find(a => a.chiave === 'feed.filtro:mittente:tom@reed.example')
+  assert.equal((await regola())?.inVigore, true)
+  // «Annulla» sull'avviso: la carta torna, la regola cade con lei
+  assert.equal((await chiama(`/api/feed/${encodeURIComponent(ids[TITOLI[2]!]!)}/aperto`, 'POST')).status, 200)
+  const dopo = await regola()
+  assert.equal(dopo?.inVigore, false); assert.equal(dopo?.casi, 2)
 })

@@ -3230,7 +3230,19 @@ app.post('/api/feed/:id/rispondi', async (req, res) => {
     // di quale progetto è, subito: l'avviso sotto il bottone lo dice
     const fatto: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
     const registrato = { progetto: esito.stato === 'fatto' ? dopoFatto.progettoDelFatto(fatto) : null }
-    res.json({ ...esito, aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), registrato })
+    /*
+     * F7 · i filtri del feed si rifanno adesso, dalla tabella: il terzo «Non è
+     * mia» su una persona (o il primo su una macchina) è una regola in vigore
+     * alla lettura dopo, e l'avviso lo dice («Gone. Learned: …»). «Annulla»
+     * riapre la carta e la regola cade da sé, allo stesso modo.
+     */
+    let imparato: abitudini.Imparata | undefined
+    try {
+      const entrate = abitudini.ricalcolaFiltri()
+      const sue = new Set(abitudini.chiaviDellaCarta(req.params.id))
+      imparato = esito.stato === 'scartato' ? entrate.find(e => sue.has(e.chiave)) : undefined
+    } catch (e) { console.warn('myynd · filtri del feed:', e instanceof Error ? e.message : e) }
+    res.json({ ...esito, aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), registrato, ...(imparato ? { imparato } : {}) })
     compiti.annunciaFeed()
     // dopo la risposta: il traguardo in memoria, e il passo dopo o la domanda
     if (esito.stato === 'fatto') void dopoFatto.registraFatto(fatto)
@@ -3303,6 +3315,8 @@ app.post('/api/feed/:id/:stato', (req, res) => {
   } else {
     store.cambiaStatoFeed(req.params.id, 'aperto', '', null)
   }
+  // F7 · un «Fatto» o un «Annulla» cambiano i conti dei filtri: la regola che la carta aveva fatto nascere cade qui
+  try { abitudini.ricalcolaFiltri() } catch (e) { console.warn('myynd · filtri del feed:', e instanceof Error ? e.message : e) }
   // di quale progetto è, subito: l'avviso sotto il bottone lo dice
   const cosa: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
   res.json({ ok: true, registrato: { progetto: fatto ? dopoFatto.progettoDelFatto(cosa) : null } })
@@ -3967,18 +3981,23 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
     await invio.manda(c, conf.posta, d.m)
   } catch (e) { return errore(res, e) }
 
-  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
-  compiti.annunciaCambio()
   /*
-   * Quello che hai tenuto davvero passa alla memoria come per ogni altra
-   * chiusura. La coppia giusta è il corpo dell'email contro il corpo mandato
-   * (P3): il risultato intero porta la prima riga «Fatto:», l'oggetto e la
-   * riga delle fonti, e confrontato con il corpo pulito non coincideva mai.
+   * Quello che hai tenuto davvero passa alle regole sul tono (F7), prima della
+   * risposta: è un conto senza modello, e se una regola entra in vigore
+   * adesso l'avviso lo dice («Sent. Learned: …»). La coppia giusta è il corpo
+   * dell'email contro il corpo mandato (P3): il risultato intero porta la
+   * prima riga «Fatto:», l'oggetto e la riga delle fonti, e confrontato con
+   * il corpo pulito non coincideva mai.
    */
   const bozza = c.email?.corpo ?? corpoPerChiRiceve(c.risultato ?? '')
+  const dest = voce.destinatarioDi(c)
+  const a = (store.indirizzoDi(d.m.a) ?? d.m.a).trim().toLowerCase()
+  const destinatario = dest && dest.indirizzo === a ? dest : { indirizzo: a, nome: '' }
+  const imparato = compiti.imparaSeCorretto(bozza, d.m.corpo, { email: true, destinatario, via: 'smtp' })
+  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi(), ...(imparato ? { imparato } : {}) })
+  compiti.annunciaCambio()
   const r = ritocco(bozza, d.m.corpo)
   lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: new Date().toISOString(), distanza: r, parole: paroleDi(d.m.corpo).length, classe: classeRitocco(r) })
-  compiti.imparaSeCorretto(bozza, d.m.corpo)
 })
 
 /**
@@ -4407,7 +4426,11 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   // della sua bozza dice come scrivi; quello che hai *scritto* chiudendo dice
   // com'è andata e perché. Prima si raccoglieva solo la prima, che è anche la
   // più rara — e tutte le righe chiuse a mano passavano senza lasciare niente.
-  if (corretto) compiti.imparaSeCorretto(mostrato, tenuto)
+  // una bozza di posta va alle regole sul tono, sul corpo per chi riceve dalle due parti (F7); il resto alla memoria
+  if (corretto) {
+    if (c.email) compiti.imparaSeCorretto(corpoPerChiRiceve(mostrato) || mostrato, corpoPerChiRiceve(tenuto) || tenuto, { email: true, destinatario: voce.destinatarioDi(c), via: 'chiusura' })
+    else compiti.imparaSeCorretto(mostrato, tenuto)
+  }
   compiti.imparaDallaChiusura(c, stato, esito)
   // E il traguardo: si segna nella memoria del progetto, e si guarda il passo
   // dopo, o glielo si chiede. Una riga lasciata perdere non è un traguardo.

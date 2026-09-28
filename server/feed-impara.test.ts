@@ -92,11 +92,15 @@ test('«già fatta» mette il mittente fra quelli da ricontrollare, e inviatoDop
   assert.equal(impara.inviatoDopo('', giorniFa(2)), false)
 })
 
-test('«non è mia» due volte da una persona senza un fatto: la sua posta entra solo se chiede; un mittente automatico no, una persona con un fatto no', () => {
+test('«non è mia» tre volte da una persona senza un fatto (F7): la sua posta entra solo se chiede; due no, un mittente automatico no, una persona con un fatto no', () => {
   store.azzeraTutto()
   carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Tom <tom@x.example>' })
   carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Tom <tom@x.example>' })
+  carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Tom <tom@x.example>' })
   carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Una <una@x.example>' })
+  carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Due <due@x.example>' })
+  carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Due <due@x.example>' })
+  carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Con fatto <cf@x.example>' })
   carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Con fatto <cf@x.example>' })
   carta({ stato: 'scartato', ragione: 'non_mia', autore: 'Con fatto <cf@x.example>' })
   carta({ stato: 'fatto', ragione: 'lui', autore: 'Con fatto <cf@x.example>' })

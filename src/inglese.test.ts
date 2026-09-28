@@ -35,7 +35,9 @@ const UGUALI_APPOSTA = new Set([
   'Myynd', 'Chat', 'Desktop', 'Email', 'Password', 'Notion', 'Slack', 'Dropbox', 'GitHub',
   'WhatsApp Business', 'Google Drive', 'Word, Pages', 'Claude', 'Claude Code',
   // «prompt» si dice così anche in italiano: è la parola con cui lo chiede lui
-  'prompt'
+  'prompt',
+  // «feed» è il nome della prima pagina anche nell'interfaccia italiana: il gruppo dei filtri nella Memoria
+  'Feed'
 ])
 
 const sorgente = readFileSync(new URL('./lingua.ts', import.meta.url), 'utf8')

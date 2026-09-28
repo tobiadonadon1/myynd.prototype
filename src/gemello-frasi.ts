@@ -7,6 +7,7 @@
 
 import { lingua, loc, t } from './lingua.ts'
 import type { AbitudineVista, Gemello, PrevisioneVista } from './api.ts'
+import { nomeFonteDoc } from './citazioni.ts'
 
 const en = () => lingua() === 'en'
 const scegli = (f: { it: string; en: string }) => (en() ? f.en : f.it)
@@ -71,12 +72,72 @@ export function rigaAbitudine(a: Pick<AbitudineVista, 'genere' | 'dati' | 'stato
     case 'codice.con_agenti': return scegli({
       it: `Su ${d.cartella} lavori con ${d.agente} quasi ogni giorno`,
       en: `You work on ${d.cartella} with ${d.agente} almost every day` })
+    case 'bozza.tono': return conChi(d, rigaTono(d))
+    case 'feed.filtro': return rigaFiltro(d)
     default: return a.testoSuo ?? ''
   }
 }
 
+// — F7: le regole nate dai suoi gesti —
+
+/** Il «{nome}» di un saluto imparato: il nome se la regola è di una persona sola, altrimenti tre puntini. */
+const senzaSegnaposto = (x: unknown, nome?: unknown) => String(x ?? '').replace(/\{nome\}/g, nome ? String(nome) : '…')
+
+/** Una regola sul tono delle bozze, senza la persona. */
+function rigaTono(d: AbitudineVista['dati']): string {
+  const nome = d.soloA ? d.nome : undefined
+  switch (d.tratto) {
+    case 'saluto-via': return scegli({ it: 'Nelle bozze niente saluto in apertura', en: 'No greeting at the top of drafts' })
+    case 'saluto': return scegli({ it: `Le bozze aprono con «${senzaSegnaposto(d.a, nome)}»`, en: `Drafts open with “${senzaSegnaposto(d.a, nome)}”` })
+    case 'chiusura-via': return scegli({ it: 'Nelle bozze niente formula di chiusura', en: 'No sign-off in drafts' })
+    case 'chiusura': return scegli({ it: `Le bozze chiudono con «${d.a}»`, en: `Drafts close with “${d.a}”` })
+    case 'registro': return d.a === 'lei'
+      ? scegli({ it: 'Nelle bozze dai del Lei', en: 'Drafts use the formal Lei' })
+      : scegli({ it: 'Nelle bozze dai del tu', en: 'Drafts use the informal tu' })
+    case 'corta': {
+      const meno = Math.max(10, Math.round((1 - Number(d.rapporto || 0.7)) * 10) * 10)
+      return scegli({ it: `Bozze più corte, circa il ${meno}% in meno`, en: `Drafts about ${meno}% shorter` })
+    }
+    case 'elenchi-via': return scegli({ it: 'Nelle bozze niente elenchi puntati', en: 'No bullet lists in drafts' })
+    case 'frase': return scegli({ it: `Nelle bozze mai «${d.frase}»`, en: `Drafts leave out “${d.frase}”` })
+    case 'libera': return String(d.frase ?? '')
+    default: return ''
+  }
+}
+
+/** Una regola di una persona sola porta il suo nome davanti: «A Leo: …» / "To Leo: …". */
+function conChi(d: AbitudineVista['dati'], frase: string): string {
+  if (!d.soloA || !d.nome || !frase) return frase
+  const resto = frase.charAt(0).toLowerCase() + frase.slice(1)
+  return scegli({ it: `A ${d.nome}: ${resto}`, en: `To ${d.nome}: ${resto}` })
+}
+
+/** Un filtro del feed. */
+function rigaFiltro(d: AbitudineVista['dati']): string {
+  switch (d.specie) {
+    case 'macchina': return scegli({ it: `Niente più carte da ${d.nome}`, en: `No more cards from ${d.nome}` })
+    case 'persona': return scegli({ it: `Le mail di ${d.nome} solo quando ti chiede qualcosa`, en: `Cards from ${d.nome} only when they ask you something` })
+    case 'dominio': return scegli({ it: `Niente più posta automatica da ${d.dominio}`, en: `No more automated mail from ${d.dominio}` })
+    case 'tipo': return scegli({ it: `Niente più carte «${t(String(d.tipo))}» da ${nomeFonteDoc(String(d.fonte))}`, en: `No more “${t(String(d.tipo))}” cards from ${nomeFonteDoc(String(d.fonte))}` })
+    case 'tema': return String(d.frase || d.tema || '')
+    default: return ''
+  }
+}
+
+/** La riga dell'avviso: la regola appena entrata in vigore, detta come nella Memoria. */
+export function rigaImparata(r: Pick<AbitudineVista, 'genere' | 'dati'>): string {
+  return rigaAbitudine({ ...r, stato: 'osservata', testoSuo: null })
+}
+
 /** L'evidenza sotto la riga: «14 su 15», «su 23 giorni», «23 risposte». */
-export function provaAbitudine(a: Pick<AbitudineVista, 'genere' | 'casi' | 'su'>): string {
+export function provaAbitudine(a: Pick<AbitudineVista, 'genere' | 'casi' | 'su'> & { trattenute?: number; chiave?: string }): string {
+  if (a.genere === 'bozza.tono') return a.casi === 1 ? scegli({ it: '1 bozza corretta', en: '1 edited draft' }) : scegli({ it: `${a.casi} bozze corrette`, en: `${a.casi} edited drafts` })
+  if (a.genere === 'feed.filtro') {
+    if (a.chiave?.startsWith('feed.filtro:tema:')) return scegli({ it: `${a.casi} messe da parte`, en: `${a.casi} set aside` })
+    const scartate = scegli({ it: `${a.casi} scartat${a.casi === 1 ? 'a' : 'e'}`, en: `${a.casi} dismissed` })
+    if (!a.trattenute) return scartate
+    return `${scartate} · ${scegli({ it: `${a.trattenute} tenut${a.trattenute === 1 ? 'a' : 'e'} fuori questa settimana`, en: `held back ${a.trattenute} this week` })}`
+  }
   if (a.su !== null) return scegli({ it: `${a.casi} su ${a.su}`, en: `${a.casi} of ${a.su}` })
   if (a.genere.startsWith('app.')) return scegli({ it: `su ${a.casi} giorni`, en: `over ${a.casi} days` })
   return scegli({ it: `${a.casi} risposte`, en: `${a.casi} replies` })
@@ -186,8 +247,9 @@ export function inPausaFino(iso: string): string {
 }
 
 /** «12 set · Pilot scope»: un esempio del perché. */
-export function esempio(e: { quando: string; testo: string }): string {
+export function esempio(e: { quando: string; testo: string; trattenuta?: boolean }): string {
   const d = new Date(e.quando)
   const data = Number.isNaN(d.getTime()) ? '' : giorno(d)
-  return [data, e.testo].filter(Boolean).join(' · ')
+  // F7 · quello che un filtro ha tenuto fuori si distingue da quello che lei ha scartato
+  return [data, e.trattenuta ? t('tenuta fuori') : '', e.testo].filter(Boolean).join(' · ')
 }

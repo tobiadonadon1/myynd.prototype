@@ -11,9 +11,10 @@
 //   · già fatta: la carta era giusta, arrivata tardi. Prima di proporre una
 //     carta da quel mittente si guarda se lui ha già scritto a quell'indirizzo
 //     dopo la mail: se sì, è già risposta.
-//   · non è mia: due volte da una persona, e mai un fatto: la sua posta
-//     entra solo se chiede qualcosa alla lettera, e il modello lo sa. Una
-//     persona non si tace mai del tutto; i mittenti automatici li tace già
+//   · non è mia: tre volte da una persona (o scarti senza una parola), e mai
+//     un fatto: la sua posta entra solo se chiede qualcosa alla lettera, e il
+//     modello lo sa. È una regola della Memoria (F7), che si vede e si toglie.
+//     Una persona non si tace mai del tutto; i mittenti automatici li tace già
 //     `mittentiScartati`.
 //
 // E le carte mancate (`mancate.ts`): a chi ha risposto da solo senza che il
@@ -25,6 +26,7 @@
 import db, { documento } from './store.ts'
 import { indirizzoAttenzione, mittenteAutomatico } from './rilevanza.ts'
 import { SOGLIA_CHIARA } from './giudizi.ts'
+import { filtriInVigore, ricalcolaFiltri } from './abitudini.ts'
 
 const GIORNO = 86_400_000
 /** Quanto indietro guardano «vecchia» e «non si capisce»: sono sul gusto di adesso. */
@@ -131,8 +133,18 @@ export function impara(adesso = Date.now()): Imparato {
   const etaVecchia = new Map<string, number>()
   for (const [fonte, giorni] of etaPerFonte) if (giorni.length >= 2) etaVecchia.set(fonte, mediana(giorni))
 
-  const nonSuoi = new Set<string>()
-  for (const [indirizzo, n] of nonMie) if (n >= 2 && !fattoDa.has(indirizzo)) nonSuoi.add(indirizzo)
+  /*
+   * F7 · «non è mia» è una regola della Memoria («Le mail di Tom solo quando
+   * ti chiede qualcosa»): tre scarti su una persona, «Non è mia» o senza una
+   * parola, e nessuna carta fatta da lei. La conta `abitudini.ts`, rifatta qui
+   * dalla tabella, così «Annulla» la ritira e una regola tolta dal cestino non
+   * conta più: quello che la Memoria mostra è quello che il feed fa.
+   */
+  let nonSuoi = new Set<string>()
+  try {
+    ricalcolaFiltri(new Date(adesso))
+    nonSuoi = new Set(filtriInVigore().persone.keys())
+  } catch (e) { console.warn('myynd · filtri del feed:', e instanceof Error ? e.message : e) }
 
   const daNonPerdere = new Set<string>()
   const mancate = db.prepare(`SELECT mittente, agito FROM mancate WHERE genere = 'risposta' AND mittente IS NOT NULL AND agito >= ?`)

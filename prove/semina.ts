@@ -508,5 +508,38 @@ if (p5.convinzioni || p5.blocchi || p5.fuoco || p5.config || p5.memoriaVista || 
 }
 // — P5: fine —
 
+// — F7: inizio —
+// Le regole nate dai gesti: righe di «Come lavori» scritte com'erano, i filtri
+// del feed rifatti dalla tabella (dopo il feed seminato sopra), i temi dedotti,
+// e quello che un filtro ha tenuto fuori (una riga di `feed_esame`).
+//   "abitudini": [{ "chiave": "bozza.tono:corta", "genere": "bozza.tono", "dati": {…}, "casi": 2, "esempi": [{ "quando": "-1d", "testo": "…" }], "mostra": 2, "stato": "osservata", "visto": "-3d", "dal": "-1d" }]
+//   "filtri": true
+//   "temi": [{ "tema": "rinnov", "frase": "…", "titoli": ["…"] }]
+//   "esame": [{ "doc": "posta:INBOX:1", "fase": "filtro", "motivo": "feed.filtro:mittente:…", "quando": "-1d" }]
+type ScenaF7 = {
+  abitudini?: { chiave: string; genere: string; dati: Record<string, string | number>; casi: number; esempi?: { quando: string; testo: string; doc?: string }[]; mostra?: number; soglia?: number; stato?: string; visto?: string; dal?: string }[]
+  filtri?: boolean
+  temi?: { tema: string; frase: string; titoli: string[] }[]
+  esame?: { doc: string; fase: string; motivo: string; quando?: string }[]
+}
+const f7 = scena as unknown as ScenaF7
+if (f7.abitudini || f7.filtri || f7.temi || f7.esame) {
+  const abitudiniF7 = await import(join(SERVER, 'abitudini.ts'))
+  const feedDatiF7 = await import(join(SERVER, 'feed-dati.ts'))
+  chi.dentro(conto.id, () => {
+    const ins = store.default.prepare(`INSERT OR REPLACE INTO abitudini (chiave, genere, dati, prova, fiducia, stato, testoSuo, visto, aggiornato, tolta) VALUES (?,?,?,?,1,?,NULL,?,?,NULL)`)
+    for (const a of f7.abitudini ?? []) {
+      const prova = { casi: a.casi, su: null, esempi: (a.esempi ?? []).map(e => ({ quando: tempo(e.quando), testo: e.testo, doc: e.doc ?? null })),
+        ...(a.mostra ? { mostra: a.mostra } : {}), ...(a.soglia ? { soglia: a.soglia } : {}), ...(a.dal ? { dal: tempo(a.dal) } : {}) }
+      ins.run(a.chiave, a.genere, JSON.stringify(a.dati), JSON.stringify(prova), a.stato ?? 'osservata', tempo(a.visto ?? '-2d'), tempo(a.visto ?? '-2d'))
+    }
+    for (const t of f7.temi ?? []) abitudiniF7.regolaTema(t.tema, t.frase, t.titoli)
+    if (f7.filtri) abitudiniF7.ricalcolaFiltri()
+    for (const e of f7.esame ?? []) feedDatiF7.segnaEsame([{ doc: e.doc, fase: e.fase, motivo: e.motivo }], tempo(e.quando ?? 'adesso'))
+  })
+  console.log(`semina · F7: ${f7.abitudini?.length ?? 0} regole, ${f7.temi?.length ?? 0} temi, filtri ${f7.filtri ? 'rifatti' : 'no'}`)
+}
+// — F7: fine —
+
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

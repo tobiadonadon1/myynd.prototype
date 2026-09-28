@@ -236,3 +236,41 @@ test('la coppia che si impara è pari: la firma manca da tutte e due le parti, n
   assert.match(bozza, /Best,\s*$/)
   assert.match(inviata, /Best,\s*$/)
 })
+
+test('F7 · la coppia va alle regole sul tono con chi riceve: la seconda correzione uguale è in vigore, e lo annuncia sul filo della persona', async () => {
+  const abitudini = await import('./abitudini.ts')
+  const compiti = await import('./compiti.ts')
+  const destinatari: unknown[] = []
+  // prima con le mani finte: chi riceve arriva insieme alla coppia
+  invii.perProva({ impara: (b, i, d) => { imparate.push([b, i]); destinatari.push(d); return null } })
+  const c = riga('c-f7a')
+  mandata('posta:Sent:71', { quando: oreFa(1), corpo: 'Hey Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex' })
+  assert.ok(await invii.osservaUno(store.compito(c.id)!))
+  assert.deepEqual(destinatari, [{ indirizzo: 'leo@studio.example', nome: 'Leo' }])
+  // poi con quelle vere: due bozze salvate, due saluti cambiati allo stesso modo
+  invii.perProva(null)
+  const eventi: { fase: string }[] = []
+  const smetti = compiti.ascolta(e => eventi.push(e as { fase: string }))
+  try {
+    store.azzeraTutto(); voce.dimentica()
+    const uno = riga('c-f7b')
+    mandata('posta:Sent:72', { quando: oreFa(1), corpo: 'Hey Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex' })
+    assert.ok(await invii.osservaUno(store.compito(uno.id)!))
+    const prima = abitudini.tutte().find(a => a.chiave === 'bozza.tono:saluto:hey {nome}')
+    assert.ok(prima, 'la correzione vista partire dalla sua posta non è diventata una regola')
+    assert.equal(prima.inVigore, false)
+    assert.equal(eventi.filter(e => e.fase === 'imparato').length, 0)
+    // la seconda: un'altra riga, un'altra mail partita
+    store.default.prepare("UPDATE compiti SET id = 'c-f7b-vecchia' WHERE id = 'c-f7b'").run()
+    store.default.prepare("DELETE FROM misure_compiti WHERE compito = 'c-f7b'").run()
+    const due = riga('c-f7c')
+    mandata('posta:Sent:73', { quando: oreFa(0.5), corpo: 'Hey Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex' })
+    assert.ok(await invii.osservaUno(store.compito(due.id)!))
+    assert.equal(abitudini.tutte().find(a => a.chiave === 'bozza.tono:saluto:hey {nome}')?.inVigore, true)
+    const annuncio = eventi.find(e => e.fase === 'imparato') as { fase: 'imparato'; regola: { chiave: string } } | undefined
+    assert.equal(annuncio?.regola.chiave, 'bozza.tono:saluto:hey {nome}')
+  } finally {
+    smetti()
+    invii.perProva({ impara: async (b, i) => { imparate.push([b, i]); return 1 } })
+  }
+})

@@ -147,3 +147,38 @@ test('un tasso delle previsioni non esce mai dalla scala della fiducia: il punte
   const i = ognuna(() => g.rigaIeri({ giorno: '2026-09-23', chiuso: true, giuste: 2, totale: 2, base: 1, previsioni: [] }))
   assert.match(i.it, /senza conoscerti 1$/); assert.match(i.en, /without knowing you 1$/)
 })
+
+test('F7 · le regole nate dai gesti: in tutte e due le lingue, senza lineette, con la persona davanti quando è di una sola; e l’avviso «Learned»', async () => {
+  const { frasi } = await import('./lingua.ts')
+  const regole: { genere: string; dati: Record<string, string | number> }[] = [
+    { genere: 'bozza.tono', dati: { tratto: 'saluto-via' } },
+    { genere: 'bozza.tono', dati: { tratto: 'saluto', a: 'Hi {nome},', da: 'Dear {nome},' } },
+    { genere: 'bozza.tono', dati: { tratto: 'chiusura', a: 'Best,' } },
+    { genere: 'bozza.tono', dati: { tratto: 'chiusura-via' } },
+    { genere: 'bozza.tono', dati: { tratto: 'registro', a: 'tu' } },
+    { genere: 'bozza.tono', dati: { tratto: 'corta', rapporto: 0.62 } },
+    { genere: 'bozza.tono', dati: { tratto: 'elenchi-via' } },
+    { genere: 'bozza.tono', dati: { tratto: 'frase', frase: 'I hope this email finds you well.' } },
+    { genere: 'feed.filtro', dati: { specie: 'macchina', nome: 'Stripe', indirizzo: 'notifications@stripe.com' } },
+    { genere: 'feed.filtro', dati: { specie: 'persona', nome: 'Tom Reed', indirizzo: 'tom@reed.example' } },
+    { genere: 'feed.filtro', dati: { specie: 'dominio', dominio: 'acme.example' } },
+    { genere: 'feed.filtro', dati: { specie: 'tipo', fonte: 'posta', tipo: 'Da leggere' } },
+    { genere: 'feed.filtro', dati: { specie: 'tema', tema: 'fattur', frase: 'You set aside invoice reminders.' } }
+  ]
+  for (const r of regole) {
+    const f = ognuna(() => g.rigaAbitudine({ ...r, stato: 'osservata', testoSuo: null }))
+    assert.ok(f.it && f.en, `${r.genere} ${JSON.stringify(r.dati)}`)
+    assert.doesNotMatch(f.it + f.en, LINEETTE)
+  }
+  impostaLingua('en')
+  assert.equal(g.rigaAbitudine({ genere: 'bozza.tono', dati: { tratto: 'saluto', a: 'Hi {nome},' }, stato: 'osservata', testoSuo: null }), 'Drafts open with “Hi …,”')
+  assert.equal(g.rigaAbitudine({ genere: 'bozza.tono', dati: { tratto: 'saluto', a: 'Hi {nome},', soloA: 'leo@studio.example', nome: 'Leo' }, stato: 'osservata', testoSuo: null }), 'To Leo: drafts open with “Hi Leo,”')
+  assert.equal(g.rigaAbitudine({ genere: 'feed.filtro', dati: { specie: 'tipo', fonte: 'posta', tipo: 'Da leggere' }, stato: 'osservata', testoSuo: null }), 'No more “To read” cards from Mail')
+  assert.equal(g.provaAbitudine({ genere: 'feed.filtro', casi: 3, su: null, trattenute: 4, chiave: 'feed.filtro:mittente:tom@reed.example' }), '3 dismissed · held back 4 this week')
+  assert.equal(g.provaAbitudine({ genere: 'bozza.tono', casi: 2, su: null }), '2 edited drafts')
+  assert.equal(frasi.imparato(g.rigaImparata({ genere: 'feed.filtro', dati: { specie: 'macchina', nome: 'Stripe' } }), 'Gone.'), 'Gone. Learned: no more cards from Stripe.')
+  assert.equal(frasi.imparato('Stripe keeps sending'), 'Learned: Stripe keeps sending.', 'un nome in testa resta com’è')
+  impostaLingua('it')
+  assert.equal(frasi.imparato(g.rigaImparata({ genere: 'bozza.tono', dati: { tratto: 'saluto-via' } }), 'Via.'), 'Via. Imparato: nelle bozze niente saluto in apertura.')
+  impostaLingua('en')
+})

@@ -56,6 +56,8 @@ import { docsIgnoratiDalFeed } from './store.ts'
 // P2 · la lettura con l'asticella: quello che ha imparato dalle sue ragioni,
 // dove finisce ogni documento, il «perché oggi» controllato dove nasce, e la misura
 import { impara, inviatoDopo, righePrompt } from './feed-impara.ts'
+import * as abitudini from './abitudini.ts'
+import { radici } from './lingua.ts'
 import { segnaEsame, esameDi, rispostiPerId, type Fase } from './feed-dati.ts'
 import { assoluto, conRelativi, scadenzaDi, inizioDelGiorno } from './data-carta.ts'
 import { percheFondato } from './perche-oggi.ts'
@@ -2198,6 +2200,14 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
    */
   const adesso = Date.now()
   const imp = impara(adesso)
+  /*
+   * F7 · le regole che i suoi scarti hanno fatto nascere, e che la Memoria
+   * mostra (`abitudini.filtriInVigore`), lette a ogni lettura: una regola tolta
+   * dal cestino smette qui, la volta dopo. Le macchine si tengono fuori; una
+   * persona entra se chiede qualcosa; un genere di carta si guarda dopo il
+   * modello; un tema spinge in fondo e basta.
+   */
+  const filtri = abitudini.filtriInVigore()
   const esame = new Map<string, { fase: Fase; motivo?: string | null }>()
   const finito = (d: Documento, fase: Fase, motivo?: string | null) => { esame.set(d.id, { fase, motivo: motivo ?? null }) }
   const scriviEsame = () => {
@@ -2206,10 +2216,15 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
   const pescata = [...nuovi, ...recenti(DOCS_PER_LETTURA * 10).filter(d => !arrivati.has(d.id))]
   const candidati = pescata.filter(d => {
     const progettoAttivo = toccaUnSuo(d)
-    if (candidatoDaFeed(d, filtro, adesso, progettoAttivo)) return true
     const r = classificaAttenzione(d, { adesso, progettoAttivo })
-    if (r.destinazione !== 'feed') finito(d, 'regole', r.motivo)
-    else finito(d, 'scartati')
+    // la regola di una macchina parla di tutta la sua posta recente (la posta in serie la terrebbe fuori
+    // lo stesso, ma «tenute fuori questa settimana» è la sua regola che lavora); una mail vecchia no, o
+    // ogni lettura la ricontava come trattenuta oggi
+    const regola = r.motivo !== 'fonte_non_recente' && r.motivo !== 'gia_inviato' ? abitudini.filtroMacchina(d.autore, filtri) : null
+    if (regola) { finito(d, 'filtro', regola); return false }
+    if (r.destinazione !== 'feed') { finito(d, 'regole', r.motivo); return false }
+    if (candidatoDaFeed(d, filtro, adesso, progettoAttivo)) return true
+    finito(d, 'scartati')
     return false
   })
   const ids = candidati.map(d => d.id)
@@ -2229,8 +2244,12 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
     // «già fatta» da questo mittente: prima si guarda se ha già scritto a
     // quell'indirizzo dopo la mail, anche in un altro filo
     if (addr && imp.ricontrolla.has(addr) && d.quando && inviatoDopo(addr, d.quando)) { finito(d, 'gia_risposto'); return false }
-    // «non è mia», due volte da una persona: la sua posta entra solo se chiede qualcosa alla lettera
-    if (addr && imp.nonSuoi.has(addr) && !contieneRichiesta(corpoAttuale(d))) { finito(d, 'non_suo'); return false }
+    // «non è mia», due volte da una persona (o tre scarti muti, F7): la sua posta entra solo se chiede
+    // qualcosa alla lettera. E una persona non si tace mai del tutto: entra anche se le ha già scritto
+    // in quel filo, se è una da non perdere, o se «Come lavori» dice che le risponde sempre
+    const persona = addr ? filtri.persone.get(addr) : undefined
+    if (addr && (imp.nonSuoi.has(addr) || persona) && !contieneRichiesta(corpoAttuale(d)) && !imp.daNonPerdere.has(addr)
+      && !(d.filo && stessoFilo(d.filo, [d.id], 30).some(r => r.inviato)) && !abitudini.rispondeSempre(addr)) { finito(d, 'non_suo', persona ?? null); return false }
     return true
   })
   /*
@@ -2282,7 +2301,12 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
   if (inFila.length && jevCollegato()) passo('arrivato')
   const visti = await giudizi.attenzione(inFila.slice(0, GIUDIZI_PER_LETTURA))
   const davanti = new Set(inFila.filter(d => imp.daNonPerdere.has(mittenteDi(d))).map(d => d.id))
+  // F7 · e in coda i temi che ha messo da parte più volte, salvo chi le chiede qualcosa: spingono, non tolgono
+  const temi = filtri.temi.map(t => t.tema)
+  const suUnTema = (d: Documento) => temi.length > 0 && !contieneRichiesta(corpoAttuale(d)) &&
+    radici(`${d.titolo} ${d.corpo.slice(0, 500)}`).split(' ').some(r => temi.includes(r))
   const dietro = new Set(inFila.filter(d => {
+    if (suUnTema(d)) return true
     const mediana = imp.etaVecchia.get(d.fonte)
     if (mediana === undefined) return false
     const eta = (adesso - Date.parse(d.quando ?? '')) / 86_400_000
@@ -2347,7 +2371,12 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
     // quello che le sue ragioni gli hanno insegnato: le cose vecchie, le
     // carte che non ha capito, le persone la cui posta non è per lei, e
     // quelle a cui risponde da sola (`feed-impara.ts`)
-    righePrompt(imp) ? `\n${righePrompt(imp)}` : ''
+    righePrompt(imp) ? `\n${righePrompt(imp)}` : '',
+    // F7 · i temi che ha messo da parte: le sue regole, non un'impressione
+    filtri.temi.length
+      ? '\nHa messo da parte più volte le cose su questi temi: proponile solo se chiedono qualcosa a lei.\n' +
+        filtri.temi.map(t => `— ${t.frase || t.tema}`).join('\n')
+      : ''
   ].filter(Boolean).join('\n')
 
   const chiama = async (aggiunta: string): Promise<VoceFeed[]> => {
@@ -2547,12 +2576,22 @@ Scrivi in ${nellaLingua()}.`),
    */
   passo('ordine')
   const rifinite = await rifinisci(buone, { progetti: suoi, registro: 'lettura', sogliaChiara: imp.sogliaChiara, oscure: imp.oscure })
-  const sopravvissute = new Set(rifinite.map(v => v.doc))
-  for (const v of buone) { const d = documento(v.doc); if (d) finito(d, sopravvissute.has(v.doc) ? 'carta' : 'doppione') }
+  // F7 · un genere di carta che ha scartato tre volte da quella fonte: fuori, salvo una scadenza o una richiesta
+  const filtrate = new Set<string>()
+  const tenute = rifinite.filter(v => {
+    const d = documento(v.doc)
+    const regola = abitudini.filtroTipo(v, d ? corpoAttuale(d) : '', filtri)
+    if (!regola) return true
+    if (d) finito(d, 'filtro', regola)
+    filtrate.add(v.doc)
+    return false
+  })
+  const sopravvissute = new Set(tenute.map(v => v.doc))
+  for (const v of buone) { if (filtrate.has(v.doc)) continue; const d = documento(v.doc); if (d) finito(d, sopravvissute.has(v.doc) ? 'carta' : 'doppione') }
   scriviEsame()
   // la misura, una riga a ogni lettura: quante viste, quante giuste, quante mancate
   try { await caricaModuli(); console.log(rigaDelRegistro(misura(14, Date.now()))) } catch (e) { console.warn('myynd · misura:', e instanceof Error ? e.message : e) }
-  return rifinite
+  return tenute
 }
 
 /**

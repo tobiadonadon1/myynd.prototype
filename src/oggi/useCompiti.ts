@@ -22,6 +22,7 @@ import { segna } from '../tempi'
 import { giornoLocale } from './giorni'
 import { secchioVivo } from './secchi'
 import { preparaApertura } from '../navigazione.ts'
+import { rigaImparata } from '../gemello-frasi.ts'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -665,7 +666,8 @@ export function useCompiti(
     const r = await api.inviaEmail(id, m)
     setCompiti(r.compiti); setChiusi(r.chiusi)
     scorda(id)
-    mostraToast(t('Mandata.'))
+    // F7 · la seconda correzione uguale è una regola sul tono: l'avviso la dice
+    mostraToast(r.imparato ? frasi.imparato(rigaImparata(r.imparato), t('Mandata.')) : t('Mandata.'))
   }, [mostraToast])
 
   /**

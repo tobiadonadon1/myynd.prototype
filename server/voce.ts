@@ -20,6 +20,7 @@ import * as chi from './chi.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import { corpoAttuale } from './rilevanza.ts'
 import { sembraInglese, sembraItaliano } from './testo.ts'
+import * as abitudini from './abitudini.ts'
 
 export type Profilo = {
   lingua: 'it' | 'en' | null
@@ -110,6 +111,13 @@ const CHIUSURA = /^(?:a presto|a domani|a dopo|ciao|grazie|grazie mille|un salut
 
 function righe(corpo: string): string[] {
   return corpo.split('\n').map(r => r.trim()).filter(Boolean)
+}
+
+/** La riga di chiusura di una mail («Best,», «A presto»), fra le ultime tre; null se non c'è. */
+export function chiusuraDi(corpo: string): string | null {
+  const r = righe(corpo)
+  for (let i = r.length - 1; i >= Math.max(1, r.length - 3); i--) if (CHIUSURA.test(r[i])) return r[i]
+  return null
 }
 
 /** Le ultime righe dopo l'ultima chiusura: la firma, se c'è. */
@@ -304,6 +312,22 @@ function linguaDi(testo: string): 'it' | 'en' | undefined {
 export function perRiga(c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>): Voce | null {
   const messaggio = (!!c.doc && DI_POSTA.test(c.doc)) || EPISTOLARE.test(c.testo ?? '')
   if (!messaggio) return null
+  /*
+   * F7 · e le sue correzioni, dopo la prova. Il blocco della voce è misurato
+   * sulle mail che ha mandato; le regole sul tono sono quello che ha cambiato
+   * nelle nostre bozze prima di mandarle («Ciao» tolto due volte, un terzo più
+   * corta). Si leggono qui, a ogni bozza, così compiti e stesura le hanno
+   * tutte e due, e una regola tolta dalla Memoria smette alla bozza dopo.
+   */
+  const v = voceDi(c)
+  let regole = ''
+  try { regole = abitudini.regoleTono(v?.destinatario?.indirizzo ?? destinatarioDi(c)?.indirizzo) } catch { regole = '' }
+  if (!regole) return v
+  if (!v) return { blocco: regole, profilo: profilo([]), destinatario: null, scritta: null }
+  return { ...v, blocco: v.blocco ? `${v.blocco}\n${regole}` : regole }
+}
+
+function voceDi(c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>): Voce | null {
   const destinatario = destinatarioDi(c)
   const f = firma()
   const corpi = (docs: store.Documento[]) => docs.map(d => senzaFirma(corpoAttuale(d), f)).filter(Boolean)

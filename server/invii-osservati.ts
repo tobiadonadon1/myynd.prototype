@@ -26,18 +26,32 @@
 import { createHash } from 'node:crypto'
 import * as store from './store.ts'
 import * as lavoroDati from './lavoro-dati.ts'
-import * as memoria from './memoria.ts'
+import * as regoleTono from './regole-tono.ts'
 import * as compiti from './compiti.ts'
 import { classe, parole, ritocco } from './ritocco.ts'
 import { corpoAttuale } from './rilevanza.ts'
-import { senzaFirma } from './voce.ts'
+import { destinatarioDi, senzaFirma, type Destinatario } from './voce.ts'
 
 /** Oltre questa distanza, con il solo filo come prova, la mail è sua e non la bozza. */
 export const SOGLIA_PROPRIA = 0.6
 const FINESTRA = 30 * 86_400_000
 
-type Ferri = { impara: (bozza: string, inviato: string) => Promise<unknown> }
-const VERI: Ferri = { impara: (b, i) => memoria.imparaDallaCorrezione(b, i) }
+/*
+ * F7 · la coppia va alle regole sul tono (`regole-tono.ts`), non più a
+ * `memoria.imparaDallaCorrezione`: contata, senza modello, e letta dalla bozza
+ * dopo. Una regola che entra in vigore qui non ha una rotta che la dica: va sul
+ * filo della persona («Learned: …»), e senza finestra aperta la dice il punto
+ * accanto a «Memoria».
+ */
+type Ferri = { impara: (bozza: string, inviato: string, destinatario: Destinatario | null) => unknown }
+const VERI: Ferri = {
+  impara: (b, i, destinatario) => {
+    const e = regoleTono.imparaDaBozza({ bozza: b, inviato: i, destinatario, via: 'casella' })
+    if (e.imparato) compiti.annunciaImparato(e.imparato)
+    void e.ripiego?.then(r => { if (r) compiti.annunciaImparato(r) })
+    return e
+  }
+}
 let ferri: Ferri = VERI
 /** Solo per le prove: sostituisce la memoria, o la rimette (con `null`). */
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
@@ -116,7 +130,12 @@ export async function osservaUno(c: store.Compito): Promise<Visto> {
   lavoroDati.registraInvio(c.id, { via: 'casella', inviato: quando, distanza: r, parole: parole(corpo).length, classe: cl })
   // la coppia che si impara è pari: la firma tolta da tutte e due le parti,
   // o la memoria imparava che lei cancella il suo nome
-  if (cl === 'ritocco' || cl === 'modificato') ferri.impara(bozza, corpo).catch(() => { /* la memoria è un di più */ })
+  if (cl === 'ritocco' || cl === 'modificato') {
+    try {
+      const r = ferri.impara(bozza, corpo, destinatarioDi(c))
+      if (r instanceof Promise) r.catch(() => { /* la memoria è un di più */ })
+    } catch { /* la memoria è un di più */ }
+  }
   return { mandata: true, certezza, ritocco: r }
 }
 

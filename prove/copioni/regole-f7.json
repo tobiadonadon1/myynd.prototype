@@ -1,0 +1,8 @@
+{
+  "modello": "finto",
+  "risposte": [
+    { "se": "capo di gabinetto", "in": "system", "json": { "priorita": [], "domande": [], "superate": [] } },
+    { "se": "MESSAGGIO CORRENTE", "in": "utente", "json": { "voci": [] } }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

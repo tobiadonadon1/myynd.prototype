@@ -822,6 +822,8 @@ export type EventoCompito =
   | { fase: 'feed' }
   /** Un collegamento è cambiato, anche in un'altra finestra o dentro Claude Code: si rilegge lo stato. */
   | { fase: 'collegamento' }
+  /** F7 · una regola nata da un gesto visto altrove (una bozza partita dalla sua posta) è entrata in vigore. */
+  | { fase: 'imparato'; regola: RegolaImparata }
   | EventoLettura
 
 export type Accesso = {
@@ -1299,7 +1301,7 @@ export const api = {
    * vista — e con i campi parte quello che la persona ha corretto.
    */
   inviaEmail: (id: string, m?: { a: string; oggetto: string; corpo: string }) =>
-    json<{ ok: true; compiti: Compito[]; chiusi: Compito[] }>(
+    json<{ ok: true; compiti: Compito[]; chiusi: Compito[]; imparato?: RegolaImparata }>(
       `/api/compiti/${encodeURIComponent(id)}/invia`, { method: 'POST', body: JSON.stringify(m ?? {}) }),
 
   /** Quello che è uscito da qui davvero. */
@@ -2137,8 +2139,12 @@ export type PrevisioneVista = { id: string; genere: string; nome: string; titolo
 export type AbitudineVista = {
   chiave: string; genere: string; dati: Record<string, string | number>; testoSuo: string | null; casi: number; su: number | null
   stato: 'osservata' | 'tenuta' | 'corretta' | 'superata'; inVigore: boolean; fino: string | null
-  esempi: { quando: string; testo: string; doc: string | null }[]
+  esempi: { quando: string; testo: string; doc: string | null; trattenuta?: boolean }[]
+  /** F7 · solo i filtri del feed: quante cose ha tenuto fuori negli ultimi sette giorni. */
+  trattenute?: number
 }
+/** F7 · una regola nata da un gesto, appena entrata in vigore: l'avviso dice «Learned: …». */
+export type RegolaImparata = { chiave: string; genere: string; dati: Record<string, string | number> }
 export type Gemello = {
   /** Gli ultimi trenta giorni, solo le affermazioni verificate; null senza. */
   punteggio: { giuste: number; totale: number; base: number } | null
@@ -2186,7 +2192,7 @@ export type MisuraFeed = {
   copertura: { postaInviata: boolean }
 }
 
-type EsitoVoce = { stato: string; motivo: string; fonteVecchia: boolean; daRicordare: string; aperti: unknown[]; fatte: unknown[]; registrato?: Registrato }
+type EsitoVoce = { stato: string; motivo: string; fonteVecchia: boolean; daRicordare: string; aperti: unknown[]; fatte: unknown[]; registrato?: Registrato; imparato?: RegolaImparata }
 
 /** Le chiamate del feed con l'asticella: «Non utile» con una ragione, le carte viste, la misura. */
 export const apiP2 = {

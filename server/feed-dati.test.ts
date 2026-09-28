@@ -137,5 +137,5 @@ test('segnaEsame scrive dove è finito ogni documento, tiene «quando» se non c
   dati.segnaEsame([{ doc: 'c', fase: 'posti' }], '2026-11-22T10:00:00.000Z')
   assert.deepEqual([...dati.esameDi(['a', 'b', 'c']).keys()], ['c'])
   assert.equal(dati.segnaEsame([]), 0)
-  assert.deepEqual([...dati.FASI], ['regole', 'scartati', 'gia', 'risposto', 'gia_risposto', 'non_suo', 'posti', 'modello', 'verifica', 'obiettivo', 'lingua', 'doppione', 'carta'])
+  assert.deepEqual([...dati.FASI], ['regole', 'scartati', 'filtro', 'gia', 'risposto', 'gia_risposto', 'non_suo', 'posti', 'modello', 'verifica', 'obiettivo', 'lingua', 'doppione', 'carta'])
 })

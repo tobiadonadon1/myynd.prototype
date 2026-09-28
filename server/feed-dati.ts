@@ -113,11 +113,12 @@ export function rispostiPerId(messageIds: readonly string[]): Set<string> {
  *   automatico messo a tacere), gia (già sul feed, in lista, o risposto a
  *   suo tempo), risposto (una risposta più recente nel filo o per
  *   `risponde`), gia_risposto (la regola «già fatta» di feed-impara),
- *   non_suo (la regola «non è mia»), posti (tagliato dai trenta posti),
+ *   non_suo (la regola «non è mia»), filtro (una regola della Memoria nata
+ *   dai suoi scarti, F7, con la sua chiave nel motivo), posti (tagliato dai trenta posti),
  *   modello (letto, nessuna carta), verifica (con il motivo), obiettivo,
  *   lingua, doppione, carta.
  */
-export const FASI = ['regole', 'scartati', 'gia', 'risposto', 'gia_risposto', 'non_suo', 'posti', 'modello', 'verifica', 'obiettivo', 'lingua', 'doppione', 'carta'] as const
+export const FASI = ['regole', 'scartati', 'filtro', 'gia', 'risposto', 'gia_risposto', 'non_suo', 'posti', 'modello', 'verifica', 'obiettivo', 'lingua', 'doppione', 'carta'] as const
 export type Fase = typeof FASI[number]
 
 /** Quanto resta il registro dell'esame: oltre, un documento è fuori da ogni finestra. */
@@ -148,7 +149,7 @@ export function segnaEsame(righe: readonly { doc: string; fase: Fase | string; m
     ON CONFLICT(doc) DO UPDATE SET fase = excluded.fase, motivo = excluded.motivo, quando = excluded.quando
     WHERE (feed_esame.fase IS NOT excluded.fase OR feed_esame.motivo IS NOT excluded.motivo OR excluded.fase IN ('modello', 'verifica'))
       AND NOT (excluded.fase IN ('gia', 'risposto') AND feed_esame.fase NOT IN ('gia', 'risposto'))
-      AND NOT (excluded.fase IN ('regole', 'scartati') AND feed_esame.fase NOT IN ('regole', 'scartati'))
+      AND NOT (excluded.fase IN ('regole', 'scartati', 'filtro') AND feed_esame.fase NOT IN ('regole', 'scartati', 'filtro'))
   `)
   let scritte = 0
   db.exec('BEGIN')

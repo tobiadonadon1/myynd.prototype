@@ -3138,6 +3138,11 @@ export function docsIgnoratiDalFeed(docs: Documento[]): Set<string> {
  */
 export function mittentiScartati(_giorni = 90): { indirizzi: string[]; domini: string[] } {
   const indirizzi = new Set<string>()
+  // F7 · la regola che lei ha tolto dalla Memoria (il cestino su «No more
+  // cards from…») non torna a tacere il mittente da qui: il punto, le mancate
+  // e il feed leggono tutti questa lista, e la Memoria deve dire il vero
+  const tolti = new Set((db.prepare("SELECT chiave FROM abitudini WHERE stato = 'tolta' AND chiave LIKE 'feed.filtro:mittente:%'").all() as { chiave: string }[])
+    .map(r => r.chiave.slice('feed.filtro:mittente:'.length)))
   for (const r of risposteAttenzione()) {
     if (r.stato !== 'scartato') continue
     // una carta insegna a tacere un mittente solo se l'ha scartata come «non
@@ -3148,7 +3153,7 @@ export function mittentiScartati(_giorni = 90): { indirizzi: string[]; domini: s
     const c = contestoRisposta(r)
     // One irrelevant request is not permission to silence a person, a
     // shared team mailbox, or their whole company domain indefinitely.
-    if (c && mittenteAutomatico(c.autore)) indirizzi.add(indirizzoAttenzione(c.autore))
+    if (c && mittenteAutomatico(c.autore) && !tolti.has(indirizzoAttenzione(c.autore))) indirizzi.add(indirizzoAttenzione(c.autore))
   }
   return { indirizzi: [...indirizzi], domini: [] }
 }
@@ -3164,7 +3169,7 @@ export const MITTENTE_MACCHINA =
   /(^|[.\-_+])(no-?reply|no_reply|do-?not-?reply|donotreply|newsletters?|news|promo(tions?)?|marketing|notifications?|notify|alerts?|mailer(-daemon)?|bounces?|updates?|hello|info|team|digest)([.\-_+]|@)/i
 
 /** I domini che appartengono a tutti: scartare una persona lì non chiude nessuno. */
-const DOMINI_DI_TUTTI = new Set([
+export const DOMINI_DI_TUTTI = new Set([
   'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.it', 'live.it', 'live.com',
   'yahoo.com', 'yahoo.it', 'icloud.com', 'me.com', 'mac.com', 'libero.it', 'virgilio.it', 'tiscali.it',
   'alice.it', 'tin.it', 'fastwebnet.it', 'aruba.it', 'pec.it', 'protonmail.com', 'proton.me'

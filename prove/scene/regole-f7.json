@@ -1,0 +1,41 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Run a two-week AI pilot with the Harbor finance team" }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:401", "fonte": "posta", "tipo": "email", "titolo": "Hiring plan", "corpo": "The spring hiring plan for the team, for reference.", "autore": "Tom Reed <tom@reed.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-3d", "messageId": "tr401@reed.example", "filo": "tr401@reed.example" },
+    { "id": "posta:INBOX:402", "fonte": "posta", "tipo": "email", "titolo": "Vendor shortlist", "corpo": "The vendor shortlist the team put together, for reference.", "autore": "Tom Reed <tom@reed.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-2d", "messageId": "tr402@reed.example", "filo": "tr402@reed.example" },
+    { "id": "posta:INBOX:403", "fonte": "posta", "tipo": "email", "titolo": "Offsite budget", "corpo": "Here is the offsite budget draft the team worked on. Have a look when you get a chance.", "autore": "Tom Reed <tom@reed.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-5h", "messageId": "tr403@reed.example", "filo": "tr403@reed.example" },
+    { "id": "posta:INBOX:410", "fonte": "posta", "tipo": "email", "titolo": "Your payout is on its way", "corpo": "Your payout of 1,240.00 USD is on its way.", "autore": "Stripe <notifications@stripe.com>", "percorso": "INBOX", "gruppo": "posta", "quando": "-4d" },
+    { "id": "posta:INBOX:411", "fonte": "posta", "tipo": "email", "titolo": "Your weekly Stripe summary", "corpo": "Here is your weekly summary.", "autore": "Stripe <notifications@stripe.com>", "percorso": "INBOX", "gruppo": "posta", "quando": "-1d" },
+    { "id": "posta:INBOX:412", "fonte": "posta", "tipo": "email", "titolo": "New sign-in to your Stripe account", "corpo": "We noticed a new sign-in.", "autore": "Stripe <notifications@stripe.com>", "percorso": "INBOX", "gruppo": "posta", "quando": "-2d" },
+    { "id": "posta:INBOX:420", "fonte": "posta", "tipo": "email", "titolo": "Pilot scope", "corpo": "Hi Alex, can you confirm the pilot scope by Thursday? We start with supplier invoices. Best, Nora", "autore": "Nora Vance <nora@harbor.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-1h", "messageId": "nv420@harbor.example", "filo": "nv420@harbor.example" }
+  ],
+  "feed": [
+    { "id": "f-t1", "tipo": "Da leggere", "titolo": "Read Tom's spring hiring plan", "testo": "Tom shared the spring hiring plan with the team.", "fonte": "posta", "doc": "posta:INBOX:401", "stato": "scartato", "ragione": "non_mia", "motivo": "Non è mia.", "quando": "-3d", "risposto": "-2d" },
+    { "id": "f-t2", "tipo": "Da leggere", "titolo": "Review the vendor shortlist from Tom", "testo": "Tom sent the vendor shortlist the team put together.", "fonte": "posta", "doc": "posta:INBOX:402", "stato": "scartato", "ragione": "non_mia", "motivo": "Non è mia.", "quando": "-2d", "risposto": "-1d" },
+    { "id": "f-s1", "tipo": "Da leggere", "titolo": "Check the Stripe payout", "testo": "Stripe says a payout is on its way.", "fonte": "posta", "doc": "posta:INBOX:410", "stato": "scartato", "motivo": "Non mi interessa.", "quando": "-4d", "risposto": "-3d" },
+    { "id": "f-n1", "tipo": "Da decidere", "titolo": "Confirm the pilot scope with Nora", "testo": "Nora starts with supplier invoices once you confirm.", "urgenza": "by Thursday", "fonte": "posta", "doc": "posta:INBOX:420", "perche": "Nora waits for the scope by Thursday to start.", "quando": "-1h", "peso": 2 },
+    { "id": "f-t3", "tipo": "Da leggere", "titolo": "Review Tom's offsite budget draft", "testo": "Tom shared the offsite budget draft the team worked on.", "fonte": "posta", "doc": "posta:INBOX:403", "perche": "Tom asked the team to look at it.", "quando": "-5h", "peso": 1 }
+  ],
+  "memoriaVista": "-2d",
+  "abitudini": [
+    { "chiave": "bozza.tono:saluto:hi {nome}", "genere": "bozza.tono", "dati": { "tratto": "saluto", "a": "Hi {nome},", "da": "Dear {nome},", "chi": "leo@studio.example,nora@harbor.example" }, "casi": 3,
+      "esempi": [{ "quando": "-1d", "testo": "«Dear Nora,» → «Hi Nora,»" }, { "quando": "-3d", "testo": "«Dear Leo,» → «Hi Leo,»" }, { "quando": "-4d", "testo": "«Dear Leo,» → «Hi Leo,»" }], "visto": "-4d", "dal": "-3d" },
+    { "chiave": "bozza.tono:corta", "genere": "bozza.tono", "dati": { "tratto": "corta", "rapporto": 0.62, "chi": "leo@studio.example,sam@lumen.example" }, "casi": 2,
+      "esempi": [{ "quando": "-1d", "testo": "118 → 71" }, { "quando": "-2d", "testo": "96 → 62" }], "visto": "-2d", "dal": "-1d" },
+    { "chiave": "bozza.tono:frase:5f1c2a9e0b", "genere": "bozza.tono", "dati": { "tratto": "frase", "frase": "I hope this email finds you well.", "chi": "leo@studio.example,priya@audit.example" }, "casi": 2, "mostra": 2,
+      "esempi": [{ "quando": "-1d", "testo": "«I hope this email finds you well.» ✕" }, { "quando": "-5d", "testo": "«I hope this email finds you well.» ✕" }], "visto": "-5d", "dal": "-1d" },
+    { "chiave": "bozza.tono:chiusura:cheers", "genere": "bozza.tono", "dati": { "tratto": "chiusura", "a": "Cheers,", "da": "Best regards,", "chi": "sam@lumen.example", "soloA": "sam@lumen.example", "nome": "Sam" }, "casi": 1,
+      "esempi": [{ "quando": "-6h", "testo": "«Best regards,» → «Cheers,»" }], "visto": "-6h" }
+  ],
+  "temi": [{ "tema": "rinnov", "frase": "Subscription renewal notices can wait: they go to the bottom.", "titoli": ["Renew the Figma plan", "Renew the domain", "Renew the Notion seats"] }],
+  "filtri": true,
+  "esame": [
+    { "doc": "posta:INBOX:411", "fase": "filtro", "motivo": "feed.filtro:mittente:notifications@stripe.com", "quando": "-1d" },
+    { "doc": "posta:INBOX:412", "fase": "filtro", "motivo": "feed.filtro:mittente:notifications@stripe.com", "quando": "-2d" }
+  ]
+}

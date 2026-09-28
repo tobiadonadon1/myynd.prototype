@@ -940,15 +940,17 @@ test('«già fatta» da un mittente: la sua mail dopo non entra se lui gli ha gi
   assert.match(testoDi(ricevute[0]), /id: posta:INBOX:1043/)
 })
 
-test('«non è mia» due volte da una persona: la sua posta entra solo se chiede qualcosa, e il modello lo sa', async () => {
+test('«non è mia» tre volte da una persona: la sua posta entra solo se chiede qualcosa, e il modello lo sa', async () => {
   store.azzeraTutto()
   const y1 = doc('posta:INBOX:1051', 'Verbale riunione', { autore: 'Yara <y@ex.it>', quando: fraOre(72) })
   const y2 = doc('posta:INBOX:1052', 'Agenda trimestre', { autore: 'Yara <y@ex.it>', quando: fraOre(60) })
+  const y3 = doc('posta:INBOX:1055', 'Bilancio', { autore: 'Yara <y@ex.it>', quando: fraOre(50) })
   const senza = doc('posta:INBOX:1053', 'Report allegato', { autore: 'Yara <y@ex.it>', quando: fraOre(2), corpo: 'Il report del mese in allegato, per conoscenza.' })
   const con = doc('posta:INBOX:1054', 'Data della visita', { autore: 'Yara <y@ex.it>', quando: fraOre(1), corpo: 'Puoi confermare la data della visita?' })
-  store.salvaDocumenti([y1, y2, senza, con])
+  store.salvaDocumenti([y1, y2, y3, senza, con])
   chiusa(y1.id, 'non_mia', 'Leggi il verbale della riunione')
   chiusa(y2.id, 'non_mia', 'Guarda l’agenda del trimestre')
+  chiusa(y3.id, 'non_mia', 'Controlla il bilancio del mese')
   const ricevute = fornitoreFinto([])
   await claude.generaFeed()
   const mandato = testoDi(ricevute[0])

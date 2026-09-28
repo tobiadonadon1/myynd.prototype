@@ -42,6 +42,8 @@ import * as contratto from './contratto.ts'
 import * as ordine from './ordine.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as voce from './voce.ts'
+import * as abitudini from './abitudini.ts'
+import * as regoleTono from './regole-tono.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi, type Stesa } from './stesura.ts'
 import { corpoPerChiRiceve, haSegnaposto, rigaIpotesi } from './cornice.ts'
@@ -63,6 +65,8 @@ export type Evento =
   | { fase: 'collegamento' }
   /** P10 · la lettura chiesta con l'occhio: corre (con il suo passo), finisce, o va storta. */
   | { fase: 'lettura'; stato: 'corre' | 'fine' | 'guaio'; lettura: Lettura; nuove?: number; errore?: string }
+  /** F7 · una regola nata da un gesto è appena entrata in vigore: «Learned: …». */
+  | { fase: 'imparato'; regola: abitudini.Imparata }
 
 /*
  * Ogni ascoltatore sa di chi vuole sentire.
@@ -1136,10 +1140,31 @@ export function scordaRiprese() { ripresi.clear() }
  * hai tenuto, e da lì capisce come scrivi. Gira dopo aver risposto, mai prima:
  * chiudere un compito non deve aspettare la memoria.
  */
-export function imparaSeCorretto(bozza: string | null, tenuto: string) {
-  if (!bozza?.trim() || !tenuto.trim()) return
+export function imparaSeCorretto(bozza: string | null, tenuto: string, o: { email?: boolean; destinatario?: voce.Destinatario | null; via?: regoleTono.Ingresso['via'] } = {}): abitudini.Imparata | null {
+  if (!bozza?.trim() || !tenuto.trim()) return null
+  /*
+   * F7 · una bozza di posta corretta diventa una regola sul tono, contata e
+   * senza modello (`regole-tono.ts`), che la bozza dopo legge davvero. Prima
+   * finiva in una convinzione indotta che nessun prompt leggeva. Torna la
+   * regola appena entrata in vigore: la rotta la mette nell'avviso.
+   */
+  if (o.email) {
+    try {
+      const e = regoleTono.imparaDaBozza({ bozza, inviato: tenuto, destinatario: o.destinatario ?? null, via: o.via ?? 'chiusura' })
+      // la regola chiesta al modello arriva dopo la risposta: la dice il filo
+      void e.ripiego?.then(r => { if (r) annunciaImparato(r) })
+      return e.imparato
+    }
+    catch (e) { console.warn('myynd · la correzione non è diventata una regola:', e instanceof Error ? e.message : e); return null }
+  }
   memoria.imparaDallaCorrezione(bozza, tenuto)
     .catch(e => console.warn('myynd · la correzione non è arrivata alla memoria:', e instanceof Error ? e.message : e))
+  return null
+}
+
+/** F7 · una regola appena entrata in vigore da un gesto che nessuna rotta ha visto (una bozza partita dalla sua posta). */
+export function annunciaImparato(regola: abitudini.Imparata) {
+  annuncia({ fase: 'imparato', regola })
 }
 
 /**

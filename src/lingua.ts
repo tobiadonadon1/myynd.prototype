@@ -3445,6 +3445,13 @@ const EN: Record<string, string> = {
   'Il criterio non è valido.': 'That done means isn’t valid.',
   'Il criterio è troppo lungo: una riga basta.': 'That done means is too long: one line is enough.',
   // — F1: fine —
+
+  // — F7: inizio —
+  'Bozze': 'Drafts',
+  'Feed': 'Feed',
+  'Via.': 'Gone.',
+  'tenuta fuori': 'held back',
+  // — F7: fine —
 }
 
 
@@ -4127,6 +4134,20 @@ export const frasi = {
   /** Dopo un salvataggio che ha fatto nascere dei progetti. */
   nuoviProgetti: (nomi: string[]) => corrente === 'en'
     ? `Saved. ${nomi.length === 1 ? 'New project' : 'New projects'}: ${nomi.join(', ')}.`
-    : `Salvato. ${nomi.length === 1 ? 'Nuovo progetto' : 'Nuovi progetti'}: ${nomi.join(', ')}.`
+    : `Salvato. ${nomi.length === 1 ? 'Nuovo progetto' : 'Nuovi progetti'}: ${nomi.join(', ')}.`,
   // — P5: fine —
+
+  // — F7: inizio —
+  /**
+   * L'avviso di una regola appena entrata in vigore, dopo il gesto che l'ha
+   * fatta nascere: «Gone. Learned: no more cards from Stripe.». La frase è
+   * quella della Memoria; l'iniziale scende solo sulle parole di apertura.
+   */
+  imparato: (frase: string, prima?: string) => {
+    const f = frase.trim().replace(/[.!?…]+$/, '')
+    const g = /^(?:No|Drafts|Cards|To|Nelle|Niente|Le|Bozze|A)\b/.test(f) ? f.charAt(0).toLowerCase() + f.slice(1) : f
+    const testa = prima ? `${prima} ` : ''
+    return corrente === 'en' ? `${testa}Learned: ${g}.` : `${testa}Imparato: ${g}.`
+  }
+  // — F7: fine —
 }

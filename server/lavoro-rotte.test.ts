@@ -228,14 +228,16 @@ test('«Manda» su una bozza già partita dalla sua posta risponde 409, e la rig
 })
 
 test('la rotta «invia» manda, registra l\'invio via smtp misurato sul corpo dell\'email, e impara da quel corpo e non dal risultato intero', async () => {
-  // una parola cambiata: contro il corpo dell'email è un ritocco; contro il risultato intero («Done: …», la riga delle fonti) non lo sarebbe
-  const corretto = 'Hi Leo,\n\nthe invoice is attached, with the three lines you asked about.\n\nBest,\nAlex'
+  // due parole cambiate (il saluto e il numero): contro il corpo dell'email è un ritocco; contro il risultato intero («Done: …», la riga delle fonti) non lo sarebbe
+  const corretto = 'Hey Leo,\n\nthe invoice is attached, with the three lines you asked about.\n\nBest,\nAlex'
   const r = await post('/api/compiti/c-m1/invia', { corpo: corretto })
   assert.equal(r.stato, 200, JSON.stringify(r.corpo))
   assert.equal(mandate.length, 1, 'niente è arrivato allo SMTP finto')
   assert.match(mandate[0], /the three lines/)
   const chiusa = ((r.corpo.chiusi ?? []) as Riga[]).find(x => x.id === 'c-m1')
   assert.equal(chiusa?.stato, 'fatto')
+  // una correzione sola non è ancora una regola: niente «Learned» nell'avviso
+  assert.equal(r.corpo.imparato, undefined)
 
   // le misure: via smtp, e una distanza piccola, perché il confronto è con il corpo dell'email e non con «Done: …» e la riga delle fonti
   const m = await get('/api/lavoro/misura?giorni=30')
@@ -245,22 +247,19 @@ test('la rotta «invia» manda, registra l\'invio via smtp misurato sul corpo de
   assert.equal(misure?.via, 'smtp')
   assert.equal(misure?.classe, 'ritocco', `distanza ${misure?.distanza}`)
 
-  // la memoria ha ricevuto la coppia giusta: il corpo preparato contro quello mandato, senza la cornice
-  const inizio = Date.now()
-  const fine = inizio + 60000
-  let richiesta: string | undefined
-  while (!richiesta && Date.now() < fine) {
-    const registro = readFileSync(join(casa, 'modello.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
-    richiesta = registro.find(x => x.includes('Avevo preparato questo') && x.includes('the three lines'))
-    if (!richiesta) await new Promise(x => setTimeout(x, 250))
-  }
-  assert.ok(richiesta, 'nessuna correzione è arrivata alla memoria:\n' + readFileSync(join(casa, 'modello.jsonl'), 'utf8').trim().split('\n').filter(x => x.includes('Avevo preparato') || x.includes('Ho mandato invece')).map(x => String((JSON.parse(x) as { utente: string }).utente).slice(0, 1500)).join('\n') + '\n---\n' + readFileSync(join(casa, 'server.log'), 'utf8').split('\n').slice(-8).join('\n'))
-  console.log(`la correzione è arrivata alla memoria dopo ${Date.now() - inizio} ms`)
-  const testo = JSON.parse(richiesta!) as unknown
-  const piatto = JSON.stringify(testo)
-  assert.match(piatto, /Avevo preparato questo:[^"]*Hi Leo,/)
-  assert.doesNotMatch(piatto, /Done: the reply to Leo/)
-  assert.doesNotMatch(piatto, /From the mail \[1\]/)
+  // F7 · la coppia giusta diventa una regola sul tono, senza modello: il saluto cambiato, misurato sul corpo preparato e non sulla cornice
+  const g = await get('/api/gemello')
+  const righe = (g.corpo.abitudini ?? []) as { chiave: string; casi: number; inVigore: boolean; dati: Record<string, string>; esempi: { testo: string }[] }[]
+  const saluto = righe.find(a => a.chiave === 'bozza.tono:saluto:hey {nome}')
+  assert.ok(saluto, 'nessuna regola sul saluto: ' + JSON.stringify(righe.map(a => a.chiave)))
+  assert.equal(saluto.casi, 1); assert.equal(saluto.inVigore, false)
+  assert.equal(saluto.dati.soloA, 'leo@studio.example')
+  assert.match(saluto.esempi[0]!.testo, /«Hi Leo,» → «Hey Leo,»/)
+  assert.ok(righe.every(a => a.esempi.every(e => !/Done: the reply|From the mail/.test(e.testo))), 'la cornice è finita in una regola')
+  // e la vecchia strada (una chiamata al modello per una convinzione indotta) non parte più
+  await new Promise(x => setTimeout(x, 300))
+  const registro = existsSync(join(casa, 'modello.jsonl')) ? readFileSync(join(casa, 'modello.jsonl'), 'utf8') : ''
+  assert.ok(!registro.includes('Avevo preparato questo'), 'la correzione è ancora passata dal modello')
 })
 
 test('l\'email ricavata dopo tiene la lingua di chi riceve e propone il file da allegare, come alla consegna', async () => {

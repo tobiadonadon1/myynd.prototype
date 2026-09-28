@@ -2,7 +2,8 @@
 //
 // Conta solo le cose da guardare nate dopo l'ultima volta che ha aperto la
 // Memoria: le convinzioni che aspettano (indotte e non ancora tenute) e le
-// righe di «Come lavori» che non valgono ancora da sole. Quelle vecchie non
+// righe di «Come lavori» che non valgono ancora da sole, e le regole nate dai
+// suoi gesti appena entrate in vigore (F7). Quelle vecchie non
 // accendono niente: il punto dice «c'è del nuovo», non «hai dei compiti».
 // Senza una prima visita (vista null) non si accende mai: dopo
 // l'aggiornamento nessuno trova un punto a sorpresa.
@@ -29,6 +30,8 @@ export function nuove(vista: string | null): Nuove {
     const righe = db.prepare('SELECT chiave, visto FROM abitudini WHERE visto > ?').all(vista) as { chiave: string; visto: string }[]
     for (const r of righe) if (inAttesa.has(r.chiave)) voci.push({ quando: r.visto, dove: 'come-lavori' })
   }
+  // F7 · le regole nate dai suoi gesti valgono senza un tocco: accendono il punto quando entrano in vigore
+  for (const r of abitudini.entrateDal(vista)) voci.push({ quando: r.dal, dove: 'come-lavori' })
   if (!voci.length) return { quante: 0, dove: null }
   const nuova = voci.reduce((a, b) => (b.quando > a.quando ? b : a))
   return { quante: voci.length, dove: nuova.dove }
