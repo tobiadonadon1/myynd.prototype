@@ -650,3 +650,17 @@ test('ieri chiuso con ogni affermazione annullata (una domenica col solo progett
     assert.deepEqual([v.ieri?.chiuso, v.ieri?.giuste, v.ieri?.totale, v.ieri?.base, v.ieri?.previsioni.length], [true, 1, 1, 0, 2])
   })
 })
+
+test('F6 · con solo Mail e Calendario del Mac il giro gira: prima tornava indietro senza dirlo', async () => {
+  const c = await conti.registra('carla@esempio.it', 'passwordlunga3')
+  assert.ok(c.ok)
+  const carla = c.ok ? c.id : ''
+  await chi.dentro(carla, async () => {
+    cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', postamac: { attiva: true }, agendamac: { attiva: true } })
+    store.azzeraTutto()
+    store.salvaDocumenti([{ id: 'postamac:X/INBOX/1.emlx', fonte: 'postamac', tipo: 'email', titolo: 'Hello', corpo: 'Hi', autore: 'Nora <nora@esempio.it>', quando: new Date(MATTINA.getTime() - GIORNO).toISOString() }])
+    await gem.giro(MATTINA)
+    assert.equal(store.cursore('gemello:mattina'), '2026-09-24', 'la mattina è passata')
+    if (process.platform === 'darwin') assert.deepEqual(gem.casellePostali(), ['postamac'], 'Mail del Mac è una casella')
+  })
+})

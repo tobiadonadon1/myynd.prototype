@@ -1,0 +1,236 @@
+[
+  {
+    "aspetta": 1500
+  },
+  {
+    "clicca": "Skip the intro"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "scrivi": "Launch the new website by October",
+    "in": "Put the new website online by October"
+  },
+  {
+    "scrivi": "New website",
+    "in": "New website"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1800
+  },
+  {
+    "scatta": "fonti"
+  },
+  {
+    "testo": "fonti"
+  },
+  {
+    "clicca": "Mail on this Mac"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "clicca": "Connect Mail on this Mac"
+  },
+  {
+    "aspetta": 2500
+  },
+  {
+    "scatta": "mail-collegata"
+  },
+  {
+    "testo": "mail-collegata"
+  },
+  {
+    "js": "(() => { const b = [...document.querySelectorAll('button')].find(b => /^Read \\d+ sources?/.test(b.textContent.trim())); if (b) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 2500
+  },
+  {
+    "scatta": "lettura"
+  },
+  {
+    "testo": "lettura"
+  },
+  {
+    "js": "(() => { setTimeout(() => location.reload(), 50); return 1 })()"
+  },
+  {
+    "aspetta": 6000
+  },
+  {
+    "scatta": "ripresa"
+  },
+  {
+    "testo": "ripresa"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => (/\\d+ emails/.test(document.body.innerText) || Date.now() - t0 > 25000) ? r(/\\d+ emails/.test(document.body.innerText)) : setTimeout(g, 80); g() })"
+  },
+  {
+    "scatta": "lettura-fatta"
+  },
+  {
+    "testo": "lettura-fatta"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => (/Which excerpts|start with your goal/i.test(document.body.innerText) || Date.now() - t0 > 30000) ? r(document.querySelector('h2')?.textContent) : setTimeout(g, 150); g() })"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "scatta": "estratti"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1500
+  },
+  {
+    "scrivi": "Write the homepage copy",
+    "in": "Write the copy for the home page"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()"
+  },
+  {
+    "aspetta": 1000
+  },
+  {
+    "scatta": "fine"
+  },
+  {
+    "testo": "fine"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => (document.querySelector('[data-riga-che-lavora]') || /Here|things/i.test(document.querySelector('h1')?.textContent || '') && Date.now() - t0 > 4000 || Date.now() - t0 > 12000) ? r(!!document.querySelector('[data-riga-che-lavora]')) : setTimeout(g, 150); g() })"
+  },
+  {
+    "aspetta": 400
+  },
+  {
+    "chiudi": true
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "casa"
+  },
+  {
+    "testo": "casa"
+  },
+  {
+    "js": "(() => { const r = [...document.querySelectorAll('[data-riga-che-lavora]')].map(x => x.textContent); return JSON.stringify(r) })()"
+  },
+  {
+    "js": "new Promise(r => { const t0 = Date.now(); const g = () => fetch('/api/avvio/pagina', { headers: { authorization: 'Bearer sviluppo-non-in-produzione' } }).then(x => x.json()).then(p => (p.primoGiorno && p.primoGiorno.fase === 'fatto') || Date.now() - t0 > 90000 ? r(JSON.stringify(p.primoGiorno)) : setTimeout(g, 500)).catch(() => setTimeout(g, 500)); g() })"
+  },
+  {
+    "aspetta": 2500
+  },
+  {
+    "chiudi": true
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "casa-dopo"
+  },
+  {
+    "testo": "casa-dopo"
+  },
+  {
+    "clicca": "Your account"
+  },
+  {
+    "vai": "Memory"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "clicca": "How you work"
+  },
+  {
+    "aspetta": 1500
+  },
+  {
+    "js": "(() => { const s = document.getElementById('come-lavori'); if (s) s.scrollIntoView({ block: 'start' }); return !!s })()"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "scatta": "come-lavori"
+  },
+  {
+    "testo": "come-lavori"
+  },
+  {
+    "js": "(() => { const r = [...document.querySelectorAll('.cl-card')].find(c => /always answer/.test(c.textContent)); const b = r && r.querySelector('.mem-perche'); if (b) { b.click(); r.scrollIntoView({ block: 'center' }) } return !!b })()"
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "perche-posta"
+  },
+  {
+    "js": "(() => { const r = [...document.querySelectorAll('.cl-card')].find(c => /meetings/.test(c.textContent)); const b = r && r.querySelector('.mem-perche'); if (b) { b.click(); r.scrollIntoView({ block: 'center' }) } return !!b })()"
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "perche-agenda"
+  },
+  {
+    "js": "(() => { const r = [...document.querySelectorAll('.cl-card')].find(c => /commits/.test(c.textContent)); const b = r && r.querySelector('.mem-perche'); if (b) { b.click(); r.scrollIntoView({ block: 'center' }) } return !!b })()"
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "perche-lavoro"
+  },
+  {
+    "js": "(() => { const r = [...document.querySelectorAll('.cl-card')].find(c => /ChatGPT/.test(c.textContent)); const b = r && r.querySelector('.mem-perche'); if (b) { b.click(); r.scrollIntoView({ block: 'center' }) } return !!b })()"
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "perche-chat"
+  },
+  {
+    "testo": "perche"
+  },
+  {
+    "vai": "To do"
+  },
+  {
+    "aspetta": 1200
+  },
+  {
+    "clicca": "Board"
+  },
+  {
+    "aspetta": 1200
+  },
+  {
+    "scatta": "bacheca"
+  },
+  {
+    "testo": "bacheca"
+  }
+]

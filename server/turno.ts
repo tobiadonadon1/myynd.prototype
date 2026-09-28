@@ -34,6 +34,7 @@ import * as contratto from './contratto.ts'
 import * as presenza from './presenza.ts'
 import * as regole from './turno-regole.ts'
 import { fonteValida } from './iniziativa.ts'
+import * as primoGiorno from './primo-giorno.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 
 /** Quante carte in una giornata, di serie; e il minimo e il massimo che si possono scegliere. */
@@ -150,9 +151,14 @@ export function contesto(adesso = new Date(), imp = impostazioni(cfg.leggi(), ad
   return { adesso, notte: imp.notte, assente: ferri.assente() }
 }
 
-/** Una carta nata da un'iniziativa di Myynd la cui fonte non regge più: si ritira invece di lavorarla. */
-function ritirabile(c: store.Compito): boolean {
-  return c.origine === 'iniziativa' && !fonteValida(c.doc)
+/**
+ * Una carta nata da un'iniziativa di Myynd la cui fonte non regge più: si ritira invece di lavorarla.
+ * Anche quelle del primo giorno (F6), ma senza guardare se le proposte sono accese: il primo giorno ci sono anche spente.
+ */
+function ritirabile(c: store.Compito, adesso = new Date()): boolean {
+  if (c.origine === 'iniziativa') return !fonteValida(c.doc, adesso.getTime())
+  if (c.origine === primoGiorno.ORIGINE) return !primoGiorno.fonteValida(c, adesso.getTime())
+  return false
 }
 
 /**
@@ -193,7 +199,7 @@ export async function giro(adesso = new Date()): Promise<string | null> {
     const c = leggiConto(inizio)
     if (c.avviate >= imp.carte) return null
     for (const carta of pronte(adesso)) {
-      if (ritirabile(carta)) {
+      if (ritirabile(carta, adesso)) {
         store.cambiaStatoCompito(carta.id, 'ritirato', 'Source changed or preparation paused')
         compiti.annunciaCambio()
         continue

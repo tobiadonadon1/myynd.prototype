@@ -1,0 +1,190 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Myynd prove//F6//EN
+X-WR-CALNAME:Work
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:f6-evento-1@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-3d 13:00@@
+DTEND:@@-3d 14:00@@
+SUMMARY:Homepage copy review
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-2@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-7d 14:00@@
+DTEND:@@-7d 15:00@@
+SUMMARY:Photo shoot planning
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-3@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-11d 15:00@@
+DTEND:@@-11d 16:00@@
+SUMMARY:Launch checklist
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-4@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-15d 13:00@@
+DTEND:@@-15d 14:00@@
+SUMMARY:Hosting call with Owen
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-5@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-19d 14:00@@
+DTEND:@@-19d 15:00@@
+SUMMARY:Pricing page review
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-6@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-23d 15:00@@
+DTEND:@@-23d 16:00@@
+SUMMARY:Weekly sync with Maya
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-7@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-27d 13:00@@
+DTEND:@@-27d 14:00@@
+SUMMARY:Contract review with Sara
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-8@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-31d 14:00@@
+DTEND:@@-31d 15:00@@
+SUMMARY:Print proofs with Leo
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-9@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-35d 15:00@@
+DTEND:@@-35d 16:00@@
+SUMMARY:Design crit with Priya
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-10@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-39d 13:00@@
+DTEND:@@-39d 14:00@@
+SUMMARY:Domain transfer check
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-11@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-43d 14:00@@
+DTEND:@@-43d 15:00@@
+SUMMARY:Homepage copy review
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-12@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-47d 15:00@@
+DTEND:@@-47d 16:00@@
+SUMMARY:Photo shoot planning
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-13@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-51d 13:00@@
+DTEND:@@-51d 14:00@@
+SUMMARY:Launch checklist
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-14@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-55d 14:00@@
+DTEND:@@-55d 15:00@@
+SUMMARY:Hosting call with Owen
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-15@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-59d 15:00@@
+DTEND:@@-59d 16:00@@
+SUMMARY:Pricing page review
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-16@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-63d 13:00@@
+DTEND:@@-63d 14:00@@
+SUMMARY:Weekly sync with Maya
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-17@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-67d 19:00@@
+DTEND:@@-67d 20:00@@
+SUMMARY:Contract review with Sara
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-18@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-71d 20:00@@
+DTEND:@@-71d 21:00@@
+SUMMARY:Print proofs with Leo
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-19@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-75d 19:00@@
+DTEND:@@-75d 20:00@@
+SUMMARY:Design crit with Priya
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-evento-20@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@-79d 20:00@@
+DTEND:@@-79d 21:00@@
+SUMMARY:Domain transfer check
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-avanti-1@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@+1d 14:00@@
+DTEND:@@+1d 15:00@@
+SUMMARY:Homepage copy review
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-avanti-2@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@+2d 15:00@@
+DTEND:@@+2d 16:00@@
+SUMMARY:Photo shoot planning
+LOCATION:Studio
+END:VEVENT
+BEGIN:VEVENT
+UID:f6-avanti-3@prove.test
+DTSTAMP:@@0d 08:00@@
+DTSTART:@@+4d 13:00@@
+DTEND:@@+4d 14:00@@
+SUMMARY:Launch checklist
+LOCATION:Studio
+END:VEVENT
+END:VCALENDAR

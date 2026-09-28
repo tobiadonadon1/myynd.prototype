@@ -303,3 +303,22 @@ test('chi chiede di leggere mentre il resto aspetta una serratura presa: il rest
   assert.equal(prima.inCoda(''), false)
   prima.fermaRiprese()
 })
+
+test('F6 · Gmail e Outlook hanno la loro prima lettura: novanta giorni, e restano in corso finché ne arrivano altre', () => {
+  cfg.aggiorna({ google: { clientId: 'c', refresh: 'r', email: 'prova@example.invalid', giorni: 30 }, microsoft: { clientId: 'c', tenant: 't', refresh: 'r', parti: ['posta'], giorni: 30 } })
+  assert.ok((prima.A_FINESTRA as readonly string[]).includes('google'))
+  assert.equal(prima.giorniDi('google', 30), 90)
+  assert.equal(prima.giorniDi('microsoft', 30), 90)
+  assert.deepEqual(prima.inCorso().filter(f => f === 'google' || f === 'microsoft'), ['google', 'microsoft'])
+  prima.esito('google', false)
+  assert.equal(prima.statoPrima('google'), 'in-corso', 'troncata: il giro dopo va più indietro')
+  prima.esito('google', true)
+  assert.equal(prima.giorniDi('google', 30), 30, 'dentro: la finestra di sempre')
+  // Outlook senza la posta non ha una prima lettura (non trattiene niente)
+  cfg.aggiorna({ microsoft: { clientId: 'c', tenant: 't', refresh: 'r', parti: ['file'], giorni: 30 } })
+  assert.ok(!prima.inCorso().includes('microsoft'))
+  // chi aveva già Gmail nell'indice non se ne accorge
+  store.segnaCursore('prima:google', null)
+  store.salvaDocumenti([doc('google:1', 'google')])
+  assert.equal(prima.giorniDi('google', 30), 30)
+})

@@ -351,16 +351,26 @@ export type EsitoGoogle = { docs: Documento[]; troncato: boolean }
  * lista e che non sono documenti: sono messaggini, e riempirebbero l'indice di
  * «ok», «grazie», «arrivo».
  */
+/**
+ * `o.massimo`: quanti messaggi nuovi al massimo in questo giro (quattrocento di
+ * serie; milleduecento durante la prima lettura, F6). `o.gia`: gli id già
+ * nell'indice, che non si riscaricano e non contano nel tetto: così la prima
+ * lettura di novanta giorni avanza di giro in giro invece di rileggere sempre
+ * gli stessi ultimi messaggi. `troncato` dice che ne restano di nuovi.
+ */
 export async function sincronizza(
   g: ConfigGoogle,
-  avanzamento?: (fatti: number, totale: number) => void
+  avanzamento?: (fatti: number, totale: number) => void,
+  o: { massimo?: number; gia?: Set<string> } = {}
 ): Promise<EsitoGoogle> {
   const giorni = g.giorni ?? 30
+  const massimo = o.massimo ?? 400
   const q = `newer_than:${giorni}d -in:chats -in:spam -in:trash -in:drafts`
   const docs: Documento[] = []
   let pagina: string | undefined
   let troncato = false
 
+  // gli id costano poco (cento per chiamata): si elencano fino a dieci volte il tetto, e si scaricano solo i nuovi
   const ids: { id: string }[] = []
   do {
     const u = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages')
@@ -368,9 +378,9 @@ export async function sincronizza(
     u.searchParams.set('maxResults', '100')
     if (pagina) u.searchParams.set('pageToken', pagina)
     const r = await api<{ messages?: { id: string }[]; nextPageToken?: string }>(u.toString())
-    ids.push(...(r.messages ?? []))
+    ids.push(...(r.messages ?? []).filter(m => !o.gia?.has(`google:${m.id}`)))
     pagina = r.nextPageToken
-    if (ids.length >= 400) { troncato = true; break }
+    if (ids.length >= massimo) { troncato = ids.length > massimo || !!pagina; ids.length = Math.min(ids.length, massimo); break }
   } while (pagina)
 
   let fatti = 0

@@ -189,3 +189,19 @@ test('form request creates only an honest field draft; source without visible fi
  assert.match(task.nota||'',/reviewable field-by-field draft/)
  assert.match(task.nota||'',/Do not claim that a website was opened, filled, or submitted/)
 })
+
+test('F6 · il primo giorno guarda sette giorni, di serie tre', () => {
+  const cinque = email('cinque', { quando: new Date(ora - 5 * 86400_000).toISOString() })
+  const otto = email('otto', { quando: new Date(ora - 8 * 86400_000).toISOString() })
+  assert.deepEqual(initiative.candidati([cinque, otto], ora).map(d => d.id), [])
+  assert.deepEqual(initiative.candidati([cinque, otto], ora, { giorni: 7 }).map(d => d.id), ['cinque'])
+})
+
+test('F6 · le carte del primo giorno contano fra le proposte vive: con la bacheca piena non ne nasce un’altra', async () => {
+  initiative.imposta(true)
+  store.salvaDocumenti([email('nuova')])
+  for (let i = 0; i < initiative.PROPOSTE_VIVE_MAX; i++) store.scriviCompito({ id: `pg${i}`, testo: `Day one ${i}`, origine: 'primo-giorno', ordine: `o${i}` })
+  assert.equal(await initiative.giro(ora, () => assert.fail('la bacheca è piena'), () => true), null)
+  store.cambiaStatoCompito('pg0', 'fatto')
+  assert.ok(await initiative.giro(ora, () => {}, () => true), 'un posto libero: nasce')
+})

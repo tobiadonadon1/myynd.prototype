@@ -221,3 +221,23 @@ test('la catena: quando una carta finisce, il turno fa partire la prossima da so
   assert.equal(store.compito(b)?.stato, 'pronto', 'la seconda è partita da sola quando la prima ha finito')
   assert.equal(store.compito(b)?.turno?.tentativi, 1)
 })
+
+test('F6 · una carta del primo giorno si ritira se nel suo filo è arrivata la risposta; senza risposta parte, anche con le proposte spente', async () => {
+  finti()
+  cfg.aggiorna({ autonomia: 'preparare' })
+  const arrivata = (id: string, filo: string) => ({ id, fonte: 'posta', tipo: 'email', titolo: `Plan review ${id}`, corpo: 'Could you review the plan and reply with your feedback?',
+    autore: 'Jane <jane@example.com>', quando: new Date(alle(1).getTime() - 3_600_000).toISOString(), filo, messageId: `${id}@x` })
+  store.salvaDocumenti([arrivata('posta:INBOX:a', 'fa'), arrivata('posta:INBOX:b', 'fb')])
+  const notte = { da: 'myynd' as const, quando: 'notte' as const, dal: alle(0, 30).toISOString(), tentativi: 0 }
+  const risposta = riga('Reply to Jane (answered)', { origine: 'primo-giorno', doc: 'posta:INBOX:a' })
+  const aperta = riga('Reply to Jane', { origine: 'primo-giorno', doc: 'posta:INBOX:b' })
+  store.mettiCompitoInCoda(risposta, 'bozza', notte)
+  store.mettiCompitoInCoda(aperta, 'bozza', notte)
+  // lei ha risposto dalla sua posta al primo filo
+  store.salvaDocumenti([{ id: 'posta:Sent:a', fonte: 'posta', tipo: 'email', titolo: 'Re: Plan review', corpo: 'Done.', autore: 'me@example.com', inviato: true,
+    quando: alle(0, 50).toISOString(), filo: 'fa', messageId: 'sa@x', risponde: 'posta:INBOX:a@x', destinatari: 'jane@example.com' }])
+  // alle due di notte il turno la prende: la prima si ritira, la seconda parte
+  const partita = await turno.giro(alle(2))
+  assert.equal(store.compito(risposta)?.stato, 'ritirato')
+  assert.equal(partita, aperta)
+})

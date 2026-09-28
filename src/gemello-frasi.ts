@@ -72,6 +72,12 @@ export function rigaAbitudine(a: Pick<AbitudineVista, 'genere' | 'dati' | 'stato
     case 'codice.con_agenti': return scegli({
       it: `Su ${d.cartella} lavori con ${d.agente} quasi ogni giorno`,
       en: `You work on ${d.cartella} with ${d.agente} almost every day` })
+    // F6 · le tre righe del primo giorno
+    case 'agenda.ore': return scegli({
+      it: `Le riunioni le hai soprattutto tra le ${ora(Number(d.da))} e le ${ora(Number(d.a))}`,
+      en: `Most of your meetings fall between ${ora(Number(d.da))} and ${ora(Number(d.a))}` })
+    case 'codice.commit': return scegli({ it: `La maggior parte dei tuoi commit va su ${d.cartella}`, en: `Most of your commits go to ${d.cartella}` })
+    case 'chat.progetto': return scegli({ it: `Di ${nome} parli spesso con ChatGPT e Claude`, en: `You often talk about ${nome} with ChatGPT and Claude` })
     case 'bozza.tono': return conChi(d, rigaTono(d))
     case 'feed.filtro': return rigaFiltro(d)
     default: return a.testoSuo ?? ''
@@ -138,6 +144,9 @@ export function provaAbitudine(a: Pick<AbitudineVista, 'genere' | 'casi' | 'su'>
     if (!a.trattenute) return scartate
     return `${scartate} · ${scegli({ it: `${a.trattenute} tenut${a.trattenute === 1 ? 'a' : 'e'} fuori questa settimana`, en: `held back ${a.trattenute} this week` })}`
   }
+  if (a.genere === 'agenda.ore' && a.su !== null) return scegli({ it: `${a.casi} riunioni su ${a.su}`, en: `${a.casi} of ${a.su} meetings` })
+  if (a.genere === 'codice.commit' && a.su !== null) return scegli({ it: `${a.casi} commit su ${a.su}`, en: `${a.casi} of ${a.su} commits` })
+  if (a.genere === 'chat.progetto') return scegli({ it: `in ${a.casi} giorni`, en: `on ${a.casi} days` })
   if (a.su !== null) return scegli({ it: `${a.casi} su ${a.su}`, en: `${a.casi} of ${a.su}` })
   if (a.genere.startsWith('app.')) return scegli({ it: `su ${a.casi} giorni`, en: `over ${a.casi} days` })
   return scegli({ it: `${a.casi} risposte`, en: `${a.casi} replies` })

@@ -111,6 +111,11 @@ test('senza modello nessuna pagina; collegato il modello, la domanda della pagin
   assert.equal(senza.json.pagina, 'senza-motore')
   assert.ok(senza.json.trovato.file >= 4)
   assert.equal(richieste, 0)
+  // F6 · il primo giorno c'è nella risposta; senza modello le carte aspettano in silenzio, e la riga non le promette
+  const g = senza.json.primoGiorno as { fase: string; righe: number; carte: number }
+  assert.ok(g && ['attesa', 'ritratto', 'carte', 'fatto'].includes(g.fase), JSON.stringify(senza.json))
+  assert.notEqual(g.fase, 'carte')
+  assert.equal(typeof g.righe, 'number'); assert.equal(g.carte, 0)
 
   assert.equal((await chiama('POST', '/api/connettori/compatibile', { url: `${fintoUrl}/v1`, modello: 'finto', chiave: 'sk-finta' })).stato, 200)
   const prima = richieste
@@ -127,4 +132,7 @@ test('senza modello nessuna pagina; collegato il modello, la domanda della pagin
   lascia()
   await aspettaChe(async () => (await chiama('GET', '/api/avvio/pagina')).json.pagina === 'pronta', 20_000)
   assert.match(registro, /prima pagina · pronta in \d+ ms/)
+  // e dopo la pagina il primo giorno fa il suo ritratto e sceglie le carte: la riga arriva a «fatto»
+  await aspettaChe(async () => (await chiama('GET', '/api/avvio/pagina')).json.primoGiorno?.fase === 'fatto', 20_000)
+  assert.match(registro, /primo giorno · il ritratto/)
 })

@@ -113,6 +113,7 @@ import * as whatsapp from './connettori/whatsapp.ts'
 import { CATALOGO, FONTI } from './connettori/registro.ts'
 // — P4: il primo avvio —
 import * as primaLettura from './prima-lettura.ts'
+import * as primoGiorno from './primo-giorno.ts'
 import * as primaPagina from './prima-pagina.ts'
 import * as viva from './lettura-viva.ts'
 import * as imbuto from './imbuto.ts'
@@ -2374,6 +2375,8 @@ async function leggiTuttoDentro(
     const e = await agendaMac.sincronizza({ dal: new Date(Date.now() - giorni * giorno), al: new Date(Date.now() + agendaMac.GIORNI_AVANTI * giorno) })
     await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('agendamac', { completo: !e.troncato, dal: e.dal, al: e.al }, e.docs.map(d => d.id))
+    // F6 · anche il Calendario del Mac nel registro dei cambi, con le sue chiavi: senza, chi ha solo quello non ha righe sull'agenda
+    try { gemello.agendaLetta(e, { mac: true }) } catch { /* il registro dei cambi non ferma la lettura */ }
     store.segnaCursore('agendamac:ultima', new Date().toISOString())
     primaLettura.esito('agendamac', true)
     avvisa({ fase: 'agendamac', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato, tolti })
@@ -2435,19 +2438,27 @@ async function leggiTuttoDentro(
   const ggl = c.google
   if (ggl) await fonte('google', async () => {
     avvisa({ fase: 'google', stato: 'mi collego alla casella' })
-    const e = await google.sincronizza(ggl, (fatti, tot) =>
-      avvisa({ fase: 'google', stato: `${fatti} di ${tot} messaggi`, fatti, tot }))
+    // F6 · novanta giorni e milleduecento messaggi nuovi per giro finché la prima lettura non è dentro: quelli
+    // già letti allora si saltano, così ogni giro va più indietro. Dopo si rileggono come sempre (le bandiere «letto»)
+    const primaG = primaLettura.statoPrima('google') === 'in-corso'
+    const e = await google.sincronizza({ ...ggl, giorni: primaLettura.giorniDi('google', ggl.giorni) }, (fatti, tot) =>
+      avvisa({ fase: 'google', stato: `${fatti} di ${tot} messaggi`, fatti, tot }),
+      primaG ? { massimo: primaLettura.MESSAGGI_PRIMA, gia: new Set(store.idsConPrefisso('google:')) } : {})
     await store.salvaDocumentiAPezzi(e.docs)
     store.togliDoppioniMac(e.docs)
+    primaLettura.esito('google', !e.troncato)
     avvisa({ fase: 'google', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
     return e.docs.length
   })
   const ms = c.microsoft
   if (ms?.parti.includes('posta')) await fonte('microsoft', async () => {
     avvisa({ fase: 'microsoft', stato: 'mi collego alla casella' })
-    const e = await microsoft.sincronizzaPosta(ms, (fatti, tot) =>
-      avvisa({ fase: 'microsoft', stato: `${fatti} di ${tot} messaggi`, fatti, tot }))
+    const primaM = primaLettura.statoPrima('microsoft') === 'in-corso'
+    const e = await microsoft.sincronizzaPosta({ ...ms, giorni: primaLettura.giorniDi('microsoft', ms.giorni) }, (fatti, tot) =>
+      avvisa({ fase: 'microsoft', stato: `${fatti} di ${tot} messaggi`, fatti, tot }),
+      primaM ? { massimo: primaLettura.MESSAGGI_PRIMA, gia: new Set(store.idsConPrefisso('microsoft:')) } : {})
     await store.salvaDocumentiAPezzi(e.docs)
+    primaLettura.esito('microsoft', !e.troncato)
     avvisa({ fase: 'microsoft', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
     return e.docs.length
   })
@@ -2651,6 +2662,8 @@ function paginaSeDovuta(prima: boolean | (() => boolean), fonti: string[], dal =
       }
       pagina = withBackgroundWork(() => primaPagina.prepara(dal))
         .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
+        // F6 · appena la prima pagina c'è: il ritratto e le carte del primo giorno, fuori dalla serratura della lettura
+        .then(() => { void primoGiorno.forse() })
     }
     return pagina
   }
@@ -5248,10 +5261,10 @@ app.get('/api/lavoro/misura', async (req, res) => {
  * Il primo avvio (P4): Calendario e Mail di questo Mac, senza niente da
  * incollare, e lo stato della prima pagina per la riga che lavora.
  *
- * Il primo giro di apprendimento dopo i novanta giorni (`primaLettura.
- * quandoFinisce`) aspetta P1B: le sue funzioni non sono ancora qui, e finché
- * non ci sono non si registra niente.
+ * Quando i novanta giorni sono tutti dentro (`primaLettura.quandoFinisce`),
+ * il primo giorno rifà il ritratto e scrive le carte se mancano (F6).
  */
+primaLettura.quandoFinisce(() => primoGiorno.forse())
 const soloSuQuestoMac = () => process.platform === 'darwin' && !ospitato.OSPITATO
 
 app.post('/api/connettori/agendamac', async (_req, res) => {
@@ -5290,7 +5303,7 @@ app.get('/api/avvio/pagina', (_req, res) => {
       sincronizzazioniInCorso.add(conto)
       void withBackgroundWork(() => primaPagina.prepara())
         .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
-        .finally(() => { sincronizzazioniInCorso.delete(conto) })
+        .finally(() => { sincronizzazioniInCorso.delete(conto); void primoGiorno.forse(conto) })
       s = primaPagina.stato()
     }
     const lettura = viva.primaChiesta(conto) ? 'prima' : primaLettura.inCoda(conto) ? 'coda' : null
@@ -5299,7 +5312,9 @@ app.get('/api/avvio/pagina', (_req, res) => {
       lettura, trovato: generi.perGenere(perFonte),
       // per fonte anche: la riga dei conti non conta una fonte la cui riga è ancora «In coda»
       perFonte: Object.fromEntries(perFonte.filter(r => Number(r.n) > 0).map(r => [r.fonte, Number(r.n)])),
-      pagina: s.pagina, carte: s.carte
+      pagina: s.pagina, carte: s.carte,
+      // F6 · «Imparo come lavori»: a che punto è il primo giorno
+      primoGiorno: primoGiorno.stato()
     })
   } catch (e) { errore(res, e) }
 })
@@ -5903,6 +5918,10 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const gemelloGiro = perOgnuno('il gemello non ha finito il giro', () => runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro())))
   setTimeout(gemelloGiro, 200_000)
   setInterval(gemelloGiro, 15 * 60_000)
+  // il primo giorno (F6): per chi aspettava la posta, un modello, o la rilettura; fatto, non fa niente
+  const primoGiornoGiro = perOgnuno('il primo giorno non ha finito il giro', () => store.senzaToccare(() => primoGiorno.forse()))
+  setTimeout(primoGiornoGiro, 90_000)
+  setInterval(primoGiornoGiro, 15 * 60_000)
   // la salute delle fonti: ogni ora si chiudono i giorni finiti; una volta al
   // giorno la sonda di WhatsApp e la riga del giorno
   const salute = perOgnuno('la salute delle fonti non si è chiusa', async () => {

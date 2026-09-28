@@ -2241,6 +2241,8 @@ export type PaginaAvvio = {
   perFonte?: Record<string, number>
   pagina: StatoPrimaPagina
   carte: number
+  /** F6 · il primo giorno: il ritratto e le carte per la notte, con le righe di «Come lavori» e le carte nate. */
+  primoGiorno?: { fase: 'attesa' | 'ritratto' | 'carte' | 'fatto'; righe: number; carte: number }
 }
 export const apiP4 = {
   avvioPagina: () => json<PaginaAvvio>('/api/avvio/pagina'),

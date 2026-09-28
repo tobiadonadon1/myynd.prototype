@@ -24,7 +24,7 @@
 
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
-import { filoDi, idPulito } from '../filo.ts'
+import { filoDi, idPulito, rispondeDi } from '../filo.ts'
 import { postaAutomatica } from './segnaliPosta.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
 import { daMicrosoft } from './amministratore.ts'
@@ -309,62 +309,83 @@ export function spoglia(html: string): string {
 
 export type EsitoPosta = { docs: Documento[]; troncato: boolean }
 
+/**
+ * La posta, e poi la posta mandata (F6): `/me/messages` le mescola in ordine
+ * di data e il tetto se le mangiava, e senza le sue risposte nessuna riga di
+ * «Come lavori» si può contare. `o.massimo`: i messaggi nuovi di ciascuna delle
+ * due strade (quattrocento di serie, milleduecento durante la prima lettura);
+ * `o.gia`: gli id già nell'indice, che si saltano e non contano nel tetto.
+ */
 export async function sincronizzaPosta(
   c: ConfigMicrosoft,
-  avanzamento?: (fatti: number, totale: number) => void
+  avanzamento?: (fatti: number, totale: number) => void,
+  o: { massimo?: number; gia?: Set<string> } = {}
 ): Promise<EsitoPosta> {
   const giorni = Math.min(365, Math.max(1, c.giorni ?? 30))
   const dal = new Date(Date.now() - giorni * 86_400_000).toISOString()
-
-  const u = new URL(`${GRAFO}/me/messages`)
-  u.searchParams.set('$filter', `receivedDateTime ge ${dal}`)
-  u.searchParams.set('$orderby', 'receivedDateTime desc')
-  // `internetMessageHeaders` per il filo della conversazione: Message-ID,
-  // In-Reply-To e References sono lì, e sono la stessa chiave che usano gli
-  // altri due connettori di posta
-  u.searchParams.set('$select', 'id,subject,receivedDateTime,from,toRecipients,body,isDraft,isRead,webLink,internetMessageId,internetMessageHeaders')
-  u.searchParams.set('$top', '50')
+  const massimo = o.massimo ?? MAX_MESSAGGI
+  const strada = (percorso: string) => {
+    const u = new URL(`${GRAFO}${percorso}`)
+    u.searchParams.set('$filter', `receivedDateTime ge ${dal}`)
+    u.searchParams.set('$orderby', 'receivedDateTime desc')
+    // `internetMessageHeaders` per il filo della conversazione: Message-ID,
+    // In-Reply-To e References sono lì, e sono la stessa chiave che usano gli
+    // altri due connettori di posta
+    u.searchParams.set('$select', 'id,subject,receivedDateTime,from,toRecipients,body,isDraft,isRead,webLink,internetMessageId,internetMessageHeaders')
+    u.searchParams.set('$top', '50')
+    return u.toString()
+  }
 
   const docs: Documento[] = []
-  let prossima: string | undefined = u.toString()
+  const visti = new Set<string>()
   let troncato = false
   let fatti = 0
 
-  while (prossima) {
-    const r: { value?: Messaggio[]; '@odata.nextLink'?: string } = await api(prossima)
-    for (const m of r.value ?? []) {
-      // una bozza non è posta arrivata: è un pensiero a metà, e in un indice
-      // di documenti si comporta come se fosse stata mandata
-      if (m.isDraft) continue
-      const grezzo = m.body?.content ?? m.bodyPreview ?? ''
-      const testo = riflua(m.body?.contentType === 'html' ? spoglia(grezzo) : grezzo.trim())
-      if (!testo) continue
-      const da = m.from?.emailAddress
-      docs.push({
-        id: `microsoft:${m.id}`,
-        fonte: 'microsoft',
-        tipo: 'email',
-        titolo: m.subject?.trim() || '(senza oggetto)',
-        corpo: testo.slice(0, 20_000),
-        autore: da ? (da.name ? `${da.name} <${da.address ?? ''}>` : da.address ?? null) : null,
-        percorso: m.webLink ?? 'Posta in arrivo',
-        quando: m.receivedDateTime ?? null,
-        gruppo: 'posta',
-        filo: filoDi({
-          messageId: m.internetMessageId ?? intestazione(m, 'Message-ID'),
-          inReplyTo: intestazione(m, 'In-Reply-To'),
-          references: intestazione(m, 'References'),
-          oggetto: m.subject
-        }),
-        messageId: idPulito(m.internetMessageId ?? intestazione(m, 'Message-ID')) || null,
-        letto: m.isRead ?? false,
-        inviato: !!c.email && da?.address?.toLowerCase() === c.email.toLowerCase(),
-        massa: postaAutomatica(m.internetMessageHeaders)
-      })
-      avanzamento?.(++fatti, MAX_MESSAGGI)
-      if (docs.length >= MAX_MESSAGGI) { troncato = true; return { docs, troncato } }
+  // prima la mandata: così una sua risposta, che sta in tutte e due le strade, nasce già «inviata»
+  for (const percorso of ['/me/mailFolders/sentitems/messages', '/me/messages']) {
+    let prossima: string | undefined = strada(percorso)
+    let nuovi = 0
+    pagine: while (prossima) {
+      const r: { value?: Messaggio[]; '@odata.nextLink'?: string } = await api(prossima)
+      for (const m of r.value ?? []) {
+        // una bozza non è posta arrivata: è un pensiero a metà, e in un indice
+        // di documenti si comporta come se fosse stata mandata
+        if (m.isDraft) continue
+        // già letta da questa lettura (la mandata sta in tutte e due le strade), o già nell'indice
+        if (visti.has(m.id) || o.gia?.has(`microsoft:${m.id}`)) continue
+        visti.add(m.id)
+        const grezzo = m.body?.content ?? m.bodyPreview ?? ''
+        const testo = riflua(m.body?.contentType === 'html' ? spoglia(grezzo) : grezzo.trim())
+        if (!testo) continue
+        const da = m.from?.emailAddress
+        docs.push({
+          id: `microsoft:${m.id}`,
+          fonte: 'microsoft',
+          tipo: 'email',
+          titolo: m.subject?.trim() || '(senza oggetto)',
+          corpo: testo.slice(0, 20_000),
+          autore: da ? (da.name ? `${da.name} <${da.address ?? ''}>` : da.address ?? null) : null,
+          percorso: m.webLink ?? 'Posta in arrivo',
+          quando: m.receivedDateTime ?? null,
+          gruppo: 'posta',
+          filo: filoDi({
+            messageId: m.internetMessageId ?? intestazione(m, 'Message-ID'),
+            inReplyTo: intestazione(m, 'In-Reply-To'),
+            references: intestazione(m, 'References'),
+            oggetto: m.subject
+          }),
+          messageId: idPulito(m.internetMessageId ?? intestazione(m, 'Message-ID')) || null,
+          letto: m.isRead ?? false,
+          inviato: percorso.includes('sentitems') || (!!c.email && da?.address?.toLowerCase() === c.email.toLowerCase()),
+          destinatari: (m.toRecipients ?? []).map(x => x.emailAddress?.address ?? '').filter(Boolean).join(', ') || null,
+          risponde: rispondeDi(intestazione(m, 'In-Reply-To')),
+          massa: postaAutomatica(m.internetMessageHeaders)
+        })
+        avanzamento?.(++fatti, massimo * 2)
+        if (++nuovi >= massimo) { troncato = true; break pagine }
+      }
+      prossima = r['@odata.nextLink']
     }
-    prossima = r['@odata.nextLink']
   }
   return { docs, troncato }
 }

@@ -607,6 +607,8 @@ function corpo(c: Compito): string {
   // prima per intero), non una riga per lei. Richiamata, resta il titolo
   const revisione = presentazioneRevisione(c, lingua() === 'en')
   if (revisione) return revisione.descrizione
+  // F6 · lo stesso per una carta che Myynd si è preparato da solo: la nota è per chi lavora, non per lei
+  if (c.origine === 'iniziativa' || c.origine === 'primo-giorno') return ''
   return c.nota || ''
 }
 

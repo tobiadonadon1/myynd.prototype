@@ -80,14 +80,21 @@ export const giornoPrima = (g: string, n = 1) => fuso.giornoIn(new Date(inizioGi
 
 // — le fonti —
 
+/*
+ * Anche Mail e Calendario del Mac, e X (F6): un conto nuovo che ha collegato
+ * solo quelle due (il caso del primo avvio sul Mac) non aveva un gemello, e il
+ * giro si fermava qui senza dirlo.
+ */
 function fonteCollegata(): boolean {
   const c = cfg.leggi()
-  return !!(c.desktop || c.notion || c.posta || c.google || c.slack || c.drive || c.microsoft || c.dropbox || c.calendario || c.granola || c.note || c.conversazioni || c.github)
+  return !!(c.desktop || c.notion || c.posta || c.google || c.slack || c.drive || c.microsoft || c.dropbox || c.calendario || c.granola || c.note || c.conversazioni || c.github
+    || c.postamac || c.agendamac || c.x)
 }
-/** Le caselle collegate, coi nomi delle fasi della lettura: Microsoft conta solo se legge la posta. */
-export function casellePostali(c: { posta?: unknown; google?: unknown; microsoft?: { parti?: string[] } | null } = cfg.leggi()): string[] {
+/** Le caselle collegate, coi nomi delle fasi della lettura: Microsoft conta solo se legge la posta, Mail del Mac solo dove si legge. */
+export function casellePostali(c: { posta?: unknown; google?: unknown; microsoft?: { parti?: string[] } | null; postamac?: unknown } = cfg.leggi()): string[] {
   const fuori: string[] = []
   if (c.posta) fuori.push('posta')
+  if (c.postamac && process.platform === 'darwin' && !ospitato.OSPITATO) fuori.push('postamac')
   if (c.google) fuori.push('google')
   if (c.microsoft?.parti?.includes('posta')) fuori.push('microsoft')
   return fuori
@@ -358,7 +365,7 @@ function ricalcolaFiducia(adesso: Date): void {
  * memoria e l'app si riavvia spesso: senza, fino alle tre della notte dopo
  * non si vedrebbe un commit e nessuna sessione avrebbe la sua cartella.
  */
-async function aggiornaCartelle(): Promise<void> {
+export async function aggiornaCartelle(): Promise<void> {
   if (ospitato.OSPITATO) return
   const desk = cfg.leggi().desktop
   if (!desk) return
@@ -460,9 +467,9 @@ export function dopoLaLettura(partita: string, postaOk: boolean): void {
 }
 
 /** Dopo una lettura intera dell'agenda: i cambi nel registro. */
-export function agendaLetta(e: { viste: segnali.VistaAgenda[]; finestra: { da: string; a: string }; troncato: boolean }): void {
+export function agendaLetta(e: { viste: segnali.VistaAgenda[]; finestra: { da: string; a: string }; troncato: boolean }, o: { mac?: boolean } = {}): void {
   if (e.troncato || !e.viste) return
-  segnali.raccogliAgenda(e.viste, e.finestra)
+  segnali.raccogliAgenda(e.viste, e.finestra, new Date(), o)
 }
 
 /**

@@ -19,6 +19,12 @@ export type Forma = {
   spazzatura: number
   /** Anche una cartella V9 più vecchia, con un messaggio che non deve contare. */
   versioneVecchia?: boolean
+  /**
+   * F6 · a quante delle persone (le prime) si risponde sempre: ogni loro mail
+   * arrivata più di sei giorni fa ha la sua risposta nella posta inviata, due
+   * ore dopo, con In-Reply-To. Quelle più recenti aspettano ancora.
+   */
+  risposte?: number
   adesso?: number
 }
 
@@ -34,13 +40,14 @@ export const OGGETTI = [
   'Draft contract for the October campaign', 'Can you confirm the menu wording?', 'Domain transfer'
 ]
 
-function emlx(m: { da: string[]; a: string[]; oggetto: string; data: Date; id: string; corpo: string; letto: boolean }): Buffer {
+function emlx(m: { da: string[]; a: string[]; oggetto: string; data: Date; id: string; corpo: string; letto: boolean; risponde?: string }): Buffer {
   const testo = [
     `From: ${m.da[0]} <${m.da[1]}>`,
     `To: ${m.a[0]} <${m.a[1]}>`,
     `Subject: ${m.oggetto}`,
     `Date: ${m.data.toUTCString().replace('GMT', '+0000')}`,
     `Message-ID: <${m.id}>`,
+    ...(m.risponde ? [`In-Reply-To: <${m.risponde}>`, `References: <${m.risponde}>`] : []),
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
     '',
@@ -82,7 +89,26 @@ export function costruisciMail(casa: string, f: Forma): { inArrivo: string[]; in
     return id
   }
   const conti = Math.max(1, Math.min(CONTI.length, f.caselle))
-  for (let i = 0; i < f.inArrivo; i++) fuori.inArrivo.push(scrivi(i % conti, 'INBOX', 1 + (i * 88) / Math.max(1, f.inArrivo), false, i))
+  const arrivate: { conto: number; giorni: number; i: number; id: string }[] = []
+  for (let i = 0; i < f.inArrivo; i++) {
+    const giorni = 1 + (i * 88) / Math.max(1, f.inArrivo)
+    arrivate.push({ conto: i % conti, giorni, i, id: `finta-${i % conti}-INBOX-${n}@mail.test` })
+    fuori.inArrivo.push(scrivi(i % conti, 'INBOX', giorni, false, i))
+  }
+  // le risposte, dopo tutta la posta arrivata: i numeri dei file di quella non cambiano
+  for (const a of arrivate) {
+    if (!f.risposte || a.i % PERSONE.length >= f.risposte || a.giorni <= 6) continue
+    const persona = PERSONE[a.i % PERSONE.length]!
+    const dir = join(radice, CONTI[a.conto]!, 'Sent Messages.mbox', '6D1F0B3A-1C2D-4E3F-8A5B-9C0D1E2F3A4B', 'Data', String(n % 10), 'Messages')
+    mkdirSync(dir, { recursive: true })
+    const data = new Date(adesso - a.giorni * 86_400_000 - (a.i % 7) * 3_600_000 + 2 * 3_600_000)
+    const file = join(dir, `${n}.emlx`)
+    writeFileSync(file, emlx({ da: IO, a: persona, oggetto: `Re: ${OGGETTI[a.i % OGGETTI.length]!}`, data, id: `finta-risposta-${n}@mail.test`,
+      corpo: `Hi ${persona[0].split(' ')[0]},\n\nThanks, that works for me. I will follow up on Friday.\n\nAlex`, letto: true, risponde: a.id }))
+    utimesSync(file, data, data)
+    fuori.inviate.push(idFinto(a.conto, 'Sent Messages', n))
+    n++
+  }
   for (let i = 0; i < f.inviate; i++) fuori.inviate.push(scrivi(i % conti, 'Sent Messages', 1 + (i * 88) / Math.max(1, f.inviate), true, i))
   for (let i = 0; i < f.vecchie; i++) scrivi(i % conti, 'INBOX', 120 + i * 5, false, i)
   for (let i = 0; i < f.spazzatura; i++) scrivi(i % conti, 'Junk', 2 + i, false, i)

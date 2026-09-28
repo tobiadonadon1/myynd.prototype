@@ -28,6 +28,8 @@ import * as fuso from './fuso.ts'
 import * as segnali from './segnali.ts'
 import { senzaTrattini } from './testo.ts'
 import { contieneRichiesta, indirizzoAttenzione, mittenteAutomatico } from './rilevanza.ts'
+import { cercatoreDiProgetti } from './attenzione.ts'
+import * as progetti from './progetti.ts'
 
 const GIORNO = 86_400_000
 /** Da qui in su una riga osservata vale da sola (tranne le app). */
@@ -202,6 +204,9 @@ function righeAgenda(adesso: Date): Candidata[] {
   return fuori
 }
 
+/** Su quanti giorni si contano le cartelle con un agente: un mese, non due settimane (F6: il primo giorno le sessioni ci sono già). */
+export const GIORNI_AGENTI = 30
+
 function righeLavoro(adesso: Date): Candidata[] {
   const fuori: Candidata[] = []
   const da14 = fuso.giornoIn(new Date(adesso.getTime() - 14 * GIORNO))
@@ -224,8 +229,8 @@ function righeLavoro(adesso: Date): Candidata[] {
     fuori.push({ chiave: 'app.giornata', genere: 'app.giornata', dati: { da, a }, prova: { casi: attivi.length, su: null, esempi: [] }, fiducia: 1 })
   }
   // le cartelle con un agente: i giorni con una sessione, sui giorni attivi
-  const sessioniCodice = segnali.leggi('codice.sessione', new Date(adesso.getTime() - 14 * GIORNO).toISOString(), adesso.toISOString())
-  const commit = segnali.leggi('codice.commit', new Date(adesso.getTime() - 14 * GIORNO).toISOString(), adesso.toISOString())
+  const sessioniCodice = segnali.leggi('codice.sessione', new Date(adesso.getTime() - GIORNI_AGENTI * GIORNO).toISOString(), adesso.toISOString())
+  const commit = segnali.leggi('codice.commit', new Date(adesso.getTime() - GIORNI_AGENTI * GIORNO).toISOString(), adesso.toISOString())
   for (const s of [...sessioniCodice, ...commit]) if (s.giorno && s.giorno < oggi) giorniAttivi.add(s.giorno)
   const perCartella = new Map<string, Map<string, string>>()
   for (const s of sessioniCodice) {
@@ -241,6 +246,95 @@ function righeLavoro(adesso: Date): Candidata[] {
       fuori.push({ chiave: `codice.con_agenti:${cartella}`, genere: 'codice.con_agenti', dati: { cartella, agente },
         prova: { casi: giorni.size, su: giorniAttivi.size, esempi: [...giorni.keys()].sort().slice(-5).reverse().map(g => ({ quando: `${g}T12:00:00.000Z`, testo: cartella, doc: null })) }, fiducia: giorni.size / giorniAttivi.size })
     }
+  }
+  return fuori
+}
+
+// — il primo giorno (F6): l'agenda, i commit, le chat —
+//
+// Tre righe che si contano sui novanta giorni letti all'installazione, così
+// «Come lavori» non è vuota la prima sera. Nessuna vale da sola (non stanno in
+// `DA_SOLA`): aspettano Tienila prima di arrivare a un modello, come le app.
+
+/** Una riunione di un giorno intero non ha un'ora: la prima riga del corpo lo dice. */
+const TUTTO_IL_GIORNO = /, (?:tutto il giorno|all day)\.$/
+
+/** Quante riunioni passate servono, e che quota deve stare nelle tre ore. */
+export const RIUNIONI_MIN = 15
+export const QUOTA_ORE_RIUNIONI = 0.5
+
+/**
+ * Le ore delle riunioni: la fascia di tre ore dove sta almeno metà delle
+ * riunioni già avvenute negli ultimi novanta giorni, se sono almeno quindici.
+ * Si leggono dall'indice (l'agenda iCal e quella del Mac), non da
+ * `agenda_viste`: un evento del Mac non ha un organizzatore, ma ha un'ora.
+ */
+function righeAgendaOre(adesso: Date): Candidata[] {
+  const da90 = new Date(adesso.getTime() - 90 * GIORNO).toISOString()
+  const eventi = (db.prepare("SELECT id, titolo, quando, corpo FROM documenti WHERE tipo = 'evento' AND quando >= ? AND quando < ? ORDER BY quando").all(da90, adesso.toISOString()) as
+    { id: string; titolo: string; quando: string; corpo: string | null }[])
+    .filter(e => !TUTTO_IL_GIORNO.test(String(e.corpo ?? '').split('\n')[0] ?? ''))
+  if (eventi.length < RIUNIONI_MIN) return []
+  const ore = eventi.map(e => fuso.parti(new Date(e.quando)).ora)
+  let meglio = { da: 0, n: 0 }
+  for (let h = 0; h < 24; h++) {
+    const n = ore.filter(o => (o - h + 24) % 24 < 3).length
+    if (n > meglio.n) meglio = { da: h, n }
+  }
+  if (meglio.n / eventi.length < QUOTA_ORE_RIUNIONI) return []
+  const dentro = eventi.filter((_, i) => (ore[i]! - meglio.da + 24) % 24 < 3)
+  return [{ chiave: 'agenda.ore', genere: 'agenda.ore', dati: { da: meglio.da, a: (meglio.da + 3) % 24 },
+    prova: { casi: meglio.n, su: eventi.length, esempi: dentro.slice(-5).reverse().map(e => ({ quando: e.quando, testo: String(e.titolo ?? '').slice(0, 80), doc: e.id })) },
+    fiducia: meglio.n / eventi.length }]
+}
+
+/** Quanti commit suoi servono, e che quota deve avere la cartella dove ne fa di più. */
+export const COMMIT_MIN = 10
+export const QUOTA_COMMIT = 0.5
+
+/** La cartella dove fa la maggior parte dei suoi commit, sui novanta giorni: con i messaggi dei commit come perché. */
+function righeCommit(adesso: Date): Candidata[] {
+  const commit = segnali.leggi('codice.commit', new Date(adesso.getTime() - 90 * GIORNO).toISOString(), adesso.toISOString())
+    .filter(c => c.ref)
+  if (commit.length < COMMIT_MIN) return []
+  const perCartella = new Map<string, typeof commit>()
+  for (const c of commit) { const k = basename(c.ref!); const l = perCartella.get(k) ?? []; l.push(c); perCartella.set(k, l) }
+  const [cartella, suoi] = [...perCartella.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))[0]!
+  if (suoi.length / commit.length < QUOTA_COMMIT) return []
+  const giorni = new Set(suoi.map(c => c.giorno).filter(Boolean)).size
+  return [{ chiave: `codice.commit:${cartella}`, genere: 'codice.commit', dati: { cartella, giorni },
+    prova: { casi: suoi.length, su: commit.length, esempi: suoi.slice(-5).reverse().map(c => ({ quando: c.quando, testo: String(c.dati.messaggio ?? '').slice(0, 80), doc: null })) },
+    fiducia: suoi.length / commit.length }]
+}
+
+/** In quanti giorni diversi un progetto deve tornare nelle chat esportate. */
+export const GIORNI_CHAT = 5
+
+/**
+ * I progetti di cui parla con ChatGPT e con Claude: le conversazioni esportate
+ * (non le sessioni di codice, che hanno già la loro riga) che nominano un
+ * progetto attivo, in almeno cinque giorni diversi degli ultimi novanta.
+ */
+function righeChat(adesso: Date): Candidata[] {
+  const da90 = new Date(adesso.getTime() - 90 * GIORNO).toISOString()
+  const chat = db.prepare(`SELECT id, titolo, corpo, quando FROM documenti
+    WHERE (id LIKE 'conversazioni:chatgpt:%' OR id LIKE 'conversazioni:claude:%') AND quando >= ? AND quando < ? ORDER BY quando`)
+    .all(da90, adesso.toISOString()) as { id: string; titolo: string; corpo: string | null; quando: string }[]
+  if (!chat.length) return []
+  const progetto = cercatoreDiProgetti()
+  const perProgetto = new Map<string, typeof chat>()
+  for (const c of chat) {
+    const p = progetto(`${c.titolo}\n${String(c.corpo ?? '').slice(0, 4000)}`)
+    if (!p) continue
+    const l = perProgetto.get(p) ?? []; l.push(c); perProgetto.set(p, l)
+  }
+  const fuori: Candidata[] = []
+  for (const [id, xs] of perProgetto) {
+    const giorni = new Set(xs.map(c => fuso.giornoIn(new Date(c.quando))))
+    const nome = progetti.trova(id)?.nome
+    if (giorni.size < GIORNI_CHAT || !nome) continue
+    fuori.push({ chiave: `chat.progetto:${id}`, genere: 'chat.progetto', dati: { progetto: id, nome },
+      prova: { casi: giorni.size, su: null, esempi: xs.slice(-5).reverse().map(c => ({ quando: c.quando, testo: String(c.titolo ?? '').slice(0, 80), doc: c.id })) }, fiducia: 1 })
   }
   return fuori
 }
@@ -331,7 +425,8 @@ const eTema = (chiave: string) => chiave.startsWith('feed.filtro:tema:')
  */
 export function ricalcola(adesso = new Date(), o: { senzaPosta?: boolean } = {}): { righe: number } {
   // senza la posta (il registro è indietro): le righe sulla posta non si rifanno e non si toccano
-  const candidate = [...(o.senzaPosta ? [] : righePosta(adesso)), ...righeAgenda(adesso), ...righeLavoro(adesso), ...righeFeed(adesso)]
+  const candidate = [...(o.senzaPosta ? [] : righePosta(adesso)), ...righeAgenda(adesso), ...righeAgendaOre(adesso), ...righeLavoro(adesso),
+    ...righeCommit(adesso), ...righeChat(adesso), ...righeFeed(adesso)]
   const tocca = (genere: string, chiave: string) => genere !== 'bozza.tono' && !eTema(chiave) && !(o.senzaPosta && genere.startsWith('posta.'))
   return { righe: applica(candidate, tocca, adesso).righe }
 }
@@ -416,6 +511,9 @@ function fraseIt(a: Abitudine): string {
     case 'app.principale': return `Passa più tempo in ${d.app}, ${String(d.oreGiorno).replace('.', ',')} ore al giorno.`
     case 'app.giornata': return `Comincia verso le ${oraIt(Number(d.da))} e smette verso le ${oraIt(Number(d.a))}.`
     case 'codice.con_agenti': return `Su ${d.cartella} lavora con ${d.agente} quasi ogni giorno.`
+    case 'agenda.ore': return `Le sue riunioni stanno soprattutto tra le ${d.da} e le ${d.a}.`
+    case 'codice.commit': return `La maggior parte dei suoi commit va su ${d.cartella}.`
+    case 'chat.progetto': return `Parla spesso di ${d.nome} con ChatGPT e Claude.`
     default: return ''
   }
 }

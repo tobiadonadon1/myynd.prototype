@@ -449,10 +449,14 @@ type RigaVista = { uid: string; titolo: string | null; inizio: string | null; fi
  * rifiutate, annullate. Solo dentro la finestra letta, e solo su una lettura
  * intera. Torna quanti segnali nuovi ha scritto.
  */
-export function raccogliAgenda(viste: VistaAgenda[], finestra: { da: string; a: string }, adesso = new Date()): number {
+/** Le occorrenze del Calendario del Mac hanno la chiave che comincia così: non si confondono con quelle dell'agenda iCal. */
+export const PREFISSO_MAC = 'mac:'
+
+export function raccogliAgenda(viste: VistaAgenda[], finestra: { da: string; a: string }, adesso = new Date(), o: { mac?: boolean } = {}): number {
   const miei = mieiIndirizzi()
   const note = new Map<string, RigaVista>()
-  for (const r of db.prepare('SELECT * FROM agenda_viste').all() as RigaVista[]) note.set(r.uid, r)
+  // ogni agenda guarda solo le sue: una lettura dell'iCal non deve dare per annullate le riunioni del Mac, né il contrario
+  for (const r of db.prepare('SELECT * FROM agenda_viste').all() as RigaVista[]) if (r.uid.startsWith(PREFISSO_MAC) === !!o.mac) note.set(r.uid, r)
   let nuovi = 0
   const oraIso = adesso.toISOString()
   const dentro = (iso: string | null) => !!iso && iso >= finestra.da && iso <= finestra.a

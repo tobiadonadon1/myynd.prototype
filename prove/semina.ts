@@ -432,7 +432,7 @@ if ((scena as Record<string, unknown>).p9) {
 type ScenaP4 = {
   onboarding?: boolean; imbuto?: boolean; senzaModello?: boolean
   calendario?: { url: string; nome?: string }
-  postaMac?: { caselle: number; inArrivo: number; inviate: number; vecchie: number; spazzatura: number }
+  postaMac?: { caselle: number; inArrivo: number; inviate: number; vecchie: number; spazzatura: number; risposte?: number }
   fileDatati?: { nome: string; testo: string; giorni: number }[]
 }
 const p4 = (scena as Record<string, unknown>).p4 as ScenaP4 | undefined
@@ -540,6 +540,73 @@ if (f7.abitudini || f7.filtri || f7.temi || f7.esame) {
   console.log(`semina · F7: ${f7.abitudini?.length ?? 0} regole, ${f7.temi?.length ?? 0} temi, filtri ${f7.filtri ? 'rifatti' : 'no'}`)
 }
 // — F7: fine —
+
+// — F6: inizio —
+// Il primo giorno: quello che c'è su un Mac vero prima dell'installazione.
+//   "f6": {
+//     "git": [{ "cartella": "atlas", "commit": [12, 15, …] }],   // un commit suo per ogni giorno fa, nella casa finta
+//     "sessioni": { "cwd": "/Users/alex/Code/atlas", "giorni": [1, 2, …] },   // Claude Code, sotto ~/.claude/projects
+//     "chatgpt": { "titolo": "New website", "giorni": [3, 9, …] }             // un'esportazione di ChatGPT, collegata
+//   }
+// Le sessioni hanno una cartella fuori dalla casa finta apposta: quelle sotto
+// la cartella temporanea Myynd non le legge (sono le sue).
+type ScenaF6 = {
+  git?: { cartella: string; commit: number[] }[]
+  sessioni?: { cwd: string; giorni: number[] }
+  chatgpt?: { titolo: string; giorni: number[] }
+}
+const f6 = (scena as Record<string, unknown>).f6 as ScenaF6 | undefined
+if (f6) {
+  const { execFileSync } = await import('node:child_process')
+  const giorniFa = (g: number, ora = 10) => { const d = new Date(Date.now() - g * 86_400_000); d.setHours(ora, 0, 0, 0); return d }
+  writeFileSync(join(CASA, '.gitconfig'), '[user]\n\tname = Alex Morgan\n\temail = alex@morgan-works.test\n')
+  for (const r of f6.git ?? []) {
+    const dir = join(cartella, r.cartella)
+    mkdirSync(dir, { recursive: true })
+    const git = (args: string[], quando?: Date) => execFileSync('git', ['-C', dir, ...args], {
+      env: { PATH: process.env.PATH ?? '', HOME: CASA, ...(quando ? { GIT_AUTHOR_DATE: quando.toISOString(), GIT_COMMITTER_DATE: quando.toISOString() } : {}) }, stdio: 'ignore'
+    })
+    git(['init', '-q'])
+    writeFileSync(join(dir, 'README.md'), `# ${r.cartella}\n\nThe ${r.cartella} importer.\n`)
+    const messaggi = ['Fix the CSV importer for empty rows', 'Add retries to the sync job', 'Tidy the settings page', 'Speed up the search index', 'Handle time zones in reports', 'Write tests for the parser']
+    r.commit.slice().sort((a, b) => b - a).forEach((g, i) => {
+      writeFileSync(join(dir, 'CHANGES.md'), `change ${i}\n`)
+      git(['add', '-A'])
+      git(['commit', '-q', '-m', messaggi[i % messaggi.length]!], giorniFa(g, 9 + (i % 6)))
+    })
+  }
+  if (f6.sessioni) {
+    const cartellaProgetto = join(CASA, '.claude', 'projects', f6.sessioni.cwd.replace(/[/.]/g, '-'))
+    mkdirSync(cartellaProgetto, { recursive: true })
+    for (const [i, g] of f6.sessioni.giorni.entries()) {
+      const t0 = giorniFa(g, 11)
+      const riga = (tipo: 'user' | 'assistant', testo: string, min: number) => JSON.stringify({ type: tipo, sessionId: `sessione-${i}`, cwd: f6.sessioni!.cwd,
+        timestamp: new Date(t0.getTime() + min * 60_000).toISOString(), message: { role: tipo, content: testo } })
+      writeFileSync(join(cartellaProgetto, `sessione-${i}.jsonl`), [
+        riga('user', `Let's work on the atlas importer today: the CSV rows with empty cells still break the sync, can you look at session ${i}?`, 0),
+        riga('assistant', 'I found the problem in the row parser and fixed it, the tests pass now.', 12)
+      ].join('\n') + '\n')
+    }
+  }
+  if (f6.chatgpt) {
+    const esportazione = f6.chatgpt.giorni.map((g, i) => {
+      const t = giorniFa(g, 18).getTime() / 1000
+      return {
+        id: `chatgpt-${i}`, title: `${f6.chatgpt!.titolo}: idea ${i + 1}`, create_time: t, update_time: t + 600, current_node: 'b',
+        mapping: {
+          a: { id: 'a', parent: null, children: ['b'], message: { author: { role: 'user' }, create_time: t, content: { content_type: 'text', parts: [`Help me think about the ${f6.chatgpt!.titolo} launch: what should the homepage say first, and what can wait until after October?`] } } },
+          b: { id: 'b', parent: 'a', children: [], message: { author: { role: 'assistant' }, create_time: t + 60, content: { content_type: 'text', parts: ['Lead with what the studio does, then the work, then the contact.'] } } }
+        }
+      }
+    })
+    const file = join(CASA, 'Downloads', 'chatgpt-export', 'conversations.json')
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify(esportazione))
+    chi.dentro(conto.id, () => cfg.aggiorna({ conversazioni: { file: [file], codice: true } }))
+  }
+  console.log(`semina · F6: ${f6.git?.length ?? 0} cartelle git, ${f6.sessioni?.giorni.length ?? 0} sessioni, ${f6.chatgpt?.giorni.length ?? 0} chat`)
+}
+// — F6: fine —
 
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

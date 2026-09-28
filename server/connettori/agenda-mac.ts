@@ -15,6 +15,7 @@ import * as primaLettura from '../prima-lettura.ts'
 import type { Documento } from '../store.ts'
 import { corpoEvento, type Evento } from './calendario.ts'
 import { GuaioFonte } from './guaio.ts'
+import { PREFISSO_MAC, type VistaAgenda } from '../segnali.ts'
 
 /** Quanto si aspetta Calendario: la prima volta macOS chiede il permesso proprio qui. */
 export const ATTESA = 60_000
@@ -102,7 +103,27 @@ export async function prova(adesso = Date.now()): Promise<{ eventi: number; cale
   } catch (e) { throw guaio(e) }
 }
 
-export type EsitoAgendaMac = { docs: Documento[]; calendari: number; troncato: boolean; dal: string; al: string }
+export type EsitoAgendaMac = {
+  docs: Documento[]; calendari: number; troncato: boolean; dal: string; al: string
+  /** Le occorrenze com'erano, per il registro dei cambi (F6): come quelle dell'iCal, senza organizzatore né invitati. */
+  viste: VistaAgenda[]; finestra: { da: string; a: string }
+}
+
+/**
+ * Un'occorrenza del Mac per il registro dei cambi. La chiave comincia con
+ * `mac:`; un'occorrenza di una serie (`uid#istante`) tiene l'istante come
+ * inizio originale, così spostarla è spostarla e non annullarla. Calendario
+ * del Mac non ci dà chi organizza né chi è invitato (l'aiutante legge solo
+ * titolo, ore e luogo): le righe sui rifiuti restano dell'agenda iCal.
+ */
+export function vistaDi(e: Pick<apple.EventoAgenda, 'id' | 'titolo' | 'inizio' | 'fine'>): VistaAgenda {
+  const [uid, istante] = e.id.split('#') as [string, string | undefined]
+  // l'istante può essere una data, o secondi (o millisecondi) dall'epoca: se non si legge, vale l'inizio
+  const numero = istante && /^\d+(?:\.\d+)?$/.test(istante) ? Number(istante) : null
+  const t = numero !== null ? (numero > 1e12 ? numero : numero * 1000) : istante ? Date.parse(istante) : NaN
+  const originale = Number.isFinite(t) ? new Date(t).toISOString() : e.inizio
+  return { chiave: `${PREFISSO_MAC}${uid}${istante ? `|${istante}` : ''}`, titolo: e.titolo, inizio: e.inizio, fine: e.fine ?? null, originale, stato: '', partecipanti: [] }
+}
 
 /** Il documento di un evento, scritto come quelli del calendario iCal. */
 function documento(e: apple.EventoAgenda): Documento {
@@ -162,6 +183,8 @@ export async function sincronizza(o: { dal: Date; al: Date }): Promise<EsitoAgen
     calendari: new Set(buoni.map(e => e.calendario)).size,
     troncato,
     dal: o.dal.toISOString(),
-    al: o.al.toISOString()
+    al: o.al.toISOString(),
+    viste: buoni.filter(e => !e.tuttoIlGiorno).map(vistaDi),
+    finestra: { da: o.dal.toISOString(), a: o.al.toISOString() }
   }
 }

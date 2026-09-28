@@ -24,8 +24,10 @@ import { fonteCollegata } from './fonti-collegate.ts'
 export const GIORNI_PRIMA = 90
 /** Quante letture di una fonte prima che la prima lettura si arrenda. */
 export const GIRI_MASSIMI = 40
-/** Le fonti che leggono una finestra di giorni: solo queste hanno una prima lettura. */
-export const A_FINESTRA = ['posta', 'postamac', 'calendario', 'agendamac', 'slack', 'github', 'desktop'] as const
+/** Le fonti che leggono una finestra di giorni: solo queste hanno una prima lettura. Gmail e Outlook anche (F6). */
+export const A_FINESTRA = ['posta', 'postamac', 'google', 'microsoft', 'calendario', 'agendamac', 'slack', 'github', 'desktop'] as const
+/** Quanti messaggi nuovi per giro legge Gmail o Outlook durante la prima lettura; dopo, quattrocento. */
+export const MESSAGGI_PRIMA = 1200
 /** In che ordine si leggono la prima volta: prima l'agenda e la posta, il Mac per ultimo. */
 export const ORDINE_PRIMA = ['calendario', 'agendamac', 'posta', 'postamac', 'google', 'microsoft',
   'note', 'notion', 'slack', 'conversazioni', 'github', 'granola', 'x', 'drive', 'sharepoint', 'dropbox', 'desktop']

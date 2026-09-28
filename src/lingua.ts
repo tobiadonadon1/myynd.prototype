@@ -3452,6 +3452,10 @@ const EN: Record<string, string> = {
   'Via.': 'Gone.',
   'tenuta fuori': 'held back',
   // — F7: fine —
+
+  // — F6: inizio —
+  'Imparo come lavori': 'Learning how you work',
+  // — F6: fine —
 }
 
 
@@ -4148,6 +4152,15 @@ export const frasi = {
     const g = /^(?:No|Drafts|Cards|To|Nelle|Niente|Le|Bozze|A)\b/.test(f) ? f.charAt(0).toLowerCase() + f.slice(1) : f
     const testa = prima ? `${prima} ` : ''
     return corrente === 'en' ? `${testa}Learned: ${g}.` : `${testa}Imparato: ${g}.`
-  }
+  },
   // — F7: fine —
+
+  // — F6: inizio —
+  /** Sotto «Imparo come lavori»: le righe contate e le carte per stanotte, solo quelle che ci sono. */
+  imparoCome: (righe: number, carte: number) => {
+    const r = righe ? (corrente === 'en' ? `${righe} ${righe === 1 ? 'habit' : 'habits'}` : `${righe} ${righe === 1 ? 'abitudine' : 'abitudini'}`) : ''
+    const c = carte ? (corrente === 'en' ? `${carte} ${carte === 1 ? 'card' : 'cards'} for tonight` : `${carte} ${carte === 1 ? 'carta' : 'carte'} per stanotte`) : ''
+    return [r, c].filter(Boolean).join(' · ')
+  }
+  // — F6: fine —
 }

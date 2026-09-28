@@ -42,6 +42,8 @@ function ics(): string {
 /** Le chiamate al modello: se erano per le priorità, e se avevano davanti la posta del Mac. */
 const chiamate: { priorita: boolean; posta: boolean }[] = []
 function risposta(corpo: string): unknown {
+  // F6 · il contratto di una carta del primo giorno, dopo la pagina: non è una lettura, non si conta
+  if (corpo.includes('criterio di «fatto»')) return { criterio: '' }
   const priorita = corpo.includes('capo di gabinetto')
   chiamate.push({ priorita, posta: corpo.includes('postamac:') })
   if (!priorita) return { voci: [] }

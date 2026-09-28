@@ -15,19 +15,21 @@ import { preparaApertura } from '../navigazione'
 import { senzaTrattini } from '../../server/testo.ts'
 import * as g from '../gemello-frasi'
 
-type Gruppo = 'bozze' | 'feed' | 'posta' | 'agenda' | 'lavoro'
+type Gruppo = 'bozze' | 'feed' | 'posta' | 'agenda' | 'lavoro' | 'chat'
 /** I tagli «Tutte (n)»: cinque righe per mittente (posta e agenda) e per regola nata dai gesti, tre per cartella; il resto si apre con un tocco. */
 const TAGLI: Record<Gruppo, { generi: Set<string>; quante: number }> = {
   bozze: { generi: new Set(['bozza.tono']), quante: 5 },
   feed: { generi: new Set(['feed.filtro']), quante: 5 },
   posta: { generi: new Set(['posta.risponde_sempre', 'posta.lascia']), quante: 5 },
   agenda: { generi: new Set(['agenda.rifiuta']), quante: 5 },
-  lavoro: { generi: new Set(['codice.con_agenti']), quante: 3 }
+  lavoro: { generi: new Set(['codice.con_agenti']), quante: 3 },
+  // F6 · un progetto per riga, dalle chat esportate
+  chat: { generi: new Set(['chat.progetto']), quante: 3 }
 }
 // F7 · le regole nate dalle sue correzioni e dai suoi scarti stanno in cima: sono quelle che ha fatto lei
 const gruppoDi = (genere: string): Gruppo =>
   genere.startsWith('bozza.') ? 'bozze' : genere.startsWith('feed.') ? 'feed'
-    : genere.startsWith('posta.') ? 'posta' : genere.startsWith('agenda.') ? 'agenda' : 'lavoro'
+    : genere.startsWith('posta.') ? 'posta' : genere.startsWith('agenda.') ? 'agenda' : genere.startsWith('chat.') ? 'chat' : 'lavoro'
 
 type Prova = { riga: string; esempi: AbitudineVista['esempi'] }
 
@@ -257,7 +259,8 @@ export function ComeLavori() {
   }
   const gruppi: { chiave: Gruppo; titolo: string }[] = [
     { chiave: 'bozze', titolo: t('Bozze') }, { chiave: 'feed', titolo: t('Feed') },
-    { chiave: 'posta', titolo: t('Posta') }, { chiave: 'agenda', titolo: t('Agenda') }, { chiave: 'lavoro', titolo: t('Lavoro') }
+    { chiave: 'posta', titolo: t('Posta') }, { chiave: 'agenda', titolo: t('Agenda') }, { chiave: 'lavoro', titolo: t('Lavoro') },
+    { chiave: 'chat', titolo: t('Chat') }
   ]
   const punteggio = d.punteggio ? g.frasePunteggio(d.punteggio.giuste, d.punteggio.totale, d.punteggio.base) : ''
   const oggi = g.faseOggi(d.oggi)

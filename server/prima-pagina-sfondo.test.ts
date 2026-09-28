@@ -155,8 +155,10 @@ test('sul passo delle fonti il giro di fondo non è una lettura sua; il Mac vist
   // la prima pagina la fa il giro a cui si è attaccato, con la priorità
   await aspettaChe(async () => (await chiama('GET', '/api/avvio/pagina')).json.pagina === 'pronta')
   assert.equal(priorita, 1, 'un giro di priorità, quello della pagina')
+  // F6 · la carta con l'offerta può essere già diventata una carta del primo giorno, in coda per la notte
   const feed = (await chiama('GET', '/api/feed')).json.aperti as { titolo: string }[]
-  assert.deepEqual(feed.map(v => v.titolo), ['File the downloaded note'], registro.slice(-3000))
+  const delPrimoGiorno = ((await chiama('GET', '/api/compiti')).json.compiti as { testo: string; origine: string }[]).filter(c => c.origine === 'primo-giorno')
+  assert.deepEqual([...feed.map(v => v.titolo), ...delPrimoGiorno.map(c => c.testo)], ['File the downloaded note'], registro.slice(-3000))
 
   // e il Mac, anche con il file della vedetta già dentro, ha fatto la sua prima lettura
   assert.match(registro, /prima lettura · desktop completa/, 'il segno del Mac era «in corso» prima che la vedetta scrivesse')

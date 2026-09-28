@@ -1,0 +1,66 @@
+{
+  "modello": "finto",
+  "risposte": [
+    {
+      "se": "capo di gabinetto",
+      "in": "system",
+      "json": {
+        "priorita": [
+          {
+            "genere": "priorita",
+            "titolo": "Send Leo the launch checklist",
+            "testo": "Leo needs your answer to move ahead with the new website.",
+            "perche": "Leo is waiting for your answer on the launch checklist.",
+            "progetto": "New website",
+            "doc": "postamac:9C8B7A60-5D4E-4F3A-9B2C-1D0E9F8A7B62/INBOX/4.emlx",
+            "offerta": "I can draft the reply to Leo.",
+            "quando": "",
+            "prova": "Could you get back to me on this?"
+          }
+        ],
+        "domande": [],
+        "superate": []
+      }
+    },
+    {
+      "se": "MESSAGGIO CORRENTE",
+      "in": "utente",
+      "attesa": 18000,
+      "json": {
+        "voci": [
+          {
+            "tipo": "Da decidere",
+            "titolo": "Reply to Maya about the homepage copy",
+            "testo": "Maya needs your answer to move ahead with the new website.",
+            "urgenza": "",
+            "fonte": "postamac",
+            "doc": "postamac:2F4A7C10-1B3D-4E5F-8A9B-0C1D2E3F4A51/INBOX/1.emlx",
+            "perche": "Maya is waiting for your answer on the homepage copy.",
+            "prova": "Could you get back to me on this?"
+          },
+          {
+            "tipo": "Da decidere",
+            "titolo": "Confirm the launch date with Owen",
+            "testo": "Owen needs your answer to move ahead with the new website.",
+            "urgenza": "",
+            "fonte": "postamac",
+            "doc": "postamac:9C8B7A60-5D4E-4F3A-9B2C-1D0E9F8A7B62/INBOX/2.emlx",
+            "perche": "Owen is waiting for your answer on the launch date.",
+            "prova": "Could you get back to me on this?"
+          },
+          {
+            "tipo": "Da decidere",
+            "titolo": "Answer Sara about the About page photos",
+            "testo": "Sara needs your answer to move ahead with the new website.",
+            "urgenza": "",
+            "fonte": "postamac",
+            "doc": "postamac:2F4A7C10-1B3D-4E5F-8A9B-0C1D2E3F4A51/INBOX/3.emlx",
+            "perche": "Sara is waiting for your answer on the About page photos.",
+            "prova": "Could you get back to me on this?"
+          }
+        ]
+      }
+    }
+  ],
+  "predefinita": "Done."
+}

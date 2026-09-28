@@ -20,6 +20,7 @@ const seg = await import('./segnali.ts')
 const ab = await import('./abitudini.ts')
 const memoria = await import('./memoria.ts')
 const fuso = await import('./fuso.ts')
+const progetti = await import('./progetti.ts')
 
 let anna = ''
 const ADESSO = new Date('2026-09-24T12:00:00.000Z')
@@ -283,5 +284,77 @@ test('agenda: una serie rifiutata è un invito solo, le occorrenze future non co
     ab.ricalcola(ADESSO)
     const sp = riga('agenda.sposta')!
     assert.ok(sp); assert.equal(sp.casi, 3); assert.equal(sp.su, 12); assert.equal(sp.dati.ogni, 4)
+  })
+})
+
+// — F6: le tre righe del primo giorno —
+
+test('F6 · le ore delle riunioni, la cartella dei commit, il progetto delle chat: con le prove, e nessuna in vigore da sola', () => {
+  chi.dentro(anna, () => {
+    pulisci()
+    store.default.exec('DELETE FROM documenti')
+    // venti riunioni passate: sedici fra le 9 e le 12 di Roma, quattro il pomeriggio; e una di un giorno intero, che non conta
+    const eventi = Array.from({ length: 20 }, (_, i) => {
+      const g = new Date(ADESSO.getTime() - (i + 1) * 3 * GIORNO)
+      const ora = i < 16 ? 7 + (i % 3) : 13 + (i % 2)
+      g.setUTCHours(ora, 0, 0, 0)
+      return { id: `calendario:r${i}@x:${g.getTime()}`, fonte: 'calendario', tipo: 'evento', titolo: `Riunione ${i}`, corpo: 'Tuesday 09:00 — 10:00.', quando: g.toISOString() }
+    })
+    eventi.push({ id: 'calendario:ferie@x:1', fonte: 'calendario', tipo: 'evento', titolo: 'Ferie', corpo: 'Monday, all day.', quando: new Date(ADESSO.getTime() - 5 * GIORNO).toISOString() })
+    store.salvaDocumenti(eventi)
+    // quindici commit suoi: dodici su «atlas», tre su «blog»
+    for (let i = 0; i < 15; i++) {
+      const q = new Date(ADESSO.getTime() - (i + 1) * 4 * GIORNO).toISOString()
+      const cartella = i < 12 ? '/Users/anna/Code/atlas' : '/Users/anna/Code/blog'
+      seg.scrivi({ id: `codice.commit|h${i}`, genere: 'codice.commit', quando: q, chi: 'anna@esempio.it', ref: cartella, dati: { agente: false, messaggio: `Fix ${i} in the importer`, cartella: cartella.split('/').pop() } })
+    }
+    // un progetto attivo di cui parla con ChatGPT e Claude in sei giorni diversi, e una sessione di codice che non conta
+    progetti.scrivi({ nome: 'Harbor Launch', obiettivo: 'Launch the harbor app' })
+    const chat = Array.from({ length: 6 }, (_, i) => ({ id: `conversazioni:${i % 2 ? 'claude' : 'chatgpt'}:c${i}`, fonte: 'conversazioni', tipo: 'chat',
+      titolo: `Harbor Launch pricing ${i}`, corpo: 'We talked about the Harbor Launch plan.', quando: new Date(ADESSO.getTime() - (i + 1) * 5 * GIORNO).toISOString() }))
+    chat.push({ id: 'conversazioni:codice:k1', fonte: 'conversazioni', tipo: 'chat', titolo: 'Harbor Launch · refactor', corpo: 'Harbor Launch', quando: new Date(ADESSO.getTime() - 2 * GIORNO).toISOString() })
+    store.salvaDocumenti(chat)
+    ab.ricalcola(ADESSO)
+
+    const ore = riga('agenda.ore')!
+    assert.ok(ore, 'la fascia delle riunioni')
+    assert.equal(ore.su, 20, 'il giorno intero non conta'); assert.ok(ore.casi >= 10 && ore.casi / 20 >= 0.5)
+    assert.equal((Number(ore.dati.a) - Number(ore.dati.da) + 24) % 24, 3)
+    assert.ok(ore.esempi.length && ore.esempi.every(e => e.doc?.startsWith('calendario:')), 'il perché porta alle riunioni')
+    assert.equal(ore.inVigore, false)
+
+    const commit = riga('codice.commit:atlas')!
+    assert.ok(commit, 'la cartella dei commit'); assert.equal(commit.casi, 12); assert.equal(commit.su, 15)
+    assert.match(commit.esempi[0]!.testo, /Fix \d+ in the importer/, 'il perché sono i messaggi dei commit')
+    assert.equal(commit.inVigore, false)
+
+    const harbor = ab.tutte().find(a => a.genere === 'chat.progetto')!
+    assert.ok(harbor, 'il progetto delle chat'); assert.equal(harbor.dati.nome, 'Harbor Launch'); assert.equal(harbor.casi, 6)
+    assert.ok(harbor.esempi.every(e => e.doc?.startsWith('conversazioni:chatgpt:') || e.doc?.startsWith('conversazioni:claude:')), 'solo le chat esportate')
+    assert.equal(harbor.inVigore, false)
+
+    // a venti casi non valgono comunque: aspettano Tienila
+    for (const g of ['agenda.ore', 'codice.commit', 'chat.progetto']) assert.equal(ab.inVigore({ genere: g, stato: 'osservata', prova: { casi: 50, su: 50, esempi: [] } }), false, g)
+    // e nel ritratto, tenute, dicono la frase giusta
+    for (const a of [ore, commit, harbor]) ab.cambia(a.chiave, 'tieni')
+    const r = ab.perIlRitratto()
+    assert.match(r, /Le sue riunioni stanno soprattutto tra le/)
+    assert.match(r, /commit va su atlas/)
+    assert.match(r, /Parla spesso di Harbor Launch/)
+    store.default.exec('DELETE FROM documenti; DELETE FROM progetti')
+  })
+})
+
+test('F6 · sotto le quindici riunioni, o senza metà nelle tre ore, niente riga; un commit sparso nemmeno', () => {
+  chi.dentro(anna, () => {
+    pulisci()
+    store.default.exec('DELETE FROM documenti')
+    const poche = Array.from({ length: 14 }, (_, i) => ({ id: `calendario:p${i}`, fonte: 'calendario', tipo: 'evento', titolo: `R ${i}`, corpo: 'x', quando: new Date(ADESSO.getTime() - (i + 1) * GIORNO).toISOString() }))
+    store.salvaDocumenti(poche)
+    for (let i = 0; i < 9; i++) seg.scrivi({ id: `codice.commit|p${i}`, genere: 'codice.commit', quando: new Date(ADESSO.getTime() - (i + 1) * GIORNO).toISOString(), chi: 'anna@esempio.it', ref: '/c/uno', dati: { agente: false, messaggio: 'x' } })
+    ab.ricalcola(ADESSO)
+    assert.equal(riga('agenda.ore'), undefined)
+    assert.equal(ab.tutte().filter(a => a.genere === 'codice.commit').length, 0, 'nove commit non bastano')
+    store.default.exec('DELETE FROM documenti')
   })
 })
