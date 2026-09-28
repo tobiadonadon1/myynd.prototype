@@ -24,14 +24,22 @@
 // tell me». Quanto è stato via lo sa il server, perché è con quello che
 // decide da dove ripartire a guardare; non è una cosa da dire a lui.
 
-import { useRef, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import { frasi, loc, t, tradotta } from '../lingua'
 import { Hov, LABEL, useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
 import { IeriGemello } from './IeriGemello'
 import type { Vals } from '../vals'
 import { usePunto } from '../usePunto'
-import type { RigaPunto } from '../api'
+import type { Compito, Punto as PuntoDelGiorno, RigaPunto } from '../api'
+import type { Lista } from '../oggi/useCompiti'
+import { laNotte, RigheDellaNotte } from './Stanotte'
+
+/**
+ * Il lavoro della notte, per il foglio del punto (F5): la lista delle righe e
+ * come si apre una carta. Senza, il punto è quello di sempre.
+ */
+export type NotteDelPunto = { l: Lista; apri: (c: Compito) => void }
 
 /** Il guaio del server, se lo sappiamo dire; se no una frase sola, invece di un errore grezzo in un'altra lingua. */
 function spiegaGuaio(g: string): string {
@@ -146,10 +154,17 @@ function Voce({ nome, testo, doc, apriDoc }: {
   )
 }
 
-function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
+/**
+ * Il foglio. `punto` può mancare: una notte di lavoro senza un punto di oggi
+ * (non ancora scritto, o di ieri) apre lo stesso foglio con la sola notte.
+ */
+function Finestra({ v, punto, guaio, chiudi, notte }: {
+  v: Vals; punto: PuntoDelGiorno | null; guaio: string | null; chiudi: () => void; notte?: NotteDelPunto
+}) {
   const finestra = useRef<HTMLDivElement>(null)
-  useFocoDialogo(finestra, p.nascondi)
-  const punto = p.punto!
+  useFocoDialogo(finestra, chiudi)
+  const p = { nascondi: chiudi, guaio }
+  const laNotteQui = notte ? laNotte(notte.l) : null
 
   /*
    * Una riga si apre su quello che la dice.
@@ -162,9 +177,9 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
   const righe = (xs: RigaPunto[]) => xs.map((r, i) =>
     <Voce key={i} testo={r.testo} doc={r.doc} apriDoc={apriDoc} />)
 
-  const quante = punto.progetti.length + punto.github.length + punto.daLeggere.length + punto.risposte.length + (punto.aggiornamenti?.length ?? 0)
+  const quante = punto ? contaRighe(punto) : 0
   const vuoto = quante === 0
-  const data = new Date(punto.quando).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
+  const data = new Date(punto?.quando ?? Date.now()).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
   /*
    * La data e il conto. Quanto sei stato via, no.
    *
@@ -205,23 +220,31 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
         {/* P10 · anche qui, se l'ultimo «Rifai il punto» non è andato, si dice perché */}
         {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
 
-        {vuoto && (
+        {/* F5 · la prima cosa del foglio: cosa ha fatto il turno mentre dormiva.
+            Aprire una carta chiude il foglio: la carta si apre in pagina. */}
+        {notte && laNotteQui && (
+          <Sezione etichetta={t('Mentre dormivi')}>
+            <RigheDellaNotte l={notte.l} notte={laNotteQui} apri={c => { chiudi(); notte.apri(c) }} />
+          </Sezione>
+        )}
+
+        {punto && vuoto && !laNotteQui && (
           <div style={{ ...LINEA, marginTop: 26 }}>
             <span style={TESTO}>{t('Niente di nuovo da quando ci siamo visti.')}</span>
           </div>
         )}
 
-        {punto.progetti.length > 0 && (
+        {punto && punto.progetti.length > 0 && (
           <Sezione etichetta={t('Progetti')}>
             {punto.progetti.map(pr => (
               <Voce key={pr.id || pr.nome} nome={pr.nome} testo={pr.novita} doc={pr.doc} apriDoc={apriDoc} />
             ))}
           </Sezione>
         )}
-        {punto.github.length > 0 && (
+        {punto && punto.github.length > 0 && (
           <Sezione etichetta={t('GitHub')}>{righe(punto.github)}</Sezione>
         )}
-        {punto.daLeggere.length > 0 && (
+        {punto && punto.daLeggere.length > 0 && (
           <Sezione etichetta={t('Da leggere')}>
             {punto.daLeggere.map((n, i) => (
               <div key={i} style={LINEA}>
@@ -237,10 +260,10 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
             ))}
           </Sezione>
         )}
-        {punto.risposte.length > 0 && (
+        {punto && punto.risposte.length > 0 && (
           <Sezione etichetta={t('Risposte')}>{righe(punto.risposte)}</Sezione>
         )}
-        {!!punto.aggiornamenti?.length && (
+        {punto && !!punto.aggiornamenti?.length && (
           <Sezione etichetta={t('Aggiornamenti')}>{righe(punto.aggiornamenti)}</Sezione>
         )}
 
@@ -288,21 +311,43 @@ function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
  * pagina è la cosa peggiore che si possa aggiungere qui — tranne quando ce
  * n'è uno di ieri: allora la carta c'è, e dice che è scaduto.
  */
-export function Punto({ v }: { v: Vals }) {
+export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
   const p = usePunto(v.claudeOn)
-  if (!p.punto) return p.vecchio ? <Scaduto p={p} /> : null
-  if (p.daVedere) return <Finestra v={v} p={p} />
-  const quante = p.punto.progetti.length + p.punto.github.length + p.punto.daLeggere.length + p.punto.risposte.length + (p.punto.aggiornamenti?.length ?? 0)
+  // il foglio con la sola notte, quando un punto di oggi non c'è
+  const [soloNotte, setSoloNotte] = useState(false)
+  const n = notte ? laNotte(notte.l) : null
+  // sulla carta, una riga: quante ne ha fatte e quante aspettano lei
+  const rigaNotte = n && <div style={SOTTO}>{frasi.stanotteFatte(n.fatte.length, n.attende.length)}.</div>
+  if (!p.punto) {
+    if (!n) return p.vecchio ? <Scaduto p={p} /> : null
+    if (soloNotte) return <Finestra v={v} punto={null} guaio={null} chiudi={() => setSoloNotte(false)} notte={notte} />
+    return (
+      <>
+        {p.vecchio && <Scaduto p={p} />}
+        <div style={CARTA}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
+            {rigaNotte}
+          </div>
+          <button type="button" onClick={() => setSoloNotte(true)} style={BOTTONE}>{t('Apri')} <IconAvanti /></button>
+        </div>
+      </>
+    )
+  }
+  if (p.daVedere) return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={p.nascondi} notte={notte} />
   return (
     <div style={CARTA}>
       <div style={{ flex: 1, minWidth: 220 }}>
         <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
         <div style={SOTTO}>
-          {maiuscola(frasi.coseNelPunto(quante))}. {t('Dieci secondi.')}
+          {maiuscola(frasi.coseNelPunto(contaRighe(p.punto)))}. {t('Dieci secondi.')}
         </div>
+        {rigaNotte}
         {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
       </div>
       <button type="button" onClick={p.riapri} style={BOTTONE}>{t('Apri')} <IconAvanti /></button>
     </div>
   )
 }
+
+const contaRighe = (x: PuntoDelGiorno) => x.progetti.length + x.github.length + x.daLeggere.length + x.risposte.length + (x.aggiornamenti?.length ?? 0)

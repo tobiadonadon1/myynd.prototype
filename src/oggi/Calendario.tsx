@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type Compito, type Progetto } from '../api'
 import { frasi, t } from '../lingua'
 import { Marchio } from '../components/Marchio'
+import { IconCestino } from '../icons'
 import { coloreProgetto } from '../colori-progetto'
 import type { Lista } from './useCompiti'
 import { dataLocale, giornoCompito, giornoLocale, secchioDelGiorno, spostaGiorno } from './giorni'
@@ -140,11 +141,13 @@ function useProgetti(): Progetto[] {
  * Un giorno: la data piccola sopra, il nome grande, e la pagina a righe.
  * Serve anche alla prima pagina, sulla destra, quando la finestra è larga.
  */
-export function Giorno({ l, g, oggi, locale, progetti, righe, fatte, apri, modifica, compatto = false }: {
+export function Giorno({ l, g, oggi, locale, progetti, righe, fatte, apri, modifica, compatto = false, minime }: {
   l: Lista; g: string; oggi: string; locale: string; progetti: Progetto[]
   righe: Compito[]; fatte: Compito[]
   /** Sulla prima pagina: meno righe vuote, e il nome del giorno più piccolo. */
   compatto?: boolean
+  /** Quante righe almeno, contando quella dove si scrive. */
+  minime?: number
 } & Apri) {
   const nome = dataLocale(g).toLocaleDateString(locale, { weekday: 'long' })
   const data = dataLocale(g).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
@@ -156,7 +159,7 @@ export function Giorno({ l, g, oggi, locale, progetti, righe, fatte, apri, modif
         <h3>{nome.charAt(0).toLocaleUpperCase() + nome.slice(1)}</h3>
       </header>
       <Righe l={l} g={g} oggi={oggi} locale={locale} progetti={progetti} righe={righe} fatte={fatte}
-        minime={compatto ? 3 : 9} apri={apri} modifica={modifica} />
+        minime={minime ?? (compatto ? 3 : 9)} apri={apri} modifica={modifica} />
     </section>
   )
 }
@@ -326,8 +329,10 @@ function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, 
         aspetta chi e, sotto la mano, i due gesti. «When I overlap it… items
         don't overlap»: prima i gesti galleggiavano sopra il testo e lo
         coprivano, con un suggerimento del sistema sopra. Adesso si danno il
-        cambio nello stesso posto, e il testo non si tocca mai. Il cestino sta
-        nel dettaglio.
+        cambio nello stesso posto, e il testo non si tocca mai. Il cestino è
+        tornato sulla riga il giorno dopo: «there is no bin on the overview…
+        I cannot delete them without actually going into the settings». Toglie
+        e basta, senza «Sicuro?»: una riga tolta non si cancella.
       */}
       {!scrivo && (
         <span className="quaderno-fine">
@@ -344,6 +349,9 @@ function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, 
               </button>
             )}
             <button type="button" className="quaderno-icona" onClick={() => modifica(c)} aria-label={`${t('Dettagli attività')}: ${c.testo}`}>⋯</button>
+            <button type="button" className="quaderno-icona" data-togli onClick={() => void l.elimina(c.id)} aria-label={`${t('Toglila')}: ${c.testo}`}>
+              <IconCestino size={12} />
+            </button>
           </span>
         </span>
       )}
@@ -351,27 +359,35 @@ function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, 
   )
 }
 
+/** Quanti giorni scorre la lista di destra: oggi e i sei dopo. */
+const GIORNI_DI_LATO = 7
+
 /**
- * Oggi e domani, sulla destra della prima pagina, quando la finestra è larga.
+ * La settimana, sulla destra della prima pagina, quando la finestra è larga.
  *
  * «If I'm on deep work, when I open my Myynd app at max I want to deep dive
  * into a session. I want to have my to-do list on the right, claiming that
  * white space.» Le stesse pagine del quaderno, più corte: si scrive, si
  * spunta, si passa a Myynd, senza lasciare la prima pagina.
+ *
+ * Erano oggi e domani, in un riquadro che cresceva con le righe fino a
+ * uscire dalla finestra: «it does not scroll… it just expands in size».
+ * Adesso il riquadro è alto quanto la finestra, sempre, e dentro si scorre
+ * giù per i giorni, come su TeuxDeux: oggi in cima, poi i sei dopo.
  */
 export function ListaDiLato({ l, lingua, apri, modifica, vaiALista }: {
   l: Lista; lingua: string; vaiALista: () => void
 } & Apri) {
   const oggi = giornoLocale()
-  const domani = spostaGiorno(oggi, 1)
   const progetti = useProgetti()
   const locale = lingua === 'it' ? 'it-IT' : 'en-US'
+  const giorni = Array.from({ length: GIORNI_DI_LATO }, (_, i) => spostaGiorno(oggi, i))
   return (
     <aside className="quaderno-lato" aria-label={t('Da fare')}>
-      <Giorno l={l} g={oggi} oggi={oggi} locale={locale} progetti={progetti} compatto
-        righe={righeDelGiorno(l.compiti, oggi, oggi)} fatte={fatteDelGiorno(l.chiusi, oggi)} apri={apri} modifica={modifica} />
-      <Giorno l={l} g={domani} oggi={oggi} locale={locale} progetti={progetti} compatto
-        righe={righeDelGiorno(l.compiti, domani, oggi)} fatte={[]} apri={apri} modifica={modifica} />
+      {giorni.map(g => (
+        <Giorno key={g} l={l} g={g} oggi={oggi} locale={locale} progetti={progetti} compatto minime={g === oggi ? 3 : 2}
+          righe={righeDelGiorno(l.compiti, g, oggi)} fatte={g === oggi ? fatteDelGiorno(l.chiusi, g) : []} apri={apri} modifica={modifica} />
+      ))}
       <button type="button" className="quaderno-tutto" onClick={vaiALista}>{t('Tutta la settimana')} ›</button>
     </aside>
   )

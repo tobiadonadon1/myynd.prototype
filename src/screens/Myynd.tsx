@@ -7,7 +7,6 @@ import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
 import { CartaSettimana } from '../components/Resoconto'
-import { Stanotte } from '../components/Stanotte'
 import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
@@ -1358,9 +1357,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
           dentro, in `components/Punto.tsx`. */}
       {/* Una riga del punto apre il documento da cui viene, e niente altro: le
           cose da fare non stanno lì dentro, stanno qui sotto. */}
-      {/* F5 · la prima cosa della mattina: cosa ha fatto il turno mentre dormiva */}
-      {lista && apriLavoro && <Stanotte l={lista} apri={apriLavoro} />}
-      <Punto v={v} />
+      {/* F5 · cosa ha fatto il turno mentre dormiva sta dentro il punto, prima sezione */}
+      <Punto v={v} notte={lista && apriLavoro ? { l: lista, apri: apriLavoro } : undefined} />
       <CartaSettimana v={v} />
 
       {/*

@@ -18,6 +18,7 @@
 //   { "passa": "testo" }                porta il mouse sopra l'elemento che contiene quel testo
 //   { "aspetta": 800 }                  millisecondi
 //   { "scorri": 600 }                   scorre il contenitore principale (0 = in cima)
+//   { "rotella": ".selettore", "giu": 5 } la rotella del mouse sopra quell'elemento, cinque scatti in giù
 //   { "scatta": "nome" }                una fotografia: <OUT>/<nome>-<tema>-<larga>.png
 //   { "testo": "nome" }                 il testo della pagina: <OUT>/<nome>-<tema>-<larga>.txt
 //   { "js": "espressione" }             valuta un'espressione nella pagina e la stampa
@@ -126,6 +127,14 @@ async function main() {
       if (c) w.webContents.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
       console.log(`scatta · passa su «${p.passa}»: ${c ? 'fatto' : 'NON TROVATO'}`)
       await pausa(700)
+    } else if (p.rotella) {
+      const c = await js(`(() => { const e=document.querySelector(${JSON.stringify(p.rotella)}); if(!e) return null; const r=e.getBoundingClientRect(); return {x:Math.round(r.left+r.width/2), y:Math.round(r.top+Math.min(r.height/2,300))} })()`)
+      if (c) {
+        w.webContents.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
+        for (let i = 0; i < Number(p.giu ?? 5); i++) { w.webContents.sendInputEvent({ type: 'mouseWheel', x: c.x, y: c.y, deltaX: 0, deltaY: -100, canScroll: true }); await pausa(60) }
+      }
+      console.log(`scatta · rotella su «${p.rotella}»: ${c ? 'fatto' : 'NON TROVATO'}`)
+      await pausa(500)
     } else if (p.aspetta) {
       await pausa(Number(p.aspetta))
     } else if (p.scorri !== undefined) {

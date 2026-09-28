@@ -60,7 +60,7 @@
 
 /* La fine della riga: un posto fisso dove la parola di chi aspetta chi e,
    sotto la mano, i due gesti si danno il cambio. Il testo non viene mai coperto. */
-.quaderno-fine {flex:none;width:68px;display:grid;align-items:center;justify-items:end;align-self:stretch;}
+.quaderno-fine {flex:none;width:86px;display:grid;align-items:center;justify-items:end;align-self:stretch;}
 .quaderno-fine > * {grid-area:1 / 1;}
 .quaderno-stato {display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;max-width:100%;font-size:11px;font-weight:500;line-height:1.25;text-align:right;overflow-wrap:break-word;color:rgba(var(--inchiostro-rgb),.5);transition:opacity .14s;}
 .quaderno-stato.lavora,.quaderno-stato.coda {color:var(--verde-cupo, #3E5140);}
@@ -71,6 +71,7 @@
 .quaderno-riga:hover .quaderno-stato,.quaderno-riga:focus-within .quaderno-stato {opacity:0;}
 .quaderno-icona {display:inline-grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;font-size:14px;line-height:1;color:rgba(var(--inchiostro-rgb),.6);}
 .quaderno-icona:hover {color:var(--rame-testo);}
+.quaderno-icona[data-togli] {color:rgba(var(--inchiostro-rgb),.42);}
 .quaderno-riapri {position:absolute;right:0;border:1px solid rgba(var(--inchiostro-rgb),.16);background:var(--carta-piena);border-radius:99px;padding:3px 10px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.72);white-space:nowrap;opacity:0;pointer-events:none;}
 .quaderno-riapri:hover {border-color:var(--rame);color:var(--rame-testo);}
 .quaderno-riga.fatta:hover .quaderno-riapri,.quaderno-riapri:focus-visible {opacity:1;pointer-events:auto;}
@@ -89,8 +90,11 @@
 .quaderno-righe[data-colonne] {display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));column-gap:26px;}
 
 /* La colonna di destra della prima pagina, quando la finestra è larga. */
-.quaderno-lato {position:sticky;top:0;display:flex;flex-direction:column;gap:26px;flex:1 1 360px;min-width:340px;max-width:560px;max-height:calc(100dvh - 72px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 20px 16px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
+/* alta quanto la finestra, sempre (i margini della colonna li dà App.tsx): dentro si scorre, fuori non cresce.
+   `top:0` e non il margine: Chromium conta l'appiccicato dal bordo del contenuto, già sotto il margine */
+.quaderno-lato {position:sticky;top:0;box-sizing:border-box;display:flex;flex-direction:column;gap:26px;flex:1 1 360px;min-width:340px;max-width:560px;height:calc(100dvh - var(--lato-sopra, 46px) - var(--lato-sotto, 30px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 20px 16px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
 .quaderno-lato button {font-family:inherit;cursor:pointer;}
+.quaderno-lato > * {flex:none;}
 .quaderno-tutto {align-self:flex-start;border:0;background:transparent;padding:0;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.55);}
 .quaderno-tutto:hover {color:var(--rame-testo);}
 

@@ -43,6 +43,7 @@ import * as contratto from './contratto.ts'
 import * as turno from './turno.ts'
 import * as presenza from './presenza.ts'
 import * as disfa from './disfa.ts'
+import * as progettoRiga from './progetto-riga.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
@@ -3629,7 +3630,9 @@ app.post('/api/compiti', (req, res) => {
   res.json({ ok: true, id, compiti: compitiAttuali() })
   compiti.annunciaCambio()
   // la voce promossa è sparita dal feed: anche il feed va riletto
-  if (req.body?.voce) compiti.annunciaFeed()
+  if (req.body?.voce) compiti.annunciaFeed()  // senza progetto (non lo nomina, niente «#»): lo si chiede dietro, e il
+  // pallino arriva un attimo dopo la riga
+  if (progetto === null) void progettoRiga.trova(id).then(p => { if (p) compiti.annunciaCambio() })
 })
 
 app.patch('/api/compiti/:id', (req, res) => {

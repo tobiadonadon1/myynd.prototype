@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { desktop } from './desktop'
 import { Sfondo } from './Sfondo'
@@ -624,7 +624,11 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         {v.isMyynd && (conLista ? (
           // tutta la larghezza che c'è, fino a feed + lista piena: la lista si
           // allarga nello spazio vuoto a destra invece di lasciarlo vuoto
-          <div style={{ display: 'flex', gap: 36, alignItems: 'flex-start', width: '100%', maxWidth: 760 + 36 + 560 }}>
+          // i margini della colonna vanno alla lista, che è alta quanto la finestra meno quelli
+          <div style={{
+            display: 'flex', gap: 36, alignItems: 'flex-start', width: '100%', maxWidth: 760 + 36 + 560,
+            '--lato-sopra': `${(rail ? 16 : 22) + striscia}px`, '--lato-sotto': `${rail ? 24 : 30}px`
+          } as CSSProperties}>
             <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato apriLavoro={apriLavoroCasa} />
             <ListaDiLato l={lista} lingua={stato.config.lingua ?? 'en'} vaiALista={() => v.goOggi()}
               apri={apriLavoroCasa} modifica={c => setDettaglioCasa(c.id)} />

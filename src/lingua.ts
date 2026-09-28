@@ -3394,7 +3394,6 @@ const EN: Record<string, string> = {
   'Tutta la settimana': 'The whole week',
   'Per finirla': 'To finish it',
   'Mentre dormivi': 'While you slept',
-  'Visto': 'Got it',
   'Disfa': 'Undo',
   'Disfatta: il file è nel Cestino, la bozza resta in Bozze. La carta è di nuovo tua.': 'Undone: the file is in the Trash, the draft stays in Drafts. The card is yours again.',
   'Disfatta: il file è nel Cestino. La carta è di nuovo tua.': 'Undone: the file is in the Trash. The card is yours again.',
