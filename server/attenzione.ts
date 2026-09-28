@@ -8,6 +8,8 @@ import { nominaAmbito } from './ambiti-memoria.ts'
 import * as riferimento from './riferimento.ts'
 import { pillolaDi } from './data-carta.ts'
 import { risposteFuori } from './feed-dati.ts'
+import * as regole from './turno-regole.ts'
+import * as presenza from './presenza.ts'
 
 function pertinente(d: store.Documento, adesso: number) {
   return classificaAttenzione(d, {
@@ -132,8 +134,16 @@ export function feedAttuale(adesso = Date.now()): VoceInPagina[] {
 
 /** User-owned tasks stay on the list. Only untouched suggestions created by
  * the Brief are re-evaluated; moving, editing or delegating one adopts it. */
-export function compitiAttuali(adesso = Date.now()): (store.Compito & { puoInviare: boolean })[] {
+export function compitiAttuali(adesso = Date.now()): (store.Compito & { puoInviare: boolean; tocca: regole.Tocca | null })[] {
   const compiti = store.elencoCompiti()
+  // F2 · quando tocca a una carta in coda: la bacheca lo scrive sulla carta
+  const conf = leggi()
+  const t = conf.turno
+  const ctx: regole.Contesto = {
+    adesso: new Date(adesso),
+    notte: { da: regole.oraValida(t?.notteDa) ? t.notteDa : regole.NOTTE_DI_SERIE.da, a: regole.oraValida(t?.notteA) ? t.notteA : regole.NOTTE_DI_SERIE.a },
+    assente: presenza.assente(adesso)
+  }
   const fonti = compiti.flatMap(c => c.origine === 'punto' && c.doc ? store.documento(c.doc) ?? [] : [])
   const ignorati = store.docsIgnoratiDalFeed(fonti)
   return compiti.filter(c => {
@@ -142,7 +152,7 @@ export function compitiAttuali(adesso = Date.now()): (store.Compito & { puoInvia
     return !!d && !ignorati.has(d.id) && pertinente(d, adesso) && validaVoceFeed({
       titolo: c.testo, testo: c.nota ?? '', perche: (c.nota ?? '').slice(0, 200)
     }, d, { richiediProva: false })
-  }).map(c => ({ ...c, puoInviare: !!leggi().posta }))
+  }).map(c => ({ ...c, puoInviare: !!conf.posta, tocca: regole.tocca(c, ctx) }))
 }
 
 /**

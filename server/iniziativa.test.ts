@@ -50,11 +50,33 @@ test('creates actual task with source, invokes draft-only non-native executor an
   assert.equal((await import('./iniziativa.ts')).stato(ora).attiva, true)
 })
 test('rolling daily cap and outstanding cap prevent clutter even across restarts', async () => {
-  initiative.imposta(true); store.salvaDocumenti([email('a'), email('b'), email('c')])
-  const a = await initiative.giro(ora, () => {}, () => true); assert.ok(a)
-  const b = await initiative.giro(ora + initiative.PAUSA, () => {}, () => true); assert.ok(b)
-  assert.equal(await initiative.giro(ora + 2 * initiative.PAUSA, () => assert.fail('budget'), () => true), null)
-  assert.equal(await initiative.giro(ora + 86400_000, () => assert.fail('outstanding'), () => true), null)
+  // F2: una proposta non parte, entra in coda; qui conta quante ne aspettano
+  // insieme (PROPOSTE_VIVE_MAX) e quante ne nascono in un giorno (LIMITE)
+  initiative.imposta(true)
+  const n = initiative.PROPOSTE_VIVE_MAX + 1
+  store.salvaDocumenti(Array.from({ length: n }, (_, i) => email(`d${i}`, { quando: new Date(ora - (i + 1) * 60_000).toISOString() })))
+  for (let i = 0; i < initiative.PROPOSTE_VIVE_MAX; i++) assert.ok(await initiative.giro(ora + i * initiative.PAUSA, () => {}, () => true), `proposta ${i + 1}`)
+  assert.equal(await initiative.giro(ora + initiative.PROPOSTE_VIVE_MAX * initiative.PAUSA, () => assert.fail('outstanding'), () => true), null)
+  // la cadenza vale anche dopo un riavvio: il conto sta su disco
+  assert.equal(initiative.stato(ora + initiative.PROPOSTE_VIVE_MAX * initiative.PAUSA).oggi, initiative.PROPOSTE_VIVE_MAX)
+})
+
+test('F2 · di serie una proposta entra in coda per il turno, con il suo contratto, e non parte', async () => {
+  initiative.imposta(true); store.salvaDocumenti([email('coda')])
+  const id = await initiative.giro(ora, undefined, () => true)
+  assert.ok(id)
+  const c = store.compito(id!)!
+  assert.equal(c.stato, 'aperto')
+  assert.equal(c.modo, 'bozza')
+  assert.equal(c.turno?.da, 'myynd')
+  assert.equal(c.turno?.quando, 'notte')
+  assert.ok(c.contratto?.criterio, 'la base del contratto c\'è già')
+})
+
+test('F2 · «Prepara ora»: la proposta entra in coda con la precedenza di una carta di oggi', async () => {
+  initiative.imposta(true); store.salvaDocumenti([email('subito')])
+  const id = await initiative.giro(ora, initiative.inCodaPerIlTurno(true), () => true)
+  assert.equal(store.compito(id!)?.turno?.quando, 'presto')
 })
 test('done and deleted task sources never recreate; answered threads are skipped', async () => {
   initiative.imposta(true)

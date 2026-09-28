@@ -36,9 +36,9 @@ export function sezioniPreferenze(o: { desktop: boolean; osservatore: boolean; m
   return [
     {
       id: 'myynd', titolo: t('Il tuo Myynd'),
-      nota: guarda ? t('Fuoco, notizie, autonomia, osservazione, tono') : t('Fuoco, notizie, autonomia, tono'),
+      nota: guarda ? t('Fuoco, notizie, autonomia, turno, osservazione, tono') : t('Fuoco, notizie, autonomia, turno, tono'),
       notaRame: false,
-      schede: ['fuoco', 'notizie', 'autonomia', ...(guarda ? ['osservazione'] : []), 'tono']
+      schede: ['fuoco', 'notizie', 'autonomia', 'turno', ...(guarda ? ['osservazione'] : []), 'tono']
     },
     {
       id: 'intelligenza', titolo: t('Intelligenza e costi'),

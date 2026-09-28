@@ -1,0 +1,485 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "ruolo": "Founder",
+ "progetti": [
+  {
+   "chiave": "nw",
+   "nome": "Northwind",
+   "obiettivo": "Ship Northwind 1.0 on the App Store",
+   "alias": [
+    "northwind app",
+    "nw"
+   ],
+   "priorita": "alta"
+  },
+  {
+   "chiave": "hb",
+   "nome": "Harbor Labs",
+   "obiettivo": "Run a two-week AI pilot with the Harbor finance team"
+  },
+  {
+   "chiave": "ls",
+   "nome": "Lumen Studio",
+   "obiettivo": "Sell the first course on lumenstudio.example"
+  }
+ ],
+ "file": [
+  {
+   "nome": "northwind-launch-plan.md",
+   "testo": "# Northwind launch plan\n\n1. Fix the three account issues.\n2. Upload build 1.0.4.\n3. Record the review video.\n"
+  }
+ ],
+ "documenti": [
+  {
+   "id": "posta:INBOX:201",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "App Review: guideline 4.3",
+   "corpo": "Hello Alex, your submission Northwind 1.0.3 was rejected under guideline 4.3. Please reply with the differences from similar apps.",
+   "autore": "App Review <review@appstore.example>",
+   "percorso": "INBOX",
+   "gruppo": "posta",
+   "quando": "-5h",
+   "messageId": "ar201@appstore.example"
+  },
+  {
+   "id": "posta:INBOX:202",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Pilot scope for the finance team",
+   "corpo": "Hi Alex, can we agree the pilot scope by Thursday? Two engineers, supplier invoices first. Best, Nora",
+   "autore": "Nora Vance <nora@harbor.example>",
+   "percorso": "INBOX",
+   "gruppo": "posta",
+   "quando": "-3h",
+   "messageId": "nv202@harbor.example"
+  },
+  {
+   "id": "posta:Sent:31",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Re: Pilot scope for the finance team",
+   "corpo": "Hi Nora, Thursday works. I will send the outline tomorrow. Alex",
+   "autore": "Alex <alex@northwind.example>",
+   "percorso": "Sent",
+   "gruppo": "posta",
+   "quando": "-2h",
+   "inviato": true,
+   "messageId": "s31@northwind.example",
+   "risponde": "nv202@harbor.example",
+   "destinatari": "nora@harbor.example"
+  },
+  {
+   "id": "calendario:evt-9",
+   "fonte": "calendario",
+   "tipo": "evento",
+   "titolo": "Audit call with Priya",
+   "corpo": "Audit of the onboarding flow with Priya Shah.",
+   "quando": "+1d",
+   "gruppo": "agenda"
+  }
+ ],
+ "feed": [
+  {
+   "id": "f1",
+   "tipo": "Priorità",
+   "titolo": "Fix the three Northwind account issues and upload the build",
+   "testo": "Your partner is waiting on it to add the videos and submit.",
+   "fonte": "posta",
+   "doc": "posta:INBOX:201",
+   "progetto": "nw",
+   "quando": "-3h",
+   "peso": 2,
+   "offerta": "I can list the three fixes and the upload steps.",
+   "perche": "Unblocks the App Store submission"
+  },
+  {
+   "id": "f2",
+   "tipo": "Scadenza",
+   "titolo": "Prepare for the audit call with Priya",
+   "testo": "Tomorrow at 9:30. Priya booked it through the studio site.",
+   "urgenza": "Tomorrow 9:30",
+   "fonte": "calendario",
+   "doc": "calendario:evt-9",
+   "quando": "-2h",
+   "peso": 3,
+   "perche": "A direct prospect"
+  },
+  {
+   "id": "f3",
+   "tipo": "Da leggere",
+   "titolo": "Newsletter: App Review appeals changed",
+   "testo": "Worth ten minutes: the appeal path changed this month.",
+   "fonte": "posta",
+   "quando": "-1h",
+   "peso": 0,
+   "perche": "Touches the Northwind review"
+  },
+  {
+   "id": "f4",
+   "tipo": "Proposta",
+   "titolo": "Choose the first audience angle for Lumen Studio",
+   "testo": "Three unpublished drafts are ready to test an angle now.",
+   "fonte": "lavoro",
+   "progetto": "ls",
+   "quando": "-4h",
+   "peso": 1,
+   "offerta": "I can write the outline of the first one.",
+   "perche": "Builds the audience before selling"
+  },
+  {
+   "id": "f5",
+   "tipo": "Da decidere",
+   "titolo": "Approve the post on the founder workflow",
+   "testo": "The draft is ready. Approve it or ask for changes.",
+   "urgenza": "No rush",
+   "fonte": "x",
+   "quando": "-5h",
+   "peso": 1,
+   "perche": "Sets the public positioning"
+  }
+ ],
+ "compiti": [
+  {
+   "id": "c1",
+   "testo": "Reply to App Review about guideline 4.3",
+   "quando": "oggi",
+   "progetto": "nw",
+   "doc": "posta:INBOX:201",
+   "priorita": "alta"
+  },
+  {
+   "id": "c4",
+   "testo": "Write the first course outline",
+   "quando": "oggi",
+   "progetto": "ls"
+  },
+  {
+   "id": "c5",
+   "testo": "Renew the domain before the 30th",
+   "quando": "settimana"
+  },
+  {
+   "id": "c6",
+   "testo": "Summarize the Harbor pilot call into next steps",
+   "quando": "settimana",
+   "progetto": "hb",
+   "stato": "aperto",
+   "modo": "tutto",
+   "contratto": {
+    "criterio": "A short summary of the Harbor pilot call with the decisions and next steps, each with an owner and a date.",
+    "mani": [
+     "file"
+    ],
+    "budget": {
+     "giri": 7,
+     "minuti": 15
+    },
+    "scritto": "myynd",
+    "quando": "2026-09-28T08:00:00.000Z"
+   },
+   "giorno": "+1d",
+   "turno": {
+    "da": "tu",
+    "quando": "presto",
+    "dal": "-2h",
+    "tentativi": 0
+   }
+  },
+  {
+   "id": "c3",
+   "testo": "Answer the App Review team with the build notes",
+   "quando": "oggi",
+   "progetto": "nw",
+   "stato": "chiede",
+   "modo": "bozza",
+   "risultato": "I read the rejection mail and the last build notes.\nWhich build should I point them to, 1.0.3 or the one in TestFlight?",
+   "chieste": [
+    {
+     "domanda": "Which build should I point them to?",
+     "opzioni": [
+      "1.0.3",
+      "TestFlight build"
+     ],
+     "multipla": false
+    }
+   ],
+   "contratto": {
+    "criterio": "A draft reply to App Review in your mailbox that lists the differences from similar apps.",
+    "mani": [
+     "posta"
+    ],
+    "budget": {
+     "giri": 7,
+     "minuti": 15
+    },
+    "scritto": "myynd",
+    "quando": "2026-09-28T08:00:00.000Z"
+   },
+   "turno": {
+    "da": "tu",
+    "quando": "presto",
+    "dal": "-20h",
+    "tentativi": 1,
+    "ultimo": "-7h",
+    "notte": true
+   }
+  },
+  {
+   "id": "c7",
+   "testo": "Chase the unpaid Lumen invoice",
+   "quando": "oggi",
+   "progetto": "ls",
+   "stato": "pronto",
+   "modo": "tutto",
+   "risultato": "Done: the reminder is below.\n\nHi Sam, a quick reminder about invoice [to fill: invoice number].\n\nMissing: the invoice number and the amount.",
+   "contratto": {
+    "criterio": "A reminder draft to Sam in your mailbox with the invoice number, the amount and the due date.",
+    "mani": [
+     "posta"
+    ],
+    "budget": {
+     "giri": 7,
+     "minuti": 15
+    },
+    "scritto": "myynd",
+    "quando": "2026-09-28T08:00:00.000Z"
+   },
+   "prova": {
+    "esito": "fail",
+    "perche": "Missing: the invoice number and the amount, the mail does not say them.",
+    "controlli": [
+     "Done means: not met. The invoice number and amount are not in any source."
+    ],
+    "quando": "2026-09-28T09:10:00.000Z"
+   },
+   "aggiornato": "-40m"
+  },
+  {
+   "id": "c2",
+   "testo": "Write the pilot outline for Harbor Labs",
+   "quando": "oggi",
+   "progetto": "hb",
+   "stato": "pronto",
+   "modo": "bozza",
+   "risultato": "Done: saved to your Desktop as Harbor pilot outline.md.\n\nI assumed a Thursday kickoff.",
+   "consegna": {
+    "app": "File",
+    "titolo": "Harbor pilot outline.md",
+    "percorso": "/tmp/Harbor pilot outline.md",
+    "dove": "scrivania"
+   },
+   "revisione": {
+    "esito": "pass",
+    "comeTe": "ok",
+    "comeLoro": "ok",
+    "per": "the Harbor finance team",
+    "problemi": [],
+    "verificato": [],
+    "giri": 1
+   },
+   "contratto": {
+    "criterio": "A pilot outline file on your Desktop with the owner, the team, the first workflow and the kickoff date.",
+    "mani": [
+     "file",
+     "web"
+    ],
+    "budget": {
+     "giri": 7,
+     "minuti": 15
+    },
+    "scritto": "myynd",
+    "quando": "2026-09-28T08:00:00.000Z"
+   },
+   "prova": {
+    "esito": "pass",
+    "perche": "Names Nora as owner, two engineers, supplier invoices first, and a Thursday kickoff.",
+    "controlli": [
+     "The file is there: Harbor pilot outline.md",
+     "Done means: met. Names Nora as owner, two engineers, supplier invoices first, and a Thursday kickoff."
+    ],
+    "quando": "2026-09-28T07:40:00.000Z"
+   },
+   "diario": [
+    {
+     "t": "2026-09-28T07:31:00.000Z",
+     "tipo": "preso",
+     "dettaglio": "bozza"
+    },
+    {
+     "t": "2026-09-28T07:31:02.000Z",
+     "tipo": "contratto",
+     "dettaglio": "A pilot outline file on your Desktop with the owner, the team, the first workflow and the kickoff date."
+    },
+    {
+     "t": "2026-09-28T07:31:09.000Z",
+     "tipo": "cerco",
+     "dettaglio": "Harbor pilot scope"
+    },
+    {
+     "t": "2026-09-28T07:31:15.000Z",
+     "tipo": "apro",
+     "dettaglio": "Pilot scope for the finance team"
+    },
+    {
+     "t": "2026-09-28T07:32:40.000Z",
+     "tipo": "scrivo"
+    },
+    {
+     "t": "2026-09-28T07:33:30.000Z",
+     "tipo": "rileggo"
+    },
+    {
+     "t": "2026-09-28T07:34:10.000Z",
+     "tipo": "consegnato",
+     "dettaglio": "Harbor pilot outline.md"
+    },
+    {
+     "t": "2026-09-28T07:34:11.000Z",
+     "tipo": "prova",
+     "dettaglio": "pass: Names Nora as owner"
+    }
+   ],
+   "aggiornato": "-2h",
+   "turno": {
+    "da": "tu",
+    "quando": "presto",
+    "dal": "-20h",
+    "tentativi": 1,
+    "ultimo": "-9h",
+    "notte": true
+   }
+  },
+  {
+   "id": "c8",
+   "testo": "Reply to Nora about the pilot scope",
+   "quando": "oggi",
+   "progetto": "hb",
+   "stato": "pronto",
+   "modo": "tutto",
+   "doc": "posta:INBOX:202",
+   "risultato": "Done: the reply to Nora is ready.\n\nHi Nora, Thursday works. Two engineers, supplier invoices first.",
+   "email": {
+    "a": "nora@harbor.example",
+    "oggetto": "Re: Pilot scope for the finance team",
+    "corpo": "Hi Nora, Thursday works.",
+    "conosciuto": true,
+    "casella": {
+     "stato": "salvata",
+     "id": "d1"
+    }
+   },
+   "contratto": {
+    "criterio": "A draft reply to Nora Vance in your mailbox that confirms the scope by Thursday.",
+    "mani": [
+     "posta"
+    ],
+    "budget": {
+     "giri": 7,
+     "minuti": 15
+    },
+    "scritto": "myynd",
+    "quando": "2026-09-28T08:00:00.000Z"
+   },
+   "prova": {
+    "esito": "pass",
+    "perche": "Confirms Thursday, two engineers and supplier invoices first.",
+    "controlli": [
+     "The draft is in your mailbox, not sent."
+    ],
+    "quando": "2026-09-28T08:40:00.000Z"
+   },
+   "aggiornato": "-25m",
+   "turno": {
+    "da": "myynd",
+    "quando": "notte",
+    "dal": "-20h",
+    "tentativi": 1,
+    "ultimo": "-8h",
+    "notte": true
+   }
+  },
+  {
+   "id": "c9",
+   "testo": "Send the signed NDA back to Priya",
+   "quando": "oggi",
+   "stato": "fatto",
+   "chiuso": "-90m"
+  },
+  {
+   "id": "c10",
+   "testo": "Prepare the board pack for Thursday",
+   "quando": "settimana",
+   "giorno": "+3d",
+   "stato": "aperto",
+   "modo": "tutto",
+   "contratto": {
+    "criterio": "A board pack file on your Desktop with the Q3 numbers, the pilot status and three decisions to take.",
+    "mani": [
+     "file"
+    ],
+    "budget": {
+     "giri": 7,
+     "minuti": 15
+    },
+    "scritto": "myynd",
+    "quando": "2026-09-28T08:00:00.000Z"
+   },
+   "turno": {
+    "da": "tu",
+    "quando": "presto",
+    "dal": "-1h",
+    "tentativi": 0
+   }
+  },
+  {
+   "id": "c11",
+   "testo": "Draft a reply: Venue options for the offsite",
+   "quando": "oggi",
+   "stato": "aperto",
+   "modo": "bozza",
+   "origine": "iniziativa",
+   "contratto": {
+    "criterio": "A draft reply to Marta in your mailbox that picks one of her two venues and asks for the quote.",
+    "mani": [
+     "posta"
+    ],
+    "budget": {
+     "giri": 7,
+     "minuti": 15
+    },
+    "scritto": "myynd",
+    "quando": "2026-09-28T08:00:00.000Z"
+   },
+   "turno": {
+    "da": "myynd",
+    "quando": "notte",
+    "dal": "-30m",
+    "tentativi": 0
+   }
+  }
+ ],
+ "domande": [
+  {
+   "tema": "riferimento",
+   "testo": "To get my bearings: for each project, what are you working on right now? What is dead, and what is blocked?"
+  }
+ ],
+ "riferimento": "Northwind: fixing the review issues and shipping 1.0.4. Harbor Labs: pilot scope this week. Lumen Studio: course outline, not urgent.",
+ "punto": {
+  "progetti": [
+   {
+    "progetto": "nw",
+    "novita": "App Review rejected build 1.0.3 under guideline 4.3.",
+    "doc": "posta:INBOX:201"
+   },
+   {
+    "progetto": "hb",
+    "novita": "Nora wants the pilot scope agreed by Thursday.",
+    "doc": "posta:INBOX:202"
+   }
+  ]
+ },
+ "turnoAvviate": 3
+}

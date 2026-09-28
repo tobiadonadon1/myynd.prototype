@@ -40,6 +40,8 @@ import * as avvio from './avvio.ts'
 import { leggiSeAncoraCollegata } from './fonti-collegate.ts'
 import * as compiti from './compiti.ts'
 import * as contratto from './contratto.ts'
+import * as turno from './turno.ts'
+import * as presenza from './presenza.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
@@ -3499,8 +3501,30 @@ app.get('/api/compiti', (_req, res) => {
   res.json({
     compiti: compitiAttuali(),
     chiusi: store.compitiChiusi(),
-    fuoco: timone.fuoco()
+    fuoco: timone.fuoco(),
+    // il turno (F2), nella stessa risposta: la bacheca lo dice in una riga
+    turno: turno.stato()
   })
+})
+
+/*
+ * Il turno (F2): una carta in coda per Myynd, com'è il turno, e le sue
+ * impostazioni. Mettere in coda risponde subito; il giro parte dietro.
+ */
+app.post('/api/compiti/:id/coda', (req, res) => {
+  const c = store.compito(req.params.id)
+  if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  if (!mod.puoLavorare()) return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
+  try { turno.mettiInCoda(c.id, 'tu') } catch (e) { return errore(res, e, 400) }
+  res.json({ ok: true, compiti: compitiAttuali(), turno: turno.stato() })
+})
+app.get('/api/turno', (_req, res) => { res.json(turno.stato()) })
+app.patch('/api/turno', (req, res) => {
+  try { turno.imposta(req.body ?? {}) } catch (e) { return errore(res, e, 400) }
+  res.json(turno.stato())
+  compiti.annunciaCambio()
+  // ripreso o riacceso: si guarda subito se c'è qualcosa di pronto
+  void turno.giro()
 })
 
 /**
@@ -4419,8 +4443,13 @@ app.patch('/api/iniziativa', (req, res) => {
   res.json(iniziativa.imposta(req.body.attiva))
 })
 app.post('/api/iniziativa/prepara', async (_req, res) => {
-  try { const compito = await iniziativa.giro(); res.json({ ...iniziativa.stato(), compito }) }
-  catch (e) { errore(res, e) }
+  // «Prepara ora»: la proposta entra in coda con la precedenza di una carta
+  // di oggi, e il turno la prende al primo giro (F2)
+  try {
+    const compito = await iniziativa.giro(Date.now(), iniziativa.inCodaPerIlTurno(true))
+    res.json({ ...iniziativa.stato(), compito })
+    if (compito) void turno.giro()
+  } catch (e) { errore(res, e) }
 })
 
 app.get('/api/automazioni/suggerimenti', async (req, res) => {
@@ -5793,6 +5822,13 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // l'osservatore (P1B): solo dentro l'app sul Mac; il guscio riceve subito lo stato
   if (osservatore.disponibile()) osservatore.ascolta()
   osservatore.annuncia()
+  // il turno (F2): quanto è fermo il Mac lo dice il guscio; la coda chiama il
+  // turno quando una persona ha le mani libere, e il turno guarda ogni minuto
+  presenza.ascolta()
+  turno.avvia()
+  const giroDelTurno = perOgnuno('il turno non ha finito il giro', async () => { await store.senzaToccare(() => turno.giro()) })
+  setTimeout(giroDelTurno, 45_000)
+  setInterval(giroDelTurno, 60_000)
 
   // Le automazioni guardano l'orologio ogni quarto d'ora. Il primo giro dopo
   // due minuti e non subito: all'avvio c'è già la lettura delle fonti, e due

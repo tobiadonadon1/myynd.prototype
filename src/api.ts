@@ -687,6 +687,28 @@ export type Compito = {
   prova?: ProvaCompito | null
   /** F1 · quello che ha fatto, passo per passo. */
   diario?: VoceDiario[] | null
+  /** F2 · chi l'ha messa in coda per Myynd, come, quante volte il turno l'ha fatta partire. */
+  turno?: TurnoCompito | null
+  /** F2 · quando tocca a una carta in coda: adesso, stanotte, quando lei non c'è, o la notte prima del suo giorno. */
+  tocca?: 'adesso' | 'notte' | 'via' | `prima:${string}` | null
+}
+
+export type TurnoCompito = { da: 'tu' | 'myynd'; quando: 'presto' | 'notte'; dal: string; tentativi: number; ultimo?: string | null; notte?: boolean }
+
+/** F2 · il turno: com'è impostato, e cosa sta facendo. */
+export type StatoTurno = {
+  acceso: boolean
+  pausaFino: string | null
+  carte: number
+  notte: { da: string; a: string }
+  avviate: number
+  inNotte: boolean
+  prossimaNotte: string | null
+  assente: boolean
+  motore: boolean
+  inCoda: number
+  prontePerOra: number
+  stanotte: { fatte: number; attende: number; dal: string }
 }
 
 export type ManoCompito = 'posta' | 'file' | 'nota' | 'web' | 'codice'
@@ -700,11 +722,11 @@ export type ContrattoCompito = {
 export type ProvaCompito = { esito: 'pass' | 'fail' | 'unavailable'; perche: string; controlli: string[]; quando: string }
 export type VoceDiario = {
   t: string
-  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto'
+  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto' | 'turno'
   dettaglio?: string
 }
 
-export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
+export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string; turno?: StatoTurno }
 
 // — l'agenda della settimana —
 
@@ -1174,6 +1196,13 @@ export const api = {
   cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null; criterio?: string | null }) =>
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}`,
       { method: 'PATCH', body: JSON.stringify(c) }),
+
+  /** F2 · una carta in coda per Myynd: la fa partire il turno, quando è il suo momento. */
+  mettiInCoda: (id: string) =>
+    json<{ ok: true; compiti: Compito[]; turno: StatoTurno }>(`/api/compiti/${encodeURIComponent(id)}/coda`, { method: 'POST' }),
+  turno: () => json<StatoTurno>('/api/turno'),
+  impostaTurno: (p: { acceso?: boolean; pausa?: number | null; carte?: number; notteDa?: string; notteA?: string }) =>
+    json<StatoTurno>('/api/turno', { method: 'PATCH', body: JSON.stringify(p) }),
 
   /** F1 · il «fatto» scritto (o riscritto) da Myynd adesso. */
   contrattoCompito: (id: string, rifai = false) =>

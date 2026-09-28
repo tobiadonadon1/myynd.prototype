@@ -15,15 +15,15 @@ test('le schede delle Preferenze, in ordine, con e senza l’app e l’osservato
   const ordine = (desktop: boolean, osservatore: boolean) =>
     s.sezioniPreferenze({ desktop, osservatore, motoreDaCollegare: false }).map(x => [x.id, x.schede.join(' ')])
   assert.deepEqual(ordine(true, true), [
-    ['myynd', 'fuoco notizie autonomia osservazione tono'],
+    ['myynd', 'fuoco notizie autonomia turno osservazione tono'],
     ['intelligenza', 'motore modelli consumo'],
     ['account', 'nome lingua app accesso dati cancella']
   ])
-  assert.deepEqual(ordine(true, false)[0], ['myynd', 'fuoco notizie autonomia tono'])
+  assert.deepEqual(ordine(true, false)[0], ['myynd', 'fuoco notizie autonomia turno tono'])
   // fuori dall'app: niente «L’app» e niente osservazione, anche se il server l'avesse
   for (const oss of [true, false]) {
     const x = ordine(false, oss)
-    assert.deepEqual(x[0], ['myynd', 'fuoco notizie autonomia tono'])
+    assert.deepEqual(x[0], ['myynd', 'fuoco notizie autonomia turno tono'])
     assert.deepEqual(x[2], ['account', 'nome lingua accesso dati cancella'])
   }
 })

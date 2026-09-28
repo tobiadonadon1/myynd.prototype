@@ -622,39 +622,33 @@ test('a delegated reply to a Mail on this Mac message stays ready with no mailbo
   assert.match(String(c?.risultato ?? ''), /wording is confirmed/)
 })
 
-test('restart recovers one bounded read-only initiative attempt, never arbitrary/native work', async () => {
-  const cfg=await import('./config.ts');const initiative=await import('./iniziativa.ts')
-  cfg.scrivi({lingua:'en',autonomia:'preparare'});initiative.imposta(true)
-  const doc={id:'posta:recovery',fonte:'posta',tipo:'email',titolo:'Review the proposal',corpo:'Could you review the project proposal and reply with your feedback?',autore:'Jane <jane@example.com>',quando:new Date().toISOString()}
-  store.salvaDocumenti([doc])
-  store.scriviCompito({id:'recovery-safe',testo:'Prepare a reply',ordine:'rec-a',origine:'iniziativa',doc:doc.id})
-  store.affidaCompito('recovery-safe','bozza')
-  store.scriviCompito({id:'recovery-manual',testo:'Write an essay in Pages',ordine:'rec-b',origine:'chat'})
-  store.affidaCompito('recovery-manual','tutto')
-  let calls=0
-  prova({svolgi:async (_t,_n,_m,_a,_folder,_step,_doc,_selection,execution)=>{
-    calls++;assert.equal(execution?.nativa,false);return {testo:'A recovered draft.',fonti:[],eseguito:true}
-  },postaCollegata:()=>false})
-  const listener=orecchio('recovery-safe')
-  assert.equal(compiti.riprendiAppesi(()=>true),2)
-  await listener.aspetta('pronto');await pausa(10)
-  assert.equal(calls,1);assert.equal(store.compito('recovery-manual')?.stato,'aperto')
-  store.affidaCompito('recovery-safe','bozza')
-  compiti.riprendiAppesi(()=>true);await pausa(10)
-  assert.equal(calls,1);assert.equal(store.compito('recovery-safe')?.stato,'aperto')
-  listener.smetti();initiative.imposta(false)
+test('F2 · al riavvio le carte interrotte tornano in coda per il turno, senza guaio e senza partire da sole', () => {
+  store.scriviCompito({ id: 'rec-a', testo: 'Prepare a reply', ordine: 'rec-a' })
+  store.affidaCompito('rec-a', 'bozza')
+  store.scriviCompito({ id: 'rec-b', testo: 'Write an essay in Pages', ordine: 'rec-b', origine: 'chat' })
+  store.affidaCompito('rec-b', 'tutto')
+  assert.equal(compiti.riprendiAppesi(), 2)
+  for (const id of ['rec-a', 'rec-b']) {
+    const c = store.compito(id)!
+    assert.equal(c.stato, 'aperto')
+    assert.equal(c.guaio, null)
+    assert.notEqual(c.modo, 'io', 'resta di Myynd: è in coda')
+    assert.equal(c.turno?.quando, 'presto')
+    assert.equal(c.turno?.tentativi, 0)
+  }
+  assert.equal(store.compito('rec-a')?.modo, 'bozza')
+  // nessuno le ha fatte partire: lo farà il turno, al suo giro
+  assert.equal(store.elencoCompiti().filter(c => c.stato === 'delegato').length, 0)
 })
 
-test('restart does not resume proactive work after opt-out or loss of provider', async () => {
-  const initiative=await import('./iniziativa.ts')
-  for(const [id,enabled,ready] of [['recovery-off',false,true],['recovery-offline',true,false]] as const){
-    initiative.imposta(enabled)
-    store.scriviCompito({id,testo:'Reply',ordine:id,origine:'iniziativa',doc:'posta:recovery'})
-    store.affidaCompito(id,'bozza')
-    compiti.riprendiAppesi(()=>ready)
-    assert.equal(store.compito(id)?.stato,'aperto')
-  }
-  initiative.imposta(false)
+test('F2 · una carta caduta a metà già due volte non torna in coda: torna sua, con il perché', () => {
+  store.scriviCompito({ id: 'rec-due', testo: 'The card that crashes', ordine: 'rec-due' })
+  store.affidaCompito('rec-due', 'tutto')
+  store.scriviTurnoCompito('rec-due', { da: 'tu', quando: 'presto', dal: new Date().toISOString(), tentativi: 2, ultimo: new Date().toISOString() })
+  compiti.riprendiAppesi()
+  const c = store.compito('rec-due')!
+  assert.equal(c.stato, 'aperto')
+  assert.equal(c.guaio, compiti.INTERROTTA_DUE_VOLTE)
 })
 
 test('mail revision conflict after email preparation emits chiede with visible error and never saves or announces ready', async () => {

@@ -171,6 +171,17 @@ async function avvio() {
   // `import()` dall'inspector non passa, e la scorciatoia non si preme da
   // uno script — questi sono i pezzi che servono, a portata di mano
   if (process.env.MYYND_ISPEZIONE) Object.assign(globalThis, { myynd: { app, richiamo, finestra, alPremere } })
+  // il turno (F2): quanto è fermo il Mac, un numero al minuto e subito quando
+  // lo schermo si blocca o si sblocca. Solo il numero: niente app, niente
+  // titoli. Il server fa partire le proposte di Myynd quando lei non c'è
+  // (`server/presenza.ts`); senza questo messaggio aspettano la notte.
+  const presenza = (inattivo?: number) => {
+    try { server.manda({ tipo: 'presenza', inattivo: inattivo ?? powerMonitor.getSystemIdleTime() }) } catch { /* il server non c'è ancora */ }
+  }
+  setInterval(() => presenza(), 60_000).unref?.()
+  powerMonitor.on('lock-screen', () => presenza(24 * 3600))
+  powerMonitor.on('unlock-screen', () => presenza(0))
+  powerMonitor.on('resume', () => presenza())
   // il computer si è svegliato: il server deve saperlo (`server.ts`)
   powerMonitor.on('resume', server.sveglia)
   // e l'osservatore chiude la sessione quando la persona non c'è

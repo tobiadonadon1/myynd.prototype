@@ -12,7 +12,7 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, apiP10, correggiCompito, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest } from '../api'
+import { api, apiP10, correggiCompito, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest, type StatoTurno } from '../api'
 import { appenaFinite as appenaFiniteFra, siRivede, testoMostrato } from '../lavoro-affidato'
 import { quanteAspettano } from '../blocchi-feed'
 import { frasi, t } from '../lingua'
@@ -44,6 +44,8 @@ export function useCompiti(
   const [compiti, setCompiti] = useState<Compito[]>([])
   const [chiusi, setChiusi] = useState<Compito[]>([])
   const [fuoco, setFuoco] = useState('')
+  /** F2 · il turno: arriva con la lista, e si rilegge con lei. */
+  const [turno, setTurno] = useState<StatoTurno | null>(null)
   const [caricato, setCaricato] = useState(false)
   const [guasto, setGuasto] = useState('')
   // quali righe hanno la bozza aperta sotto
@@ -63,7 +65,7 @@ export function useCompiti(
 
   useEffect(() => {
     api.compiti()
-      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco); setGuasto(''); segna('compiti') })
+      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco); setTurno(l.turno ?? null); setGuasto(''); segna('compiti') })
       // dire «la lista è vuota» quando in realtà non si è riusciti a leggerla è
       // il modo peggiore di sbagliare: la schermata mentirebbe con sicurezza
       .catch(e => setGuasto(e instanceof Error ? e.message : String(e)))
@@ -80,7 +82,7 @@ export function useCompiti(
   /** Rilegge la lista dal server. Il server è la verità; noi siamo una copia. */
   const rileggi = useCallback(() => {
     api.compiti()
-      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco) })
+      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco); setTurno(l.turno ?? null) })
       .catch(() => { /* si riprova al prossimo annuncio */ })
   }, [])
 
@@ -469,6 +471,32 @@ export function useCompiti(
     }
   }, [mostraToast, apriConnessioni])
 
+  /**
+   * F2 · «A Myynd»: la carta entra in coda, e la fa partire il turno quando è
+   * il suo momento (subito se è di oggi). Si muove subito, come tutto: la
+   * carta passa nella corsia «In coda» prima che il server risponda.
+   */
+  const mettiInCoda = useCallback(async (id: string) => {
+    const prima = compitiRef.current
+    const adesso = new Date().toISOString()
+    setCompiti(cs => cs.map(c => (c.id === id
+      ? { ...c, stato: 'aperto', modo: c.modo && c.modo !== 'io' ? c.modo : 'tutto', guaio: null, turno: { da: 'tu', quando: 'presto', dal: adesso, tentativi: 0 } }
+      : c)))
+    try {
+      const r = await api.mettiInCoda(id)
+      setCompiti(r.compiti); setTurno(r.turno)
+    } catch (e) {
+      indietro(prima, id, e instanceof Error ? t(e.message) : t('Non sono riuscito ad affidarlo.'))
+      if (e instanceof DaCollegare) apriConnessioni?.(e.fonte)
+    }
+  }, [indietro, apriConnessioni])
+
+  /** F2 · acceso, spento, in pausa, quante carte, quale notte. */
+  const impostaTurno = useCallback(async (p: Parameters<typeof api.impostaTurno>[0]): Promise<boolean> => {
+    try { setTurno(await api.impostaTurno(p)); return true }
+    catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a salvarlo.')); return false }
+  }, [mostraToast])
+
   /** Ci ho ripensato: il compito torna mio. */
   const richiama = useCallback(async (id: string) => {
     const prima = compitiRef.current
@@ -768,7 +796,7 @@ export function useCompiti(
 
   return {
     esegui, salvaDocumento, lavora, copia,
-    compiti, chiusi, fuoco, caricato, guasto, aperti, passi,
+    compiti, chiusi, fuoco, turno, caricato, guasto, aperti, passi,
     perSecchio,
     // «chiede» conta come da fare: è una riga che aspetta te, e dire «tutto
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima
@@ -780,7 +808,7 @@ export function useCompiti(
     pronte, chiedono,
     /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
     inAttesa,
-    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

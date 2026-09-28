@@ -15,7 +15,7 @@
 //     sotto node; `v.apri('pref', sezione, scheda)` porta su una scheda.
 
 import { useEffect, useMemo, useState } from 'react'
-import { api, memoriaP5, sessione, type ChatGPT, type ClaudeCon } from '../api'
+import { api, memoriaP5, sessione, type ChatGPT, type ClaudeCon, type StatoTurno } from '../api'
 import { rilettura, suCollegamento } from '../collegamenti'
 import { frasi, t } from '../lingua'
 import { daTastiera } from '../ui'
@@ -594,6 +594,46 @@ function ModelliOpenAI({ v }: { v: Vals }) {
   )
 }
 
+/** Le notti fra cui scegliere (F2): tre, dette come le direbbe una persona. */
+const NOTTI: { da: string; a: string }[] = [{ da: '22:00', a: '07:00' }, { da: '23:00', a: '06:00' }, { da: '00:00', a: '07:00' }]
+const CARTE_AL_GIORNO = [6, 12, 20]
+
+/**
+ * Il turno (F2): Myynd lavora da solo le carte in coda sulla bacheca.
+ * Acceso o spento, quante carte in una giornata, e quale notte. Una riga di
+ * stato, come le altre schede: quante ne ha fatte partire oggi.
+ */
+function CartaTurno() {
+  const [s, setS] = useState<StatoTurno | null>(null)
+  const [guaio, setGuaio] = useState('')
+  useEffect(() => { let vivo = true; api.turno().then(x => { if (vivo) setS(x) }).catch(() => {}); return () => { vivo = false } }, [])
+  const cambia = async (p: Parameters<typeof api.impostaTurno>[0]) => {
+    try { setS(await api.impostaTurno(p)); setGuaio('') }
+    catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a salvarlo.')) }
+  }
+  const notte = s ? NOTTI.find(n => n.da === s.notte.da && n.a === s.notte.a) : null
+  return (
+    <Carta titolo={t('Turno di notte')} id="turno" stato={!s ? undefined : !s.acceso ? t('Spento') : frasi.carteDelTurno(s.avviate, s.carte)}>
+      {s && <>
+        <div className="f-riga">
+          <div className="f-nome">{t('Myynd lavora la bacheca da solo')}</div>
+          <Interruttore acceso={s.acceso} cambia={() => void cambia({ acceso: !s.acceso })} etichetta={t('Myynd lavora la bacheca da solo')} />
+        </div>
+        {s.acceso && <>
+          <Scelte etichetta={t('Carte in una giornata')} mostraEtichetta
+            opzioni={CARTE_AL_GIORNO.map(n => ({ id: String(n), nome: String(n) }))}
+            scelta={CARTE_AL_GIORNO.includes(s.carte) ? String(s.carte) : null} scegli={id => void cambia({ carte: Number(id) })} />
+          <Scelte etichetta={t('La notte')} mostraEtichetta
+            opzioni={NOTTI.map(n => ({ id: `${n.da}-${n.a}`, nome: `${n.da}–${n.a}` }))}
+            scelta={notte ? `${notte.da}-${notte.a}` : null}
+            scegli={id => { const n = NOTTI.find(x => `${x.da}-${x.a}` === id); if (n) void cambia({ notteDa: n.da, notteA: n.a }) }} />
+        </>}
+        {guaio && <div className="f-stato rame">{guaio}</div>}
+      </>}
+    </Carta>
+  )
+}
+
 export function Preferenze({ v }: { v: Vals }) {
   const d = desktop()
   const osservatore = useOsservatoreDisponibile()
@@ -615,6 +655,7 @@ export function Preferenze({ v }: { v: Vals }) {
             <Scelte etichetta={t('Autonomia')} opzioni={v.autonomie.map(a => ({ id: a.id, nome: a.titolo }))}
               scelta={v.autonomie.find(a => a.scelto)?.id ?? null} scegli={id => v.autonomie.find(a => a.id === id)?.onClick()} />
           </Carta>
+          <CartaTurno />
           {schede.includes('osservazione') && (
             <Carta titolo={t('Osservazione')} id="osservazione">
               <PreferenzeOsservatore parte="osservazione" />

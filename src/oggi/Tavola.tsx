@@ -14,7 +14,7 @@
 // criterio, e sulle fatte la prova. Nessun paragrafo che spiega.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Compito, type ManoCompito, type PassoCompito, type Progetto } from '../api'
+import { api, type Compito, type ManoCompito, type PassoCompito, type Progetto, type StatoTurno } from '../api'
 import { frasi, t } from '../lingua'
 import { Cestino } from '../ui'
 import { Casella } from '../components/forme'
@@ -96,12 +96,13 @@ export function Tavola({ l, oggi, modifica, apri }: {
   const lascia = (id: string, dove: Corsia) => {
     const c = l.compiti.find(x => x.id === id)
     if (!c) return
-    if (dove === 'coda' && c.stato === 'aperto') l.delega(id, c.modo && c.modo !== 'io' ? c.modo : 'tutto')
+    if (dove === 'coda' && c.stato === 'aperto' && (c.modo === 'io' || !c.modo || !!c.guaio)) void l.mettiInCoda(id)
     else if (dove === 'tue' && (c.stato !== 'aperto' || (c.modo && c.modo !== 'io'))) l.richiama(id)
   }
 
   return (
     <section className="tavola" aria-label={t('Bacheca')}>
+      {l.turno && <RigaTurno s={l.turno} l={l} />}
       <div className="tavola-corsie">
         {CORSIE.map(corsia => {
           const carte = corsia === 'fatte' ? corsie.fatte : corsie[corsia]
@@ -163,9 +164,12 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
       onDragEnd={lasciaAndare}>
       <div className="tavola-testa">
         {progetto && <span className="tavola-progetto"><i style={{ background: coloreProgetto(progetto, progetti) }} />{progetto.nome}</span>}
-        {!progetto && prov !== 'tu' && <span className="tavola-da">{t(NOME_PROVENIENZA[prov])}</span>}
-        {progetto && prov !== 'tu' && <span className="tavola-da">· {t(NOME_PROVENIENZA[prov])}</span>}
-        <span className="tavola-ora">{quandoCorto(corsia === 'fatte' ? (c.chiuso ?? c.aggiornato) : corsia === 'lavora' || corsia === 'coda' ? c.chiesto : null, oggi)}</span>
+        {/* da dove viene serve finché la carta è da fare; fatta, conta cosa è diventata */}
+        {!progetto && prov !== 'tu' && corsia !== 'fatte' && <span className="tavola-da">{t(NOME_PROVENIENZA[prov])}</span>}
+        {progetto && prov !== 'tu' && corsia !== 'fatte' && <span className="tavola-da">· {t(NOME_PROVENIENZA[prov])}</span>}
+        {corsia === 'fatte' && c.turno?.notte
+          ? <span className="tavola-ora tavola-notte" title={t('Fatta stanotte, mentre dormivi')}><i aria-hidden="true">☾</i>{t('Fatta stanotte')}</span>
+          : <span className="tavola-ora">{quandoCorto(corsia === 'fatte' ? (c.chiuso ?? c.aggiornato) : corsia === 'lavora' ? c.chiesto : null, oggi)}</span>}
       </div>
 
       <button type="button" className="tavola-titolo" onClick={() => (corsia === 'attende' || (corsia === 'fatte' && !chiusa) ? apri(c) : modifica(c))}>
@@ -180,6 +184,8 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
           {c.contratto.mani.map(m => <span key={m}>{t(NOME_MANO[m])}</span>)}
         </div>
       )}
+
+      {corsia === 'coda' && <Quando c={c} s={l.turno} />}
 
       {corsia === 'lavora' && passo && (
         <p className={`tavola-passo${controlla ? ' controlla' : ''}`} aria-live="polite">
@@ -211,7 +217,7 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
           Non tengono posto: una carta ferma è alta quanto quello che dice. */}
       {!chiusa && corsia !== 'fatte' && corsia !== 'attende' && (
         <div className="tavola-sopra">
-          {corsia === 'tue' && <button type="button" className="tavola-gesto" onClick={() => l.delega(c.id, 'tutto')}>{t('A Myynd')}</button>}
+          {corsia === 'tue' && <button type="button" className="tavola-gesto" onClick={() => { void l.mettiInCoda(c.id) }}>{t('A Myynd')}</button>}
           {corsia === 'coda' && c.stato === 'aperto' && <button type="button" className="tavola-gesto" onClick={() => l.delega(c.id, c.modo && c.modo !== 'io' ? c.modo : 'tutto')}>{t('Adesso')}</button>}
           {(corsia === 'coda' || corsia === 'lavora') && <button type="button" className="tavola-gesto" onClick={() => l.richiama(c.id)}>{t('Riprendila')}</button>}
           {corsia === 'tue' && <Cestino fai={() => l.elimina(c.id)} titolo={t('Toglila')} dim={24} icona={11} subito />}
@@ -302,4 +308,67 @@ function Aggiungi({ l, oggi }: { l: Lista; oggi: string }) {
         alUscire={() => { if (!testo.trim()) setApri(false) }} />
     </div>
   )
+}
+
+/** L'ora di un istante ISO, «HH:MM». */
+function oraDi(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/**
+ * Il turno in una riga, sopra le corsie (F2).
+ *
+ * Dice com'è, non come funziona: spento, in pausa fino a…, stanotte dalle…,
+ * quante carte ha fatto partire oggi sul suo tetto, e la mattina quello che
+ * ha fatto la notte. Un bottone solo: la pausa di un'ora, o riprendere.
+ */
+function RigaTurno({ s, l }: { s: StatoTurno; l: Lista }) {
+  const [occupato, setOccupato] = useState(false)
+  const fai = async (p: Parameters<Lista['impostaTurno']>[0]) => { setOccupato(true); await l.impostaTurno(p); setOccupato(false) }
+  if (!s.acceso) {
+    return (
+      <div className="tavola-turno spento">
+        <span><i aria-hidden="true" />{t('Myynd non lavora la bacheca da solo.')}</span>
+        <button type="button" className="tavola-gesto" disabled={occupato} onClick={() => fai({ acceso: true })}>{t('Accendi')}</button>
+      </div>
+    )
+  }
+  if (!s.motore) {
+    return <div className="tavola-turno spento"><span><i aria-hidden="true" />{t('Collega Claude e potrò lavorarci.')}</span></div>
+  }
+  const pezzi: string[] = []
+  if (!s.inNotte && s.stanotte.fatte + s.stanotte.attende > 0) pezzi.push(frasi.stanotteFatte(s.stanotte.fatte, s.stanotte.attende))
+  if (s.pausaFino) pezzi.push(frasi.inPausaFino(oraDi(s.pausaFino)))
+  else if (s.inNotte) pezzi.push(t('Lavora la notte'))
+  else if (s.prossimaNotte) pezzi.push(frasi.stanotteDalle(oraDi(s.prossimaNotte)))
+  pezzi.push(frasi.carteDelTurno(s.avviate, s.carte))
+  const vivo = !s.pausaFino && (s.inNotte || s.prontePerOra > 0)
+  return (
+    <div className={`tavola-turno${vivo ? ' vivo' : ''}${s.pausaFino ? ' pausa' : ''}`}>
+      <span><i aria-hidden="true" />{pezzi.join(' · ')}</span>
+      {s.pausaFino
+        ? <button type="button" className="tavola-gesto" disabled={occupato} onClick={() => fai({ pausa: 0 })}>{t('Riprendi il turno')}</button>
+        : <button type="button" className="tavola-gesto" disabled={occupato} onClick={() => fai({ pausa: 60 })}>{t('Pausa di un’ora')}</button>}
+    </div>
+  )
+}
+
+/**
+ * Quando parte una carta in coda (F2): la prossima, stanotte, quando non ci
+ * sei, o la notte prima del suo giorno. Se il turno è fermo, lo dice lei.
+ */
+function Quando({ c, s }: { c: Compito; s: StatoTurno | null | undefined }) {
+  let testo = ''
+  if (c.stato === 'delegato') testo = t('Prossima')
+  else if (!s?.acceso || !s.motore) testo = t('Aspetta il turno')
+  else if (s.pausaFino) testo = t('In pausa')
+  else if (c.tocca === 'adesso') testo = s.avviate >= s.carte ? t('Domani') : t('Prossima')
+  else if (c.tocca === 'notte') testo = t('Stanotte')
+  else if (c.tocca === 'via') testo = t('Quando non ci sei')
+  else if (c.tocca?.startsWith('prima:')) testo = frasi.laNottePrima(c.tocca.slice(6))
+  if (!testo) return null
+  const prossima = c.tocca === 'adesso' || c.stato === 'delegato'
+  return <p className="tavola-quando" data-prossima={prossima || undefined}><i aria-hidden="true" />{testo}</p>
 }

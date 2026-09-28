@@ -1,5 +1,3 @@
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
-import { join } from 'node:path'
 import { withBackgroundWork } from './lavoro-background.ts'
 import { verificaBaseRevisione } from './revisioni.ts'
 // La delega: quando un compito passa a Myynd.
@@ -295,8 +293,19 @@ function gira() {
         passiAttivi.delete(k)
         richiamati.delete(k)
         gira()
+        // la persona ha le mani libere: il turno (F2) guarda se c'è un'altra carta pronta
+        if (!inCorsoDi.has(voce.utente ?? '') && !coda.some(v => v.utente === voce.utente)) {
+          for (const f of liberi) { try { f(voce.utente) } catch { /* chi ascolta si arrangia */ } }
+        }
       })
   }
+}
+
+/** Chi vuole sapere quando una persona non ha più lavoro in fila né in corso (il turno, F2). */
+const liberi: ((utente: string | null) => void)[] = []
+export function quandoLibero(f: (utente: string | null) => void): () => void {
+  liberi.push(f)
+  return () => { const i = liberi.indexOf(f); if (i >= 0) liberi.splice(i, 1) }
 }
 
 /**
@@ -998,33 +1007,19 @@ export function richiama(id: string) {
  * Si chiama all'avvio. Un compito «da Myynd» il cui lavoro è morto insieme al
  * processo non tornerà da solo: senza questa riga resta lì a girare per sempre,
  * e la lista mente a chi la guarda.
+ *
+ * Dal turno (F2) non torna più «aperto con un guaio»: torna in coda, e il
+ * turno lo riprende da solo — l'aveva affidato lei, e il computer che si è
+ * spento non è una sua decisione. Una carta già partita due volte e caduta
+ * tutte e due torna sua con il perché: una carta che fa cadere l'app non
+ * deve farla cadere a ogni avvio.
  */
-export function riprendiAppesi(pronto = claude.collegato): number {
-  const interrupted = store.compitiAppesi()
-  const reopened = store.riapriGliAppesi('Il lavoro si è interrotto. Riaffidamelo quando vuoi.')
-  // Only opt-in, read-only proactive email drafts recover automatically. A
-  // persistent attempt marker prevents a repeatedly crashing task looping.
-  if (!pronto()) return reopened
-  const path = join(cfg.cartella(), 'initiative-recovery.json')
-  let attempts: Record<string, number> = {}
-  try {
-    if (existsSync(path)) {
-      const value = JSON.parse(readFileSync(path, 'utf8'))
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return reopened
-      attempts = value
-    }
-  } catch { return reopened }
-  const candidates = interrupted.filter(c => c.origine === 'iniziativa' && c.modo === 'bozza' &&
-    !c.attrezzi && !c.consegna && !attempts[c.id] && fonteValida(c.doc)).slice(0, 2)
-  for (const c of candidates) {
-    attempts[c.id] = Date.now()
-    // Persist before queueing; after a crash, never duplicate uncertain work.
-    writeFileSync(path + '.tmp', JSON.stringify(attempts), { mode: 0o600 })
-    renameSync(path + '.tmp', path)
-    affida(c.id, 'bozza', false)
-    console.info(`myynd · worker · recovered-read-only-draft · ${c.id}`)
-  }
-  return reopened
+export const INTERROTTA_DUE_VOLTE = 'Si è interrotta due volte a metà. Riaffidamela quando vuoi.'
+export function riprendiAppesi(): number {
+  const { inCoda, ferme } = store.rimettiInCodaGliAppesi(2, INTERROTTA_DUE_VOLTE)
+  if (inCoda) console.info(`myynd · turno · ${inCoda} ${inCoda === 1 ? 'carta interrotta torna' : 'carte interrotte tornano'} in coda`)
+  if (ferme) console.info(`myynd · turno · ${ferme} ${ferme === 1 ? 'carta caduta due volte torna sua' : 'carte cadute due volte tornano sue'}`)
+  return inCoda + ferme
 }
 
 /**

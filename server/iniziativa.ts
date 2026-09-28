@@ -11,9 +11,33 @@ import { classificaAttenzione, contieneRichiesta, corpoAttuale } from './rilevan
 import { documentoVero } from './veri.ts'
 import * as progetti from './progetti.ts'
 import { FONTI_POSTA } from './connettori/registro.ts'
+import * as contratto from './contratto.ts'
 
-export const LIMITE = 2
-export const PAUSA = 3 * 3600_000
+/**
+ * Di serie una proposta non parte: entra in coda per il turno (F2), con il
+ * suo contratto. «Prepara ora» la vuole presto, e allora il turno la prende
+ * al primo giro. Chi chiama può passare un'altra mano (le prove, o chi vuole
+ * farla partire subito com'era prima).
+ */
+export function inCodaPerIlTurno(subito = false) {
+  return (id: string, modo: string) => {
+    const t: store.TurnoCompito = { da: 'myynd', quando: subito ? 'presto' : 'notte', dal: new Date().toISOString(), tentativi: 0 }
+    if (store.mettiCompitoInCoda(id, modo, t)) contratto.subito(id)
+  }
+}
+
+/*
+ * Il ritmo (F2). Erano due bozze al giorno, a tre ore l'una dall'altra, e
+ * partivano subito: il tetto serviva a non riempire la lista di lavoro mai
+ * chiesto mentre lei lavorava. Adesso una proposta entra «In coda» sulla
+ * bacheca e la fa partire il turno, di notte o quando lei non c'è, dentro il
+ * suo tetto di carte: qui resta solo quanto spesso nasce una proposta, e
+ * quante ne possono aspettare insieme.
+ */
+export const LIMITE = 6
+export const PAUSA = 30 * 60_000
+/** Le proposte di Myynd vive insieme (in coda, al lavoro, da guardare): oltre, non ne nascono altre. */
+export const PROPOSTE_VIVE_MAX = 4
 const ORIGINE = 'iniziativa'
 type Stato = { attiva: boolean; tentativi: number[]; ultimoControllo?: number }
 const file = () => join(cfg.cartella(), 'iniziativa.json')
@@ -83,7 +107,7 @@ export function fonteValida(id: string | null | undefined, adesso = Date.now()):
   return !d.filo || !store.stessoFilo(d.filo, [id], 100).some(p => p.inviato && Date.parse(p.quando ?? '') >= Date.parse(d.quando ?? ''))
 }
 const occupati = new Set<string>()
-export async function giro(adesso = Date.now(), esegui = compiti.affida, pronto = collegato): Promise<string | null> {
+export async function giro(adesso = Date.now(), esegui: (id: string, modo: string, nativa: boolean) => void = inCodaPerIlTurno(), pronto = collegato): Promise<string | null> {
   const conto = cfg.cartella()
   if (occupati.has(conto)) return null
   occupati.add(conto)
@@ -93,8 +117,9 @@ export async function giro(adesso = Date.now(), esegui = compiti.affida, pronto 
     const tentativi = s.tentativi.filter(t => t > adesso - 86400_000)
     if (tentativi.length >= LIMITE || tentativi.some(t => t > adesso - PAUSA)) return null
     const vivi = store.elencoCompiti()
-    // User-requested work gets the capacity first. Two unnoticed drafts are enough.
-    if (vivi.some(c => c.stato === 'delegato') || vivi.filter(c => c.origine === ORIGINE).length >= 2) return null
+    // Nascere non occupa la coda (la fa partire il turno): conta solo quante
+    // proposte aspettano già, perché una bacheca piena di cose mai chieste è rumore.
+    if (vivi.filter(c => c.origine === ORIGINE).length >= PROPOSTE_VIVE_MAX) return null
     const choices = candidatiDettagli(store.recenti(250), adesso)
     const docs = choices.map(x=>x.doc)
     const esclusi = store.docsIgnoratiDalFeed(docs)

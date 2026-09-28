@@ -1525,7 +1525,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     colonna(d, 'compiti', 'contratto', 'TEXT')
     colonna(d, 'compiti', 'prova', 'TEXT')
     colonna(d, 'compiti', 'diario', 'TEXT')
-  }
+  },
+  // 67 → 68 · F2 · il turno di una carta: chi l'ha messa in coda, quando, quante volte è partita.
+  d => colonna(d, 'compiti', 'turno', 'TEXT')
 ]
 
 /**
@@ -1617,7 +1619,7 @@ const COLONNE: Record<string, [string, string][]> = {
     ['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'],
     ['madre', 'TEXT'], ['contesto', 'TEXT'], ['revisione', 'TEXT'], ['priorita', 'TEXT'],
     ['ipotesi', 'TEXT'], ['domandeFatte', 'INTEGER NOT NULL DEFAULT 0'], ['voceScritta', 'TEXT'],
-    ['mandata', 'TEXT'], ['contratto', 'TEXT'], ['prova', 'TEXT'], ['diario', 'TEXT']
+    ['mandata', 'TEXT'], ['contratto', 'TEXT'], ['prova', 'TEXT'], ['diario', 'TEXT'], ['turno', 'TEXT']
   ],
   feed: [
     ['motivo', 'TEXT'], ['risposto', 'TEXT'], ['perche', 'TEXT'], ['contesto', 'TEXT'],
@@ -3606,6 +3608,27 @@ export type Compito = {
   prova?: ProvaLavoro | null
   /** Quello che ha fatto, passo per passo: si legge nel dettaglio della carta (F1). */
   diario?: VoceDiario[] | null
+  /** Il turno (F2): chi l'ha messa in coda per Myynd, come, e quante volte il turno l'ha fatta partire. */
+  turno?: TurnoCompito | null
+}
+
+/**
+ * Il turno di una carta (F2).
+ *
+ * `da`: chi l'ha messa in coda, lei o Myynd (una proposta nata dal suo
+ * materiale). `quando`: «presto» parte appena è il suo giorno; «notte» parte
+ * di notte o quando lei non c'è. `tentativi` conta le partenze del turno:
+ * una carta che si interrompe due volte non riparte da sola.
+ */
+export type TurnoCompito = {
+  da: 'tu' | 'myynd'
+  quando: 'presto' | 'notte'
+  dal: string
+  tentativi: number
+  /** L'ultima partenza data dal turno. */
+  ultimo?: string | null
+  /** L'ultima partenza era di notte: la carta finita lo dice («stanotte»). */
+  notte?: boolean
 }
 
 /** Le mani di una carta: dove può arrivare il lavoro, oltre a leggere. Nessuna manda niente. */
@@ -3633,7 +3656,7 @@ export type ProvaLavoro = {
 
 export type VoceDiario = {
   t: string
-  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto'
+  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto' | 'turno'
   dettaglio?: string
 }
 
@@ -3745,6 +3768,7 @@ function compitoDaRiga(r: Record<string, unknown>): Compito {
     contratto: jsonOppureNulla(r.contratto),
     prova: jsonOppureNulla(r.prova),
     diario: jsonOppureNulla(r.diario),
+    turno: jsonOppureNulla(r.turno),
     domandeFatte: Number(r.domandeFatte ?? 0),
     porta: portaDi(r.doc),
     consegna: r.consegna ? JSON.parse(String(r.consegna)) : null,
@@ -4132,8 +4156,9 @@ export function affidaCompito(id: string, modo: string) {
  * sarebbero una frase di nessuno.
  */
 export function riprendiCompito(id: string) {
+  // e il turno (F2): una carta tornata sua non è più in coda per nessuno
   db.prepare(`
-    UPDATE compiti SET modo = 'io', guaio = CASE WHEN stato = 'aperto' THEN NULL ELSE guaio END, aggiornato = ?, versione = versione + 1 WHERE id = ?
+    UPDATE compiti SET modo = 'io', guaio = CASE WHEN stato = 'aperto' THEN NULL ELSE guaio END, turno = NULL, aggiornato = ?, versione = versione + 1 WHERE id = ?
   `).run(new Date().toISOString(), id)
 }
 
@@ -4191,6 +4216,51 @@ export function riapriGliAppesi(guaio: string): number {
     WHERE stato = 'delegato' AND sparito IS NULL
   `).run(guaio, ora)
   return Number(r.changes)
+}
+
+/**
+ * Una carta in coda per Myynd (F2): aperta, di Myynd, senza guaio, con il suo
+ * turno. Solo da aperta: una domanda o un lavoro consegnato non si rimettono
+ * in coda, si rispondono o si cambiano. Torna vero se l'ha messa.
+ */
+export function mettiCompitoInCoda(id: string, modo: string, turno: TurnoCompito): boolean {
+  const r = db.prepare(`
+    UPDATE compiti SET stato = 'aperto', modo = ?, guaio = NULL, turno = ?, aggiornato = ?, versione = versione + 1
+    WHERE id = ? AND stato = 'aperto' AND sparito IS NULL
+  `).run(modo, JSON.stringify(turno), new Date().toISOString(), id)
+  return Number(r.changes) > 0
+}
+
+/** Il turno di una carta, riscritto (F2): la partenza, i tentativi. */
+export function scriviTurnoCompito(id: string, turno: TurnoCompito | null) {
+  db.prepare('UPDATE compiti SET turno = ? WHERE id = ?').run(turno ? JSON.stringify(turno) : null, id)
+}
+
+/**
+ * Le carte rimaste a metà quando il processo è morto (F2): tornano in coda
+ * per Myynd, e il turno le riprende da solo. Una carta che si era già
+ * interrotta `massimo` volte non torna in coda: torna sua, con il perché —
+ * una carta che fa cadere l'app a ogni giro non deve farla cadere per sempre.
+ * Torna quante sono tornate in coda e quante sono tornate sue.
+ */
+export function rimettiInCodaGliAppesi(massimo: number, guaio: string): { inCoda: number; ferme: number } {
+  const ora = new Date().toISOString()
+  const appese = db.prepare(`SELECT id, modo, turno FROM compiti WHERE stato = 'delegato' AND sparito IS NULL`).all() as { id: string; modo: string | null; turno: string | null }[]
+  let inCoda = 0, ferme = 0
+  for (const a of appese) {
+    const t = jsonOppureNulla(a.turno) as TurnoCompito | null
+    const tentativi = t?.tentativi ?? 0
+    if (tentativi >= massimo) {
+      db.prepare(`UPDATE compiti SET stato = 'aperto', guaio = ?, chiesto = NULL, aggiornato = ?, versione = versione + 1 WHERE id = ?`).run(guaio, ora, a.id)
+      ferme++
+      continue
+    }
+    const turno: TurnoCompito = { da: t?.da ?? 'tu', quando: 'presto', dal: t?.dal ?? ora, tentativi, ultimo: t?.ultimo ?? null, notte: t?.notte ?? false }
+    db.prepare(`UPDATE compiti SET stato = 'aperto', modo = ?, guaio = NULL, chiesto = NULL, turno = ?, aggiornato = ?, versione = versione + 1 WHERE id = ?`)
+      .run(a.modo && a.modo !== 'io' ? a.modo : 'tutto', JSON.stringify(turno), ora, a.id)
+    inCoda++
+  }
+  return { inCoda, ferme }
 }
 
 /**

@@ -3374,6 +3374,29 @@ const EN: Record<string, string> = {
   'Ti chiede una cosa': 'It asks you one thing',
   'Il lavoro consegnato': 'The finished work',
   'da finire': 'to finish',
+  'Stanotte': 'Tonight',
+  'Fatta stanotte': 'Overnight',
+  'Fatta stanotte, mentre dormivi': 'Done overnight, while you slept',
+  'Myynd non lavora la bacheca da solo.': 'Myynd isn’t working the board on its own.',
+  'Lavora la notte': 'Working through the night',
+  'Riprendi il turno': 'Resume',
+  'Pausa di un’ora': 'Pause for an hour',
+  'Prossima': 'Next',
+  'Aspetta il turno': 'Waiting for the shift',
+  'Quando non ci sei': 'When you’re away',
+  'Turno di notte': 'Night shift',
+  'Spento': 'Off',
+  'Myynd lavora la bacheca da solo': 'Myynd works the board on its own',
+  'Carte in una giornata': 'Cards in a day',
+  'La notte': 'The night',
+  'Fuoco, notizie, autonomia, turno, osservazione, tono': 'Focus, news, autonomy, night shift, observation, tone',
+  'Fuoco, notizie, autonomia, turno, tono': 'Focus, news, autonomy, night shift, tone',
+  'Acceso o spento?': 'On or off?',
+  'Quante carte in una giornata?': 'How many cards in a day?',
+  'Un’ora come 22:00.': 'A time like 22:00.',
+  'La notte comincia e finisce alla stessa ora.': 'The night starts and ends at the same time.',
+  'Questa carta non si mette in coda: rispondile, o cambiala.': 'This card can’t go back in the queue: answer it, or change it.',
+  'Si è interrotta due volte a metà. Riaffidamela quando vuoi.': 'It stopped halfway twice. Hand it back to me whenever you want.',
   'Riprendila': 'Take it back',
   'Fatto vuol dire': 'Done means',
   'Lo scrivo…': 'Writing it…',
@@ -4040,6 +4063,19 @@ export const frasi = {
   /** La prova sotto il lavoro: controllato contro il suo «fatto». */
   provaRegge: (perche: string) => corrente === 'en' ? `Checked against done means: ${perche}` : `Controllata contro il suo «fatto»: ${perche}`,
   provaNonRegge: (perche: string) => corrente === 'en' ? `Not done yet: ${perche}` : `Non ancora fatta: ${perche}`,
+  /** F2 · il turno in una riga. */
+  carteDelTurno: (n: number, max: number) => corrente === 'en' ? `${n} of ${max} today` : `${n} di ${max} oggi`,
+  stanotteDalle: (ora: string) => corrente === 'en' ? `Tonight from ${ora}` : `Stanotte dalle ${ora}`,
+  inPausaFino: (ora: string) => corrente === 'en' ? `Paused until ${ora}` : `In pausa fino alle ${ora}`,
+  stanotteFatte: (fatte: number, attende: number) => corrente === 'en'
+    ? `Last night: ${fatte} done${attende ? `, ${attende} need${attende === 1 ? 's' : ''} you` : ''}`
+    : `Stanotte: ${fatte === 1 ? '1 fatta' : `${fatte} fatte`}${attende ? `, ${attende === 1 ? '1 aspetta te' : `${attende} aspettano te`}` : ''}`,
+  /** La notte prima di un giorno, «AAAA-MM-GG»: «The night before Thursday». */
+  laNottePrima: (giorno: string) => {
+    const d = new Date(`${giorno}T12:00:00`)
+    const nome = Number.isNaN(d.getTime()) ? giorno : d.toLocaleDateString(corrente === 'en' ? 'en-US' : 'it-IT', { weekday: 'long' })
+    return corrente === 'en' ? `The night before ${nome}` : `La notte prima di ${nome}`
+  },
   // — F1: fine —
 
   // — P5: inizio —

@@ -91,6 +91,7 @@ const store = await import(join(SERVER, 'store.ts'))
 const progetti = await import(join(SERVER, 'progetti.ts'))
 const riferimento = await import(join(SERVER, 'riferimento.ts'))
 const chiavi = await import(join(SERVER, 'ordine.ts'))
+const regoleTurno = await import(join(SERVER, 'turno-regole.ts'))
 
 const scena = JSON.parse(readFileSync(fileScena, 'utf8')) as Scena
 
@@ -103,6 +104,21 @@ function tempo(v: unknown): string {
   return new Date(Date.now() + (m[1] === '-' ? -ms : ms)).toISOString()
 }
 const json = (v: unknown) => v === undefined || v === null ? null : typeof v === 'string' ? v : JSON.stringify(v)
+/** «+1d» → il giorno locale di domani, «AAAA-MM-GG»; un giorno già scritto resta com'è. */
+function giornoRelativo(v: string): string {
+  const m = v.match(/^([+-])(\d+)d$/)
+  if (!m) return v
+  const d = new Date(); d.setDate(d.getDate() + (m[1] === '-' ? -1 : 1) * Number(m[2]))
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+/** Un turno di carta con i tempi relativi («-2h») resi veri. */
+function turnoVero(t: unknown): string | null {
+  if (!t || typeof t !== 'object') return null
+  const x = { ...(t as Record<string, unknown>) }
+  if (typeof x.dal === 'string') x.dal = tempo(x.dal)
+  if (typeof x.ultimo === 'string') x.ultimo = tempo(x.ultimo)
+  return JSON.stringify(x)
+}
 
 const conto = await conti.registra('sviluppo@myynd.local', 'sviluppo-non-in-produzione')
 if (!conto.ok) esci(`il conto non nasce: ${conto.errore}`)
@@ -185,7 +201,8 @@ chi.dentro(conto.id, () => {
       // — P2: inizio —
       ...(c.origine ? { origine: String(c.origine) } : {}),
       // — P2: fine —
-      ...(c.giorno ? { giorno: String(c.giorno) } : {}), ...(c.ora ? { ora: String(c.ora) } : {})
+      // un giorno relativo («+1d», «-2d») diventa il giorno locale: le scene non invecchiano
+      ...(c.giorno ? { giorno: giornoRelativo(String(c.giorno)) } : {}), ...(c.ora ? { ora: String(c.ora) } : {})
     })
     const campi: [string, unknown][] = [
       ['stato', c.stato], ['modo', c.modo], ['risultato', c.risultato], ['chieste', json(c.chieste)],
@@ -207,7 +224,7 @@ chi.dentro(conto.id, () => {
       ['email', json(c.email)], ['voceScritta', json(c.voceScritta)], ['mandata', json(c.mandata)], ['consegna', json(c.consegna)],
       ['domandeFatte', typeof c.domandeFatte === 'number' ? c.domandeFatte : undefined], ['guaio', (c.guaio as string) ?? undefined],
       // — F1: il contratto, la prova e il diario di una carta —
-      ['contratto', json(c.contratto)], ['prova', json(c.prova)], ['diario', json(c.diario)],
+      ['contratto', json(c.contratto)], ['prova', json(c.prova)], ['diario', json(c.diario)], ['turno', turnoVero(c.turno)],
       ['aggiornato', c.aggiornato ? tempo(c.aggiornato) : undefined], ['priorita', (c.priorita as string) ?? undefined]
     ]
     for (const [k, v] of p3) {
@@ -217,6 +234,10 @@ chi.dentro(conto.id, () => {
     // — P3: fine —
   }
 
+  // F2 · quante carte il turno ha già fatto partire oggi
+  if (typeof (scena as { turnoAvviate?: unknown }).turnoAvviate === 'number') {
+    writeFileSync(join(cfg.cartella(), 'turno.json'), JSON.stringify({ giornata: regoleTurno.inizioGiornata(new Date()).toISOString(), avviate: (scena as { turnoAvviate: number }).turnoAvviate }))
+  }
   for (const d of scena.domande ?? []) {
     store.apriDomanda({ tema: d.tema, testo: d.testo, spunto: [], progetto: progetto(d.progetto) })
   }
