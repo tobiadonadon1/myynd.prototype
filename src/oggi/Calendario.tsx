@@ -359,9 +359,6 @@ function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, 
   )
 }
 
-/** Quanti giorni scorre la lista di destra: oggi e i sei dopo. */
-const GIORNI_DI_LATO = 7
-
 /**
  * La settimana, sulla destra della prima pagina, quando la finestra è larga.
  *
@@ -370,22 +367,24 @@ const GIORNI_DI_LATO = 7
  * white space.» Le stesse pagine del quaderno, più corte: si scrive, si
  * spunta, si passa a Myynd, senza lasciare la prima pagina.
  *
- * Erano oggi e domani, in un riquadro che cresceva con le righe fino a
- * uscire dalla finestra: «it does not scroll… it just expands in size».
- * Adesso il riquadro è alto quanto la finestra, sempre, e dentro si scorre
- * giù per i giorni, come su TeuxDeux: oggi in cima, poi i sei dopo.
+ * Quanti giorni lo sceglie lui nelle Preferenze, di serie tre: «Monday,
+ * Tuesday, Wednesday. That's it.» Il riquadro comincia all'altezza della
+ * prima carta del feed, non in cima alla pagina, è alto quanto le sue righe,
+ * e se non ci stanno si scorre dentro: non esce mai dalla finestra.
  */
-export function ListaDiLato({ l, lingua, apri, modifica, vaiALista }: {
+export function ListaDiLato({ l, lingua, giorni: quanti = 3, apri, modifica, vaiALista }: {
   l: Lista; lingua: string; vaiALista: () => void
+  /** Quanti giorni, oggi compreso: da 1 a 7. */
+  giorni?: number
 } & Apri) {
   const oggi = giornoLocale()
   const progetti = useProgetti()
   const locale = lingua === 'it' ? 'it-IT' : 'en-US'
-  const giorni = Array.from({ length: GIORNI_DI_LATO }, (_, i) => spostaGiorno(oggi, i))
+  const giorni = Array.from({ length: Math.min(7, Math.max(1, quanti)) }, (_, i) => spostaGiorno(oggi, i))
   return (
     <aside className="quaderno-lato" aria-label={t('Da fare')}>
       {giorni.map(g => (
-        <Giorno key={g} l={l} g={g} oggi={oggi} locale={locale} progetti={progetti} compatto minime={g === oggi ? 3 : 2}
+        <Giorno key={g} l={l} g={g} oggi={oggi} locale={locale} progetti={progetti} compatto minime={g === oggi ? 2 : 1}
           righe={righeDelGiorno(l.compiti, g, oggi)} fatte={g === oggi ? fatteDelGiorno(l.chiusi, g) : []} apri={apri} modifica={modifica} />
       ))}
       <button type="button" className="quaderno-tutto" onClick={vaiALista}>{t('Tutta la settimana')} ›</button>

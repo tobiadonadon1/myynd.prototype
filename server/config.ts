@@ -768,6 +768,8 @@ export type Config = {
   fuso?: string
   /** Dopo quante ore una voce chiusa sparisce dall'elenco. 0 = mai. */
   oreFatte?: number
+  /** Quanti giorni mostra la lista accanto al feed, quando la finestra è larga: da 1 a 7, di serie 3. */
+  giorniLato?: number
   /** Il tetto di token al giorno per il lavoro di frontiera. Zero o assente: nessuno. */
   tetto?: number
   /**
@@ -1205,6 +1207,7 @@ export function pubblica(c: Config = leggi()) {
     tema: c.tema ?? 'sistema',
     fuso: c.fuso ?? null,
     oreFatte: c.oreFatte ?? 48,
+    giorniLato: c.giorniLato ?? 3,
     tetto: c.tetto ?? 0,
     giro: !!c.giro,
     argomenti: c.argomenti ?? '',

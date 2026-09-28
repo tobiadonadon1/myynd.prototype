@@ -1434,6 +1434,8 @@ const EN: Record<string, string> = {
   'Con quale modello ragiona': 'Which model it thinks with',
   'Lingua': 'Language',
   'Aspetto': 'Appearance',
+  'Giorni accanto al feed': 'Days next to the feed',
+  'I giorni vanno da uno a sette.': 'Days go from one to seven.',
   'Chiaro di giorno, scuro di sera. «Sistema» segue il tuo computer.': 'Light by day, dark at night. “System” follows your computer.',
   'Sistema': 'System',
   'Chiaro': 'Light',

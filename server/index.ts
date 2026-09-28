@@ -931,7 +931,7 @@ const profilo = async (req: express.Request, res: express.Response) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giorniLato', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
   // Con l'orologio fermo di una scena (MYYND_DEV=1 e MYYND_ADESSO), il fuso
@@ -999,6 +999,11 @@ const profilo = async (req: express.Request, res: express.Response) => {
       return res.status(400).json({ errore: 'Le ore devono essere un numero fra 0 e un anno.' })
     }
     patch.oreFatte = n
+  }
+  if (patch.giorniLato !== undefined) {
+    const n = Number(patch.giorniLato)
+    if (!Number.isInteger(n) || n < 1 || n > 7) return res.status(400).json({ errore: 'I giorni vanno da uno a sette.' })
+    patch.giorniLato = n
   }
   if (patch.tetto !== undefined) {
     const n = Math.floor(Number(patch.tetto))

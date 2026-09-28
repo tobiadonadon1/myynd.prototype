@@ -688,6 +688,9 @@ export function Preferenze({ v }: { v: Vals }) {
             <Scelte etichetta={t('Aspetto')} mostraEtichetta attivazione="automatica"
               opzioni={v.temi.map(x => ({ id: x.id, nome: x.label }))}
               scelta={v.temi.find(x => x.scelto)?.id ?? null} scegli={id => v.temi.find(x => x.id === id)?.onClick()} />
+            <Scelte etichetta={t('Giorni accanto al feed')} mostraEtichetta attivazione="automatica"
+              opzioni={[1, 2, 3, 4, 5, 6, 7].map(n => ({ id: String(n), nome: String(n) }))}
+              scelta={String(v.giorniLato)} scegli={id => v.scegliGiorniLato(Number(id))} />
           </Carta>
           {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
           {d && <LApp />}

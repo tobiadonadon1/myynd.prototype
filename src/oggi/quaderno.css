@@ -90,9 +90,10 @@
 .quaderno-righe[data-colonne] {display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));column-gap:26px;}
 
 /* La colonna di destra della prima pagina, quando la finestra è larga. */
-/* alta quanto la finestra, sempre (i margini della colonna li dà App.tsx): dentro si scorre, fuori non cresce.
-   `top:0` e non il margine: Chromium conta l'appiccicato dal bordo del contenuto, già sotto il margine */
-.quaderno-lato {position:sticky;top:0;box-sizing:border-box;display:flex;flex-direction:column;gap:26px;flex:1 1 360px;min-width:340px;max-width:560px;height:calc(100dvh - var(--lato-sopra, 46px) - var(--lato-sotto, 30px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 20px 16px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
+/* Comincia all'altezza della prima carta del feed (`--lato-scarto`, misurato in App.tsx sotto il titolo)
+   e resta lì quando la pagina scorre; alta quanto le sue righe, mai oltre la finestra: dentro si scorre.
+   `top` conta dal bordo del contenuto della colonna, già sotto il suo margine: per questo non c'è `--lato-sopra`. */
+.quaderno-lato {position:sticky;top:var(--lato-scarto, 0px);margin-top:var(--lato-scarto, 0px);box-sizing:border-box;display:flex;flex-direction:column;gap:22px;flex:1 1 360px;min-width:340px;max-width:560px;max-height:calc(100dvh - var(--lato-sopra, 46px) - var(--lato-scarto, 0px) - var(--lato-sotto, 30px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 20px 16px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
 .quaderno-lato button {font-family:inherit;cursor:pointer;}
 .quaderno-lato > * {flex:none;}
 .quaderno-tutto {align-self:flex-start;border:0;background:transparent;padding:0;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.55);}

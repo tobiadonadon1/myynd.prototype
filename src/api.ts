@@ -64,6 +64,8 @@ export type Stato = {
     /** Il fuso in cui ragiona il server per questa persona; `null` finché il browser non glielo dice. */
     fuso?: string | null
     oreFatte: number
+    /** Quanti giorni mostra la lista accanto al feed: da 1 a 7. */
+    giorniLato?: number
     /** Token al giorno oltre i quali Myynd smette di chiamare il modello. Zero = nessun tetto. */
     tetto: number
     giro: boolean

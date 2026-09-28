@@ -1923,6 +1923,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         api.profilo({ tema: x.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })
       }
     })),
+    // quanti giorni nella lista accanto al feed: «Monday, Tuesday, Wednesday. That's it.»
+    giorniLato: stato.config.giorniLato ?? 3,
+    scegliGiorniLato: (n: number) => {
+      setStato(s => ({ ...s, config: { ...s.config, giorniLato: n } }))
+      api.profilo({ giorniLato: n }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })
+    },
     tenute: TENUTE.map(x => ({
       ...x, label: t(x.label),
       scelto: (stato.config.oreFatte ?? 48) === x.ore,

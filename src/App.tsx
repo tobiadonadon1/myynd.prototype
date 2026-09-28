@@ -366,6 +366,23 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
    * I 64 sono le due imbottiture della colonna centrale, i 36 lo spazio fra.
    */
   const conLista = larghezza - colonna - 64 >= 760 + 36 + 340
+  /*
+   * Dove comincia la lista: all'altezza della prima carta del feed, non in
+   * cima alla pagina. «I told you already it has to start from where the
+   * first briefing card starts.» La testa del feed (il titolo, la data, le
+   * pillole) cambia altezza con il titolo che va a capo: si misura.
+   */
+  const filaCasa = useRef<HTMLDivElement>(null)
+  const [scartoLato, setScartoLato] = useState(0)
+  useLayoutEffect(() => {
+    const testa = conLista ? filaCasa.current?.querySelector<HTMLElement>('[data-testa-casa]') : null
+    if (!testa) return
+    const misura = () => setScartoLato(Math.round(testa.offsetHeight))
+    misura()
+    const o = new ResizeObserver(misura)
+    o.observe(testa)
+    return () => o.disconnect()
+  }, [conLista, v.isMyynd])
   const [foglioCasa, setFoglioCasa] = useState<string | null>(null)
   const [dettaglioCasa, setDettaglioCasa] = useState<string | null>(null)
   /** Il lavoro di una carta, aperto nel foglio sopra la prima pagina; senza un lavoro, il dettaglio. */
@@ -624,13 +641,15 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         {v.isMyynd && (conLista ? (
           // tutta la larghezza che c'è, fino a feed + lista piena: la lista si
           // allarga nello spazio vuoto a destra invece di lasciarlo vuoto
-          // i margini della colonna vanno alla lista, che è alta quanto la finestra meno quelli
-          <div style={{
+          // i margini della colonna e l'altezza della testa del feed vanno alla lista:
+          // comincia dove comincia la prima carta, e non esce dalla finestra
+          <div ref={filaCasa} style={{
             display: 'flex', gap: 36, alignItems: 'flex-start', width: '100%', maxWidth: 760 + 36 + 560,
-            '--lato-sopra': `${(rail ? 16 : 22) + striscia}px`, '--lato-sotto': `${rail ? 24 : 30}px`
+            '--lato-sopra': `${(rail ? 16 : 22) + striscia}px`, '--lato-sotto': `${rail ? 24 : 30}px`,
+            '--lato-scarto': `${scartoLato}px`
           } as CSSProperties}>
             <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato apriLavoro={apriLavoroCasa} />
-            <ListaDiLato l={lista} lingua={stato.config.lingua ?? 'en'} vaiALista={() => v.goOggi()}
+            <ListaDiLato l={lista} lingua={stato.config.lingua ?? 'en'} giorni={v.giorniLato} vaiALista={() => v.goOggi()}
               apri={apriLavoroCasa} modifica={c => setDettaglioCasa(c.id)} />
           </div>
         ) : <Myynd v={v} lista={lista} blocchi={blocchi} apriLavoro={apriLavoroCasa} />)}

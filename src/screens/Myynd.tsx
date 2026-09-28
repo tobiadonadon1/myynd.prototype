@@ -1277,7 +1277,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Titolo sopra, data sotto — identico alla finestra dell'app. Sono due
           facce della stessa cosa e devono aprirsi con la stessa immagine. */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, padding: '52px 4px 26px' }}>
+      {/* `data-testa-casa`: la lista accanto al feed comincia dove finisce questa testa (App.tsx) */}
+      <div data-testa-casa style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, padding: '52px 4px 26px' }}>
         <div style={{ flex: '1 1 240px', minWidth: 0 }}>
           <h1 style={{
             fontSize: 40, lineHeight: 1.15, letterSpacing: '-.032em', maxWidth: 600,
