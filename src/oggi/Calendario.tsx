@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type Compito, type Progetto } from '../api'
 import { frasi, t } from '../lingua'
-import { Cestino } from '../ui'
+import { Marchio } from '../components/Marchio'
 import { coloreProgetto } from '../colori-progetto'
 import type { Lista } from './useCompiti'
 import { dataLocale, giornoCompito, giornoLocale, secchioDelGiorno, spostaGiorno } from './giorni'
@@ -321,19 +321,30 @@ function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, 
           <span className="quaderno-parole">{c.testo}</span>
         </button>
       )}
-      {stato && !scrivo && (
-        <span className={`quaderno-stato ${stato.tipo}`}>
-          {stato.tipo === 'lavora' && <i aria-hidden="true" />}
-          {stato.giorno ? frasi.laNottePrima(stato.giorno) : t(stato.chiave)}
-        </span>
-      )}
+      {/*
+        La fine della riga: un posto fisso, stretto, dove sta la parola di chi
+        aspetta chi e, sotto la mano, i due gesti. «When I overlap it… items
+        don't overlap»: prima i gesti galleggiavano sopra il testo e lo
+        coprivano, con un suggerimento del sistema sopra. Adesso si danno il
+        cambio nello stesso posto, e il testo non si tocca mai. Il cestino sta
+        nel dettaglio.
+      */}
       {!scrivo && (
-        <span className="quaderno-gesti">
-          {siScrive && (!c.modo || c.modo === 'io') && (
-            <button type="button" className="quaderno-a-myynd" onClick={() => void l.mettiInCoda(c.id)} title={t('A Myynd')}>{t('A Myynd')}</button>
+        <span className="quaderno-fine">
+          {stato && (
+            <span className={`quaderno-stato ${stato.tipo}`}>
+              {stato.tipo === 'lavora' && <i aria-hidden="true" />}
+              {stato.giorno ? frasi.laNottePrima(stato.giorno) : t(stato.chiave)}
+            </span>
           )}
-          <button type="button" className="quaderno-piu" onClick={() => modifica(c)} aria-label={`${t('Dettagli attività')}: ${c.testo}`} title={t('Dettagli attività')}>⋯</button>
-          <Cestino fai={() => l.elimina(c.id)} titolo={t('Toglila')} dim={22} icona={11} subito />
+          <span className="quaderno-gesti">
+            {siScrive && (!c.modo || c.modo === 'io') && (
+              <button type="button" className="quaderno-icona" onClick={() => void l.mettiInCoda(c.id)} aria-label={`${t('A Myynd')}: ${c.testo}`}>
+                <Marchio dim={14} animato={false} />
+              </button>
+            )}
+            <button type="button" className="quaderno-icona" onClick={() => modifica(c)} aria-label={`${t('Dettagli attività')}: ${c.testo}`}>⋯</button>
+          </span>
         </span>
       )}
     </li>

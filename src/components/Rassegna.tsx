@@ -220,9 +220,9 @@ export function Rassegna() {
   const importante = notizie.some(n => n.importante && !viste.includes(n.id))
 
   return <>
-    <button type="button" className={`news-pill${importante && !aperta ? ' news-pill-salta' : ''}`} onClick={() => { setAperta(true); void carica() }} aria-haspopup="dialog" aria-expanded={aperta}
+    <button type="button" className="news-pill" onClick={() => { setAperta(true); void carica() }} aria-haspopup="dialog" aria-expanded={aperta}
       aria-label={importante ? t('Notizie importanti') : fresca ? t('Notizie nuove') : t('Notizie')}>
-      <span className={`news-dot${notizie.length ? ' has-news' : ''}${fresca ? ' pallino-salta' : ''}`} aria-hidden="true" />{t('Notizie')}
+      <span className={`news-dot${(fresca || importante) ? ' has-news' : ''}`} aria-hidden="true" />{t('Notizie')}
     </button>
     {aperta && <SalaNotizie notizie={notizie.length ? notizie : recenti} archivio={!notizie.length && !!recenti.length} quando={quando} carico={carico || aggiornando} guaio={guaio}
       aggiorna={() => void carica(true)} togli={togli} occupata={occupata ?? (carico ? 'loading' : null)} chiudi={() => setAperta(false)} />}

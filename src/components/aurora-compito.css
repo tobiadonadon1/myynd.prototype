@@ -2,96 +2,73 @@
 .task-aurora-row { border-radius: 18px; }
 .task-aurora-host > :not(.task-aurora) { position: relative; z-index: 1; }
 /*
- * Il fuoco sulla riga a cui sta lavorando. (21 settembre 2026)
+ * La riga su cui Myynd sta lavorando. (28 settembre 2026)
  *
- * Prima la riga affidata portava un velo di rame a un quarto di opacità e
- * un glifo di dodici pixel accanto al titolo. Di notte il velo spariva del
- * tutto, e le sue parole sono state queste: «the only thing that was telling
- * me that he was working was a tiny little square on the top left that kind
- * of moved, which is not enough». Poi due immagini: un arancio caldo in cima
- * che scende in rosso e si spegne nel buio, tagliato da striature verticali
- * — vetro rigato, luce dietro. «With the same texture, with the same feel,
- * of course, alive.»
+ * Era un fuoco di righe verticali: «it looks like a barcode moving». Adesso
+ * tre strati quieti — un velo di rame che respira, una lucentezza larga che
+ * attraversa la riga, un filo sottile sul bordo di sotto — e quando finisce
+ * il filo si completa, la riga prende per un attimo il verde di «fatto» e si
+ * spegne. Il perché di ogni strato sta in `AuroraCompito.tsx`.
  *
- * Quindi la riga intera diventa quel fuoco. I colori sono quelli
- * dell'identità spinti fino in fondo: l'ambra e il rame in cima, il rame
- * cupo a metà, il bruno quasi nero della notte in basso. Qui sta solo il
- * fondo, fermo; le righe e la luce che ci passa dentro le disegna la tela in
- * `AuroraCompito.tsx`, dove è scritto anche perché.
- *
- * La sera stessa, in pagina, due correzioni sue. «I like the colors… I
- * just wanted it more transparent so that it wasn't that disruptive»: lo
- * strato sta al sessanta per cento, così la carta sotto traspare davvero, e
- * il testo resta quello del tema — inchiostro di giorno, crema di notte —
- * senza ridipingerlo in crema come prima: a questa trasparenza il crema
- * sull'avorio non si leggeva più. E l'animazione: non più due strati che
- * scorrono in versi opposti (vedi la tela).
- *
- * Qui sta il fondo, e sta fermo: l'ambra in cima, il rame, il bruno quasi
- * nero in basso. Tutto quello che si muove — le righe che scivolano, il
- * fascio che le attraversa, il guizzo delle fiamme, il fumo che sale, le
- * braci — lo disegna la tela in `AuroraCompito.tsx`, dove è scritto anche
- * perché ognuna di quelle cose si muove in quel verso e non in un altro. Il
- * fondo è in CSS e non nella tela perché così la riga si vede accesa anche
- * nel fotogramma prima che JavaScript parta.
- *
- * Nessuna barra che avanza: dice «sta succedendo», non «quanto manca» —
- * quello lo dice a parole la riga del passo. Con il moto ridotto resta il
- * fuoco fermo, che si distingue lo stesso da una riga a riposo.
+ * Il testo resta quello del tema: il velo è chiaro abbastanza da non doverlo
+ * ridipingere, di giorno come di notte.
  */
 .task-aurora-host[data-working] { --riga-sopra: transparent; }
 .task-aurora {
   position: absolute; inset: 0; z-index: 0; border-radius: inherit;
   overflow: hidden; pointer-events: none; contain: paint;
-  opacity: .6;
-  box-shadow: inset 0 0 0 1px rgba(255,200,150,.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--rame-rgb),.22);
 }
-/* il fondo su un suo strato, perché quando il lavoro finisce si raffredda per
-   conto proprio mentre la tela sopra finisce la sua corsa */
-.task-aurora::before {
-  content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(to bottom,
-    #E9A35C 0%, #DA7A45 6%, #C4553A 13%, #A03826 21%, #732A19 34%, #3E1A10 52%, #22110B 70%, #1A0D08 100%);
+.task-aurora-velo {
+  position: absolute; inset: 0; border-radius: inherit;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(var(--rame-rgb),.16), transparent 60%),
+    radial-gradient(90% 120% at 100% 100%, rgba(var(--rame-rgb),.10), transparent 65%),
+    rgba(var(--rame-rgb),.05);
+  animation: aurora-respira 6s ease-in-out infinite;
 }
-.task-aurora canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.task-aurora-luce {
+  position: absolute; top: -40%; bottom: -40%; left: -45%; width: 45%;
+  background: linear-gradient(100deg, transparent 0%, rgba(var(--luce-rgb),.0) 20%, rgba(var(--luce-rgb),.55) 50%, rgba(var(--luce-rgb),.0) 80%, transparent 100%);
+  filter: blur(14px); transform: skewX(-14deg); opacity: .55;
+  animation: aurora-passa 3.6s cubic-bezier(.45,.05,.35,1) infinite;
+}
+.task-aurora-filo {
+  position: absolute; left: 14px; right: 14px; bottom: 0; height: 2px; border-radius: 99px;
+  background: rgba(var(--rame-rgb),.14); overflow: hidden;
+}
+.task-aurora-filo::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 30%; border-radius: 99px;
+  background: linear-gradient(90deg, transparent, var(--rame), transparent);
+  animation: aurora-filo 1.9s cubic-bezier(.55,.1,.35,1) infinite;
+}
+@keyframes aurora-respira { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+@keyframes aurora-passa { 0% { left: -45%; } 62%, 100% { left: 110%; } }
+@keyframes aurora-filo { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
 .task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(var(--inchiostro-rgb),.62); overflow-wrap: anywhere; }
 
 /*
- * Quando il lavoro finisce. (21 settembre 2026)
- *
- * Un secondo e quattro decimi, una volta sola. Il fascio si raccoglie e si
- * ferma, il fuoco si raffredda dall'ambra a un rame quieto, le righe si
- * posano e svaniscono: quello lo fa la tela. Qui si spegne lo strato intero,
- * con un soffio più acceso a metà — il calore che si raccoglie prima di
- * andarsene — e poi giù fino a niente. Non è un avviso che compare: è una
- * cosa che smette. Alla fine il componente chiama `onFinita` e la riga passa
- * allo stato dopo.
- *
- * Lo spegnimento sta sullo strato e non sul fondo, e non è un dettaglio: con
- * il fondo che se ne andava per conto suo, sulla carta chiara restava per due
- * decimi di secondo la tela da sola — righe accese e fumo scuro su un bianco
- * quasi pieno, che sembrava un guasto. Tela e fondo se ne vanno insieme,
- * sempre; il raffreddamento è solo un filtro, che non toglie niente da sotto.
+ * Quando il lavoro finisce: un secondo e due decimi, una volta sola. Il filo
+ * si riempie da un capo all'altro, il velo passa al verde di «fatto» e tutto
+ * si spegne. La durata è `DURATA_POSA_MS` in `AuroraCompito.tsx`.
  */
-.task-aurora[data-fase="finita"] { animation: fuoco-si-posa 1.4s cubic-bezier(.33,0,.15,1) forwards; }
-.task-aurora[data-fase="finita"]::before { animation: fuoco-si-raffredda 1.4s cubic-bezier(.33,0,.15,1) forwards; }
-@keyframes fuoco-si-posa {
-  0% { opacity: .6; }
-  35% { opacity: .62; }
-  70% { opacity: .4; }
+.task-aurora[data-fase="finita"] { animation: aurora-si-posa 1.2s cubic-bezier(.33,0,.15,1) forwards; }
+.task-aurora[data-fase="finita"] .task-aurora-luce { animation: none; opacity: 0; transition: opacity .3s; }
+.task-aurora[data-fase="finita"] .task-aurora-velo {
+  animation: none;
+  background: rgba(var(--salvia-rgb),.14);
+  transition: background .35s ease;
+}
+.task-aurora[data-fase="finita"] .task-aurora-filo::after { animation: aurora-filo-pieno .5s cubic-bezier(.3,.7,.3,1) forwards; background: var(--salvia); }
+@keyframes aurora-filo-pieno { from { left: 0; width: 30%; transform: none; } to { left: 0; width: 100%; transform: none; } }
+@keyframes aurora-si-posa {
+  0%, 55% { opacity: 1; }
   100% { opacity: 0; }
 }
-@keyframes fuoco-si-raffredda {
-  0% { filter: none; }
-  30% { filter: brightness(1.14); }
-  60% { filter: brightness(.95) saturate(.8); }
-  100% { filter: brightness(.74) saturate(.55); }
-}
 @media (prefers-reduced-motion: reduce) {
-  .task-aurora-host[data-working] svg rect { animation: none !important; }
-  /* niente da guardare: la riga si spegne e basta */
+  .task-aurora-velo, .task-aurora-luce, .task-aurora-filo::after { animation: none; }
+  .task-aurora-luce { display: none; }
   .task-aurora[data-fase="finita"] { opacity: 0; animation: none; }
-  .task-aurora[data-fase="finita"]::before { animation: none; }
 }
 
 /*

@@ -48,7 +48,7 @@
 .quaderno-spunta:hover {border-color:var(--inchiostro);}
 .quaderno-riga.di-pronta .quaderno-spunta,.quaderno-riga.di-chiede .quaderno-spunta,.quaderno-riga.di-dafinire .quaderno-spunta {border-color:var(--rame);border-width:2px;opacity:1;}
 .quaderno-spunta.fatta {display:inline-grid;place-items:center;border:0;opacity:1;font-size:9px;background:var(--fatto-fondo, rgba(92,118,96,.16));color:var(--fatto-segno, #3E5140);}
-.quaderno-testo {flex:1 1 60%;min-width:0;display:flex;align-items:baseline;gap:7px;padding:9px 0;border:0;background:transparent;text-align:left;font-size:14px;line-height:1.38;color:var(--inchiostro);}
+.quaderno-testo {flex:1;min-width:0;display:flex;align-items:baseline;gap:7px;padding:9px 0;border:0;background:transparent;text-align:left;font-size:14px;line-height:1.38;color:var(--inchiostro);}
 .quaderno-parole {min-width:0;overflow-wrap:anywhere;}
 .quaderno-testo:hover .quaderno-parole {color:var(--rame-testo);}
 .quaderno-riga.fatta .quaderno-parole {text-decoration:line-through;text-decoration-color:rgba(var(--inchiostro-rgb),.35);color:rgba(var(--inchiostro-rgb),.42);}
@@ -58,20 +58,21 @@
 .quaderno-punto {flex:none;align-self:center;width:6px;height:6px;border-radius:50%;}
 .quaderno-riga.alta .quaderno-parole::after {content:' !';color:var(--rame-testo);font-weight:600;}
 
-/* La parola a destra: chi aspetta chi. */
-/* la parola cede sempre il passo al testo: al massimo due quinti della riga, e va a capo lei */
-.quaderno-stato {flex:0 1 auto;max-width:40%;display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;font-size:11px;font-weight:500;line-height:1.25;text-align:right;overflow-wrap:break-word;color:rgba(var(--inchiostro-rgb),.5);}
+/* La fine della riga: un posto fisso dove la parola di chi aspetta chi e,
+   sotto la mano, i due gesti si danno il cambio. Il testo non viene mai coperto. */
+.quaderno-fine {flex:none;width:68px;display:grid;align-items:center;justify-items:end;align-self:stretch;}
+.quaderno-fine > * {grid-area:1 / 1;}
+.quaderno-stato {display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;max-width:100%;font-size:11px;font-weight:500;line-height:1.25;text-align:right;overflow-wrap:break-word;color:rgba(var(--inchiostro-rgb),.5);transition:opacity .14s;}
 .quaderno-stato.lavora,.quaderno-stato.coda {color:var(--verde-cupo, #3E5140);}
 .quaderno-stato.pronta,.quaderno-stato.chiede,.quaderno-stato.dafinire,.quaderno-stato.ferma {color:var(--rame-testo);}
 .quaderno-stato > i {flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--salvia-rgb),.95);animation:tavola-battito 1.6s ease-in-out infinite;}
-
-/* Sotto la mano: «A Myynd», il dettaglio, il cestino. Galleggiano, non tengono posto. */
-.quaderno-gesti {position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:4px;padding:3px;border-radius:99px;background:var(--carta-piena);box-shadow:0 4px 14px -6px rgba(var(--ombra-rgb),.35);opacity:0;pointer-events:none;transition:opacity .14s;}
+.quaderno-gesti {display:flex;align-items:center;gap:2px;opacity:0;pointer-events:none;transition:opacity .14s;}
 .quaderno-riga:hover .quaderno-gesti,.quaderno-riga:focus-within .quaderno-gesti {opacity:1;pointer-events:auto;}
-.quaderno-a-myynd,.quaderno-piu,.quaderno-riapri {border:1px solid rgba(var(--inchiostro-rgb),.16);background:var(--carta-piena);border-radius:99px;padding:3px 10px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.72);white-space:nowrap;}
-.quaderno-piu {padding:3px 8px;line-height:1;}
-.quaderno-a-myynd:hover,.quaderno-piu:hover,.quaderno-riapri:hover {border-color:var(--rame);color:var(--rame-testo);}
-.quaderno-riapri {position:absolute;right:0;opacity:0;pointer-events:none;}
+.quaderno-riga:hover .quaderno-stato,.quaderno-riga:focus-within .quaderno-stato {opacity:0;}
+.quaderno-icona {display:inline-grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;font-size:14px;line-height:1;color:rgba(var(--inchiostro-rgb),.6);}
+.quaderno-icona:hover {color:var(--rame-testo);}
+.quaderno-riapri {position:absolute;right:0;border:1px solid rgba(var(--inchiostro-rgb),.16);background:var(--carta-piena);border-radius:99px;padding:3px 10px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.72);white-space:nowrap;opacity:0;pointer-events:none;}
+.quaderno-riapri:hover {border-color:var(--rame);color:var(--rame-testo);}
 .quaderno-riga.fatta:hover .quaderno-riapri,.quaderno-riapri:focus-visible {opacity:1;pointer-events:auto;}
 
 /* Dove si scrive: una riga come le altre, con il cursore. */
@@ -79,7 +80,6 @@
 .quaderno-modifica {padding-left:0;}
 .quaderno-scrivi::placeholder {color:transparent;}
 .quaderno-righe:hover .quaderno-scrivi::placeholder,.quaderno-scrivi:focus::placeholder {color:rgba(var(--inchiostro-rgb),.32);}
-.quaderno-riga.nuova:focus-within {border-bottom-color:rgba(var(--rame-rgb),.5);}
 
 /* Da pianificare: sotto i giorni, su un fondo appena più scuro, in più colonne. */
 .quaderno-pagina {margin-top:30px;padding:16px 18px 10px;border-radius:14px;background:rgba(var(--inchiostro-rgb),.03);}
@@ -89,12 +89,14 @@
 .quaderno-righe[data-colonne] {display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));column-gap:26px;}
 
 /* La colonna di destra della prima pagina, quando la finestra è larga. */
-.quaderno-lato {position:sticky;top:0;display:flex;flex-direction:column;gap:26px;width:360px;flex:none;padding:18px 20px 16px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
+.quaderno-lato {position:sticky;top:0;display:flex;flex-direction:column;gap:26px;flex:1 1 360px;min-width:340px;max-width:560px;max-height:calc(100dvh - 72px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 20px 16px;background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8));border:1px solid rgba(var(--luce-rgb),.96);border-radius:20px;box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34);color:var(--inchiostro);}
 .quaderno-lato button {font-family:inherit;cursor:pointer;}
 .quaderno-tutto {align-self:flex-start;border:0;background:transparent;padding:0;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.55);}
 .quaderno-tutto:hover {color:var(--rame-testo);}
 
-.quaderno button:focus-visible,.quaderno-lato button:focus-visible,.quaderno-scrivi:focus-visible,.quaderno-modifica:focus-visible {outline:2px solid var(--rame);outline-offset:2px;}
+.quaderno button:focus-visible,.quaderno-lato button:focus-visible {outline:2px solid var(--rame);outline-offset:2px;}
+/* scrivere non accende niente: il cursore basta («it doesn't need to highlight the box in orange») */
+.quaderno-scrivi:focus,.quaderno-modifica:focus {outline:none;box-shadow:none;}
 @media (prefers-reduced-motion:reduce) {
   .quaderno-stato > i {animation:none;}
   .quaderno-spunta,.quaderno-gesti {transition:none;}

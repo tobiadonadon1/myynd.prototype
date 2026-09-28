@@ -1,16 +1,10 @@
 .news-pill { flex: none; display: inline-flex; align-items: center; gap: 7px; margin-top: 6px; min-height: 30px; padding: 5px 12px; border-radius: 99px; border: 1px solid rgba(var(--luce-rgb),.9); background: rgba(var(--carta-rgb),.8); color: var(--inchiostro); font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer; box-shadow: 0 4px 12px -8px rgba(var(--ombra-rgb),.4); }
 .news-pill:hover { background: var(--carta-piena); }
 .news-dot { display: inline-block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--salvia); }
-.news-dot.has-news { background: var(--rame); animation: news-pulse 2.8s ease-in-out 3; }
-/* Non lette: salta finché non le apre. Il salto è una trasformazione — il
-   pallino si muove, la parola accanto no — e vince sul battito, che dura tre
-   giri e poi sparisce. `salta` sta in index.css, con il pallino della chat. */
-.news-dot.has-news.pallino-salta { animation: salta 1.8s ease-in-out infinite; animation-play-state: var(--mo, running); }
-/* Importante e non ancora vista: salta la pastiglia intera, poi riposa. Due
-   rimbalzi e una pausa lunga, così si nota senza diventare un allarme. Il
-   bordo rame resta anche a movimento ridotto, dove il salto non c'è. */
-.news-pill.news-pill-salta { border-color: rgba(var(--rame-rgb),.55); animation: news-salta 2.6s cubic-bezier(.3,.7,.4,1) infinite; animation-play-state: var(--mo, running); }
-@keyframes news-salta { 0%, 42%, 100% { transform: translateY(0); } 10% { transform: translateY(-7px); } 20% { transform: translateY(0); } 28% { transform: translateY(-3px); } 35% { transform: translateY(0); } }
+/* «The news don't have to always jump up and down.» Il pallino di rame dice
+   che c'è qualcosa, e basta: niente battito, niente salti, né del pallino né
+   della pastiglia. Aprire la sala conta come visto. */
+.news-dot.has-news { background: var(--rame); }
 .news-flag { margin-left: 6px; padding: 1px 6px; border-radius: 99px; background: rgba(var(--rame-rgb),.14); color: var(--rame-testo); font-size: 9px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 .news-room::backdrop { background: rgba(var(--inchiostro-rgb),.28); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 .news-room { box-sizing: border-box; padding: 0; margin: auto; width: min(880px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); flex-direction: column; overflow: hidden; color: var(--inchiostro); background: var(--carta-piena); border: 1px solid var(--carta-piena); border-radius: 26px; box-shadow: 0 32px 100px -25px rgba(var(--ombra-rgb),.47), inset 0 1px var(--avorio); }

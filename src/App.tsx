@@ -616,7 +616,9 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         padding: rail ? `${16 + striscia}px 14px 24px 14px` : `${22 + striscia}px 34px 30px 30px`
       }}>
         {v.isMyynd && (conLista ? (
-          <div style={{ display: 'flex', gap: 36, alignItems: 'flex-start', maxWidth: '100%' }}>
+          // tutta la larghezza che c'è, fino a feed + lista piena: la lista si
+          // allarga nello spazio vuoto a destra invece di lasciarlo vuoto
+          <div style={{ display: 'flex', gap: 36, alignItems: 'flex-start', width: '100%', maxWidth: 760 + 36 + 560 }}>
             <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato />
             <ListaDiLato l={lista} lingua={stato.config.lingua ?? 'en'} vaiALista={() => v.goOggi()}
               apri={c => {

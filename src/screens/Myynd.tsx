@@ -1563,7 +1563,7 @@ function CartaDomande({ v }: { v: Vals }) {
       boxShadow: accesa ? 'inset 0 0 0 2px var(--rame), 0 22px 52px rgba(var(--ombra-rgb),.09)' : '0 22px 52px rgba(var(--ombra-rgb),.09)',
       transition: 'box-shadow .3s', animation: 'fadein .3s ease'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '13px 21px 3px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 21px 2px' }}>
         <Marchio dim={14} animato={false} />
         <span style={{ ...NOME, color: 'rgba(var(--inchiostro-rgb),.55)' }}>{t('Myynd ti chiede')}</span>
       </div>
@@ -1582,17 +1582,10 @@ function CartaDomande({ v }: { v: Vals }) {
       ))}
 
       {domande.map((q, i) => (
-        <RigaDomanda key={q.id} q={q} v={v} prima={i === 0 && !esiti.length}
+        <RigaDomanda key={q.id} q={q} v={v} prima={i === 0 && !esiti.length} ultima={i === domande.length - 1}
+          pronta={piene.length > 0} mandando={mandando}
           testo={risposte[q.id] ?? ''} scrivi={testo => scrivi(q.id, testo)} manda={() => { void manda() }} lascia={() => lascia(q)} />
       ))}
-
-      {domande.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 21px 14px' }}>
-          <div style={{ flex: 1 }} />
-          <button type="button" onClick={() => { void manda() }} disabled={!piene.length || mandando} aria-busy={mandando || undefined}
-            style={piene.length && !mandando ? MANDA : MANDA_SPENTO}>{mandando ? t('Un momento…') : t('Manda')}</button>
-        </div>
-      )}
     </section>
   )
 }
@@ -1604,9 +1597,11 @@ function CartaDomande({ v }: { v: Vals }) {
  * un progetto (la chat resta una strada), «Perché me lo chiedi?» dove c'è
  * uno spunto, e «Non mi interessa» che la toglie di mezzo.
  */
-function RigaDomanda({ q, v, prima, testo, scrivi, manda, lascia }: {
-  q: Domanda; v: Vals; prima: boolean
+function RigaDomanda({ q, v, prima, ultima, testo, scrivi, manda, lascia, pronta, mandando }: {
+  q: Domanda; v: Vals; prima: boolean; ultima: boolean
   testo: string; scrivi: (testo: string) => void; manda: () => void; lascia: () => void
+  /** Il «Manda» sta accanto all'ultima casella: uno solo per tutte le domande. */
+  pronta: boolean; mandando: boolean
 }) {
   const { attiva, props } = useAttiva()
   const [spunto, setSpunto] = useState(false)
@@ -1616,16 +1611,40 @@ function RigaDomanda({ q, v, prima, testo, scrivi, manda, lascia }: {
     if (e.key === 'Enter' && (!q.lunga || e.metaKey || e.ctrlKey)) { e.preventDefault(); manda() }
     if (e.key === 'Escape') (e.currentTarget as HTMLElement).blur()
   }
+  /*
+   * Più bassa, e ferma. «The Myynd ask is too tall as a box, and when I hover
+   * over it, it kind of highlights a part. It looks kind of weird.» La riga
+   * non si accende più sotto il mouse (un rettangolo chiaro dentro una carta
+   * arrotondata), i gesti stanno sulla riga della domanda invece che su una
+   * fascia loro, e «Manda» sta accanto all'ultima casella invece che in una
+   * riga in fondo.
+   */
   return (
-    <div {...props} style={{ ...RIGA, padding: '12px 21px 10px', borderTop: prima ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.09)', background: attiva ? 'var(--riga-sopra)' : 'transparent' }}>
+    <div {...props} style={{ ...RIGA, padding: prima ? '6px 21px 12px' : '12px 21px 12px', borderTop: prima ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.09)' }}>
       {q.nomeProgetto && colore && (
         <div style={{ ...NOME, color: colore, fontSize: '11px', marginBottom: 4 }}>{q.nomeProgetto}</div>
       )}
-      <div style={{ ...TITOLO, fontWeight: 400, fontSize: '14.5px', maxWidth: 640 }}>{q.testo}</div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 8, maxWidth: 640, alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, maxWidth: 680 }}>
+        <div style={{ ...TITOLO, flex: 1, minWidth: 0, fontWeight: 400, fontSize: '14.5px' }}>{q.testo}</div>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 12, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}>
+          {q.originale && (
+            <Hov as="button" type="button" onClick={fermo(() => v.discutiIniziativa(q.originale!))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parliamone')}</Hov>
+          )}
+          {q.spunto.length > 0 && (
+            <Hov as="button" type="button" onClick={fermo(() => setSpunto(x => !x))} aria-expanded={spunto} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Perché me lo chiedi?')}</Hov>
+          )}
+          <Hov as="button" type="button" onClick={fermo(lascia)} title={t('Lascia perdere: non te lo richiedo')} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non mi interessa')}</Hov>
+        </div>
+      </div>
+      {spunto && q.spunto.length > 0 && (
+        <div style={{ marginTop: 4, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.6)', lineHeight: 1.6, maxWidth: 680, overflowWrap: 'anywhere' }}>
+          {t('Hai tolto di mezzo queste senza dirmi perché:')} {q.spunto.slice(0, 4).map(x => `«${x}»`).join(', ')}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, maxWidth: 680, alignItems: q.lunga ? 'flex-end' : 'center' }}>
         <Scatola alto={q.lunga}>
           {q.lunga ? (
-            <textarea value={testo} onChange={e => scrivi(e.target.value)} onKeyDown={tasti} rows={4}
+            <textarea value={testo} onChange={e => scrivi(e.target.value)} onKeyDown={tasti} rows={3}
               aria-label={t('Rispondi qui')} placeholder={t('Una riga per progetto. Cmd+Invio per mandare.')}
               style={{ ...CAMPO, lineHeight: 1.5, resize: 'vertical' }} />
           ) : (
@@ -1633,24 +1652,11 @@ function RigaDomanda({ q, v, prima, testo, scrivi, manda, lascia }: {
               aria-label={t('Rispondi qui')} placeholder={t('Rispondi qui')} style={CAMPO} />
           )}
         </Scatola>
-      </div>
-      <Fascia attiva={attiva}
-        sinistra={spunto && q.spunto.length > 0 && (
-          <span style={{ flexBasis: '100%', color: 'rgba(var(--inchiostro-rgb),.6)', lineHeight: 1.6 }}>
-            {t('Hai tolto di mezzo queste senza dirmi perché:')} {q.spunto.slice(0, 4).map(x => `«${x}»`).join(', ')}
-          </span>
+        {ultima && (
+          <button type="button" onClick={manda} disabled={!pronta || mandando} aria-busy={mandando || undefined}
+            style={pronta && !mandando ? MANDA : MANDA_SPENTO}>{mandando ? t('Un momento…') : t('Manda')}</button>
         )}
-        destra={
-          <>
-            {q.originale && (
-              <Hov as="button" type="button" onClick={fermo(() => v.discutiIniziativa(q.originale!))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parliamone')}</Hov>
-            )}
-            {q.spunto.length > 0 && (
-              <Hov as="button" type="button" onClick={fermo(() => setSpunto(x => !x))} aria-expanded={spunto} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Perché me lo chiedi?')}</Hov>
-            )}
-            <Hov as="button" type="button" onClick={fermo(lascia)} title={t('Lascia perdere: non te lo richiedo')} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non mi interessa')}</Hov>
-          </>
-        } />
+      </div>
     </div>
   )
 }
