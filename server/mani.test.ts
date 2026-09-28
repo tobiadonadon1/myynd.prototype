@@ -361,6 +361,23 @@ test('le mani di una riga: leggere sempre, scrivere solo se il compito lo chiede
   assert.equal(mani.spiega([]), '')
 })
 
+test('F3 · le mani del contratto sono vere anche quando il testo non le nomina; il codice vuole sempre cartella e Claude Code', () => {
+  const nomi = (o: Parameters<typeof mani.perQuestoCompito>[0]) => mani.perQuestoCompito(o).map(t => t.name)
+  finto({ installato: () => null, piattaforma: () => 'darwin' })
+  // «Prepare the next project step» non dice «file»: senza contratto niente mano che scrive
+  assert.deepEqual(nomi({ compito: 'Prepare the next project step: pilot scope' }), ['leggi_file', 'leggi_pagina', 'cerca_web'])
+  assert.deepEqual(nomi({ compito: 'Prepare the next project step: pilot scope', mani: ['file'] }), ['leggi_file', 'leggi_pagina', 'cerca_web', 'scrivi_file'])
+  assert.deepEqual(nomi({ compito: 'Summarize the call', mani: ['nota', 'file'] }), ['leggi_file', 'leggi_pagina', 'cerca_web', 'crea_nota', 'scrivi_file'])
+  // la posta non è una mano che manda: la bozza la prepara la coda, dopo
+  assert.deepEqual(nomi({ compito: 'Reply to Nora', mani: ['posta'] }), ['leggi_file', 'leggi_pagina', 'cerca_web'])
+  assert.deepEqual(nomi({ compito: 'Tidy the landing page copy', mani: ['codice'], cartella: progetto }), ['leggi_file', 'leggi_pagina', 'cerca_web'], 'senza Claude Code niente codice, contratto o no')
+  finto({ installato: () => '/x/claude', piattaforma: () => 'darwin' })
+  assert.deepEqual(nomi({ compito: 'Tidy the landing page copy', mani: ['codice'], cartella: progetto }), ['leggi_file', 'leggi_pagina', 'cerca_web', 'lavora_nel_codice'])
+  assert.deepEqual(nomi({ compito: 'Tidy the landing page copy', mani: ['codice'] }), ['leggi_file', 'leggi_pagina', 'cerca_web'], 'senza una cartella niente codice')
+  // su un server nessuna mano che scrive, qualunque cosa dica il contratto
+  assert.deepEqual(nomi({ compito: 'x', mani: ['file', 'nota', 'codice'], cartella: progetto, ospitato: true }), ['leggi_pagina', 'cerca_web'])
+})
+
 // — la frase di chiusura —
 
 test('la frase di chiusura si compone dai fatti quando manca, si tiene quando c\'è, e parla la lingua dell\'app', () => {

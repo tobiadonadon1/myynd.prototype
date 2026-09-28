@@ -30,7 +30,7 @@ import { Credito } from './components/Credito'
 import { Marchio } from './components/Marchio'
 import { Mascotte } from './components/Mascotte'
 import { useVals, type Vals } from './vals'
-import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
+import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Compito, type Guaio, type Stato } from './api'
 import { annunciaCollegamento, rilettura, suCollegamento } from './collegamenti'
 import { Accesso } from './Accesso'
 import { inviaAvvio, ospitatoQui, segna } from './tempi'
@@ -368,6 +368,12 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   const conLista = larghezza - colonna - 64 >= 760 + 36 + 340
   const [foglioCasa, setFoglioCasa] = useState<string | null>(null)
   const [dettaglioCasa, setDettaglioCasa] = useState<string | null>(null)
+  /** Il lavoro di una carta, aperto nel foglio sopra la prima pagina; senza un lavoro, il dettaglio. */
+  const apriLavoroCasa = (c: Compito) => {
+    if (c.stato !== 'pronto' && c.stato !== 'chiede') { setDettaglioCasa(c.id); return }
+    if (!lista.aperti.has(c.id)) lista.apriChiudi(c.id)
+    setFoglioCasa(c.id)
+  }
 
   /**
    * La striscia in cima, dentro l'app sul Mac.
@@ -619,16 +625,11 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           // tutta la larghezza che c'è, fino a feed + lista piena: la lista si
           // allarga nello spazio vuoto a destra invece di lasciarlo vuoto
           <div style={{ display: 'flex', gap: 36, alignItems: 'flex-start', width: '100%', maxWidth: 760 + 36 + 560 }}>
-            <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato />
+            <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato apriLavoro={apriLavoroCasa} />
             <ListaDiLato l={lista} lingua={stato.config.lingua ?? 'en'} vaiALista={() => v.goOggi()}
-              apri={c => {
-                if (c.stato !== 'pronto' && c.stato !== 'chiede') { setDettaglioCasa(c.id); return }
-                if (!lista.aperti.has(c.id)) lista.apriChiudi(c.id)
-                setFoglioCasa(c.id)
-              }}
-              modifica={c => setDettaglioCasa(c.id)} />
+              apri={apriLavoroCasa} modifica={c => setDettaglioCasa(c.id)} />
           </div>
-        ) : <Myynd v={v} lista={lista} blocchi={blocchi} />)}
+        ) : <Myynd v={v} lista={lista} blocchi={blocchi} apriLavoro={apriLavoroCasa} />)}
         {v.isMyynd && foglioCasa && (() => {
           const c = lista.compiti.find(x => x.id === foglioCasa)
           if (!c) return null

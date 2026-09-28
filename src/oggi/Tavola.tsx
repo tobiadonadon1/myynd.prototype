@@ -208,7 +208,7 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
       {(corsia === 'attende' || (corsia === 'fatte' && !chiusa)) && (
         <div className="tavola-gesti">
           <button type="button" className="tavola-gesto pieno" onClick={() => apri(c)}>
-            {corsia === 'fatte' ? t('Apri') : c.stato === 'chiede' ? t('Rispondi') : c.prova?.esito === 'fail' ? t('Completala') : t('Guarda')}
+            {corsia === 'fatte' ? t('Apri') : (c.stato === 'chiede' || c.chieste?.length) ? t('Rispondi') : c.prova?.esito === 'fail' ? t('Completala') : t('Guarda')}
           </button>
         </div>
       )}

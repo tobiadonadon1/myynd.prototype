@@ -491,6 +491,21 @@ export function useCompiti(
     }
   }, [indietro, apriConnessioni])
 
+  /**
+   * F5 · disfare il lavoro di una carta. Come mandare, niente di ottimistico:
+   * la carta cambia quando il server dice che il file è nel Cestino.
+   */
+  const disfa = useCallback(async (id: string) => {
+    try {
+      const r = await api.disfaCompito(id)
+      setCompiti(r.compiti)
+      scorda(id)
+      mostraToast(r.file === 'cestino'
+        ? (r.bozzaResta ? t('Disfatta: il file è nel Cestino, la bozza resta in Bozze. La carta è di nuovo tua.') : t('Disfatta: il file è nel Cestino. La carta è di nuovo tua.'))
+        : r.bozzaResta ? t('Disfatta: la bozza resta in Bozze, toglila da lì se non la vuoi. La carta è di nuovo tua.') : t('Disfatta: la carta è di nuovo tua.'))
+    } catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a disfarla.')) }
+  }, [mostraToast])
+
   /** F2 · acceso, spento, in pausa, quante carte, quale notte. */
   const impostaTurno = useCallback(async (p: Parameters<typeof api.impostaTurno>[0]): Promise<boolean> => {
     try { setTurno(await api.impostaTurno(p)); return true }
@@ -808,7 +823,7 @@ export function useCompiti(
     pronte, chiedono,
     /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
     inAttesa,
-    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, disfa, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

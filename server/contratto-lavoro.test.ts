@@ -179,3 +179,51 @@ test('la riga tornata sua non si porta dietro il guaio', () => {
   assert.equal(c.modo, 'io')
   assert.equal(c.guaio, null)
 })
+
+test('F3 · le mani del contratto arrivano a chi scrive, anche per una carta nata da Myynd', async () => {
+  let ricevute: readonly string[] | undefined
+  compiti.perProva({
+    contratto: id => { const k = { ...CONTRATTO(), mani: ['file' as const, 'nota' as const] }; store.scriviContrattoCompito(id, k); return k },
+    svolgi: async (_t, _n, _m, _a, _c, _p, _d, _s, esecuzione) => { ricevute = esecuzione?.mani; return { testo: OUTLINE, fonti: [] } },
+    chiedeAiuto: nonChiede, domandeDaFare: async () => [], prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
+    giudica: async () => ({ esito: 'pass', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] }) as Giudizio
+  })
+  const id = `cl-myynd-${Date.now()}`
+  // una carta che Myynd ha scritto da sé (il passo dopo), lavorata dal turno (nativa = false)
+  store.scriviCompito({ id, testo: 'Prepare the next project step: pilot scope', ordine: 'zz1', origine: 'seguito' })
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza', false)
+  await o.aspetta('pronto')
+  assert.deepEqual(ricevute, ['file', 'nota'])
+  o.smetti()
+})
+
+test('F4 · non regge nemmeno dopo la riscrittura: resta consegnata, con una domanda sola, contata una volta', async () => {
+  let chiesteA = 0
+  compiti.perProva({
+    contratto: id => { const k = CONTRATTO(); store.scriviContrattoCompito(id, k); return k },
+    svolgi: async () => ({ testo: OUTLINE, fonti: [] }),
+    chiedeAiuto: nonChiede, prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
+    domandeDaFare: async (_c, testo) => { chiesteA++; assert.match(testo, /Module 3 has no exercise/); return [{ domanda: 'What exercise goes in module 3?', opzioni: ['A pricing quiz', 'A landing page draft'], multipla: false }] },
+    giudica: async () => ({ esito: 'revise', per: '', comeTe: '', comeLoro: '', problemi: ['Module 3 has no exercise.'], verificato: [], criterio: { esito: 'not_met', perche: 'Module 3 has no exercise.' } }) as Giudizio
+  })
+  const id = riga('Write the third course outline')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('pronto')
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto', 'il lavoro resta consegnato: la domanda non lo ferma')
+  assert.equal(c.prova?.esito, 'fail')
+  assert.deepEqual(c.chieste?.map(q => q.domanda), ['What exercise goes in module 3?'])
+  assert.equal(c.domandeFatte, 1)
+  assert.equal(chiesteA, 1)
+  o.smetti()
+  // rifatta dopo la risposta, se non regge ancora non chiede una seconda volta
+  store.scordaChieste(id)
+  const o2 = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o2.aspetta('pronto')
+  assert.equal(chiesteA, 1, 'una domanda nella vita della carta')
+  assert.equal(store.compito(id)?.chieste, null)
+  o2.smetti()
+})

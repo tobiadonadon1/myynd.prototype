@@ -872,14 +872,27 @@ export const LAVORA_NEL_CODICE: Anthropic.Tool = {
 }
 
 /** Le mani che una riga si porta dietro, decise dal testo del compito e dal contesto. */
-export function perQuestoCompito(o: { compito: string; nota?: string | null; cartella?: string | null; ospitato?: boolean }): Anthropic.Tool[] {
+/*
+ * Le mani del contratto (F3). Il contratto di una carta (`contratto.ts`) dice
+ * dove può arrivare il lavoro: un file, una nota, il codice in una copia, il
+ * web. Da F3 quelle sono mani vere, per ogni carta — anche per quelle che
+ * Myynd scrive da sé — e non più solo quando il testo della carta nomina un
+ * file o una nota. Nessuna mano manda, paga o cancella: la posta resta una
+ * bozza (la prepara `compiti.preparaLaMail` dopo), il file va nel luogo delle
+ * consegne, il codice cambia in una copia e si posa solo se i controlli
+ * passano.
+ */
+export type ManoDelContratto = 'posta' | 'file' | 'nota' | 'web' | 'codice'
+
+export function perQuestoCompito(o: { compito: string; nota?: string | null; cartella?: string | null; ospitato?: boolean; mani?: readonly ManoDelContratto[] | null }): Anthropic.Tool[] {
   const testo = `${o.compito}\n${o.nota ?? ''}`
   const ospitato = o.ospitato ?? ferri.ospitato()
+  const dal = new Set(o.mani ?? [])
   const mani: Anthropic.Tool[] = [LEGGI_PAGINA, CERCA_WEB]
   if (!ospitato) mani.unshift(LEGGI_FILE)
-  if (!ospitato && ferri.piattaforma() === 'darwin' && /\b(?:apple notes|notes app|note app|nota|note|appunt[oi])\b/i.test(testo)) mani.push(CREA_NOTA)
-  if (!ospitato && /\b(?:file|files|save|salva\w*|markdown|\.md|\.txt|\.csv|\.json|csv|json|yaml|on (?:my |the )?desktop|sulla scrivania|sul desktop|myynd folder|cartella myynd)\b/i.test(testo)) mani.push(SCRIVI_FILE)
-  if (!ospitato && o.cartella && sembraLavoroDiCodice(o.compito, o.nota) && ferri.installato()) mani.push(LAVORA_NEL_CODICE)
+  if (!ospitato && ferri.piattaforma() === 'darwin' && (dal.has('nota') || /\b(?:apple notes|notes app|note app|nota|note|appunt[oi])\b/i.test(testo))) mani.push(CREA_NOTA)
+  if (!ospitato && (dal.has('file') || /\b(?:file|files|save|salva\w*|markdown|\.md|\.txt|\.csv|\.json|csv|json|yaml|on (?:my |the )?desktop|sulla scrivania|sul desktop|myynd folder|cartella myynd)\b/i.test(testo))) mani.push(SCRIVI_FILE)
+  if (!ospitato && o.cartella && (dal.has('codice') || sembraLavoroDiCodice(o.compito, o.nota)) && ferri.installato()) mani.push(LAVORA_NEL_CODICE)
   return mani
 }
 

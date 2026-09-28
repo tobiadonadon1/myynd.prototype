@@ -499,6 +499,8 @@ async function svolgiUno(id: string, nativa: boolean) {
       {
         nativa, signal: controller.signal, taskId: c.id,
         ...(k?.criterio ? { criterio: k.criterio } : {}),
+        // F3: le mani del contratto sono le sue, anche per una carta scritta da Myynd
+        ...(k?.mani?.length ? { mani: k.mani } : {}),
         ...(giriDelBudget ? { giri: giriDelBudget } : {}),
         ...(extra ?? {}),
         ...(extra?.giri && giriDelBudget ? { giri: Math.min(extra.giri, giriDelBudget) } : {}),
@@ -755,6 +757,27 @@ export async function dopoLaStesura(
     store.scriviProvaCompito(id, p)
     store.segnaNelDiario(id, { tipo: 'consegnato', dettaglio: scritta.consegna?.titolo ?? (scritta.email?.casella?.stato === 'salvata' ? 'casella' : undefined) })
     if (p) store.segnaNelDiario(id, { tipo: 'prova', dettaglio: `${p.esito}: ${p.perche}` })
+    /*
+     * F4 · non regge nemmeno dopo la riscrittura: «Aspetta te», con una
+     * domanda sola. Il lavoro resta consegnato — non si ferma niente, non
+     * si butta niente — e sotto c'è la cosa da chiederle per finirlo, con
+     * le opzioni prese dal materiale. Rispondere la rifà con la risposta
+     * (`/api/compiti/:id/rispondi`). Una domanda nella vita della carta, mai
+     * di più: se ne ha già fatta una, resta il perché e basta.
+     */
+    if (p?.esito === 'fail' && (scritta.domandeFatte ?? 0) < 1 && !o.fermato()) {
+      const materialeDomanda = [c.testo, nota ?? '', ...lette.slice(0, 4).map(did => {
+        const d = store.documento(did)
+        return d ? [d.autore ?? '', d.titolo, (d.corpo ?? '').slice(0, 3000)].filter(Boolean).join('\n') : ''
+      })].filter(Boolean).join('\n\n')
+      const righe = await ferri.domandeDaFare(c.testo, `${p.perche}\n\n${testo.slice(0, 4000)}`, { genere, materiale: materialeDomanda }).catch(() => [])
+      const q = righe[0]
+      if (q && !o.fermato() && store.compito(id)?.stato === 'pronto') {
+        store.chiediSuCompito(id, [q])
+        lavoroDati.contaDomanda(id)
+        store.segnaNelDiario(id, { tipo: 'domanda', dettaglio: q.domanda })
+      }
+    }
   } else if (scritta?.stato === 'chiede') {
     store.segnaNelDiario(id, { tipo: 'domanda', dettaglio: scritta.chieste?.[0]?.domanda ?? scritta.risultato?.split('\n').find(r => r.trim())?.slice(0, 200) })
   }

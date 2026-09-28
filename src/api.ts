@@ -1201,6 +1201,9 @@ export const api = {
   mettiInCoda: (id: string) =>
     json<{ ok: true; compiti: Compito[]; turno: StatoTurno }>(`/api/compiti/${encodeURIComponent(id)}/coda`, { method: 'POST' }),
   turno: () => json<StatoTurno>('/api/turno'),
+  /** F5 · disfare il lavoro consegnato: il file nel Cestino, la bozza resta nella casella, la carta torna sua. */
+  disfaCompito: (id: string) =>
+    json<{ ok: true; file: 'cestino' | 'fuori' | null; bozzaResta: boolean; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/disfa`, { method: 'POST' }),
   impostaTurno: (p: { acceso?: boolean; pausa?: number | null; carte?: number; notteDa?: string; notteA?: string }) =>
     json<StatoTurno>('/api/turno', { method: 'PATCH', body: JSON.stringify(p) }),
 

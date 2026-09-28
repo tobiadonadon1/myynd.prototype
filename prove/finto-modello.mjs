@@ -225,6 +225,8 @@ const server = createServer(async (req, res) => {
   registra({
     quando: new Date().toISOString(), modello, stream: !!corpo.stream, regola: s.regola,
     formato: corpo.response_format?.type ?? null, attrezzi: Array.isArray(corpo.tools) ? corpo.tools.length : 0,
+    // i nomi degli attrezzi offerti (F3): una prova guarda quali mani ha avuto chi scrive
+    nomiAttrezzi: Array.isArray(corpo.tools) ? corpo.tools.map(t => t?.function?.name ?? t?.name).filter(Boolean) : [],
     ...((corpo.max_tokens ?? corpo.max_completion_tokens) !== undefined ? { max_tokens: corpo.max_tokens ?? corpo.max_completion_tokens } : {}),
     ...(corpo.options?.num_predict !== undefined ? { num_predict: corpo.options.num_predict, num_ctx: corpo.options.num_ctx } : {}),
     system: s.system, utente: s.utente, risposta: s.testo
@@ -280,6 +282,7 @@ async function anthropic(req, res) {
   registra({
     quando: new Date().toISOString(), api: 'anthropic', modello, stream: !!grezzo.stream, regola: s.regola,
     formato: corpo.response_format?.type ?? null, attrezzi: Array.isArray(grezzo.tools) ? grezzo.tools.length : 0,
+    nomiAttrezzi: Array.isArray(grezzo.tools) ? grezzo.tools.map(t => t?.name).filter(Boolean) : [],
     max_tokens: grezzo.max_tokens, system: s.system, utente: s.utente, risposta: s.testo
   })
   await aspettaIlFermo()

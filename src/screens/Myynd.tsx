@@ -7,6 +7,7 @@ import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
 import { CartaSettimana } from '../components/Resoconto'
+import { Stanotte } from '../components/Stanotte'
 import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
@@ -888,7 +889,8 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           <Riletta c={c} chiaro />
           {attivo && <PassoAttivo passo={l.passi[c.id]} />}
           <ConsegnaPronta c={c} l={l} v={v} /><BozzaInPosta c={c} /><DaAllegare c={c} v={v} />
-          {chiede && <Domande c={c} l={l} />}
+          {/* F4: un lavoro che non ha passato il suo «fatto» porta la domanda per finirlo */}
+          {(chiede || (c.stato === 'pronto' && c.prova?.esito === 'fail' && !!c.chieste?.length)) && <Domande c={c} l={l} />}
         </div>
         {attesa
           ? <span style={pronto ? PASTIGLIA_FATTA : PASTIGLIA}>{attesa}</span>
@@ -1219,8 +1221,10 @@ function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
   )
 }
 
-export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false }: {
+export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriLavoro }: {
   v: Vals; lista?: Lista; blocchi?: BloccoPagina[]
+  /** Apre il lavoro consegnato di una carta nel foglio (lo tiene `App.tsx`). */
+  apriLavoro?: (c: Compito) => void
   /**
    * La lista sta già sulla destra (finestra larga): le righe sue e basta —
    * aperte, sue, senza niente di Myynd dentro — stanno lì e non anche qui.
@@ -1354,6 +1358,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false }: {
           dentro, in `components/Punto.tsx`. */}
       {/* Una riga del punto apre il documento da cui viene, e niente altro: le
           cose da fare non stanno lì dentro, stanno qui sotto. */}
+      {/* F5 · la prima cosa della mattina: cosa ha fatto il turno mentre dormiva */}
+      {lista && apriLavoro && <Stanotte l={lista} apri={apriLavoro} />}
       <Punto v={v} />
       <CartaSettimana v={v} />
 

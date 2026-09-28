@@ -473,7 +473,11 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
 
       {aperto && (chiede ? <Domanda c={c} l={l} />
         : c.proposta ? <Proposta c={c} l={l} />
-        : pronto ? <Bozza c={c} l={l} /> : null)}
+        : pronto ? <>
+          <Bozza c={c} l={l} />
+          {/* F4: non regge il suo «fatto»: sotto il lavoro, la domanda sola per finirlo */}
+          {c.prova?.esito === 'fail' && !!c.chieste?.length && <Domanda c={c} l={l} soloDomanda />}
+        </> : null)}
     </li>
   )
 }
@@ -500,7 +504,7 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
  * La casella di testo resta sempre, sotto: le opzioni sono un punto di
  * partenza, non un modulo. E si può mandare anche solo scrivendo, come prima.
  */
-function Domanda({ c, l }: { c: Compito; l: Lista }) {
+function Domanda({ c, l, soloDomanda = false }: { c: Compito; l: Lista; soloDomanda?: boolean }) {
   const [testo, setTesto] = useState('')
   // le scelte fatte, per domanda: un insieme perché alcune ne prendono più di una
   const [scelte, setScelte] = useState<Record<number, Set<string>>>({})
@@ -541,12 +545,15 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
       border: '1px solid rgba(var(--luce-rgb),.5)',
       boxShadow: 'inset 0 1px 3px rgba(var(--ombra-rgb),.09)'
     }}>
-      <div style={{
-        fontSize: '14px', lineHeight: 1.6, color: 'var(--inchiostro)', whiteSpace: 'pre-wrap',
-        overflowWrap: 'anywhere', maxHeight: 300, overflowY: 'auto'
-      }}>
-        <Testo testo={c.risultato ?? ''} fonti={c.fonti ?? []} />
-      </div>
+      {/* sotto un lavoro consegnato (F4) il testo è già sopra: qui la domanda e basta */}
+      {soloDomanda
+        ? <div style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--rame-testo)' }}>{t('Per finirla')}</div>
+        : <div style={{
+          fontSize: '14px', lineHeight: 1.6, color: 'var(--inchiostro)', whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere', maxHeight: 300, overflowY: 'auto'
+        }}>
+          <Testo testo={c.risultato ?? ''} fonti={c.fonti ?? []} />
+        </div>}
 
       {chieste.map((q, i) => (
         <div key={i} style={{ marginTop: 14 }}>

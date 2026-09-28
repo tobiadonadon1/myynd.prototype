@@ -1,0 +1,97 @@
+{
+ "modello": "finto",
+ "risposte": [
+  {
+   "se": "Sei il revisore di un lavoro[\\s\\S]*pricing one-pager",
+   "in": "tutto",
+   "json": {
+    "esito": "revise",
+    "per": "the reader",
+    "comeTe": "The tiers are there.",
+    "comeLoro": "No annual price.",
+    "problemi": [
+     "The annual price is missing."
+    ],
+    "verificato": [
+     "the tiers"
+    ],
+    "criterio": "not_met",
+    "criterioPerche": "The annual price for the Pro tier is missing: no source says it."
+   }
+  },
+  {
+   "se": "Un assistente si è fermato su un compito",
+   "in": "system",
+   "json": {
+    "righe": [
+     {
+      "domanda": "What is the annual price for Pro?",
+      "opzioni": [
+       "$290 a year",
+       "$390 a year"
+      ],
+      "multipla": false
+     }
+    ]
+   }
+  },
+  {
+   "se": "Scrivi il criterio di «fatto»",
+   "in": "system",
+   "json": {
+    "criterio": "A course outline file on your Desktop with five modules, each with its goal and one exercise."
+   }
+  },
+  {
+   "se": "Guardi il risultato di un compito affidato",
+   "in": "system",
+   "json": {
+    "chiede": false,
+    "manca": [],
+    "domanda": "",
+    "visto": ""
+   }
+  },
+  {
+   "se": "Sei il revisore di un lavoro",
+   "in": "system",
+   "attesa": 8000,
+   "json": {
+    "esito": "pass",
+    "per": "the reader",
+    "comeTe": "It holds.",
+    "comeLoro": "Clear.",
+    "problemi": [],
+    "verificato": [
+     "five modules against the notes"
+    ],
+    "criterio": "met",
+    "criterioPerche": "Five modules, each with a goal and an exercise, saved on your Desktop."
+   }
+  },
+  {
+   "se": "Un assistente ha appena finito un lavoro",
+   "in": "system",
+   "json": {
+    "prossimo": ""
+   }
+  },
+  {
+   "se": "Prendi una bozza scritta per una persona",
+   "in": "system",
+   "json": {
+    "a": "",
+    "oggetto": "",
+    "corpo": "",
+    "allegato": ""
+   }
+  },
+  {
+   "se": "Fatto vuol dire, per questa carta",
+   "in": "system",
+   "attesa": 6000,
+   "testo": "Done: the course outline.\n\n# Lumen Studio: first course\n\n1. Finding your angle. Goal: pick one audience. Exercise: write three one line promises.\n2. The first lesson. Goal: teach one thing well. Exercise: record a five minute draft.\n3. Building the page. Goal: a page that sells the outcome. Exercise: write the headline and three bullets.\n4. The first ten buyers. Goal: sell before you finish. Exercise: message ten people.\n5. Shipping. Goal: publish and learn. Exercise: collect five pieces of feedback.\n\nFrom your notes on Lumen Studio."
+  }
+ ],
+ "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

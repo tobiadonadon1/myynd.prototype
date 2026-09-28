@@ -42,6 +42,7 @@ import * as compiti from './compiti.ts'
 import * as contratto from './contratto.ts'
 import * as turno from './turno.ts'
 import * as presenza from './presenza.ts'
+import * as disfa from './disfa.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
@@ -3517,6 +3518,18 @@ app.post('/api/compiti/:id/coda', (req, res) => {
   if (!mod.puoLavorare()) return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
   try { turno.mettiInCoda(c.id, 'tu') } catch (e) { return errore(res, e, 400) }
   res.json({ ok: true, compiti: compitiAttuali(), turno: turno.stato() })
+})
+/*
+ * F5 · disfare il lavoro consegnato di una carta: il file nel Cestino (mai
+ * cancellato), la bozza nella casella resta dov'è, la carta torna sua.
+ */
+app.post('/api/compiti/:id/disfa', (req, res) => {
+  const c = store.compito(req.params.id)
+  if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  let esito: disfa.Disfatto
+  try { esito = disfa.disfaLavoro(c.id) } catch (e) { return errore(res, e, 400) }
+  res.json({ ok: true, ...esito, compiti: compitiAttuali() })
+  compiti.annunciaCambio()
 })
 app.get('/api/turno', (_req, res) => { res.json(turno.stato()) })
 app.patch('/api/turno', (req, res) => {

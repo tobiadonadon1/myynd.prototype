@@ -120,7 +120,8 @@ export function cosaAspetta(c: Compito): string {
     return righe.find(r => r.endsWith('?')) ?? righe[righe.length - 1] ?? ''
   }
   if (c.guaio) return c.guaio
-  if (c.prova?.esito === 'fail') return c.prova.perche
+  // F4: la domanda per finirla, se c'è, dice più del perché
+  if (c.prova?.esito === 'fail') return c.chieste?.[0]?.domanda?.trim() || c.prova.perche
   return ''
 }
 
@@ -153,4 +154,19 @@ export function statoRiga(c: Compito, passo: PassoCompito | null | undefined, s:
     return q ? { tipo: 'coda', chiave: q.chiave, giorno: q.giorno } : { tipo: 'coda', chiave: 'Prossima' }
   }
   return null
+}
+
+/** Le carte che il turno ha fatto partire nell'ultima notte: finite, e che aspettano lei. */
+export function carteDiStanotte(compiti: Compito[], chiusi: Compito[], s: StatoTurno | null | undefined): { fatte: Compito[]; attende: Compito[] } {
+  if (!s) return { fatte: [], attende: [] }
+  const dal = Date.parse(s.stanotte.dal)
+  const diNotte = (c: Compito) => !!c.turno?.notte && !!c.turno.ultimo && Date.parse(c.turno.ultimo) >= dal
+  const fatte: Compito[] = []
+  const attende: Compito[] = []
+  for (const c of [...compiti, ...chiusi]) {
+    if (!diNotte(c)) continue
+    if (c.stato === 'fatto' || (c.stato === 'pronto' && c.prova?.esito !== 'fail')) fatte.push(c)
+    else if (c.stato === 'chiede' || c.stato === 'pronto' || (c.stato === 'aperto' && c.guaio)) attende.push(c)
+  }
+  return { fatte, attende }
 }

@@ -3052,7 +3052,7 @@ export async function svolgi(
    * `giri` abbassa il tetto dei giri; `voce` è come scrive a chi riceve;
    * `consegna` è la lingua in cui legge chi riceve.
    */
-  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en'; criterio?: string },
+  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en'; criterio?: string; mani?: readonly mani.ManoDelContratto[] },
   /**
    * Il materiale del progetto di cui la riga fa parte, se ne ha uno: la
    * cartella di lavoro come fonte fissa, la memoria e il riferimento nel
@@ -3239,7 +3239,7 @@ export async function svolgi(
   const leMani = !concessi.length && !selezioneAttiva && selezione?.origine !== 'automazione' && modo !== 'prompt'
     // il «fatto» della carta (F1) conta per le mani: «un file sulla Scrivania»
     // o «una nota in Note» vogliono la mano che lo fa
-    ? mani.perQuestoCompito({ compito, nota: [nota, esecuzione?.criterio].filter(Boolean).join('\n') || null, cartella, ospitato: OSPITATO })
+    ? mani.perQuestoCompito({ compito, nota: [nota, esecuzione?.criterio].filter(Boolean).join('\n') || null, cartella, ospitato: OSPITATO, mani: esecuzione?.mani ?? null })
     : []
   const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi), ...leMani, ...(appNativa ? [CREA_DOCUMENTO] : [])]
 

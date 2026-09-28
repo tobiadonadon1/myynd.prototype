@@ -1,0 +1,29 @@
+/*
+ * «Mentre dormivi» (F5): la stessa carta del punto e della settimana, in
+ * cima alla prima pagina. Il verde solo sui segni di «fatto», il rame su
+ * quello che aspetta lei; il resto è la carta della scrivania.
+ */
+.stanotte {flex:none;margin-bottom:14px;padding:16px 20px 12px;border-radius:20px;background:rgba(var(--carta-rgb),.66);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(var(--luce-rgb),.75);color:var(--inchiostro);}
+.stanotte button {font-family:inherit;cursor:pointer;}
+.stanotte > header {display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.stanotte h2 {display:flex;align-items:center;gap:8px;margin:0;font-size:15px;font-weight:500;}
+.stanotte h2 > i {font-style:normal;color:var(--verde-cupo, #3E5140);}
+.stanotte header p {margin:3px 0 0;font-size:13px;color:rgba(var(--inchiostro-rgb),.62);}
+.stanotte-visto {border:0;background:transparent;padding:2px 0;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.55);}
+.stanotte-visto:hover {color:var(--rame-testo);}
+.stanotte ul {list-style:none;margin:10px 0 0;padding:0;}
+.stanotte li {display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid rgba(var(--inchiostro-rgb),.08);}
+.stanotte-segno {flex:none;display:inline-grid;place-items:center;width:18px;height:18px;margin-top:1px;border-radius:50%;font-size:10px;font-weight:600;background:var(--fatto-fondo, rgba(92,118,96,.16));color:var(--fatto-segno, #3E5140);}
+.stanotte li.aspetta .stanotte-segno {background:rgba(var(--rame-rgb),.14);color:var(--rame-testo);}
+.stanotte-testo {flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.stanotte-titolo {font-size:14px;font-weight:500;line-height:1.4;overflow-wrap:anywhere;}
+.stanotte li.chiusa .stanotte-titolo {color:rgba(var(--inchiostro-rgb),.55);}
+.stanotte-detto {font-size:12.5px;line-height:1.45;color:var(--verde-cupo, #3E5140);overflow-wrap:anywhere;}
+.stanotte li.aspetta .stanotte-detto {color:var(--rame-testo);}
+.stanotte-cosa {font-size:12px;color:rgba(var(--inchiostro-rgb),.55);overflow-wrap:anywhere;}
+.stanotte-gesti {flex:none;display:flex;align-items:center;gap:6px;}
+.stanotte-gesti button {border:1px solid rgba(var(--inchiostro-rgb),.16);background:transparent;border-radius:99px;padding:4px 11px;font-size:12px;color:rgba(var(--inchiostro-rgb),.72);white-space:nowrap;}
+.stanotte-gesti button:hover {border-color:var(--rame);color:var(--rame-testo);}
+.stanotte-gesti button.pieno {border-color:transparent;background:var(--rame-forte, #C4623B);color:var(--avorio, #FFF7F0);font-weight:500;}
+.stanotte-gesti button.pieno:hover {background:var(--rame-forte-su, #B24E2E);color:var(--avorio, #FFF7F0);}
+.stanotte button:focus-visible {outline:2px solid var(--rame);outline-offset:2px;}
