@@ -538,15 +538,40 @@ export function useCompiti(
     }
   }, [indietro, mostraToast])
 
-  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null }): Promise<boolean> => {
+  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null; criterio?: string | null }): Promise<boolean> => {
     const prima = compitiRef.current
-    setCompiti(cs => cs.map(x => (x.id === id ? { ...x, ...c } as Compito : x)))
+    // il criterio non è un campo della riga: sulla riga sta dentro il contratto,
+    // e scritto da lei diventa suo nello stesso istante
+    const { criterio, ...campi } = c
+    setCompiti(cs => cs.map(x => {
+      if (x.id !== id) return x
+      const nuova = { ...x, ...campi } as Compito
+      if (criterio !== undefined) {
+        nuova.contratto = criterio && criterio.trim()
+          ? { ...(x.contratto ?? { mani: [], budget: { giri: 4, minuti: 10 } }), criterio: criterio.trim(), scritto: 'tu', quando: new Date().toISOString() }
+          : null
+      }
+      return nuova
+    }))
     try {
       const r = await api.cambiaCompito(id, c)
       setCompiti(r.compiti)
       return true
     } catch { indietro(prima, id, t('Non sono riuscito a salvarlo.')); return false }
   }, [indietro])
+
+  /**
+   * F1 · il «fatto» di una carta scritto da Myynd adesso, o riscritto. Il
+   * server risponde quando il modello ha finito (al massimo venti secondi):
+   * fino ad allora la carta mostra quello che aveva.
+   */
+  const contratto = useCallback(async (id: string, rifai = false): Promise<boolean> => {
+    try {
+      const r = await api.contrattoCompito(id, rifai)
+      setCompiti(r.compiti)
+      return true
+    } catch { mostraToast(t('Non sono riuscito a scriverlo.')); return false }
+  }, [mostraToast])
 
   /**
    * Sposta una riga fra due vicine — o in un altro secchio, che è lo stesso gesto.
@@ -755,7 +780,7 @@ export function useCompiti(
     pronte, chiedono,
     /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
     inAttesa,
-    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

@@ -219,3 +219,30 @@
   .task-detail-body {padding:22px 20px;}
 }
 @media (prefers-reduced-motion:reduce) {.task-calendar-day,.task-day-add,.task-planning-cestino {transition:none;}}
+
+/* — F1: il «fatto», la prova e il diario nel dettaglio della carta — */
+.task-detail-fatto {display:flex;flex-direction:column;gap:6px;margin-top:18px;}
+.task-detail-fatto-testa {display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.task-detail-fatto-testa .task-detail-label {margin:0;}
+.task-detail-suo {font-size:11px;font-weight:600;padding:1px 8px;border-radius:99px;color:var(--rame-testo);background:rgba(var(--rame-rgb),.12);}
+.task-detail .task-detail-riscrivi {border:0;background:transparent;padding:2px 4px;min-height:0;font-size:12px;color:var(--rame-testo);box-shadow:none;}
+.task-detail .task-detail-riscrivi:hover:not(:disabled) {text-decoration:underline;text-underline-offset:3px;background:transparent;}
+.task-detail-riscrivi:disabled {opacity:.6;cursor:default;}
+.task-detail-mani {display:flex;flex-wrap:wrap;gap:5px;align-items:center;}
+.task-detail-mani span {font-size:11px;padding:2px 8px;border-radius:99px;color:rgba(var(--inchiostro-rgb),.62);background:rgba(var(--inchiostro-rgb),.05);}
+.task-detail-mani .task-detail-budget {background:transparent;padding-left:2px;color:rgba(var(--inchiostro-rgb),.45);}
+.task-detail-prova {display:flex;flex-direction:column;gap:6px;margin-top:16px;padding:12px 14px;border-radius:14px;border:1px solid rgba(var(--inchiostro-rgb),.08);background:rgba(var(--inchiostro-rgb),.025);}
+.task-detail-prova.pass {border-color:rgba(var(--salvia-rgb),.4);background:rgba(var(--salvia-rgb),.08);}
+.task-detail-prova.fail {border-color:rgba(var(--rame-rgb),.4);background:rgba(var(--rame-rgb),.06);}
+.task-detail-prova .task-detail-label {margin:0;}
+.task-detail-prova p {margin:0;font-size:13px;line-height:1.45;overflow-wrap:anywhere;}
+.task-detail-prova.pass p {color:var(--verde-cupo);}
+.task-detail-prova.fail p {color:var(--rame-testo);}
+.task-detail-prova ul {margin:0;padding-left:18px;font-size:12px;line-height:1.5;color:rgba(var(--inchiostro-rgb),.62);}
+.task-detail-diario {margin-top:16px;}
+.task-detail-diario summary {cursor:pointer;font-size:12px;font-weight:500;letter-spacing:.02em;color:rgba(var(--inchiostro-rgb),.6);}
+.task-detail-diario summary:hover {color:var(--rame-testo);}
+.task-detail-diario ol {list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;}
+.task-detail-diario li {display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;font-size:12px;line-height:1.45;color:rgba(var(--inchiostro-rgb),.72);}
+.task-detail-diario time {font-variant-numeric:tabular-nums;color:rgba(var(--inchiostro-rgb),.42);}
+.task-detail-diario li span {overflow-wrap:anywhere;}

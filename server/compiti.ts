@@ -40,12 +40,13 @@ import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import { tutteLeDomande } from './testo.ts'
 import { giudica, prossimoPasso, simili } from './revisione-lavoro.ts'
 import * as mani from './mani.ts'
+import * as contratto from './contratto.ts'
 import * as ordine from './ordine.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as voce from './voce.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi, type Stesa } from './stesura.ts'
-import { corpoPerChiRiceve, rigaIpotesi } from './cornice.ts'
+import { corpoPerChiRiceve, haSegnaposto, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
 import type { Lettura } from './lettura-chiesta.ts'
 
@@ -341,6 +342,8 @@ type Ferri = {
   pesaLaDomanda: typeof claude.pesaLaDomanda
   /** Come scrive a chi riceve (P3): senza modello, ma legge l'indice, e le prove vogliono poterlo dire. */
   voce: { perRiga: typeof voce.perRiga }
+  /** Il contratto della carta (F1), la base se manca: nelle prove si sostituisce. */
+  contratto: (id: string) => store.Contratto | null
 }
 const VERI: Ferri = {
   salvaBozzaCasella,
@@ -350,6 +353,7 @@ const VERI: Ferri = {
   preparaEmail: (...a) => claude.preparaEmail(...a),
   pesaLaDomanda: (...a) => claude.pesaLaDomanda(...a),
   voce: { perRiga: c => voce.perRiga(c) },
+  contratto: id => contratto.subito(id),
   giudica: (...a) => giudica(...a),
   salvaConsegna: (...a) => mani.salvaConsegna(...a),
   prossimoPasso: (...a) => prossimoPasso(...a),
@@ -399,6 +403,12 @@ async function svolgiUno(id: string, nativa: boolean) {
   annuncia({ fase: 'lavoro', id, passo: { passo: 'preparo' } })
   const iniziato = Date.now()
   let ultimoPasso: string | undefined
+  /** Il budget di tempo della carta è finito (F1): il lavoro si ferma, e non è un guaio passeggero. */
+  let scaduto = false
+  let scadenza: ReturnType<typeof setTimeout> | undefined
+  // una riga riaffidata non si porta dietro la prova di ieri
+  store.scriviProvaCompito(id, null)
+  store.segnaNelDiario(id, { tipo: 'preso', dettaglio: c.modo })
 
   try {
     // Il permesso viaggia con la riga: qui non si va a rileggere niente, si
@@ -414,6 +424,23 @@ async function svolgiUno(id: string, nativa: boolean) {
     const nota = progetto && progetto.stato !== 'chiuso'
       ? [`Progetto: ${progetto.nome}`, `Obiettivo: ${progetto.obiettivo}`, c.nota].filter(Boolean).join('\n')
       : c.nota
+    /*
+     * Il contratto (F1): cosa vuol dire «fatto», con che mani, in quanto
+     * tempo. Se manca, il lavoro parte subito con la base e il modello
+     * scrive dietro quello preciso: il revisore, che arriva dopo, legge il
+     * più preciso che c'è in quel momento. Nessuna attesa in più su una
+     * carta affidata adesso; una carta che aspetta il suo turno (F2) ha già
+     * il suo. Il criterio arriva a chi scrive (nel prompt di sistema, vedi
+     * `svolgi`) e a chi rilegge, mai nella nota: la nota entra nella ricerca
+     * del materiale, e `dopoLaStesura` la legge per imparare dove salvare.
+     * «Un file sulla Scrivania» scritto da Myynd non è lei che lo chiede.
+     */
+    const k = ferri.contratto(id)
+    if (k) store.segnaNelDiario(id, { tipo: 'contratto', dettaglio: k.criterio })
+    if (k?.budget.minuti) {
+      scadenza = setTimeout(() => { scaduto = true; controller.abort() }, k.budget.minuti * 60_000)
+      scadenza.unref?.()
+    }
     console.info(`myynd · worker · entering-production · ${id} · elapsed_ms=${Date.now() - iniziato}`)
     // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da
     // sola non diceva se stesse cercando, leggendo o scrivendo. Dopo un
@@ -423,6 +450,7 @@ async function svolgiUno(id: string, nativa: boolean) {
         console.info(`myynd · worker · stage=${p.passo} · ${id} · elapsed_ms=${Date.now() - iniziato}`)
         ultimoPasso = p.passo
       }
+      if (p.passo !== 'preparo') store.segnaNelDiario(id, { tipo: p.passo, dettaglio: p.dettaglio })
       annuncia({ fase: 'lavoro', id, passo: p })
     } }
     /*
@@ -449,6 +477,7 @@ async function svolgiUno(id: string, nativa: boolean) {
     lavoroDati.registraAffido(c, nativa)
     let v: voce.Voce | null = null
     try { v = ferri.voce.perRiga(c) } catch (e) { console.warn(`myynd · voce · ${id}:`, e instanceof Error ? e.message : e) }
+    const giriDelBudget = k?.budget.giri
     const lavora = (notaGiro: string | null, extra?: { fissa?: string[]; giri?: number }) => ferri.svolgi(
       c.testo, notaGiro, c.modo,
       concessi,
@@ -459,7 +488,11 @@ async function svolgiUno(id: string, nativa: boolean) {
       c.doc,
       dato,
       {
-        nativa, signal: controller.signal, taskId: c.id, ...(extra ?? {}),
+        nativa, signal: controller.signal, taskId: c.id,
+        ...(k?.criterio ? { criterio: k.criterio } : {}),
+        ...(giriDelBudget ? { giri: giriDelBudget } : {}),
+        ...(extra ?? {}),
+        ...(extra?.giri && giriDelBudget ? { giri: Math.min(extra.giri, giriDelBudget) } : {}),
         ...(v?.blocco ? { voce: v.blocco } : {}), ...(v?.consegna ? { consegna: v.consegna } : {})
       },
       materiale
@@ -474,6 +507,13 @@ async function svolgiUno(id: string, nativa: boolean) {
     const progettoVivo = progetto && progetto.stato !== 'chiuso' ? progetto : null
     const stesa = await stendi({
       c, nota, progetto: progettoVivo, nativa,
+      criterio: () => contratto.criterioDi(id) ?? k?.criterio ?? null,
+      segna: (tipo, dettaglio) => {
+        if (richiamati.has(chiave(id))) return
+        store.segnaNelDiario(id, { tipo, dettaglio })
+        // la rilettura si vede sulla carta: è il momento in cui passa in «Controllo»
+        if (tipo === 'rileggo') annuncia({ fase: 'lavoro', id, passo: { passo: 'rileggo' } })
+      },
       doc: c.doc ? store.documento(c.doc) : null,
       lingua: cfg.lingua(), consegna: v?.consegna, voce: v?.blocco,
       lavora,
@@ -485,9 +525,19 @@ async function svolgiUno(id: string, nativa: boolean) {
       collegata: g => g === 'posta' ? ferri.postaCollegata() : g === 'file' ? !!cfg.leggi().desktop?.cartelle?.length : false
     })
     if (!stesa) return
+    clearTimeout(scadenza)
     await dopoLaStesura(c, stesa, progetto, { nota, voce: v, fermato: () => richiamati.has(chiave(id)) })
   } catch (e) {
+    clearTimeout(scadenza)
     if (richiamati.has(chiave(id))) return
+    if (scaduto) {
+      // il tempo della carta è finito: non si riprova da soli, lo si dice
+      ritentati.delete(chiave(id))
+      store.segnaNelDiario(id, { tipo: 'scaduto' })
+      try { if (!store.guaioCompito(id, TEMPO_FINITO)) return } catch { return }
+      annuncia({ fase: 'guaio', id, guaio: TEMPO_FINITO })
+      return
+    }
     const guaio = e instanceof Error ? e.message : String(e)
     const k = chiave(id)
     if (PASSEGGERO.test(guaio) && !ritentati.has(k)) {
@@ -509,9 +559,15 @@ async function svolgiUno(id: string, nativa: boolean) {
       console.error('myynd · non riesco nemmeno a segnare il guaio', id, ancora)
       return
     }
+    store.segnaNelDiario(id, { tipo: 'guaio', dettaglio: guaio })
     annuncia({ fase: 'guaio', id, guaio })
+  } finally {
+    clearTimeout(scadenza)
   }
 }
+
+/** Quando il budget di tempo della carta finisce (F1): una frase fissa, così si traduce sempre. */
+export const TEMPO_FINITO = 'Ci ha messo più del tempo che aveva. Riaffidamela, o dividila in due.'
 
 /**
  * Quello che succede dopo la stesura (P6): il file, la verifica delle fonti,
@@ -555,6 +611,7 @@ export async function dopoLaStesura(
     lavoroDati.registraEsito(id, { mossa, genere })
     ritentati.delete(chiave(id))
     if (!store.guaioCompito(id, frase)) return
+    store.segnaNelDiario(id, { tipo: 'guaio', dettaglio: frase })
     annuncia({ fase: 'guaio', id, guaio: frase })
     return
   }
@@ -675,6 +732,24 @@ export async function dopoLaStesura(
     lavoroDati.registraEsito(id, { mossa: 'produci', genere: null, tipo, ...(chiedeNativo ? {} : { consegnato: new Date().toISOString() }) })
   }
 
+  /*
+   * La prova (F1): il lavoro contro il suo «fatto». I controlli duri (il
+   * file c'è, la bozza è nella casella, il codice è posato) e il giudizio del
+   * revisore sul criterio. Una domanda non ha niente da provare; un lavoro
+   * con dentro un posto vuoto («[da completare: …]») non è fatto, e la prova
+   * lo dice con la riga di quello che manca.
+   */
+  const scritta = store.compito(id)
+  if (scritta && scritta.stato === 'pronto') {
+    const manca = haSegnaposto(testo) ? rigaDellaMancanza(testo) : null
+    const p = contratto.prova({ compito: scritta, verdetto: revisione, fatti, segnaposto: manca, lingua: cfg.lingua() })
+    store.scriviProvaCompito(id, p)
+    store.segnaNelDiario(id, { tipo: 'consegnato', dettaglio: scritta.consegna?.titolo ?? (scritta.email?.casella?.stato === 'salvata' ? 'casella' : undefined) })
+    if (p) store.segnaNelDiario(id, { tipo: 'prova', dettaglio: `${p.esito}: ${p.perche}` })
+  } else if (scritta?.stato === 'chiede') {
+    store.segnaNelDiario(id, { tipo: 'domanda', dettaglio: scritta.chieste?.[0]?.domanda ?? scritta.risultato?.split('\n').find(r => r.trim())?.slice(0, 200) })
+  }
+
   const fatto = store.compito(id)
   if (fatto) annuncia({ fase: fatto.stato === 'chiede' ? 'chiede' : 'pronto', id, compito: fatto })
   // e la cosa dopo: si cerca *dopo* aver annunciato, perché il risultato
@@ -774,6 +849,15 @@ export function rispostaCheChiude(testo: string): 'lasciato' | 'fatto' | null {
   if (forme.some(f => GIA_FATTO.test(f))) return 'fatto'
   if (forme.some(f => LASCIA.test(f))) return 'lasciato'
   return null
+}
+
+/** La riga che dice cosa manca, in fondo a un lavoro con un posto vuoto: «Manca…» o «Missing…». */
+function rigaDellaMancanza(testo: string): string {
+  const righe = testo.split('\n').map(r => r.trim()).filter(Boolean)
+  const detta = [...righe].reverse().find(r => /^(?:manca|mancano|missing)\b/i.test(r))
+  if (detta) return detta.slice(0, 300)
+  const posto = /\[(?:da completare|to fill)\s*:\s*([^\]]+)\]/i.exec(testo)
+  return posto ? (cfg.lingua() === 'en' ? `Missing: ${posto[1].trim()}` : `Manca: ${posto[1].trim()}`) : (cfg.lingua() === 'en' ? 'Something is still missing.' : 'Manca ancora qualcosa.')
 }
 
 /** I modi che passano dalla rilettura: quelli che portano la sua firma. */

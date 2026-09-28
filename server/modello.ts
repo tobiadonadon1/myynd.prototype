@@ -270,6 +270,7 @@ export type Lavoro =
   | 'domande'       // cosa gli serve sapere per andare avanti, con le opzioni
   | 'rassegna'      // quali titoli di giornale vale la pena leggere stamattina
   | 'ricetta'       // da una frase sua a un'automazione che gira davvero
+  | 'contratto'     // cosa vuol dire «fatto» per una carta, prima di lavorarla (F1)
   | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
   | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
@@ -427,6 +428,14 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * prova direbbe il falso.
    */
   collaudo:   { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 120_000 },
+  /*
+   * Il contratto di una carta (F1): una riga che dice cosa vuol dire «fatto»,
+   * prima che il lavoro cominci. È il metro con cui il revisore boccia o fa
+   * passare, e per questo non è `casa`: un criterio generico («un lavoro di
+   * qualità») non boccia mai niente. Ma è una riga, una volta per carta, e
+   * senza modello c'è la base deterministica: `media` basta e avanza.
+   */
+  contratto:  { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 30_000 },
 
   // Manovre interne: il locale le fa uguale.
   //

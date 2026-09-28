@@ -3003,7 +3003,7 @@ const GIRI = { bozza: 4, tutto: 7, prompt: 7 } as const
  * comparirebbe «Cerco «listino»» e nessun dizionario potrebbe recuperarla —
  * `dettaglio` cambia a ogni giro, e una chiave che cambia non è una chiave.
  */
-export type Passo = { passo: 'preparo' | 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
+export type Passo = { passo: 'preparo' | 'cerco' | 'apro' | 'scrivo' | 'rileggo'; dettaglio?: string }
 
 export async function svolgi(
   compito: string,
@@ -3052,7 +3052,7 @@ export async function svolgi(
    * `giri` abbassa il tetto dei giri; `voce` è come scrive a chi riceve;
    * `consegna` è la lingua in cui legge chi riceve.
    */
-  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en' },
+  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en'; criterio?: string },
   /**
    * Il materiale del progetto di cui la riga fa parte, se ne ha uno: la
    * cartella di lavoro come fonte fissa, la memoria e il riferimento nel
@@ -3237,7 +3237,9 @@ export async function svolgi(
    * non fa la cosa.
    */
   const leMani = !concessi.length && !selezioneAttiva && selezione?.origine !== 'automazione' && modo !== 'prompt'
-    ? mani.perQuestoCompito({ compito, nota, cartella, ospitato: OSPITATO })
+    // il «fatto» della carta (F1) conta per le mani: «un file sulla Scrivania»
+    // o «una nota in Note» vogliono la mano che lo fa
+    ? mani.perQuestoCompito({ compito, nota: [nota, esecuzione?.criterio].filter(Boolean).join('\n') || null, cartella, ospitato: OSPITATO })
     : []
   const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi), ...leMani, ...(appNativa ? [CREA_DOCUMENTO] : [])]
 
@@ -3256,6 +3258,18 @@ export async function svolgi(
     'mancanti. La mancanza di un aggiornamento sullo stato non impedisce una proposta ' +
     'dichiarata come tale. Non sostenere di aver eseguito i passi proposti.'
   if (obiettivoNudo) sistemaLavoro += obiettivoDaProdurre()
+  /*
+   * Il «fatto» della carta (F1). Sta nel prompt di sistema e non nella nota:
+   * la nota entra nella ricerca del materiale, e un criterio là dentro
+   * pescherebbe documenti che parlano di bozze e caselle invece di quelli
+   * che parlano della cosa.
+   */
+  if (esecuzione?.criterio?.trim()) {
+    sistemaLavoro += `\n\nFatto vuol dire, per questa carta: ${esecuzione.criterio.trim()}\n` +
+      'È il criterio con cui il lavoro verrà controllato prima di dirlo pronto: consegna una cosa ' +
+      'che lo soddisfa per intero. Se una parte non si può fare con quello che hai, dillo nella ' +
+      'riga per lei invece di fingere.'
+  }
   /*
    * Quello che sa del progetto: il riferimento scritto da lui, e la memoria
    * del progetto. La memoria arriva già da `sistema()` quando il nome del

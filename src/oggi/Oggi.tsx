@@ -14,6 +14,7 @@
 // chiede ogni tanto, non una che si guarda a colpo d'occhio.
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
 import { frasi, loc, t } from '../lingua'
 import { IconAvanti, IconGiu, IconSpunta } from '../icons'
@@ -30,6 +31,7 @@ import { nomePorta, portaAlleFonti, portaAlProgetto, portaInChat, siPuoAprireLeF
 import { Calendario } from './Calendario'
 import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
+import { Tavola } from './Tavola'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
 import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
@@ -142,6 +144,7 @@ function Cerchio({ c, onClick }: { c: Compito; onClick: () => void }) {
 function frasePasso(p: PassoCompito): string {
   if (p.passo === 'cerco') return frasi.passoCerco(p.dettaglio ?? '')
   if (p.passo === 'apro') return frasi.passoApro(p.dettaglio ?? '')
+  if (p.passo === 'rileggo') return t('Controllo contro il suo «fatto»')
   return t('Scrivo…')
 }
 
@@ -752,6 +755,26 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
   )
 }
 
+/**
+ * La prova, sotto il lavoro (F1): controllato contro il suo «fatto», e com'è
+ * andata. Una riga sola, nel verde degli stati se regge e nel rame se no;
+ * niente se nessuno ha potuto controllarlo (lo dice già la bacheca).
+ */
+export function RigaProva({ c }: { c: Compito }) {
+  const p = c.prova
+  if (!p || p.esito === 'unavailable' || !p.perche) return null
+  const regge = p.esito === 'pass'
+  return (
+    <div style={{
+      marginTop: 10, display: 'flex', gap: 7, alignItems: 'baseline', fontSize: '12.5px', lineHeight: 1.5,
+      color: regge ? 'var(--verde-cupo)' : 'var(--rame-testo)', overflowWrap: 'anywhere'
+    }}>
+      <span aria-hidden="true" style={{ flex: 'none', fontWeight: 600 }}>{regge ? '✓' : '!'}</span>
+      <span>{regge ? frasi.provaRegge(p.perche) : frasi.provaNonRegge(p.perche)}</span>
+    </div>
+  )
+}
+
 /** La bozza, sotto la riga che l'ha chiesta. */
 /** Il testo della bozza da mostrare e correggere: senza la riga dell'ipotesi, che sta sotto con «Cambia». */
 function Bozza({ c, l }: { c: Compito; l: Lista }) {
@@ -841,6 +864,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
         </div>
       )}
       {siCambia(c) && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
+      <RigaProva c={c} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
         {/* il gesto principale di un prompt è copiarlo: «Va bene» si fa di contorno */}
@@ -1677,13 +1701,56 @@ function Finito({ l }: { l: Lista }) {
   )
 }
 
+/**
+ * Il foglio della bacheca (F1): la riga intera, con il suo lavoro e i suoi
+ * gesti (Manda, Cambia, Rispondi), sopra la bacheca. È la stessa riga del
+ * calendario e della lista: niente di nuovo da imparare, solo un posto
+ * dove si vede. Esc, la croce o un clic fuori lo chiudono.
+ */
+function Foglio({ c, l, stretta, modifica, chiudi }: { c: Compito; l: Lista; stretta: boolean; modifica: (c: Compito) => void; chiudi: () => void }) {
+  const d = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const x = d.current
+    const prima = document.activeElement as HTMLElement | null
+    x?.showModal()
+    return () => { x?.close(); requestAnimationFrame(() => { if (prima?.isConnected) prima.focus() }) }
+  }, [])
+  return createPortal(
+    <dialog ref={d} className="task-sheet" aria-labelledby={`task-sheet-${c.id}`}
+      onCancel={e => { e.preventDefault(); chiudi() }}
+      onClick={e => { if (e.target === d.current) chiudi() }}>
+      <header>
+        <span id={`task-sheet-${c.id}`}>{c.stato === 'chiede' ? t('Ti chiede una cosa') : c.stato === 'delegato' ? t('Al lavoro') : t('Il lavoro consegnato')}</span>
+        <button type="button" className="task-sheet-close" aria-label={t('Chiudi')} onClick={chiudi}>×</button>
+      </header>
+      <div className="task-sheet-body">
+        <ul className="task-agenda-list"><Riga c={c} l={l} stretta={stretta} modifica={modifica} /></ul>
+      </div>
+    </dialog>, document.body)
+}
+
+type Vista = 'calendario' | 'bacheca' | 'lista'
+const CHIAVE_VISTA = 'myynd.vistaCompiti'
+function vistaSalvata(): Vista {
+  try {
+    const v = localStorage.getItem(CHIAVE_VISTA)
+    return v === 'bacheca' || v === 'lista' ? v : 'calendario'
+  } catch { return 'calendario' }
+}
+
 export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
   l: Lista; oggi: string; lingua: string; giroFatto: boolean; segnaGiro: () => void
   /** La guida sta dentro l'app: era un indirizzo privato su claude.ai, e non si apriva a nessuno. */
   apriGuida: () => void
 }) {
   const [fatteAperte, setFatteAperte] = useState(false)
-  const [vista, setVista] = useState<'calendario' | 'lista'>('calendario')
+  /*
+   * La vista si ricorda (F1): chi lavora sulla bacheca la ritrova aperta la
+   * volta dopo. Prima si ripartiva sempre dal calendario, e con due viste la
+   * cosa passava inosservata; con tre è un clic in più ogni volta.
+   */
+  const [vista, setVistaStato] = useState<Vista>(vistaSalvata)
+  const setVista = (v: Vista) => { setVistaStato(v); try { localStorage.setItem(CHIAVE_VISTA, v) } catch { /* senza memoria si riparte dal calendario */ } }
   const [giorno, setGiorno] = useState(giornoLocale)
   const [senzaData, setSenzaData] = useState(false)
   /*
@@ -1697,6 +1764,15 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
    */
   const [espansa, setEspansa] = useState(false)
   const [modifica, setModifica] = useState<Compito | null>(null)
+  /** F1 · la carta della bacheca aperta sopra, in un foglio: il lavoro consegnato o la domanda. */
+  const [foglio, setFoglio] = useState<string | null>(null)
+  const cartaDelFoglio = foglio ? l.compiti.find(x => x.id === foglio) ?? null : null
+  // mandata, chiusa o tolta: il foglio non ha più niente da mostrare
+  useEffect(() => { if (foglio && !cartaDelFoglio) setFoglio(null) }, [foglio, cartaDelFoglio])
+  const chiudiFoglio = () => {
+    if (foglio && l.aperti.has(foglio)) l.apriChiudi(foglio)
+    setFoglio(null)
+  }
   // chiesta da fuori (una riga del punto): si apre il dettaglio e la richiesta si consuma
   useEffect(() => {
     if (!l.daAprire) return
@@ -1764,7 +1840,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
   return (
     // il fondo si può afferrare: è così che si sposta la finestra. Tutto quello
     // che si tocca dentro dice «no-drag», altrimenti non lo tocchi più
-    <div style={{ ...SPOSTA, width: vista === 'calendario' ? 1480 : 780, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ ...SPOSTA, width: vista === 'lista' ? 780 : 1480, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: stretta ? 24 : 34 }} />
 
       {/* Il titolo e la scelta della vista stanno sulla stessa riga.
@@ -1794,6 +1870,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         </div>
         <div className="task-view-toggle" style={{ flex: 'none', marginTop: 6 }} role="group" aria-label={t('Vista attività')}>
           <button type="button" aria-pressed={vista === 'calendario'} onClick={() => setVista('calendario')}>{t('Calendario')}</button>
+          <button type="button" aria-pressed={vista === 'bacheca'} onClick={() => setVista('bacheca')}>{t('Bacheca')}</button>
           <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>{t('Lista')}</button>
         </div>
       </div>
@@ -1827,6 +1904,18 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         pianifica={(id, data, ora) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data), ...(ora !== undefined ? { ora } : {}) }) }}
         nuovoCompito={(testo, g, ora) => { void l.aggiungi(testo, secchioDelGiorno(g), g, ora) }}
         chiudi={() => setEspansa(false)} />}
+
+      {l.caricato && !l.guasto && vista === 'bacheca' && <Tavola l={l} oggi={dataOggi} modifica={setModifica}
+        apri={c => {
+          // un lavoro consegnato o una domanda si apre in un foglio sopra la
+          // bacheca: sotto, dopo cinque corsie alte, non lo si vedrebbe. Una
+          // riga ferma su un guaio non ha un lavoro da mostrare: il dettaglio
+          if (c.stato !== 'pronto' && c.stato !== 'chiede') { setModifica(c); return }
+          if (!l.aperti.has(c.id)) l.apriChiudi(c.id)
+          setFoglio(c.id)
+        }} />}
+
+      {vista === 'bacheca' && cartaDelFoglio && <Foglio c={cartaDelFoglio} l={l} stretta={stretta} modifica={setModifica} chiudi={chiudiFoglio} />}
 
       {vista === 'calendario' && l.compiti.filter(c => l.aperti.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede')).map(c =>
         <section key={c.id} id={`task-result-${c.id}`} className="task-calendar-result"><ul className="task-agenda-list"><Riga c={c} l={l} stretta={stretta} modifica={setModifica} /></ul></section>)}

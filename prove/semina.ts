@@ -205,7 +205,10 @@ chi.dentro(conto.id, () => {
     // le domande fatte e un guaio: le colonne di una riga consegnata
     const p3: [string, unknown][] = [
       ['email', json(c.email)], ['voceScritta', json(c.voceScritta)], ['mandata', json(c.mandata)], ['consegna', json(c.consegna)],
-      ['domandeFatte', typeof c.domandeFatte === 'number' ? c.domandeFatte : undefined], ['guaio', (c.guaio as string) ?? undefined]
+      ['domandeFatte', typeof c.domandeFatte === 'number' ? c.domandeFatte : undefined], ['guaio', (c.guaio as string) ?? undefined],
+      // — F1: il contratto, la prova e il diario di una carta —
+      ['contratto', json(c.contratto)], ['prova', json(c.prova)], ['diario', json(c.diario)],
+      ['aggiornato', c.aggiornato ? tempo(c.aggiornato) : undefined], ['priorita', (c.priorita as string) ?? undefined]
     ]
     for (const [k, v] of p3) {
       if (v === undefined || v === null) continue

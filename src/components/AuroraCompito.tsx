@@ -535,6 +535,7 @@ export function PassoAttivo({ passo }: { passo: PassoCompito }) {
   const testo = passo.passo === 'preparo' ? (loc().startsWith('en') ? 'Preparing your task…' : 'Preparazione…')
     : passo.passo === 'cerco' ? frasi.passoCerco(passo.dettaglio ?? '')
     : passo.passo === 'apro' ? frasi.passoApro(passo.dettaglio ?? '')
+    : passo.passo === 'rileggo' ? t('Controllo contro il suo «fatto»')
       : [t('Scrivo…'), passo.dettaglio].filter(Boolean).join(' ')
   return <div className="task-working-step" role="status" aria-live="polite">{testo}</div>
 }

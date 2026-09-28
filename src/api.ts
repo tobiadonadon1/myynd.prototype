@@ -681,6 +681,27 @@ export type Compito = {
   voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[] } | null
   /** La bozza è partita dalla sua posta: quale messaggio, quando, e quanto l'ha ritoccata. */
   mandata?: { doc: string; quando: string; certezza: 'id' | 'filo'; ritocco: number } | null
+  /** F1 · cosa vuol dire «fatto», con che mani e in quanto tempo. Se l'ha scritto lei, resta suo. */
+  contratto?: ContrattoCompito | null
+  /** F1 · il lavoro consegnato contro il suo «fatto». */
+  prova?: ProvaCompito | null
+  /** F1 · quello che ha fatto, passo per passo. */
+  diario?: VoceDiario[] | null
+}
+
+export type ManoCompito = 'posta' | 'file' | 'nota' | 'web' | 'codice'
+export type ContrattoCompito = {
+  criterio: string
+  mani: ManoCompito[]
+  budget: { giri: number; minuti: number }
+  scritto: 'myynd' | 'tu'
+  quando: string
+}
+export type ProvaCompito = { esito: 'pass' | 'fail' | 'unavailable'; perche: string; controlli: string[]; quando: string }
+export type VoceDiario = {
+  t: string
+  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto'
+  dettaglio?: string
 }
 
 export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
@@ -761,7 +782,7 @@ export type Portato =
  * esce in inglese sotto una riga inglese, cosa che una frase già scritta dal
  * server non potrebbe fare.
  */
-export type PassoCompito = { passo: 'preparo' | 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
+export type PassoCompito = { passo: 'preparo' | 'cerco' | 'apro' | 'scrivo' | 'rileggo'; dettaglio?: string }
 
 /** Come va un compito affidato a Myynd, mentre ci lavora. */
 export type EventoCompito =
@@ -1150,9 +1171,14 @@ export const api = {
   aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
     json<{ ok: true; id: string; compiti: Compito[] }>('/api/compiti', { method: 'POST', body: JSON.stringify(c) }),
 
-  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null }) =>
+  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null; criterio?: string | null }) =>
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}`,
       { method: 'PATCH', body: JSON.stringify(c) }),
+
+  /** F1 · il «fatto» scritto (o riscritto) da Myynd adesso. */
+  contrattoCompito: (id: string, rifai = false) =>
+    json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/contratto`,
+      { method: 'POST', body: JSON.stringify({ rifai }) }),
 
   /** I vicini, non una posizione: una posizione calcolata su una lista vecchia sposta la riga nel posto sbagliato. */
   spostaCompito: (id: string, v: { sopra?: string | null; sotto?: string | null; quando?: string }) =>

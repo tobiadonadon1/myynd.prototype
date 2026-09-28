@@ -155,7 +155,7 @@ test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affi
   compiti.affida(id, 'bozza')
   const pronto = await mio.aspetta('pronto')
 
-  assert.deepEqual(mio.sentiti.map(e => e.fase), ['preso', 'lavoro', 'lavoro', 'lavoro', 'pronto'])
+  assert.deepEqual(mio.sentiti.map(e => e.fase), ['preso', 'lavoro', 'lavoro', 'lavoro', 'lavoro', 'pronto'])
   assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, 'Done: the deliverable is below.\n\nGentile Rossi, ecco il preventivo.')
   assert.equal(pronto.fase === 'pronto' && pronto.compito.stato, 'pronto')
 
@@ -258,7 +258,8 @@ test('i passi arrivano strutturati, non come frasi', async () => {
   await o.aspetta('pronto')
 
   const lavoro = o.sentiti.filter(e => e.fase === 'lavoro').map(e => e.fase === 'lavoro' && e.passo)
-  assert.deepEqual(lavoro, [{ passo: 'preparo' }, ...passi])
+  // la rilettura è un passo anche lei (F1): è il momento in cui la carta passa in «Controllo»
+  assert.deepEqual(lavoro, [{ passo: 'preparo' }, ...passi, { passo: 'rileggo' }])
   o.smetti()
 })
 

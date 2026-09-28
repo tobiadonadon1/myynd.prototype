@@ -105,6 +105,30 @@ const SCHEMA_GIUDIZIO = {
   additionalProperties: false
 } as const
 
+/** Lo stesso schema, con il «fatto» della carta da controllare (F1). */
+const SCHEMA_GIUDIZIO_CRITERIO = {
+  ...SCHEMA_GIUDIZIO,
+  properties: {
+    ...SCHEMA_GIUDIZIO.properties,
+    criterio: {
+      type: 'string',
+      enum: ['met', 'not_met'],
+      description:
+        '«met» se il lavoro consegnato soddisfa per intero il criterio di «fatto» della carta, ' +
+        'guardando solo quello che c\'è davvero nel lavoro e negli attrezzi usati. «not_met» se ' +
+        'manca anche una parte, o se il criterio promette una cosa che il lavoro non contiene.'
+    },
+    criterioPerche: {
+      type: 'string',
+      description:
+        'Il perché, in una frase corta e concreta che lei capisce al volo: cosa regge («risponde ' +
+        'alle tre domande di Riccardo, con le date del calendario»), o cosa manca («manca la cifra ' +
+        'del preventivo, la fonte non la dice»).'
+    }
+  },
+  required: [...SCHEMA_GIUDIZIO.required, 'criterio', 'criterioPerche']
+} as const
+
 type Uscita = {
   esito: 'pass' | 'revise'
   per: string
@@ -112,6 +136,8 @@ type Uscita = {
   comeLoro: string
   problemi: string[]
   verificato: string[]
+  criterio?: 'met' | 'not_met'
+  criterioPerche?: string
 }
 
 /** Quanti documenti si rileggono, e quanto di ciascuno: il primo è quello della riga, e si legge di più. */
@@ -172,7 +198,14 @@ function nonDisponibile(per: string): Giudizio {
  * lo giudica il revisore con la regola scritta nel prompt.
  */
 const NON_LAVORO = /^(?:not\s+relevant|irrelevant|no\s+action(?:\s+(?:needed|required|taken))?|nothing\s+to\s+(?:do|reply|send|prepare|add|report)|not\s+(?:needed|necessary|applicable)|no\s+need|n\/a|already\s+done|done\.?$|skip(?:ped)?\b|out\s+of\s+scope|no\s+longer\s+relevant|non\s+(?:è\s+)?rilevante|niente\s+da\s+(?:fare|rispondere|mandare|preparare|aggiungere)|nulla\s+da\s+(?:fare|rispondere)|non\s+serve|già\s+fatto|fatto\.?$|non\s+c'?è\s+niente\s+da|non\s+ho\s+niente\s+da|i\s+(?:can'?t|cannot|won'?t|am\s+unable\s+to|do\s+not\s+have|don'?t\s+have|need\s+(?:you|more|the))|i'?m\s+(?:unable|missing)|non\s+posso|non\s+riesco|mi\s+manca|mi\s+mancano|non\s+ho\s+accesso|sorry\b|mi\s+dispiace)/i
-const CHIEDE_UN_TESTO = /\b(?:reply|respond|answer|write(?:\s+(?:to|back))?|draft|send|email|e-mail|message|follow\s*up|rispond\w*|scriv\w*|manda\w*|invia\w*|risposta|messaggio|bozza|follow-?up)\b/i
+/*
+ * Chiede un messaggio, non un documento. «Write» e «draft» da soli no: il
+ * 28 settembre «Write the first course outline» veniva bocciato a ogni giro,
+ * perché una scaletta è fatta di punti numerati e la regola la scambiava per
+ * «un piano al posto della lettera». Un piano al posto di un messaggio è un
+ * difetto; una scaletta chiesta come scaletta è il lavoro.
+ */
+const CHIEDE_UN_TESTO = /\b(?:reply|respond|answer|write\s+(?:to|back)|draft\s+(?:a\s+|an\s+|the\s+)?(?:reply|email|e-mail|message|response|answer)|send|email|e-mail|message|follow\s*up|rispond\w*|scriv\w*\s+(?:a|al|alla|allo|ai|agli|alle)\b|manda\w*|invia\w*|risposta|messaggio|bozza\s+di\s+(?:risposta|mail|email|messaggio)|follow-?up)\b/i
 const TITOLO_DA_PIANO = /^(?:\*\*|#+\s*)?(?:plan|proposed\s+plan|proposal|approach|next\s+steps|steps|roadmap|action\s+plan|piano|proposta(?:\s+di\s+piano)?|approccio|prossimi\s+passi|passi|scaletta)\b/i
 const E_UN_MESSAGGIO = /^(?:subject|oggetto|re:|dear|hi|hello|hey|ciao|gentile|buongiorno|buonasera|salve|caro|cara|good\s+(?:morning|afternoon|evening))\b/im
 const E_UNA_DECISIONE = /\b(?:decid\w*|scegl\w*|choose|pick|which|quale|quali|yes\s+or\s+no|sì\s+o\s+no|should\s+(?:i|we)|conviene|meglio)\b/i
@@ -270,6 +303,8 @@ export async function giudica(o: {
   lingua?: 'it' | 'en'
   /** Come scrive a chi riceve, dalle sue mail (P3): evidenza per il punto 3, mai un ordine. */
   voce?: string
+  /** Il «fatto» della carta (F1): se c'è, si controlla anche quello, e se non regge il lavoro non passa. */
+  criterio?: string | null
 }): Promise<Giudizio> {
   const stimato = destinatario(o.doc, o.compito.testo)
   // il controllo zero non ha bisogno di un modello, e vale anche senza
@@ -334,6 +369,7 @@ export async function giudica(o: {
     '4. La lunghezza: quanta ne serve a chi legge, non di più e non di meno.\n' +
     '5. La riga finale per lei, se c\'è: quando il lavoro contiene cifre o date, deve dire da ' +
     'quali fonti vengono.\n' +
+    (o.criterio ? `5b. Il «fatto» della carta, scritto prima del lavoro: «${o.criterio}». Il lavoro lo soddisfa per intero? Se ne manca anche una parte, o se il criterio dice un posto (la casella, un file, una nota, il codice) e gli attrezzi usati non mostrano che il lavoro è arrivato lì, non regge: allora l'esito è revise e fra i problemi c'è quello che manca, detto in modo che chi riscrive possa rimediare. Non chiedere più di quello che il criterio dice.\n` : '') +
     '6. La frase di chiusura, cioè la prima riga: comincia con «Fatto:» o «Done:» e dice cosa ' +
     'è stato prodotto e dove. Dev\'essere vera contro l\'elenco degli attrezzi usati che trovi ' +
     'sotto il lavoro: «salvato in Pages», «la nota è in Note», «il file è in…», «le modifiche ' +
@@ -356,6 +392,7 @@ export async function giudica(o: {
     o.nota?.trim() ? `Dettaglio della riga: ${o.nota.trim()}` : '',
     o.progetto ? `Progetto: ${o.progetto.nome}. Obiettivo: ${o.progetto.obiettivo || 'non registrato'}.` : '',
     `Chi lo riceve, per quanto si capisce: ${stimato}.`,
+    o.criterio ? `Il «fatto» della carta: ${o.criterio}` : '',
     '',
     'Il lavoro consegnato:',
     '<<<',
@@ -372,7 +409,7 @@ export async function giudica(o: {
     lavoro: 'revisione' as const,
     max_tokens: 2500,
     system: conLaLingua(sistema, { consegna: o.lingua }),
-    formato: SCHEMA_GIUDIZIO,
+    formato: o.criterio ? SCHEMA_GIUDIZIO_CRITERIO : SCHEMA_GIUDIZIO,
     messages: [{ role: 'user' as const, content: messaggio }]
   }
   let out = await ferri.chiediJSON<Uscita>(richiesta)
@@ -386,6 +423,19 @@ export async function giudica(o: {
   if (!out || (out.esito !== 'pass' && out.esito !== 'revise')) return nonDisponibile(stimato)
 
   const problemi = righe(out.problemi, 400, 8)
+  /*
+   * Il «fatto» della carta (F1). Un criterio che non regge è un problema da
+   * correggere come gli altri: se il revisore l'ha detto ma non l'ha messo
+   * fra i problemi, lo si aggiunge qui con il suo perché, così chi riscrive
+   * sa cosa manca e l'esito è coerente con quello che si mostra.
+   */
+  const criterio = o.criterio && (out.criterio === 'met' || out.criterio === 'not_met')
+    ? { esito: out.criterio, perche: riga(out.criterioPerche, 300) }
+    : null
+  if (criterio?.esito === 'not_met') {
+    const manca = criterio.perche || (cfg.lingua() === 'en' ? 'The work does not meet its done means yet.' : 'Il lavoro non soddisfa ancora il suo «fatto».')
+    if (!problemi.some(p => p === manca)) problemi.unshift(manca)
+  }
   // un revisore che dice «passa» e poi elenca cose da correggere si contraddice:
   // vale l'elenco, che è la parte che si può controllare. E uno che boccia
   // senza dire perché non ha dato un verdetto: chi riscrive non saprebbe cosa
@@ -396,8 +446,9 @@ export async function giudica(o: {
     per: riga(out.per, 60) || stimato,
     comeTe: riga(out.comeTe, 700),
     comeLoro: riga(out.comeLoro, 700),
-    problemi,
-    verificato: righe(out.verificato, 300, 8)
+    problemi: problemi.slice(0, 8),
+    verificato: righe(out.verificato, 300, 8),
+    ...(criterio ? { criterio } : {})
   }
 }
 

@@ -45,7 +45,10 @@ test('su una copia seminata non stampa oggetti né indirizzi, e scrive solo dent
     chi.dentro(k.id, () => {
       cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome' })
       store.scriviCompito({ id: 'm1', testo: 'Reply to Dana', quando: 'oggi', ordine: 'a0' })
-      const quando = new Date(Date.now() - 2 * 86400000).toISOString()
+      // adesso, non «due giorni fa»: il resoconto guarda la settimana in corso,
+      // e di lunedì due giorni fa è la settimana prima (la prova cadeva ogni
+      // lunedì e ogni martedì)
+      const quando = new Date().toISOString()
       store.default.prepare("INSERT INTO azioni (id, tipo, verso, cosa, compito, esito, quando) VALUES ('az1','email','dana@northwind.example','Secret subject line','m1','fatta',?)").run(quando)
     })
     store.chiudiIndici()

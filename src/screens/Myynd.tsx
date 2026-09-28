@@ -670,6 +670,17 @@ function fraseFinita(c: Compito): string {
  */
 function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
   const r = c.revisione
+  // F1 · con una prova contro il «fatto», si dice quella: è più precisa di
+  // «riletta come te», e dice la cosa che conta, cioè se è fatta davvero
+  const p = c.prova
+  if (c.stato === 'pronto' && p && p.esito !== 'unavailable' && p.perche) {
+    const regge = p.esito === 'pass'
+    return (
+      <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? (regge ? 'var(--verde-cupo)' : 'var(--rame-testo)') : 'rgba(var(--avorio-rgb),.72)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+        {regge ? `✓ ${frasi.provaRegge(p.perche)}` : frasi.provaNonRegge(p.perche)}
+      </div>
+    )
+  }
   if (c.stato !== 'pronto' || !r || r.esito === 'unavailable') return null
   return (
     <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? 'rgba(var(--inchiostro-rgb),.58)' : 'rgba(var(--avorio-rgb),.72)', textWrap: 'pretty' }}>
@@ -685,6 +696,8 @@ function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
 
 /** Quello che aspetta te, detto in una parola. */
 function attesaDi(c: Compito): string {
+  // F1 · un lavoro consegnato che non ha passato il suo «fatto» non è «fatto»
+  if (c.stato === 'pronto' && c.prova?.esito === 'fail') return t('da finire')
   return c.stato === 'pronto' ? t('fatto') : c.stato === 'chiede' ? t('ti chiede') : ''
 }
 

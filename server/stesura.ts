@@ -49,7 +49,7 @@ export type Ferri = {
   giudica: (o: {
     compito: { testo: string; modo?: string }; nota?: string | null; risultato: string
     doc?: store.Documento | null; progetto?: Progetto | null; fonti?: { id: string }[]; fatti?: mani.Fatto[]
-    lingua?: 'it' | 'en'; voce?: string
+    lingua?: 'it' | 'en'; voce?: string; criterio?: string | null
   }) => Promise<Giudizio>
 }
 
@@ -125,6 +125,18 @@ export async function stendi(o: {
    * con la posta collegata, e la riga direbbe una cosa falsa.
    */
   collegata?: (genere: 'posta' | 'file' | 'fonte' | 'permesso') => boolean
+  /**
+   * Il «fatto» della carta (F1): il revisore lo controlla. Una funzione vale
+   * quello che dice quando tocca al revisore: il criterio preciso può
+   * arrivare mentre il lavoro si scrive.
+   */
+  criterio?: string | null | (() => string | null | undefined)
+  /**
+   * I passi della stesura che il diario e la carta vogliono vedere (F1):
+   * la rilettura, la riscrittura dopo un «non passa», il giro con
+   * un'ipotesi. Chi ascolta non può fermare niente.
+   */
+  segna?: (tipo: 'rileggo' | 'riscrivo' | 'presumo', dettaglio?: string) => void
 }): Promise<Stesa | null> {
   const { c } = o
   const domandeFatte = c.domandeFatte ?? 0
@@ -142,6 +154,7 @@ export async function stendi(o: {
   let ipotesiProposta: string | null = null
   let verdetto: Giudizio | null = null
 
+  const segna = (tipo: 'rileggo' | 'riscrivo' | 'presumo', dettaglio?: string) => { try { o.segna?.(tipo, dettaglio) } catch { /* chi ascolta si arrangia */ } }
   const chiama = async (nota: string | null, extra?: { fissa?: string[]; giri?: number }) => {
     chiamate++
     return o.lavora(nota, extra)
@@ -189,6 +202,7 @@ export async function stendi(o: {
           ? istruzionePresumi(domanda, ipotesiProposta)
           : istruzioneSegnaposto(domanda, { rispostaInNota: domandeFatte > 0 && !!o.nota })
         console.info(`myynd · lavoro · ${c.id} · ${mossa} · ${genere ?? '-'} · giro in più`)
+        segna('presumo', domanda)
         notaGiro = [o.nota, istruzioneExtra].filter(Boolean).join('\n\n')
         uscita = await chiama(notaGiro, { fissa: lette, giri: 2 })
         continue
@@ -209,9 +223,12 @@ export async function stendi(o: {
     }
 
     riletture++
+    segna('rileggo')
+    const criterio = typeof o.criterio === 'function' ? o.criterio() : o.criterio
     verdetto = await o.ferri.giudica({
       compito: c, nota: notaGiro, risultato: testo, doc: o.doc ?? null, progetto: o.progetto,
-      fonti: uscita.fonti, fatti: uscita.fatti ?? [], lingua: o.consegna, voce: o.voce
+      fonti: uscita.fonti, fatti: uscita.fatti ?? [], lingua: o.consegna, voce: o.voce,
+      ...(criterio ? { criterio } : {})
     })
     if (o.fermo()) return null
     const dellaVoce = o.controllaVoce ? o.controllaVoce(corpoPerChiRiceve(testo)) : []
@@ -222,6 +239,7 @@ export async function stendi(o: {
       riscritto = true
       giri++
       console.info(`myynd · revisione · ${c.id} · revise · riscrivo (giro ${giri})`)
+      segna('riscrivo', verdetto.problemi[0])
       notaGiro = [o.nota, istruzioneExtra, feedbackPer(verdetto.problemi)].filter(Boolean).join('\n\n')
       uscita = await chiama(notaGiro, extraFatto ? { fissa: lette, giri: 2 } : undefined)
       continue

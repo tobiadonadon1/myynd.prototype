@@ -287,7 +287,10 @@ test('eUnLavoro: rifiuti, stati, domande, piani al posto di un messaggio non son
     ['Reply to App Review with the link and the three setup steps.\n\nSubject: Re: Evermute needs more information\n\nHello, here is the recording: https://example.com/x. Steps: 1. Install build 6. 2. Tap Allow. 3. Open Reels.\n\nLink from [1].', 'Reply to App Review with the device recording'],
     ['Gentile Rossi, l\'impianto base costa 980 euro, consegna in dieci giorni. Un caro saluto.', 'Rispondere a Rossi con il preventivo'],
     ['1. Monday: team meeting.\n2. Tuesday: fair in Rimini.\n3. Thursday: quote sent to Rossi.', 'Summarize the week'],
-    ['June, because the audit uses June [1].', 'Decide: June or July figures?']
+    ['June, because the audit uses June [1].', 'Decide: June or July figures?'],
+    // una scaletta chiesta come scaletta è il lavoro, anche se è fatta di punti (28 set)
+    ['Done: the course outline.\n\n# First course\n\n1. Finding your angle.\n2. The first lesson.\n3. Building the page.\n4. The first ten buyers.\n5. Shipping.\n\nFrom your notes.', 'Write the first course outline'],
+    ['1. Create the account.\n2. Invite the team.\n3. Connect the inbox.\n4. Set the first automation.', 'Draft the onboarding checklist']
   ]
   for (const [r, c] of si) assert.equal(revisione.eUnLavoro(r, c), true, `doveva passare: «${r}»`)
 })

@@ -1518,7 +1518,14 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // 64 → 65 · P1B · chi ha invitato a un'occorrenza dell'agenda: serve alla riga «gli inviti di X li rifiuti».
   d => colonna(d, 'agenda_viste', 'organizzatore', 'TEXT'),
   // 65 → 66 · P5 · una convinzione scordata non torna
-  d => d.exec(TABELLE.convinzioni_tolte)
+  d => d.exec(TABELLE.convinzioni_tolte),
+  // 66 → 67 · F1 · il contratto di una carta (cosa vuol dire «fatto», le mani, il budget),
+  //   la prova contro quel «fatto», e il diario dei passi.
+  d => {
+    colonna(d, 'compiti', 'contratto', 'TEXT')
+    colonna(d, 'compiti', 'prova', 'TEXT')
+    colonna(d, 'compiti', 'diario', 'TEXT')
+  }
 ]
 
 /**
@@ -1610,7 +1617,7 @@ const COLONNE: Record<string, [string, string][]> = {
     ['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'],
     ['madre', 'TEXT'], ['contesto', 'TEXT'], ['revisione', 'TEXT'], ['priorita', 'TEXT'],
     ['ipotesi', 'TEXT'], ['domandeFatte', 'INTEGER NOT NULL DEFAULT 0'], ['voceScritta', 'TEXT'],
-    ['mandata', 'TEXT']
+    ['mandata', 'TEXT'], ['contratto', 'TEXT'], ['prova', 'TEXT'], ['diario', 'TEXT']
   ],
   feed: [
     ['motivo', 'TEXT'], ['risposto', 'TEXT'], ['perche', 'TEXT'], ['contesto', 'TEXT'],
@@ -3484,6 +3491,8 @@ export type RevisioneLavoro = {
   problemi: string[]
   verificato: string[]
   giri: number
+  /** Il «fatto» della carta, controllato (F1): regge, non regge, o la carta non ne aveva uno. */
+  criterio?: { esito: 'met' | 'not_met'; perche: string } | null
 }
 
 /**
@@ -3587,6 +3596,45 @@ export type Compito = {
    * certezza e quanto l'ha ritoccata. Si scrive una volta e non si riscrive.
    */
   mandata?: { doc: string; quando: string; certezza: 'id' | 'filo'; ritocco: number } | null
+  /**
+   * Il contratto della carta (F1): cosa vuol dire «fatto», con che mani ci
+   * lavora e quanto può metterci. Lo scrive Myynd quando la carta passa a
+   * lui (`contratto.ts`); se lo scrive lei, Myynd non lo tocca più.
+   */
+  contratto?: Contratto | null
+  /** La prova del lavoro consegnato contro il suo «fatto» (F1). Null finché non c'è niente da provare. */
+  prova?: ProvaLavoro | null
+  /** Quello che ha fatto, passo per passo: si legge nel dettaglio della carta (F1). */
+  diario?: VoceDiario[] | null
+}
+
+/** Le mani di una carta: dove può arrivare il lavoro, oltre a leggere. Nessuna manda niente. */
+export type ManoContratto = 'posta' | 'file' | 'nota' | 'web' | 'codice'
+export const MANI_CONTRATTO: readonly ManoContratto[] = ['posta', 'file', 'nota', 'web', 'codice']
+
+export type Contratto = {
+  /** «Fatto vuol dire»: la cosa finita e dove arriva, in una riga che si controlla con un sì o un no. */
+  criterio: string
+  mani: ManoContratto[]
+  budget: { giri: number; minuti: number }
+  /** Chi l'ha scritto: se è lei, resta suo. */
+  scritto: 'myynd' | 'tu'
+  quando: string
+}
+
+export type ProvaLavoro = {
+  esito: 'pass' | 'fail' | 'unavailable'
+  /** Il perché in una riga: cosa regge, o cosa manca. */
+  perche: string
+  /** I controlli fatti davvero, uno per riga: il file c'è, la bozza è nella casella, il criterio regge. */
+  controlli: string[]
+  quando: string
+}
+
+export type VoceDiario = {
+  t: string
+  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto'
+  dettaglio?: string
 }
 
 /**
@@ -3694,6 +3742,9 @@ function compitoDaRiga(r: Record<string, unknown>): Compito {
     ipotesi: jsonOppureNulla(r.ipotesi),
     voceScritta: jsonOppureNulla(r.voceScritta),
     mandata: jsonOppureNulla(r.mandata),
+    contratto: jsonOppureNulla(r.contratto),
+    prova: jsonOppureNulla(r.prova),
+    diario: jsonOppureNulla(r.diario),
     domandeFatte: Number(r.domandeFatte ?? 0),
     porta: portaDi(r.doc),
     consegna: r.consegna ? JSON.parse(String(r.consegna)) : null,
@@ -3947,6 +3998,41 @@ export function scriviEmailCompito(id: string, email: EmailPronta | null) {
     .run(email ? JSON.stringify(email) : null, id)
 }
 
+/** Il contratto di una carta (F1); null lo toglie, e Myynd lo riscrive la prossima volta che ci lavora. */
+export function scriviContrattoCompito(id: string, contratto: Contratto | null) {
+  db.prepare('UPDATE compiti SET contratto = ?, aggiornato = ? WHERE id = ?')
+    .run(contratto ? JSON.stringify(contratto) : null, new Date().toISOString(), id)
+}
+
+/** La prova contro il «fatto» (F1); null la toglie (una riga riaffidata non si porta dietro quella di ieri). */
+export function scriviProvaCompito(id: string, prova: ProvaLavoro | null) {
+  db.prepare('UPDATE compiti SET prova = ?, aggiornato = ? WHERE id = ?')
+    .run(prova ? JSON.stringify(prova) : null, new Date().toISOString(), id)
+}
+
+/** Quante voci tiene il diario: le ultime, che sono quelle che si leggono. */
+export const DIARIO_MAX = 60
+
+/**
+ * Una voce in fondo al diario della carta (F1). Non tocca `aggiornato`: il
+ * diario si scrive a ogni passo, e la lista non deve riordinarsi per questo.
+ * Non lancia mai: il diario racconta il lavoro, non lo regge.
+ */
+export function segnaNelDiario(id: string, voce: Omit<VoceDiario, 't'> & { t?: string }) {
+  try {
+    const r = db.prepare('SELECT diario FROM compiti WHERE id = ?').get(id) as { diario: string | null } | undefined
+    if (!r) return
+    const prima = jsonOppureNulla(r.diario)
+    const voci: VoceDiario[] = Array.isArray(prima) ? prima as VoceDiario[] : []
+    const nuova: VoceDiario = { t: voce.t ?? new Date().toISOString(), tipo: voce.tipo, ...(voce.dettaglio ? { dettaglio: voce.dettaglio.slice(0, 240) } : {}) }
+    const ultima = voci[voci.length - 1]
+    // lo stesso passo detto due volte di fila non è un passo in più
+    if (ultima && ultima.tipo === nuova.tipo && (ultima.dettaglio ?? '') === (nuova.dettaglio ?? '')) return
+    voci.push(nuova)
+    db.prepare('UPDATE compiti SET diario = ? WHERE id = ?').run(JSON.stringify(voci.slice(-DIARIO_MAX)), id)
+  } catch { /* il diario è un di più */ }
+}
+
 /** Il giudizio sul lavoro consegnato, scritto da `compiti.ts` quando la riga diventa pronta; null la ripulisce. */
 export function scriviRevisioneCompito(id: string, revisione: RevisioneLavoro | null) {
   db.prepare('UPDATE compiti SET revisione = ?, aggiornato = ? WHERE id = ?')
@@ -4038,10 +4124,16 @@ export function affidaCompito(id: string, modo: string) {
   `).run(modo, ora, ora, id)
 }
 
-/** «Questa me la faccio io.» Torna sua, e resta segnato che è sua. */
+/**
+ * «Questa me la faccio io.» Torna sua, e resta segnato che è sua.
+ *
+ * Il guaio se ne va con lei (F1): «ci ha messo troppo» o «collega la posta»
+ * erano cose che diceva Myynd del suo lavoro, e su una riga che adesso è sua
+ * sarebbero una frase di nessuno.
+ */
 export function riprendiCompito(id: string) {
   db.prepare(`
-    UPDATE compiti SET modo = 'io', aggiornato = ?, versione = versione + 1 WHERE id = ?
+    UPDATE compiti SET modo = 'io', guaio = CASE WHEN stato = 'aperto' THEN NULL ELSE guaio END, aggiornato = ?, versione = versione + 1 WHERE id = ?
   `).run(new Date().toISOString(), id)
 }
 

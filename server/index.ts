@@ -39,6 +39,7 @@ import * as progetti from './progetti.ts'
 import * as avvio from './avvio.ts'
 import { leggiSeAncoraCollegata } from './fonti-collegate.ts'
 import * as compiti from './compiti.ts'
+import * as contratto from './contratto.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
@@ -3643,8 +3644,23 @@ app.patch('/api/compiti/:id', (req, res) => {
     quando = String(b.quando)
     if (!SECCHI.includes(quando)) return res.status(400).json({ errore: 'Non so cosa sia questo momento.' })
   }
+  /*
+   * Il «fatto» della carta (F1), scritto da lei: da quel momento è suo, e
+   * Myynd non lo riscrive più. Vuoto lo toglie: Myynd ne scriverà uno la
+   * prossima volta che ci lavora. Non ferma il lavoro in corso: il criterio
+   * nuovo vale dal prossimo giro.
+   */
+  let criterio: string | null | undefined
+  if (b.criterio !== undefined) {
+    if (b.criterio !== null && typeof b.criterio !== 'string') return res.status(400).json({ errore: 'Il criterio non è valido.' })
+    if (typeof b.criterio === 'string' && b.criterio.length > 600) return res.status(400).json({ errore: 'Il criterio è troppo lungo: una riga basta.' })
+    criterio = b.criterio === null ? null : String(b.criterio)
+  }
 
   try {
+    if (criterio !== undefined) contratto.scriviDaLei(req.params.id, criterio)
+    // la carta è cambiata: il «fatto» scritto da Myynd per la carta di prima non vale più
+    if (patch.testo !== undefined && patch.testo !== c.testo && c.contratto?.scritto === 'myynd') store.scriviContrattoCompito(req.params.id, null)
     // cambiare il lavoro ferma il lavoro in corso; cambiarne la priorità no:
     // la cosa da fare è la stessa, e buttare via mezz'ora di codice per un
     // «alta» sarebbe un prezzo che nessuno ha chiesto di pagare
@@ -3703,6 +3719,24 @@ app.post('/api/compiti/:id/sposta', (req, res) => {
 
 const MODI = ['bozza', 'tutto', 'prompt']
 
+/**
+ * Il «fatto» di una carta scritto (o riscritto) da Myynd adesso (F1).
+ *
+ * Serve alla carta che è ancora sua — nessuno ci lavora, e il contratto si
+ * scrive quando passa a Myynd — quando lei vuole vederlo prima di affidarla,
+ * e a «riscrivilo» su un criterio scritto da Myynd che non la convince. Uno
+ * scritto da lei non si tocca: per cambiarlo lo riscrive lei.
+ */
+app.post('/api/compiti/:id/contratto', async (req, res) => {
+  const c = store.compito(req.params.id)
+  if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  try {
+    await contratto.assicura(c.id, { rifai: req.body?.rifai === true, attesa: 20_000 })
+    res.json({ ok: true, compiti: compitiAttuali() })
+    compiti.annunciaCambio()
+  } catch (e) { errore(res, e) }
+})
+
 app.post('/api/compiti/:id/delega', (req, res) => {
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
@@ -3746,7 +3780,11 @@ function affidaRiga(id: string, modo: string) {
 app.post('/api/compiti/:id/richiama', (req, res) => {
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
-  if (c.stato !== 'delegato' && c.stato !== 'pronto' && c.stato !== 'chiede') {
+  // una riga tornata aperta ma ancora di Myynd (in coda per il suo turno, o
+  // ferma su un guaio) si riprende come le altre: dalla bacheca si trascina
+  // fra le tue in qualunque stato sia
+  const diMyynd = c.stato === 'aperto' && !!c.modo && c.modo !== 'io'
+  if (c.stato !== 'delegato' && c.stato !== 'pronto' && c.stato !== 'chiede' && !diMyynd) {
     return res.status(400).json({ errore: 'Questo non è in mano a Myynd.' })
   }
   stopProjectWork(req.params.id)

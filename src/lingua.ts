@@ -3348,6 +3348,61 @@ const EN: Record<string, string> = {
   'Questa carta non c’è più.': 'This card is gone.',
   'Segni non validi.': 'Invalid marks.',
   // — P10: fine —
+  // — F1: la bacheca, il «fatto», la prova —
+  'Bacheca': 'Board',
+  'Tue': 'Yours',
+  'Pronte per Myynd': 'Ready',
+  'Bozza nella casella': 'Mail draft',
+  'File sul disco': 'File',
+  'Nota': 'Note',
+  'Codice, in una copia': 'Code, in a copy',
+  'Dalla posta': 'From mail',
+  'Da una riunione': 'From a meeting',
+  'Da Myynd': 'From Myynd',
+  'Il passo dopo': 'Next step',
+  'Da un’automazione': 'From an automation',
+  'Dal feed': 'From the feed',
+  'Controllo contro il suo «fatto»': 'Checking against done means',
+  'Mani': 'Hands',
+  'Controllata contro il suo «fatto».': 'Checked against its done means.',
+  'Non controllata: rileggila prima di usarla.': 'Not checked: read it before you use it.',
+  'Pronta da guardare.': 'Ready to look at.',
+  'Bozza nella tua casella': 'Draft in your mailbox',
+  'A Myynd': 'To Myynd',
+  'Guarda': 'Look',
+  'Completala': 'Fill it in',
+  'Ti chiede una cosa': 'It asks you one thing',
+  'Il lavoro consegnato': 'The finished work',
+  'da finire': 'to finish',
+  'Riprendila': 'Take it back',
+  'Fatto vuol dire': 'Done means',
+  'Lo scrivo…': 'Writing it…',
+  'Scrivilo': 'Write it',
+  'Riscrivilo': 'Rewrite it',
+  'Cambialo': 'Change it',
+  'tuo': 'yours',
+  'Non sono riuscito a scriverlo.': 'I couldn’t write it.',
+  'Com’è la cosa finita, e dove arriva': 'What the finished thing is, and where it lands',
+  'La prova': 'The proof',
+  'Cosa ha fatto': 'What it did',
+  'Presa in mano': 'Picked up',
+  'Scritta la prima stesura': 'Wrote the first draft',
+  'Riletta contro il suo «fatto»': 'Checked it against its done means',
+  'Riscritta dopo la rilettura': 'Rewrote it after the check',
+  'Andata avanti con un’ipotesi': 'Went ahead with an assumption',
+  'Consegnata': 'Delivered',
+  'bozza nella casella': 'draft in your mailbox',
+  'Ti ha chiesto una cosa': 'Asked you one thing',
+  'Fermata': 'Stopped',
+  'Controllata: regge': 'Checked: it holds',
+  'Controllata: non regge ancora': 'Checked: not there yet',
+  'Nessuno ha potuto controllarla': 'Nobody could check it',
+  'Finito il tempo che aveva': 'Ran out of the time it had',
+  'Ripresa da te': 'Taken back by you',
+  'Ci ha messo più del tempo che aveva. Riaffidamela, o dividila in due.': 'It took longer than the time it had. Hand it back to me, or split it in two.',
+  'Il criterio non è valido.': 'That done means isn’t valid.',
+  'Il criterio è troppo lungo: una riga basta.': 'That done means is too long: one line is enough.',
+  // — F1: fine —
 }
 
 
@@ -3973,6 +4028,19 @@ export const frasi = {
     : `${nome} era chiuso: l’ho riaperto, con priorità normale.`,
   /** La riga dei progetti sotto i blocchi, quando i nomi sono tanti. */
   altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`),
+
+  // — F1: inizio —
+  /** Il budget di tempo di una carta, nel dettaglio. */
+  finoAMinuti: (n: number) => corrente === 'en' ? `Up to ${n} min` : `Fino a ${n} minuti`,
+  /** Il diario: il «fatto» fissato quando la carta è passata a Myynd. */
+  fattoFissato: (criterio: string) => corrente === 'en' ? `Done means: ${criterio}` : `Fatto vuol dire: ${criterio}`,
+  riscrittaPerche: (problema: string) => corrente === 'en' ? `Rewrote it: ${problema}` : `Riscritta: ${problema}`,
+  consegnataCome: (cosa: string) => corrente === 'en' ? `Delivered: ${cosa}` : `Consegnata: ${cosa}`,
+  chiestoATe: (domanda: string) => corrente === 'en' ? `Asked you: ${domanda}` : `Ti ha chiesto: ${domanda}`,
+  /** La prova sotto il lavoro: controllato contro il suo «fatto». */
+  provaRegge: (perche: string) => corrente === 'en' ? `Checked against done means: ${perche}` : `Controllata contro il suo «fatto»: ${perche}`,
+  provaNonRegge: (perche: string) => corrente === 'en' ? `Not done yet: ${perche}` : `Non ancora fatta: ${perche}`,
+  // — F1: fine —
 
   // — P5: inizio —
   /** La nota dei Progetti nella colonna della Memoria. */
