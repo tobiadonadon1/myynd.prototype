@@ -440,6 +440,7 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
   annuncia({ fase: 'lavoro', id, passo: { passo: 'preparo' } })
   const iniziato = Date.now()
   let ultimoPasso: string | undefined
+  let primaStesura = false
   /** Il budget di tempo della carta è finito (F1): il lavoro si ferma, e non è un guaio passeggero. */
   let scaduto = false
   let scadenza: ReturnType<typeof setTimeout> | undefined
@@ -498,7 +499,11 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
         console.info(`myynd · worker · stage=${p.passo} · ${id} · elapsed_ms=${Date.now() - iniziato}`)
         ultimoPasso = p.passo
       }
-      if (p.passo !== 'preparo') store.segnaNelDiario(id, { tipo: p.passo, dettaglio: p.dettaglio })
+      // «Scritta la prima stesura» una volta per giro: col giro a più passi (F8) ogni passo
+      // del modello la ripeteva, e il diario diceva quattro volte la stessa cosa
+      const ripetuta = p.passo === 'scrivo' && !p.dettaglio && primaStesura
+      if (p.passo === 'scrivo' && !p.dettaglio) primaStesura = true
+      if (p.passo !== 'preparo' && !ripetuta) store.segnaNelDiario(id, { tipo: p.passo, dettaglio: p.dettaglio })
       annuncia({ fase: 'lavoro', id, passo: p })
     } }
     /*
