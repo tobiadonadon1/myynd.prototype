@@ -46,6 +46,7 @@ import * as turnoGuscio from './turno-guscio.ts'
 import * as presenza from './presenza.ts'
 import * as disfa from './disfa.ts'
 import * as progettoRiga from './progetto-riga.ts'
+import * as titoloRiga from './titolo-riga.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
@@ -3564,6 +3565,8 @@ app.get('/api/compiti', (_req, res) => {
     // il turno (F2), nella stessa risposta: la bacheca lo dice in una riga
     turno: turno.stato()
   })
+  // le righe troppo lunghe per una linea prendono un titolo corto, dietro: arriva col prossimo giro della lista
+  void titoloRiga.ripassa(() => compiti.annunciaCambio())
 })
 
 /*

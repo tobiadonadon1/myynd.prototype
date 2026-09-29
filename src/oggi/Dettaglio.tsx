@@ -34,7 +34,7 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
     const dialog = dialogo.current
     const precedente = document.activeElement as HTMLElement | null
     dialog?.showModal()
-    dialog?.querySelector<HTMLInputElement>('#task-detail-title')?.focus()
+    dialog?.querySelector<HTMLTextAreaElement>('#task-detail-title')?.focus()
     return () => {
       dialog?.close()
       requestAnimationFrame(() => {
@@ -64,7 +64,12 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
       <header><span id="task-detail-heading">{t('Dettagli attività')}</span><button type="button" className="task-detail-close" aria-label={t('Chiudi')} disabled={salvando} aria-busy={salvando || undefined} onClick={chiudi}>×</button></header>
       <div className="task-detail-body">
         <label className="task-detail-label" htmlFor="task-detail-title">{t('Attività')}</label>
-        <input id="task-detail-title" className="task-detail-title" autoFocus required value={testo} onChange={e => setTesto(e.target.value)} />
+        {/* il testo intero, andando a capo: sulla riga c'è il titolo corto, qui tutto quello che ha scritto.
+            Invio salva come prima; Maiuscolo+Invio va a capo. */}
+        <textarea id="task-detail-title" className="task-detail-title" autoFocus required rows={1} value={testo}
+          ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px` } }}
+          onChange={e => setTesto(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } }} />
         <fieldset><legend>{t('Pianificazione')}</legend><div className="task-detail-presets">
           {[['Oggi', oggi], ['Domani', spostaGiorno(oggi, 1)], ['Dopodomani', spostaGiorno(oggi, 2)], ['Senza data', '']].map(([nome, data]) =>
             <button type="button" key={nome} aria-pressed={giorno === data} onClick={() => { setGiorno(data); if (!data) setOra('') }}>{t(nome)}</button>)}

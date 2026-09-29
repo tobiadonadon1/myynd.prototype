@@ -1,0 +1,62 @@
+{
+ "modello": "finto",
+ "risposte": [
+  {
+   "se": "The line: [^\\n]*website.s primary objective",
+   "in": "utente",
+   "json": {
+    "titolo": "Set website goal and milestone"
+   }
+  },
+  {
+   "se": "The line: [^\\n]*company efforts AI",
+   "in": "utente",
+   "json": {
+    "titolo": "Pick company areas for AI"
+   }
+  },
+  {
+   "se": "The line: [^\\n]*product for Trey",
+   "in": "utente",
+   "json": {
+    "titolo": "Brainstorm Trey product"
+   }
+  },
+  {
+   "se": "The line: [^\\n]*feed precision",
+   "in": "utente",
+   "json": {
+    "titolo": "Measure feed precision"
+   }
+  },
+  {
+   "se": "The line: [^\\n]*old Myynd builds",
+   "in": "utente",
+   "json": {
+    "titolo": "Clear old Myynd builds"
+   }
+  },
+  {
+   "se": "The line: [^\\n]*signup form",
+   "in": "utente",
+   "json": {
+    "titolo": "Hook signup form to leads"
+   }
+  },
+  {
+   "se": "The line: [^\\n]*three-paragraph",
+   "in": "utente",
+   "json": {
+    "titolo": "Post the Myynd pitch"
+   }
+  },
+  {
+   "se": "The line: [^\\n]*cleanup script",
+   "in": "utente",
+   "json": {
+    "titolo": "Dry run the cleanup script"
+   }
+  }
+ ],
+ "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

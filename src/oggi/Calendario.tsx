@@ -28,8 +28,12 @@ import './quaderno.css'
  * Quanti giorni vedere lo sceglie lui, come su TeuxDeux: 1, 3, 5 o 7; la
  * finestra stretta ne mostra quanti ci stanno.
  *
- * Le righe di Myynd dicono chi aspetta chi con una parola a destra
- * («al lavoro», «pronta», «ti chiede», «stanotte»), la stessa della bacheca.
+ * Una riga sta su una linea sola: se il testo è lungo mostra il titolo
+ * corto che gli ha scritto il modello (`server/titolo-riga.ts`), e il testo
+ * intero si legge aprendola. Chi aspetta chi non si scrive a parole: il
+ * cerchio color rame dice «c'è qualcosa per te», il punto verde «ci lavora
+ * Myynd». «"Waits for tomorrow's budget" … it's not clear what it means, and
+ * they occupy too much space» (29 set 2026).
  */
 
 export type QuantiGiorni = 1 | 3 | 5 | 7
@@ -222,7 +226,7 @@ function Righe({ l, g, oggi, locale, progetti, righe, fatte, minime, apri, modif
       {fatte.map(c => (
         <li key={c.id} className="quaderno-riga fatta">
           <span className="quaderno-spunta fatta" aria-hidden="true">✓</span>
-          <span className="quaderno-testo"><span className="quaderno-parole">{c.testo}</span></span>
+          <span className="quaderno-testo" title={c.titolo ? c.testo : undefined}><span className="quaderno-parole">{c.titolo || c.testo}</span></span>
           <button type="button" className="quaderno-riapri" onClick={() => void l.riapri(c.id)}>{t('Riaprila')}</button>
         </li>
       ))}
@@ -278,83 +282,55 @@ function NuovaRiga({ campo, l, g, oggi, progetti }: {
 /**
  * Una riga del quaderno.
  *
- * Il cerchio a sinistra la chiude. Il testo si tocca e si riscrive lì, come
- * su un foglio; una riga con un lavoro di Myynd dentro (pronta, che chiede)
- * invece si apre, perché lì c'è qualcosa da leggere. A destra, la parola di
- * chi aspetta chi; sotto la mano, «A Myynd», il dettaglio e il cestino.
+ * Il cerchio a sinistra la chiude. Il testo, su una linea sola, la apre: una
+ * riga con un lavoro di Myynd dentro (pronta, che chiede) apre quel lavoro,
+ * le altre il dettaglio, dove il testo intero si legge e si riscrive. Sotto
+ * la mano, in fondo alla riga, «A Myynd», il dettaglio e il cestino: prendono
+ * il loro posto accanto al testo, che si accorcia coi puntini e non viene
+ * mai coperto («items don't overlap»). Il cestino toglie e basta, senza
+ * «Sicuro?»: una riga tolta non si cancella.
  */
 function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, lascia, apri, modifica }: {
   c: Compito; oggi: string; locale: string; l: Lista; progetto: Progetto | null; progetti: Progetto[]
   sopra: boolean; suSopra: () => void; lascia: (e: React.DragEvent) => void
 } & Apri) {
-  const [scrivo, setScrivo] = useState(false)
-  const [testo, setTesto] = useState(c.testo)
-  useEffect(() => { if (!scrivo) setTesto(c.testo) }, [c.testo, scrivo])
   const stato = statoRiga(c, l.passi[c.id], l.turno)
   const suo = giornoCompito(c, oggi)
   const ritardo = !!suo && suo < oggi
   const siApre = c.stato === 'pronto' || c.stato === 'chiede'
   const siScrive = c.stato === 'aperto' && !c.guaio
-  const salva = () => {
-    setScrivo(false)
-    const r = testo.replace(/\s+/g, ' ').trim()
-    if (!r || r === c.testo) { setTesto(c.testo); return }
-    void l.cambia(c.id, { testo: r })
-  }
-  const classi = ['quaderno-riga', stato ? `di-${stato.tipo}` : '', ritardo ? 'tardi' : '', sopra ? 'sopra' : '', c.priorita === 'alta' ? 'alta' : ''].filter(Boolean).join(' ')
+  // la parola di chi aspetta chi non si legge sulla riga: resta sotto la mano e per chi legge lo schermo
+  const parola = stato ? (stato.giorno ? frasi.laNottePrima(stato.giorno) : t(stato.chiave)) : ''
+  const classi = ['quaderno-riga', stato ? `di-${stato.tipo}` : '', ritardo ? 'tardi' : '', sopra ? 'sopra' : ''].filter(Boolean).join(' ')
   return (
-    <li className={classi} data-id={c.id} draggable={!scrivo}
+    <li className={classi} data-id={c.id} draggable
       onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move' }}
       onDragOver={e => { e.preventDefault(); e.stopPropagation(); suSopra() }}
       onDrop={lascia}>
-      <button type="button" className="quaderno-spunta" aria-label={`${t('Fatto')}: ${c.testo}`} title={t('Fatto')} onClick={() => l.chiudi(c.id)} />
-      {scrivo ? (
-        <input className="quaderno-modifica" value={testo} autoFocus aria-label={t('Attività')}
-          onChange={e => setTesto(e.target.value)} onBlur={salva}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); salva() }
-            if (e.key === 'Escape') { e.preventDefault(); setTesto(c.testo); setScrivo(false) }
-          }} />
-      ) : (
-        <button type="button" className="quaderno-testo"
-          onClick={() => { if (siApre) apri(c); else if (siScrive) setScrivo(true); else modifica(c) }}>
-          {ritardo && <span className="quaderno-tardi">{dataLocale(suo!).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}<span className="task-sr">, {t('Da recuperare')}</span></span>}
-          {c.ora && <span className="quaderno-ora">{c.ora}</span>}
-          {progetto && <i className="quaderno-punto" style={{ background: coloreProgetto(progetto, progetti) }} title={progetto.nome} />}
-          <span className="quaderno-parole">{c.testo}</span>
-        </button>
-      )}
-      {/*
-        La fine della riga: un posto fisso, stretto, dove sta la parola di chi
-        aspetta chi e, sotto la mano, i due gesti. «When I overlap it… items
-        don't overlap»: prima i gesti galleggiavano sopra il testo e lo
-        coprivano, con un suggerimento del sistema sopra. Adesso si danno il
-        cambio nello stesso posto, e il testo non si tocca mai. Il cestino è
-        tornato sulla riga il giorno dopo: «there is no bin on the overview…
-        I cannot delete them without actually going into the settings». Toglie
-        e basta, senza «Sicuro?»: una riga tolta non si cancella.
-      */}
-      {!scrivo && (
-        <span className="quaderno-fine">
-          {stato && (
-            <span className={`quaderno-stato ${stato.tipo}`}>
-              {stato.tipo === 'lavora' && <i aria-hidden="true" />}
-              {stato.giorno ? frasi.laNottePrima(stato.giorno) : t(stato.chiave)}
-            </span>
-          )}
-          <span className="quaderno-gesti">
-            {siScrive && (!c.modo || c.modo === 'io') && (
-              <button type="button" className="quaderno-icona" onClick={() => void l.mettiInCoda(c.id)} aria-label={`${t('A Myynd')}: ${c.testo}`}>
-                <Marchio dim={14} animato={false} />
-              </button>
-            )}
-            <button type="button" className="quaderno-icona" onClick={() => modifica(c)} aria-label={`${t('Dettagli attività')}: ${c.testo}`}>⋯</button>
-            <button type="button" className="quaderno-icona" data-togli onClick={() => void l.elimina(c.id)} aria-label={`${t('Toglila')}: ${c.testo}`}>
-              <IconCestino size={12} />
+      <button type="button" className="quaderno-spunta" aria-label={`${t('Fatto')}: ${c.testo}`} title={parola || t('Fatto')} onClick={() => l.chiudi(c.id)} />
+      <button type="button" className="quaderno-testo" title={c.titolo ? c.testo : undefined}
+        onClick={() => { if (siApre) apri(c); else modifica(c) }}>
+        {ritardo && <span className="quaderno-tardi">{dataLocale(suo!).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}<span className="task-sr">, {t('Da recuperare')}</span></span>}
+        {c.ora && <span className="quaderno-ora">{c.ora}</span>}
+        {progetto && <i className="quaderno-punto" style={{ background: coloreProgetto(progetto, progetti) }} title={progetto.nome} />}
+        <span className="quaderno-parole">{c.titolo || c.testo}</span>
+        {c.priorita === 'alta' && <span className="quaderno-alta" aria-label={t('Alta')}>!</span>}
+        {parola && <span className="task-sr">, {parola}</span>}
+      </button>
+      <span className="quaderno-fine">
+        {(stato?.tipo === 'lavora' || stato?.tipo === 'coda') && <i className={`quaderno-segno ${stato.tipo}`} title={parola} aria-hidden="true" />}
+        <span className="quaderno-gesti">
+          {siScrive && (!c.modo || c.modo === 'io') && (
+            <button type="button" className="quaderno-icona" onClick={() => void l.mettiInCoda(c.id)} aria-label={`${t('A Myynd')}: ${c.testo}`} title={t('A Myynd')}>
+              <Marchio dim={14} animato={false} />
             </button>
-          </span>
+          )}
+          <button type="button" className="quaderno-icona" onClick={() => modifica(c)} aria-label={`${t('Dettagli attività')}: ${c.testo}`}>⋯</button>
+          <button type="button" className="quaderno-icona" data-togli onClick={() => void l.elimina(c.id)} aria-label={`${t('Toglila')}: ${c.testo}`}>
+            <IconCestino size={12} />
+          </button>
         </span>
-      )}
+      </span>
     </li>
   )
 }

@@ -1539,7 +1539,10 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     colonna(d, 'uso', 'compito', 'TEXT')
     colonna(d, 'uso', 'costo', 'INTEGER')
     d.exec('CREATE INDEX IF NOT EXISTS idx_uso_compito ON uso(compito)')
-  }
+  },
+  // 70 → 71 · il titolo corto di una riga, scritto dal modello: la riga sta su una linea sola,
+  //   il testo intero si legge aprendola. Null: la riga è già corta, o il titolo non c'è ancora.
+  d => colonna(d, 'compiti', 'titolo', 'TEXT')
 ]
 
 /**
@@ -1631,7 +1634,8 @@ const COLONNE: Record<string, [string, string][]> = {
     ['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'],
     ['madre', 'TEXT'], ['contesto', 'TEXT'], ['revisione', 'TEXT'], ['priorita', 'TEXT'],
     ['ipotesi', 'TEXT'], ['domandeFatte', 'INTEGER NOT NULL DEFAULT 0'], ['voceScritta', 'TEXT'],
-    ['mandata', 'TEXT'], ['contratto', 'TEXT'], ['prova', 'TEXT'], ['diario', 'TEXT'], ['turno', 'TEXT']
+    ['mandata', 'TEXT'], ['contratto', 'TEXT'], ['prova', 'TEXT'], ['diario', 'TEXT'], ['turno', 'TEXT'],
+    ['titolo', 'TEXT']
   ],
   feed: [
     ['motivo', 'TEXT'], ['risposto', 'TEXT'], ['perche', 'TEXT'], ['contesto', 'TEXT'],
@@ -3599,6 +3603,8 @@ export type Compito = {
   consegna?: ConsegnaCompito | null
   id: string
   testo: string
+  /** Il titolo corto scritto dal modello, per una riga su una linea sola. Null se la riga è già corta. */
+  titolo?: string | null
   nota: string | null
   quando: string
   giorno?: string | null
@@ -4080,7 +4086,8 @@ export function cambiaCompito(id: string, c: {
   const valori: (string | null)[] = []
   // `undefined` è «non toccare», `null` è «svuota»: sono due cose diverse e la
   // differenza si perde se si passa tutto per una stessa condizione
-  if (c.testo !== undefined) { campi.push('testo = ?'); valori.push(c.testo) }
+  // un testo nuovo vuole un titolo nuovo: quello di prima parlava d'altro
+  if (c.testo !== undefined) { campi.push('testo = ?', 'titolo = NULL'); valori.push(c.testo) }
   if (c.nota !== undefined) { campi.push('nota = ?'); valori.push(c.nota) }
   if (c.giorno !== undefined) { campi.push('giorno = ?'); valori.push(c.giorno) }
   if (c.ora !== undefined) { campi.push('ora = ?'); valori.push(c.ora) }
@@ -4124,6 +4131,15 @@ export function proponi(id: string, p: Proposta, riassunto: string) {
 export function scriviEmailCompito(id: string, email: EmailPronta | null) {
   db.prepare('UPDATE compiti SET email = ? WHERE id = ?')
     .run(email ? JSON.stringify(email) : null, id)
+}
+
+/**
+ * Il titolo corto di una riga, solo se il testo è ancora quello da cui è nato.
+ * Non tocca `aggiornato` né `versione`: non è una modifica sua, e una riga che
+ * lei sta riscrivendo non deve perdere il confronto per un titolo arrivato dietro.
+ */
+export function scriviTitoloCompito(id: string, titolo: string, perTesto: string): boolean {
+  return db.prepare('UPDATE compiti SET titolo = ? WHERE id = ? AND testo = ?').run(titolo, id, perTesto).changes > 0
 }
 
 /** Il contratto di una carta (F1); null lo toglie, e Myynd lo riscrive la prossima volta che ci lavora. */

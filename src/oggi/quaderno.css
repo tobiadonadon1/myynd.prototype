@@ -46,29 +46,28 @@
 .quaderno-spunta {flex:none;width:15px;height:15px;padding:0;border-radius:50%;border:1.5px solid rgba(var(--inchiostro-rgb),.22);background:transparent;opacity:.55;transition:opacity .14s,border-color .14s;}
 .quaderno-riga:hover .quaderno-spunta,.quaderno-spunta:focus-visible {opacity:1;}
 .quaderno-spunta:hover {border-color:var(--inchiostro);}
-.quaderno-riga.di-pronta .quaderno-spunta,.quaderno-riga.di-chiede .quaderno-spunta,.quaderno-riga.di-dafinire .quaderno-spunta {border-color:var(--rame);border-width:2px;opacity:1;}
+.quaderno-riga.di-pronta .quaderno-spunta,.quaderno-riga.di-chiede .quaderno-spunta,.quaderno-riga.di-dafinire .quaderno-spunta,.quaderno-riga.di-ferma .quaderno-spunta {border-color:var(--rame);border-width:2px;opacity:1;}
 .quaderno-spunta.fatta {display:inline-grid;place-items:center;border:0;opacity:1;font-size:9px;background:var(--fatto-fondo, rgba(92,118,96,.16));color:var(--fatto-segno, #3E5140);}
-.quaderno-testo {flex:1;min-width:0;display:flex;align-items:baseline;gap:7px;padding:9px 0;border:0;background:transparent;text-align:left;font-size:14px;line-height:1.38;color:var(--inchiostro);}
-.quaderno-parole {min-width:0;overflow-wrap:anywhere;}
+/* Una riga, una linea: il titolo corto se il testo è lungo, e i puntini se non basta. Il testo intero si legge aprendola. */
+.quaderno-testo {flex:1;min-width:0;display:flex;align-items:baseline;gap:7px;padding:9px 0;border:0;background:transparent;text-align:left;font-size:14px;line-height:1.38;color:var(--inchiostro);white-space:nowrap;overflow:hidden;}
+.quaderno-parole {flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .quaderno-testo:hover .quaderno-parole {color:var(--rame-testo);}
 .quaderno-riga.fatta .quaderno-parole {text-decoration:line-through;text-decoration-color:rgba(var(--inchiostro-rgb),.35);color:rgba(var(--inchiostro-rgb),.42);}
 .quaderno-riga.fatta .quaderno-testo {cursor:default;}
 .quaderno-ora {flex:none;font-size:12px;font-variant-numeric:tabular-nums;color:rgba(var(--inchiostro-rgb),.5);}
 .quaderno-tardi {flex:none;font-size:12px;font-weight:500;color:var(--ritardo);}
 .quaderno-punto {flex:none;align-self:center;width:6px;height:6px;border-radius:50%;}
-.quaderno-riga.alta .quaderno-parole::after {content:' !';color:var(--rame-testo);font-weight:600;}
+.quaderno-alta {flex:none;color:var(--rame-testo);font-weight:600;}
 
-/* La fine della riga: un posto fisso dove la parola di chi aspetta chi e,
-   sotto la mano, i due gesti si danno il cambio. Il testo non viene mai coperto. */
-.quaderno-fine {flex:none;width:86px;display:grid;align-items:center;justify-items:end;align-self:stretch;}
-.quaderno-fine > * {grid-area:1 / 1;}
-.quaderno-stato {display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;max-width:100%;font-size:11px;font-weight:500;line-height:1.25;text-align:right;overflow-wrap:break-word;color:rgba(var(--inchiostro-rgb),.5);transition:opacity .14s;}
-.quaderno-stato.lavora,.quaderno-stato.coda {color:var(--verde-cupo, #3E5140);}
-.quaderno-stato.pronta,.quaderno-stato.chiede,.quaderno-stato.dafinire,.quaderno-stato.ferma {color:var(--rame-testo);}
-.quaderno-stato > i {flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--salvia-rgb),.95);animation:tavola-battito 1.6s ease-in-out infinite;}
-.quaderno-gesti {display:flex;align-items:center;gap:2px;opacity:0;pointer-events:none;transition:opacity .14s;}
-.quaderno-riga:hover .quaderno-gesti,.quaderno-riga:focus-within .quaderno-gesti {opacity:1;pointer-events:auto;}
-.quaderno-riga:hover .quaderno-stato,.quaderno-riga:focus-within .quaderno-stato {opacity:0;}
+/* La fine della riga: nessuna parola. Il punto verde se ci lavora Myynd (che batte) o se è in coda
+   per lui (fermo); sotto la mano i gesti prendono il suo posto, accanto al testo e mai sopra. */
+.quaderno-fine {flex:none;display:flex;align-items:center;justify-content:flex-end;align-self:stretch;}
+.quaderno-segno {flex:none;width:6px;height:6px;margin:0 4px;border-radius:50%;background:rgba(var(--salvia-rgb),.95);}
+.quaderno-segno.lavora {animation:tavola-battito 1.6s ease-in-out infinite;}
+.quaderno-segno.coda {background:transparent;box-shadow:inset 0 0 0 1.5px rgba(var(--salvia-rgb),.95);}
+.quaderno-gesti {display:none;align-items:center;gap:2px;}
+.quaderno-riga:hover .quaderno-gesti,.quaderno-riga:focus-within .quaderno-gesti {display:flex;}
+.quaderno-riga:hover .quaderno-segno,.quaderno-riga:focus-within .quaderno-segno {display:none;}
 .quaderno-icona {display:inline-grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;font-size:14px;line-height:1;color:rgba(var(--inchiostro-rgb),.6);}
 .quaderno-icona:hover {color:var(--rame-testo);}
 .quaderno-icona[data-togli] {color:rgba(var(--inchiostro-rgb),.42);}
@@ -77,8 +76,7 @@
 .quaderno-riga.fatta:hover .quaderno-riapri,.quaderno-riapri:focus-visible {opacity:1;pointer-events:auto;}
 
 /* Dove si scrive: una riga come le altre, con il cursore. */
-.quaderno-scrivi,.quaderno-modifica {flex:1;min-width:0;padding:9px 0 9px 23px;border:0;background:transparent;font-family:inherit;font-size:14px;line-height:1.38;color:var(--inchiostro);outline:none;}
-.quaderno-modifica {padding-left:0;}
+.quaderno-scrivi {flex:1;min-width:0;padding:9px 0 9px 23px;border:0;background:transparent;font-family:inherit;font-size:14px;line-height:1.38;color:var(--inchiostro);outline:none;}
 .quaderno-scrivi::placeholder {color:transparent;}
 .quaderno-righe:hover .quaderno-scrivi::placeholder,.quaderno-scrivi:focus::placeholder {color:rgba(var(--inchiostro-rgb),.32);}
 
@@ -101,10 +99,10 @@
 
 .quaderno button:focus-visible,.quaderno-lato button:focus-visible {outline:2px solid var(--rame);outline-offset:2px;}
 /* scrivere non accende niente: il cursore basta («it doesn't need to highlight the box in orange») */
-.quaderno-scrivi:focus,.quaderno-modifica:focus {outline:none;box-shadow:none;}
+.quaderno-scrivi:focus {outline:none;box-shadow:none;}
 @media (prefers-reduced-motion:reduce) {
-  .quaderno-stato > i {animation:none;}
-  .quaderno-spunta,.quaderno-gesti {transition:none;}
+  .quaderno-segno.lavora {animation:none;}
+  .quaderno-spunta {transition:none;}
 }
 /* di notte niente velo: il bruno non sopporta i rialzi */
 :root[data-theme="dark"] .quaderno-righe[data-sopra] {background:transparent;}

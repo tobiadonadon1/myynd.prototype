@@ -633,6 +633,8 @@ export type Compito = {
   } | null
   id: string
   testo: string
+  /** Il titolo corto scritto dal modello, per stare su una linea; null se il testo è già corto. */
+  titolo?: string | null
   nota: string | null
   quando: string          // oggi | settimana | poi
   giorno?: string | null  // planned local calendar day, YYYY-MM-DD

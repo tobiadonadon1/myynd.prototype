@@ -1,0 +1,35 @@
+[
+ {
+  "aspetta": 2500
+ },
+ {
+  "scatta": "prima"
+ },
+ {
+  "clicca": "To do"
+ },
+ {
+  "aspetta": 4000
+ },
+ {
+  "scatta": "quaderno"
+ },
+ {
+  "testo": "quaderno"
+ },
+ {
+  "passa": "Pick company areas for AI"
+ },
+ {
+  "scatta": "quaderno-sopra"
+ },
+ {
+  "js": "document.querySelector('[data-id=\"t2\"] .quaderno-testo').click(); 1"
+ },
+ {
+  "aspetta": 800
+ },
+ {
+  "scatta": "dettaglio"
+ }
+]

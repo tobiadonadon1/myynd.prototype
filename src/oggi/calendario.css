@@ -182,7 +182,8 @@
 .task-detail-body {padding:22px;}
 .task-detail-label,.task-detail legend {display:block;font-size:11px;font-weight:500;letter-spacing:.02em;color:rgba(var(--inchiostro-rgb),.5);margin-bottom:10px;}
 .task-detail textarea {box-sizing:border-box;width:100%;resize:vertical;font-family:inherit;color:var(--inchiostro);}
-.task-detail-title {box-sizing:border-box;width:100%;font-family:inherit;font-size:15px;font-weight:450;line-height:1.5;background:var(--carta-piena);color:var(--inchiostro);border:1px solid rgba(var(--inchiostro-rgb),.12);border-radius:10px;padding:10px 12px;}
+.task-detail-title {box-sizing:border-box;width:100%;font-family:inherit;font-size:15px;font-weight:450;line-height:1.5;background:var(--carta-piena);color:var(--inchiostro);border:1px solid rgba(var(--inchiostro-rgb),.12);border-radius:10px;padding:10px 12px;max-height:40vh;overflow-y:auto;overflow-wrap:anywhere;}
+.task-detail textarea.task-detail-title {resize:none;}
 .task-detail fieldset {padding:0;border:0;margin:22px 0;}
 .task-detail-presets {display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
 .task-detail-presets button {padding:8px 11px;}
