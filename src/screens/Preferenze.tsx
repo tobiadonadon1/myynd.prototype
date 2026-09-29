@@ -523,7 +523,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                 <div className="prefs-via-cima">
                   <span>{x.titolo}</span>
                   <span className={`prefs-status ${guaio || spento || nonAncora ? 'needs-attention' : 'ready'}`}>
-                    {spento ? t('Disattivato in Myynd') : nonAncora ? t('Non ancora disponibile') : x.id === 'incluso' && guaio ? (scelto ? t('In uso') : t('Pronto')) : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
+                    {spento ? t('Disattivato in Myynd') : nonAncora ? t('Non ancora disponibile') : x.id === 'incluso' && guaio ? t('Finita per oggi') : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
                   </span>
                   {x.apri && <Bottone piccolo onClick={e => { e.stopPropagation(); x.apri?.() }}>{x.collegato ? t('Gestisci') : t('Collega')}</Bottone>}
                 </div>

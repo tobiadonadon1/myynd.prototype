@@ -239,7 +239,8 @@ export function useCompiti(
     })
     for (const id of pronte) {
       const c = compiti.find(x => x.id === id)
-      if (c) mostraToast(frasi.compitoFinito(titoloCorto(c.testo)))
+      // una carta che non regge il suo «fatto» (F1) non si annuncia come fatta
+      if (c) mostraToast(c.prova?.esito === 'fail' ? frasi.compitoDaFinire(titoloCorto(c.testo)) : frasi.compitoFinito(titoloCorto(c.testo)))
     }
     if (!finite.length) return
     setAppenaFinite(f => new Set([...f, ...finite]))

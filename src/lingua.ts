@@ -305,6 +305,7 @@ const EN: Record<string, string> = {
   'Usa Claude Code su questo computer. È incluso nel tuo piano; il lavoro parte dal materiale che Myynd ha già trovato.': 'Uses Claude Code on this computer. It is included in your plan; the work starts from material Myynd has already found.',
   'Usa il credito API di Anthropic. Il lavoro può fare più giri di ricerca prima di scrivere.': 'Uses Anthropic API credit. The work can make several search passes before writing.',
   'In uso': 'In use',
+  'Finita per oggi': 'Used up for today',
   'Da configurare': 'Setup needed',
   'Pronto': 'Ready',
   'Il tuo primo passo è pronto.': 'Your first step is ready.',
@@ -3891,6 +3892,10 @@ export const frasi = {
   compitoFinito: (titolo: string) => corrente === 'en'
     ? `Done: "${titolo}". The result is on your first page.`
     : `Fatto: «${titolo}». Il risultato è in prima pagina.`,
+  /** Consegnata ma senza reggere il suo «fatto»: non si dice «Fatto». */
+  compitoDaFinire: (titolo: string) => corrente === 'en'
+    ? `Not finished: "${titolo}". What's missing is on your first page.`
+    : `Da finire: «${titolo}». Cosa manca è in prima pagina.`,
   /** Dopo «Fatto» su una cosa di un progetto: si è segnato il traguardo, e va a guardare il passo dopo. */
   segnataPer: (progetto: string) => corrente === 'en'
     ? `Marked done for ${progetto}. Looking at the next step.`
