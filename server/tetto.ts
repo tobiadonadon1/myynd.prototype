@@ -10,6 +10,9 @@
 import * as provaChiusa from './prova-chiusa.ts'
 import { leggi } from './config.ts'
 import * as store from './store.ts'
+import * as budgetNotte from './budget-notte.ts'
+import * as prezzi from './prezzi.ts'
+import { compitoInCorso } from './etichetta-uso.ts'
 
 /** Da mezzanotte UTC: un giorno solare semplice, uguale per tutti i server. */
 function inizioDiOggi(): string {
@@ -42,10 +45,37 @@ const DEL_TETTO = new WeakSet<Error>()
  */
 export function controllaIlTetto(): void {
   provaChiusa.controllaBudget()
+  controllaLaNotte()
   if (!usoDiOggi().raggiunto) return
   const e = new Error(TETTO_RAGGIUNTO)
   DEL_TETTO.add(e)
   throw e
+}
+
+export const BUDGET_NOTTE = 'Ha finito il budget di stanotte. La carta torna in coda per la notte dopo.'
+const DEL_BUDGET = new WeakSet<Error>()
+
+/**
+ * F9 · il budget della notte, a metà di una carta.
+ *
+ * Il turno non fa partire una carta se il budget è finito (`turno.giro`); ma
+ * una carta partita con il budget quasi pieno può costare più del previsto,
+ * e allora si ferma quando la spesa passa il budget di un quarto. Vale solo
+ * per le carte partite dal turno: una carta che lei affida a mano, anche di
+ * notte, conta nella spesa ma non si ferma mai per il budget.
+ */
+function controllaLaNotte() {
+  const k = compitoInCorso()
+  if (!k?.turno || !budgetNotte.sforato()) return
+  const e = new Error(BUDGET_NOTTE)
+  DEL_TETTO.add(e)
+  DEL_BUDGET.add(e)
+  throw e
+}
+
+/** Questo errore è il budget della notte: la carta torna in coda, non ha un guaio. */
+export function delBudget(e: unknown): boolean {
+  return e instanceof Error && (DEL_BUDGET.has(e) || e.message === BUDGET_NOTTE)
 }
 
 /**
@@ -96,10 +126,17 @@ export function usoDellaBusta(u: unknown, entrato: string, uscito: string):
   return { entrata: Math.ceil(entrato.length / 4), cache: 0, uscita: Math.ceil(uscito.length / 4), stima: true }
 }
 
-/** Una riga nel registro dell'uso, come per ogni altra strada. Non rompe mai la chiamata contata. */
-export function segnaAccount(lavoro: string, u: unknown, entrato: string, uscito: string) {
+/**
+ * Una riga nel registro dell'uso, come per ogni altra strada. Non rompe mai la chiamata contata.
+ *
+ * F9 · il costo: quello che Claude Code scrive nella busta (`total_cost_usd`)
+ * quando c'è, altrimenti il listino del modello chiesto, se si sa quale.
+ */
+export function segnaAccount(lavoro: string, u: unknown, entrato: string, uscito: string, o: { costoUsd?: unknown; modello?: string | null } = {}) {
   const c = usoDellaBusta(u, entrato, uscito)
   const motore = c.stima ? `${MOTORE} (stima)` : MOTORE
-  try { store.segnaUso({ lavoro, motore, entrata: c.entrata, cache: c.cache, uscita: c.uscita }) } catch { /* contare è accessorio */ }
+  const scritti = numero((u as UsoCLI | null)?.cache_creation_input_tokens) ?? 0
+  const costo = prezzi.daDollari(o.costoUsd)
+  try { store.segnaUso({ lavoro, motore, entrata: c.entrata, cache: c.cache, uscita: c.uscita, scritti, costo, modello: o.modello ?? null }) } catch { /* contare è accessorio */ }
   console.log(`myynd · uso · ${lavoro} · ${motore} · entrata ${c.entrata}${c.cache ? ` (+${c.cache} dalla cache)` : ''} · uscita ${c.uscita}`)
 }

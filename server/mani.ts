@@ -769,7 +769,7 @@ export function sembraLavoroDiCodice(testo: string, nota?: string | null): boole
  * recinto, si ripiega sul piano: legge e scrive cosa farebbe. Se non c'è
  * affatto, lo si dice.
  */
-export async function lavoraNelCodice(o: { cartella: string; richiesta: string; signal?: AbortSignal }): Promise<{ testo: string; copia: string | null; passo: lavoro.Passo; posato?: boolean }> {
+export async function lavoraNelCodice(o: { cartella: string; richiesta: string; signal?: AbortSignal; soloCopia?: boolean }): Promise<{ testo: string; copia: string | null; passo: lavoro.Passo; posato?: boolean }> {
   if (ferri.ospitato()) throw new Error('Su un server non posso lavorare in una cartella.')
   const richiesta = String(o.richiesta ?? '').trim()
   if (!richiesta) throw new Error('Non c’è niente da chiedergli.')
@@ -782,7 +782,12 @@ export async function lavoraNelCodice(o: { cartella: string; richiesta: string; 
     const cambiati = esecuzione?.changedFiles.map(f => `${f.path} (${f.kind})`) ?? []
     const stato = esecuzione?.state ?? (e.finito ? 'verified' : 'cancelled')
     const verifica = esecuzione?.verification
-    const posa = esecuzione && (stato === 'verified' || stato === 'unverified') && cambiati.length
+    /*
+     * F9 · di notte, per una carta del turno, non si posa niente: nessuno
+     * guarda, e il progetto vero cambiato alle tre non si disfa col Cestino.
+     * Il lavoro resta nella copia, e la carta dice dove, pronto da posare.
+     */
+    const posa = !o.soloCopia && esecuzione && (stato === 'verified' || stato === 'unverified') && cambiati.length
       ? await ferri.posa(esecuzione).catch(g => {
         console.warn('myynd · il lavoro è fatto, ma non si è posato nel progetto:', g instanceof Error ? g.message : g)
         return null
@@ -794,7 +799,9 @@ export async function lavoraNelCodice(o: { cartella: string; richiesta: string; 
       testo: [
         posa?.applied.length
           ? `Fatto nel progetto (${o.cartella}): ${posa.applied.map(f => `${f.path} (${f.kind})`).join(', ')}`
-          : `Il lavoro è nella copia (${e.cartella}) e la cartella vera non è stata toccata.`,
+          : o.soloCopia && cambiati.length
+            ? `Il lavoro è pronto nella copia (${e.cartella}), da posare nel progetto quando lo guardi: di notte la cartella vera non si tocca.`
+            : `Il lavoro è nella copia (${e.cartella}) e la cartella vera non è stata toccata.`,
         posa?.applied.length ? `Com'erano prima: ${posa.backup}` : '',
         lasciati.length ? `Lasciati stare perché li hai cambiati tu nel frattempo: ${lasciati.join(', ')}` : '',
         cambiati.length ? `File cambiati dal lavoro: ${cambiati.join(', ')}` : 'Nessun file è cambiato.',
@@ -913,7 +920,9 @@ export function spiega(mani: Anthropic.Tool[]): string {
     'lei citalo con l\'indirizzo o il percorso, così chi rilegge lo ritrova.'
 }
 
-export type Contesto = { cartella?: string | null; copia?: string | null; signal?: AbortSignal; luogo?: Luogo }
+export type Contesto = { cartella?: string | null; copia?: string | null; signal?: AbortSignal; luogo?: Luogo
+  /** F9 · il lavoro sul codice resta nella copia (di notte, per una carta del turno). */
+  soloCopia?: boolean }
 export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: string }
 
 /**
@@ -959,7 +968,7 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
     }
     if (nome === LAVORA_NEL_CODICE.name) {
       if (!contesto.cartella) return guaio('lavora', '', new Error('Questa riga non ha una cartella di progetto.'))
-      const r = await lavoraNelCodice({ cartella: contesto.cartella, richiesta: s('richiesta'), signal: contesto.signal })
+      const r = await lavoraNelCodice({ cartella: contesto.cartella, richiesta: s('richiesta'), signal: contesto.signal, ...(contesto.soloCopia ? { soloCopia: true } : {}) })
       /*
        * Il dettaglio dice dove è finito il lavoro, e sono tre posti diversi:
        * posato nel progetto, fermo in una copia, o solo un piano. La frase di

@@ -533,7 +533,15 @@ export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, 
   // nel registro e nel database di chi ha chiesto: la riga di stampa la legge
   // chi sviluppa, la tabella la legge la schermata delle preferenze
   try {
-    store.segnaUso({ lavoro, motore: nomeMotore(lavoro), entrata: u.input_tokens + scritti, cache, uscita: u.output_tokens })
+    // F9 · il costo: al prezzo del modello scelto per questo lavoro. Con la chiave Anthropic è
+    // quello vero; con l'account ChatGPT o un fornitore compatibile è una stima (lo dice il
+    // nome del motore, che non è un modello del listino); un modello in casa non costa niente
+    const f = fornitore()
+    const inCasa = !!f && compatibile.giaOllama(f.url)
+    store.segnaUso({
+      lavoro, motore: nomeMotore(lavoro), entrata: u.input_tokens + scritti, cache, uscita: u.output_tokens, scritti,
+      ...(inCasa ? { costo: 0 } : { modello: modelloPer(lavoro) })
+    })
   } catch { /* contare non deve mai rompere la chiamata contata */ }
   console.log(
     `myynd · uso · ${lavoro}${nota ? ` · ${nota}` : ''} · entrata ${u.input_tokens}` +

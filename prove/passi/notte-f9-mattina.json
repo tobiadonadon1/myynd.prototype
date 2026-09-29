@@ -1,0 +1,9 @@
+[
+  { "aspetta": 2500 },
+  { "scatta": "prima" },
+  { "testo": "prima" },
+  { "clicca": "Open" },
+  { "aspetta": 1200 },
+  { "scatta": "punto" },
+  { "testo": "punto" }
+]

@@ -1,0 +1,14 @@
+[
+  { "aspetta": 1500 },
+  { "clicca": "To do" },
+  { "aspetta": 1000 },
+  { "clicca": "Board" },
+  { "js": "fetch('/api/turno', { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: 'Bearer sviluppo-non-in-produzione' }, body: JSON.stringify({ pausa: 0 }) }).then(r => r.status)" },
+  { "aspetta": 6000 },
+  { "scatta": "al-lavoro" },
+  { "testo": "al-lavoro" },
+  { "clicca": "Stop now" },
+  { "aspetta": 2500 },
+  { "scatta": "fermato" },
+  { "testo": "fermato" }
+]

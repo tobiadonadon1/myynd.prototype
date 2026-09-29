@@ -3381,7 +3381,7 @@ const EN: Record<string, string> = {
   'Fatta stanotte, mentre dormivi': 'Done overnight, while you slept',
   'Myynd non lavora la bacheca da solo.': 'Myynd isn’t working the board on its own.',
   'Lavora la notte': 'Working through the night',
-  'Riprendi il turno': 'Resume',
+  'Riprendi il turno': 'Resume the shift',
   'Pausa di un’ora': 'Pause for an hour',
   'Prossima': 'Next',
   'Aspetta il turno': 'Waiting for the shift',
@@ -3456,6 +3456,27 @@ const EN: Record<string, string> = {
   // — F6: inizio —
   'Imparo come lavori': 'Learning how you work',
   // — F6: fine —
+
+  // — F9: inizio —
+  'Fermato': 'Stopped',
+  'Ferma adesso': 'Stop now',
+  'Aspetta il budget di domani': 'Waits for tomorrow’s budget',
+  'Spesa in una notte': 'Spending per night',
+  'Nessun limite': 'No limit',
+  'Tieni il Mac in carica, col coperchio aperto.': 'Keep the Mac plugged in, lid open.',
+  'Disfatta: la nota resta in Note, i file sono nel Cestino. La carta è di nuovo tua.': 'Undone: the note stays in Notes, the files are in the Trash. The card is yours again.',
+  'Disfatta: la nota resta in Note. La carta è di nuovo tua.': 'Undone: the note stays in Notes. The card is yours again.',
+  'Fermata con «Ferma adesso»: torna in coda': 'Stopped with Stop now: back in the queue',
+  'Finito il budget della notte: torna in coda': 'Out of the night’s budget: back in the queue',
+  'Disfatta': 'Undone',
+  'Partita di notte, col turno': 'Started by the night shift',
+  'Partita col turno, mentre non c’eri': 'Started by the shift while you were away',
+  'Partita col turno': 'Started by the shift',
+  'fermato da te': 'stopped by you',
+  'Ha finito il budget di stanotte. La carta torna in coda per la notte dopo.': 'Tonight’s budget ran out. The card goes back in the queue for the next night.',
+  'Sono passati più di sette giorni: questo lavoro non si disfa più da qui.': 'More than seven days have passed: this work can’t be undone from here anymore.',
+  'Quanto può spendere in una notte?': 'How much can it spend in a night?',
+  // — F9: fine —
 }
 
 
@@ -4161,6 +4182,40 @@ export const frasi = {
     const r = righe ? (corrente === 'en' ? `${righe} ${righe === 1 ? 'habit' : 'habits'}` : `${righe} ${righe === 1 ? 'abitudine' : 'abitudini'}`) : ''
     const c = carte ? (corrente === 'en' ? `${carte} ${carte === 1 ? 'card' : 'cards'} for tonight` : `${carte} ${carte === 1 ? 'carta' : 'carte'} per stanotte`) : ''
     return [r, c].filter(Boolean).join(' · ')
-  }
+  },
   // — F6: fine —
+
+  // — F9: inizio —
+  /** Dollari con i centesimi: «$1.42», «1,42 $». Sotto il centesimo, «<$0.01». */
+  dollari: (n: number) => {
+    if (n > 0 && n < 0.005) return corrente === 'en' ? '<$0.01' : '<0,01 $'
+    const c = (Number.isFinite(n) ? n : 0).toFixed(2)
+    return corrente === 'en' ? `$${c}` : `${c.replace('.', ',')} $`
+  },
+  /** Dollari tondi, per le scelte e i limiti: «$3», «3 $»; con i centesimi se ce li hanno. */
+  dollariTondi: (n: number) => {
+    const c = Number.isInteger(n) ? String(n) : n.toFixed(2)
+    return corrente === 'en' ? `$${c}` : `${c.replace('.', ',')} $`
+  },
+  /** La spesa del turno sul suo budget: «$1.42 of $3». */
+  spesaDelTurno: (speso: number, limite: number) => corrente === 'en'
+    ? `${frasi.dollari(speso)} of ${frasi.dollariTondi(limite)}`
+    : `${frasi.dollari(speso)} di ${frasi.dollariTondi(limite)}`,
+  /** Il budget finito, sulla riga del turno: le carte aspettano la notte dopo. */
+  budgetFinito: (speso: number, limite: number) => corrente === 'en'
+    ? `Budget used: ${frasi.dollari(speso)} of ${frasi.dollariTondi(limite)}`
+    : `Budget finito: ${frasi.dollari(speso)} di ${frasi.dollariTondi(limite)}`,
+  /** Quante chiamate a un modello ha fatto una carta. */
+  chiamate: (n: number) => corrente === 'en' ? `${n} ${n === 1 ? 'call' : 'calls'}` : `${n} ${n === 1 ? 'chiamata' : 'chiamate'}`,
+  /** Nel diario: un file scritto, col percorso intero. */
+  fileScritto: (percorso: string) => corrente === 'en' ? `Wrote ${percorso}` : `Scritto ${percorso}`,
+  /** Nel diario: una nota creata in Note, che non si disfa. */
+  notaCreata: (nome: string) => corrente === 'en' ? `Created the note “${nome}” in Notes` : `Creata la nota «${nome}» in Note`,
+  /** Nella riga della notte: le carte rimaste in coda perché il budget è finito. */
+  aspettanoIlBudget: (n: number) => corrente === 'en'
+    ? `${n} ${n === 1 ? 'waits' : 'wait'} for tonight’s budget`
+    : `${n} ${n === 1 ? 'aspetta' : 'aspettano'} il budget di stanotte`,
+  /** Nella riga della notte: un tratto in cui il Mac dormiva, con delle carte in coda. */
+  macAddormentato: (da: string, a: string) => corrente === 'en' ? `Mac asleep ${da} to ${a}` : `Mac addormentato dalle ${da} alle ${a}`
+  // — F9: fine —
 }

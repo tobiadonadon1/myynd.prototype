@@ -26,7 +26,7 @@ import * as abbonamento from './abbonamento.ts'
 import { delTetto } from './tetto.ts'
 import { ancora, eUnRifiuto, NON_CE_LHO, type FonteAncorata, type Verifica, type Via } from './ancoraggio.ts'
 import * as chatgpt from './chatgpt.ts'
-import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, stessoFilo, type Concessione, type Documento } from './store.ts'
+import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, segnaNelDiario, stessoFilo, type Concessione, type Documento } from './store.ts'
 import { rispostaA } from './filo.ts'
 import { linguaSbagliata, riflua, senzaTrattini, soloInLingua } from './testo.ts'
 import { documentoVero } from './veri.ts'
@@ -3094,7 +3094,9 @@ export async function svolgi(
    * `giri` abbassa il tetto dei giri; `voce` è come scrive a chi riceve;
    * `consegna` è la lingua in cui legge chi riceve.
    */
-  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en'; criterio?: string; mani?: readonly mani.ManoDelContratto[] },
+  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en'; criterio?: string; mani?: readonly mani.ManoDelContratto[]
+    /** F9 · di notte, per una carta del turno: il lavoro sul codice resta nella copia, non si posa nel progetto. */
+    soloCopia?: boolean },
   /**
    * Il materiale del progetto di cui la riga fa parte, se ne ha uno: la
    * cartella di lavoro come fonte fissa, la memoria e il riferimento nel
@@ -3357,11 +3359,15 @@ export async function svolgi(
         system: conLaLingua(senzaAttrezzi, { consegna }),
         messages: [{ role: 'user', content: testoDi(messaggi[0].content) }],
         attesa: attesaDi('bozza'),
-        modello: modelloPer('bozza')
+        modello: modelloPer('bozza'),
+        // F9 · «Stop now» e il richiamo arrivano fin qui: il processo muore con il suo gruppo
+        ...(esecuzione?.signal ? { signal: esecuzione.signal } : {})
       })
       return { ...risultatoVerificato(uscito), fatti }
     } catch (e) {
       if (delTetto(e)) throw e
+      // fermato da lei (o dal budget): non è l'account che non risponde, e non si passa alla chiave
+      if (esecuzione?.signal.aborted) throw e
       if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
@@ -3491,7 +3497,18 @@ export async function svolgi(
         const dettaglio = (c.input as Record<string, unknown> | null)
         const detto = String(dettaglio?.url ?? dettaglio?.percorso ?? dettaglio?.query ?? dettaglio?.titolo ?? dettaglio?.richiesta ?? '').trim().slice(0, 120)
         passo(c.name === mani.CERCA_WEB.name ? { passo: 'cerco', dettaglio: detto } : c.name === mani.LEGGI_FILE.name || c.name === mani.LEGGI_PAGINA.name ? { passo: 'apro', dettaglio: detto } : { passo: 'scrivo', dettaglio: detto })
-        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito() })
+        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito(), ...(esecuzione?.soloCopia ? { soloCopia: true } : {}) })
+        /*
+         * F9 · sul diario della carta, col percorso intero: un file scritto
+         * fuori dalla copia di lavoro è una cosa che «Disfa» deve poter
+         * buttare nel Cestino, e un lavoro fermato a metà anche. Una nota si
+         * segna per dirlo: da Note non si toglie niente.
+         */
+        if (esecuzione?.taskId && e.fatto.esito === 'ok') {
+          const dentroLaCopia = !!copiaDiLavoro && e.fatto.dettaglio.startsWith(copiaDiLavoro)
+          if (e.fatto.attrezzo === 'scrivi_file' && !dentroLaCopia) segnaNelDiario(esecuzione.taskId, { tipo: 'file', dettaglio: e.fatto.dettaglio })
+          if (e.fatto.attrezzo === 'crea_nota') segnaNelDiario(esecuzione.taskId, { tipo: 'nota', dettaglio: e.fatto.dettaglio })
+        }
         esecuzione?.signal.throwIfAborted()
         fatti.push(e.fatto)
         if (e.copia) copiaDiLavoro = e.copia

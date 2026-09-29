@@ -58,6 +58,12 @@ test('vociMenu: spento, o fuori dal Mac, è il menu di sempre', () => {
   assert.deepEqual(vociMenu({ disponibile: false, acceso: true, pausaFino: null, adesso: ADESSO }), sempre)
 })
 
+test('vociMenu: F9, con il turno al lavoro «Ferma il turno» viene per primo', () => {
+  assert.deepEqual(vociMenu({ disponibile: false, acceso: false, pausaFino: null, adesso: ADESSO, turno: true }),
+    ['ferma-turno', '-', 'apri', 'nuova-chat', 'preferenze', '-', 'esci'])
+  assert.deepEqual(vociMenu({ disponibile: true, acceso: true, pausaFino: null, adesso: ADESSO, turno: true }).slice(0, 3), ['ferma-turno', 'pausa', '-'])
+})
+
 test('vociCompagno: pausa o riprendi solo con l’osservatore acceso, poi apri e togli', () => {
   assert.deepEqual(vociCompagno({ disponibile: true, acceso: true, pausaFino: null, adesso: ADESSO }), ['pausa', 'apri', '-', 'togli'])
   assert.deepEqual(vociCompagno({ disponibile: true, acceso: true, pausaFino: FRA_UN_ORA, adesso: ADESSO }), ['riprendi', 'apri', '-', 'togli'])

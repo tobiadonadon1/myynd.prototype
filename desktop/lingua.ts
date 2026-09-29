@@ -57,6 +57,11 @@ const EN: Record<string, string> = {
   'Cartella dei dati': 'Data Folder',
   'Registro dell’app': 'App log',
   'in attesa': 'waiting',
+  'Ferma il turno di notte': 'Stop the night shift',
+  'Stanotte Myynd ha delle carte da lavorare.': 'Myynd has cards to work on tonight.',
+  'Se esci, stanotte non lavora.': 'If you quit, nothing gets done tonight.',
+  'Tieni aperto Myynd': 'Keep Myynd open',
+  'Esci comunque': 'Quit anyway',
   'La combinazione deve avere un modificatore e un tasto, per esempio CommandOrControl+Shift+M.':
     'The shortcut needs a modifier and a key, for example CommandOrControl+Shift+M.',
   'Questa combinazione non si può usare qui.': 'This shortcut cannot be used here.',

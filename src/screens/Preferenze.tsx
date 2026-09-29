@@ -597,6 +597,8 @@ function ModelliOpenAI({ v }: { v: Vals }) {
 /** Le notti fra cui scegliere (F2): tre, dette come le direbbe una persona. */
 const NOTTI: { da: string; a: string }[] = [{ da: '22:00', a: '07:00' }, { da: '23:00', a: '06:00' }, { da: '00:00', a: '07:00' }]
 const CARTE_AL_GIORNO = [6, 12, 20]
+/** F9 · quanto può spendere in una notte, in dollari; zero è nessun limite. */
+const BUDGET = [1, 3, 5, 10, 0]
 
 /**
  * Il turno (F2): Myynd lavora da solo le carte in coda sulla bacheca.
@@ -627,6 +629,10 @@ function CartaTurno() {
             opzioni={NOTTI.map(n => ({ id: `${n.da}-${n.a}`, nome: `${n.da}–${n.a}` }))}
             scelta={notte ? `${notte.da}-${notte.a}` : null}
             scegli={id => { const n = NOTTI.find(x => `${x.da}-${x.a}` === id); if (n) void cambia({ notteDa: n.da, notteA: n.a }) }} />
+          <Scelte etichetta={t('Spesa in una notte')} mostraEtichetta
+            opzioni={BUDGET.map(b => ({ id: String(b), nome: b ? frasi.dollariTondi(b) : t('Nessun limite') }))}
+            scelta={s.budget && BUDGET.includes(s.budget.limite) ? String(s.budget.limite) : null} scegli={id => void cambia({ budget: Number(id) })} />
+          {s.batteria && <div className="f-stato rame">{t('Tieni il Mac in carica, col coperchio aperto.')}</div>}
         </>}
         {guaio && <div className="f-stato rame">{guaio}</div>}
       </>}

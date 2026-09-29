@@ -32,11 +32,15 @@ export type Azioni = {
   /** Un'ora di pausa all'osservatore. */
   pausa(): void
   riprendi(): void
+  /** F9 · ferma il turno di notte: la carta al lavoro torna in coda. */
+  fermaTurno(): void
 }
 
 let tray: Tray | null = null
 let inAttesa = 0
 let azioni: Azioni | null = null
+/** F9 · il turno ha qualcosa da fermare (lo dice il server ogni quindici secondi). */
+let turnoDaFermare = false
 
 const MAC = process.platform === 'darwin'
 
@@ -59,6 +63,7 @@ function menu() {
     switch (v) {
       case 'pausa': return { label: t('Pausa per un’ora'), click: () => su.pausa() }
       case 'riprendi': return { label: t('Riprendi a guardare'), click: () => su.riprendi() }
+      case 'ferma-turno': return { label: t('Ferma il turno di notte'), click: () => su.fermaTurno() }
       case 'apri': return { label: t('Apri Myynd'), click: () => su.apri() }
       case 'nuova-chat': return { label: t('Nuova chat'), click: () => su.nuovaChat() }
       case 'preferenze': return { label: t('Preferenze…'), click: () => su.preferenze() }
@@ -66,7 +71,7 @@ function menu() {
       default: return { type: 'separator' }
     }
   }
-  return Menu.buildFromTemplate(vociMenu({ ...osservatore, adesso: Date.now() }).map(voce))
+  return Menu.buildFromTemplate(vociMenu({ ...osservatore, adesso: Date.now(), turno: turnoDaFermare }).map(voce))
 }
 
 const orario = (iso: string) => new Intl.DateTimeFormat(lingua() === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
@@ -96,6 +101,11 @@ export function aggiorna() {
 export function osserva(s: StatoLocale) {
   osservatore = { disponibile: s.disponibile, acceso: s.acceso, pausaFino: s.pausaFino, guarda: s.guarda }
   aggiorna()
+}
+
+/** F9 · com'è il turno: c'è qualcosa da fermare se una carta lavora o una notte aspetta, e non è già fermo. */
+export function turno(s: { lavora: boolean; inAttesa: boolean; fermo: boolean }) {
+  turnoDaFermare = !s.fermo && (s.lavora || s.inAttesa)
 }
 
 /** Quante cose aspettano la persona: puntino sul segno, numero sul Dock. */

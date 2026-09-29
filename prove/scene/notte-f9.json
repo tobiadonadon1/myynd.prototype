@@ -1,0 +1,27 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "ruolo": "Founder",
+ "progetti": [
+  { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" },
+  { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Run a two-week AI pilot with the Harbor finance team" }
+ ],
+ "turno": { "budget": 1, "notte": "dentro" },
+ "turnoAvviate": 1,
+ "compiti": [
+  { "id": "q1", "testo": "Draft the release notes for 1.0.4", "quando": "poi", "progetto": "nw", "modo": "tutto",
+    "turno": { "da": "tu", "quando": "notte", "dal": "-3h", "tentativi": 0 } },
+  { "id": "q2", "testo": "Summarise the Harbor pilot feedback", "quando": "poi", "progetto": "hb", "modo": "tutto",
+    "turno": { "da": "tu", "quando": "notte", "dal": "-3h", "tentativi": 0 } },
+  { "id": "q3", "testo": "Outline the onboarding checklist for new testers", "quando": "poi", "modo": "tutto",
+    "turno": { "da": "myynd", "quando": "notte", "dal": "-2h", "tentativi": 0 } },
+  { "id": "d9", "testo": "Write the App Review reply", "quando": "oggi", "progetto": "nw", "stato": "fatto", "chiuso": "-10m", "modo": "tutto",
+    "risultato": "Done: the reply is in your drafts.",
+    "turno": { "da": "tu", "quando": "notte", "dal": "-4h", "tentativi": 1, "ultimo": "-40m", "notte": true },
+    "diario": [ { "t": "-40m", "tipo": "turno", "dettaglio": "notte" }, { "t": "-39m", "tipo": "preso", "dettaglio": "tutto" }, { "t": "-20m", "tipo": "consegnato", "dettaglio": "casella" } ] }
+ ],
+ "uso": [
+  { "compito": "d9", "quando": "-35m", "dollari": 0.62 },
+  { "compito": "d9", "quando": "-25m", "dollari": 0.43 }
+ ]
+}

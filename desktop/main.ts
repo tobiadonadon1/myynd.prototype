@@ -83,6 +83,10 @@ if (!app.requestSingleInstanceLock()) {
 let staUscendo = false
 let serverFermato = false
 let dialogoAperto = false
+/** F9 · il server dice che stanotte c'è da lavorare: uscire la salterebbe, e prima lo si chiede. */
+let notteInAttesa = false
+/** F9 · lei ha già detto «Quit anyway», o il Mac si sta spegnendo: non si chiede più. */
+let uscitaDecisa = false
 const workLease = workPowerLease(powerSaveBlocker)
 let workLeaseTimer: ReturnType<typeof setInterval> | undefined
 
@@ -141,7 +145,8 @@ async function avvio() {
     preferenze: () => vai('preferenze'),
     esci: () => app.quit(),
     pausa: () => osservatore.pausa(60),
-    riprendi: () => osservatore.riprendi()
+    riprendi: () => osservatore.riprendi(),
+    fermaTurno: () => { server.manda({ tipo: 'turno', azione: 'ferma' }) }
   })
   // l'osservatore: spento finché il server non dice il contrario
   osservatore.avvia({
@@ -175,9 +180,14 @@ async function avvio() {
   // lo schermo si blocca o si sblocca. Solo il numero: niente app, niente
   // titoli. Il server fa partire le proposte di Myynd quando lei non c'è
   // (`server/presenza.ts`); senza questo messaggio aspettano la notte.
+  // F9 · e se il Mac va a batteria: di notte, senza corrente, il turno rischia di fermarsi a metà
   const presenza = (inattivo?: number) => {
-    try { server.manda({ tipo: 'presenza', inattivo: inattivo ?? powerMonitor.getSystemIdleTime() }) } catch { /* il server non c'è ancora */ }
+    try { server.manda({ tipo: 'presenza', inattivo: inattivo ?? powerMonitor.getSystemIdleTime(), batteria: powerMonitor.isOnBatteryPower() }) } catch { /* il server non c'è ancora */ }
   }
+  powerMonitor.on('on-battery', () => presenza())
+  powerMonitor.on('on-ac', () => presenza())
+  // il Mac si spegne: nessuna domanda prima di uscire, la risposta non arriverebbe
+  powerMonitor.on('shutdown', () => { uscitaDecisa = true })
   setInterval(() => presenza(), 60_000).unref?.()
   powerMonitor.on('lock-screen', () => presenza(24 * 3600))
   powerMonitor.on('unlock-screen', () => presenza(0))
@@ -213,7 +223,12 @@ async function avvio() {
       osservatore.nuovoServer()
     },
     suMorte: righe => chiediRiapertura(righe, ascolto),
-    suOsservatore: osservatore.daServer
+    suOsservatore: osservatore.daServer,
+    suTurno: m => {
+      const s = m as { inAttesa?: unknown; lavora?: unknown; fermo?: unknown }
+      notteInAttesa = s.inAttesa === true || s.lavora === true
+      tray.turno({ lavora: s.lavora === true, inAttesa: s.inAttesa === true, fermo: s.fermo === true })
+    }
   }
   // in `app:dev` il server ce l'ha già `npm run dev`: un secondo sugli stessi
   // dati farebbe a botte con il primo per l'indice
@@ -228,12 +243,38 @@ async function avvio() {
   // con un segno nella barra l'app vive anche senza finestre: è il punto
   app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !tray.attiva()) app.quit() })
   app.on('before-quit', e => {
+    // F9 · una notte in attesa: uscire vuol dire che stanotte non lavora nessuno. Lo si chiede, una volta
+    if (!serverFermato && notteInAttesa && !uscitaDecisa) {
+      e.preventDefault()
+      void chiediPrimaDiUscire()
+      return
+    }
     staUscendo = true
     finestra.lasciaChiudere()
     if (serverFermato) return
     e.preventDefault()
     void spegni()
   })
+}
+
+/**
+ * F9 · «Quit anyway» o «Keep Myynd open». Senza Myynd aperto il turno non
+ * parte, e la mattina non c'è niente: meglio saperlo adesso che scoprirlo
+ * domani. Una domanda sola; chi dice di uscire esce.
+ */
+async function chiediPrimaDiUscire() {
+  if (dialogoAperto) return
+  dialogoAperto = true
+  try {
+    const r = await dialog.showMessageBox({
+      type: 'question',
+      message: t('Stanotte Myynd ha delle carte da lavorare.'),
+      detail: t('Se esci, stanotte non lavora.'),
+      buttons: [t('Tieni aperto Myynd'), t('Esci comunque')],
+      defaultId: 0, cancelId: 0
+    })
+    if (r.response === 1) { uscitaDecisa = true; app.quit() }
+  } finally { dialogoAperto = false }
 }
 
 async function spegniSenzaUscire() {

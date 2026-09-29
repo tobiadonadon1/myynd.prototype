@@ -1,0 +1,97 @@
+{
+ "modello": "finto",
+ "risposte": [
+  {
+   "se": "Sei il revisore di un lavoro[\\s\\S]*pricing one-pager",
+   "in": "tutto",
+   "json": {
+    "esito": "revise",
+    "per": "the reader",
+    "comeTe": "The tiers are there.",
+    "comeLoro": "No annual price.",
+    "problemi": [
+     "The annual price is missing."
+    ],
+    "verificato": [
+     "the tiers"
+    ],
+    "criterio": "not_met",
+    "criterioPerche": "The annual price for the Pro tier is missing: no source says it."
+   }
+  },
+  {
+   "se": "Un assistente si è fermato su un compito",
+   "in": "system",
+   "json": {
+    "righe": [
+     {
+      "domanda": "What is the annual price for Pro?",
+      "opzioni": [
+       "$290 a year",
+       "$390 a year"
+      ],
+      "multipla": false
+     }
+    ]
+   }
+  },
+  {
+   "se": "Scrivi il criterio di «fatto»",
+   "in": "system",
+   "json": {
+    "criterio": "A course outline file on your Desktop with five modules, each with its goal and one exercise."
+   }
+  },
+  {
+   "se": "Guardi il risultato di un compito affidato",
+   "in": "system",
+   "json": {
+    "chiede": false,
+    "manca": [],
+    "domanda": "",
+    "visto": ""
+   }
+  },
+  {
+   "se": "Sei il revisore di un lavoro",
+   "in": "system",
+   "attesa": 8000,
+   "json": {
+    "esito": "pass",
+    "per": "the reader",
+    "comeTe": "It holds.",
+    "comeLoro": "Clear.",
+    "problemi": [],
+    "verificato": [
+     "five modules against the notes"
+    ],
+    "criterio": "met",
+    "criterioPerche": "Five modules, each with a goal and an exercise, saved on your Desktop."
+   }
+  },
+  {
+   "se": "Un assistente ha appena finito un lavoro",
+   "in": "system",
+   "json": {
+    "prossimo": ""
+   }
+  },
+  {
+   "se": "Prendi una bozza scritta per una persona",
+   "in": "system",
+   "json": {
+    "a": "",
+    "oggetto": "",
+    "corpo": "",
+    "allegato": ""
+   }
+  },
+  {
+   "se": "Fatto vuol dire, per questa carta",
+   "in": "system",
+   "attesa": 20000,
+   "testo": "Done: the release notes are below.\n\nNorthwind 1.0.4 fixes the three account issues and adds the review video."
+  }
+ ],
+ "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

@@ -18,16 +18,25 @@ export const ASSENTE_DOPO = 15 * 60
 /** Un'ultima notizia più vecchia di così non vale più: il guscio può essere morto. */
 const VALE_PER = 3 * 60_000
 
-let ultima: { inattivo: number; quando: number } | null = null
+let ultima: { inattivo: number; quando: number; batteria?: boolean } | null = null
 
 /** L'ultima notizia dal guscio, se c'è. Solo per chi la mostra (lo stato del turno). */
-export function ultimaNotizia(): { inattivo: number; quando: number } | null { return ultima }
+export function ultimaNotizia(): { inattivo: number; quando: number; batteria?: boolean } | null { return ultima }
 
-/** Il guscio ha detto quanto è fermo il Mac. */
-export function registra(inattivo: unknown, quando = Date.now()) {
+/**
+ * Il guscio ha detto quanto è fermo il Mac, e (F9) se va a batteria: di
+ * notte, senza corrente, il Mac si addormenta anche con il permesso di
+ * restare sveglio, e le preferenze lo dicono.
+ */
+export function registra(inattivo: unknown, quando = Date.now(), batteria?: unknown) {
   const n = Number(inattivo)
   if (!Number.isFinite(n) || n < 0) return
-  ultima = { inattivo: Math.floor(n), quando }
+  ultima = { inattivo: Math.floor(n), quando, ...(typeof batteria === 'boolean' ? { batteria } : {}) }
+}
+
+/** F9 · il Mac va a batteria, detto di recente dal guscio. Fuori dall'app non si sa, e si dice di no. */
+export function aBatteria(adesso = Date.now()): boolean {
+  return !!ultima && adesso - ultima.quando <= VALE_PER && ultima.batteria === true
 }
 
 /** Lei non c'è: il Mac è fermo da un quarto d'ora, detto di recente. */
@@ -42,8 +51,8 @@ export function ascolta(filo?: Filo | null): boolean {
   const f = filo ?? (process as unknown as { parentPort?: Filo }).parentPort
   if (!f) return false
   f.on('message', m => {
-    const d = m?.data as { tipo?: unknown; inattivo?: unknown } | undefined
-    if (d?.tipo === 'presenza') registra(d.inattivo)
+    const d = m?.data as { tipo?: unknown; inattivo?: unknown; batteria?: unknown } | undefined
+    if (d?.tipo === 'presenza') registra(d.inattivo, Date.now(), d.batteria)
   })
   return true
 }

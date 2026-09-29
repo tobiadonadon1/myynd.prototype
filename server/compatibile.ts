@@ -580,6 +580,18 @@ export async function eOllama(url: string): Promise<boolean> {
   return ollama
 }
 
+/**
+ * È Ollama, per quello che si sa già, senza bussare (F9): la porta di serie,
+ * o una risposta di `/api/tags` ancora fresca. Serve al conto: un modello in
+ * casa non costa niente, e contarlo al prezzo di Claude fermerebbe la notte
+ * per soldi che nessuno spende.
+ */
+export function giaOllama(url: string): boolean {
+  if (sembraOllama(url)) return true
+  const visto = ORIGINE_OLLAMA.get(base(url))
+  return !!visto && visto.ollama && Date.now() - visto.quando < RICORDO_OLLAMA
+}
+
 /** I messaggi, come li vuole `/api/chat`: gli argomenti sono oggetti, non stringhe. */
 export function messaggiOllama(righe: MessaggioOA[]): Record<string, unknown>[] {
   return righe.map(m => {

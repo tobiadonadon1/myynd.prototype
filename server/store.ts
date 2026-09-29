@@ -9,7 +9,8 @@ import { cartella } from './config.ts'
 import * as chi from './chi.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as tempi from './tempi.ts'
-import { etichettato } from './etichetta-uso.ts'
+import { compitoInCorso, etichettato } from './etichetta-uso.ts'
+import * as prezzi from './prezzi.ts'
 import { radici, radice, termini } from './lingua.ts'
 import { dovePortare } from './scrivania.ts'
 import { contestoAttenzione, stessaRichiesta, mittenteAutomatico, indirizzoAttenzione, type ContestoAttenzione } from './rilevanza.ts'
@@ -585,7 +586,8 @@ const TABELLE = {
 const INDICI = [
   'CREATE INDEX IF NOT EXISTS idx_doc_risponde ON documenti(risponde)',
   'CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)',
-  'CREATE INDEX IF NOT EXISTS idx_feed_stato ON feed(stato)'
+  'CREATE INDEX IF NOT EXISTS idx_feed_stato ON feed(stato)',
+  'CREATE INDEX IF NOT EXISTS idx_uso_compito ON uso(compito)'
 ]
 
 /**
@@ -1530,7 +1532,14 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // 67 → 68 · F2 · il turno di una carta: chi l'ha messa in coda, quando, quante volte è partita.
   d => colonna(d, 'compiti', 'turno', 'TEXT'),
   // 68 → 69 · F7 · le regole del feed si contano dagli scarti: senza indice su `stato` era tutta la tabella
-  d => d.exec('CREATE INDEX IF NOT EXISTS idx_feed_stato ON feed(stato)')
+  d => d.exec('CREATE INDEX IF NOT EXISTS idx_feed_stato ON feed(stato)'),
+  // 69 → 70 · F9 · il conto di una carta: a quale carta va una chiamata, e quanto è costata in
+  //   micro-dollari (null se il modello non ha un prezzo). Il budget della notte si legge da qui.
+  d => {
+    colonna(d, 'uso', 'compito', 'TEXT')
+    colonna(d, 'uso', 'costo', 'INTEGER')
+    d.exec('CREATE INDEX IF NOT EXISTS idx_uso_compito ON uso(compito)')
+  }
 ]
 
 /**
@@ -1635,7 +1644,8 @@ const COLONNE: Record<string, [string, string][]> = {
   messaggi: [['verifica', 'TEXT']],
   notizie: [['scartata', 'TEXT'], ['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']],
   progetti: [['colore', 'TEXT'], ['alias', 'TEXT'], ['genitore', 'TEXT'], ['priorita', 'TEXT']],
-  agenda_viste: [['organizzatore', 'TEXT']]
+  agenda_viste: [['organizzatore', 'TEXT']],
+  uso: [['compito', 'TEXT'], ['costo', 'INTEGER']]
 }
 
 /*
@@ -2607,7 +2617,15 @@ export function documento(id: string): Documento | null {
 
 // — quanto è costato —
 
-export type Uso = { lavoro: string; motore: string; entrata: number; cache: number; uscita: number }
+export type Uso = {
+  lavoro: string; motore: string; entrata: number; cache: number; uscita: number
+  /** F9 · quanti dei token in `entrata` sono stati scritti in cache: il listino li fa pagare un quarto in più. */
+  scritti?: number
+  /** F9 · il modello col cui prezzo si conta; senza, e senza `costo`, la riga resta di soli token. */
+  modello?: string | null
+  /** F9 · il costo detto da chi ha risposto (Claude Code lo scrive nella busta), in micro-dollari. */
+  costo?: number | null
+}
 
 export function segnaUso(u: Uso) {
   /*
@@ -2626,8 +2644,73 @@ export function segnaUso(u: Uso) {
   // l'etichetta del contesto («prova:risposta»), se una prova delle risposte
   // sta girando (P7): vedi etichetta-uso.ts
   provaChiusa.conta(u.entrata + u.uscita)
-  provaChiusa.fuori(() => db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita) VALUES (?,?,?,?,?,?)')
-    .run(new Date().toISOString(), etichettato(u.lavoro), u.motore, u.entrata, u.cache, u.uscita))
+  // F9 · il costo, e la carta a cui va: quella al lavoro nel contesto (vedi etichetta-uso.ts)
+  const scritti = Math.min(u.entrata, Math.max(0, u.scritti ?? 0))
+  const costo = u.costo ?? prezzi.costo(u.modello, { entrata: u.entrata - scritti, scritti, cache: u.cache, uscita: u.uscita })
+  const compito = compitoInCorso()?.id ?? null
+  provaChiusa.fuori(() => db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita, compito, costo) VALUES (?,?,?,?,?,?,?,?)')
+    .run(new Date().toISOString(), etichettato(u.lavoro), u.motore, u.entrata, u.cache, u.uscita, compito, costo))
+}
+
+/**
+ * F9 · quanto è costata una carta: le chiamate, i token, i micro-dollari.
+ *
+ * `costo` è null se nessuna chiamata aveva un prezzo; `stimato` dice che la
+ * cifra non è quella vera: una chiamata senza prezzo (conta zero), o un
+ * motore contato al prezzo del modello scelto (l'account ChatGPT, un
+ * fornitore compatibile). Chi la mostra ci mette davanti una tilde.
+ */
+export type CostoCompito = { chiamate: number; entrata: number; uscita: number; costo: number | null; stimato: boolean }
+
+const ESATTI = () => [...Object.keys(prezzi.PREZZI), 'Claude account']
+
+function costoDaRiga(r: { n: number; e: number; u: number; c: number | null; senza: number; stime: number }): CostoCompito {
+  return { chiamate: r.n, entrata: r.e, uscita: r.u, costo: r.c, stimato: r.senza > 0 || r.stime > 0 }
+}
+
+const SQL_COSTO = (esatti: string[]) =>
+  'COUNT(*) AS n, COALESCE(SUM(entrata),0) AS e, COALESCE(SUM(uscita),0) AS u, SUM(costo) AS c, ' +
+  'SUM(CASE WHEN costo IS NULL THEN 1 ELSE 0 END) AS senza, ' +
+  `SUM(CASE WHEN costo IS NOT NULL AND costo > 0 AND motore NOT IN (${esatti.map(() => '?').join(',')}) THEN 1 ELSE 0 END) AS stime`
+
+export function usoDelCompito(id: string): CostoCompito | null {
+  const esatti = ESATTI()
+  const r = db.prepare(`SELECT ${SQL_COSTO(esatti)} FROM uso WHERE compito = ?`).get(...esatti, id) as Parameters<typeof costoDaRiga>[0]
+  return r.n ? costoDaRiga(r) : null
+}
+
+/** Il conto di tante carte in una query: la lista lo mette su ogni carta. */
+export function usoDeiCompiti(ids: string[]): Map<string, CostoCompito> {
+  const fuori = new Map<string, CostoCompito>()
+  if (!ids.length) return fuori
+  const esatti = ESATTI()
+  for (let i = 0; i < ids.length; i += 500) {
+    const pezzo = ids.slice(i, i + 500)
+    const righe = db.prepare(`SELECT compito, ${SQL_COSTO(esatti)} FROM uso WHERE compito IN (${pezzo.map(() => '?').join(',')}) GROUP BY compito`)
+      .all(...esatti, ...pezzo) as (Parameters<typeof costoDaRiga>[0] & { compito: string })[]
+    for (const r of righe) fuori.set(r.compito, costoDaRiga(r))
+  }
+  return fuori
+}
+
+/**
+ * F9 · i micro-dollari spesi dalle carte da un istante in qua (e fino a un
+ * altro, se c'è). Solo quelle: la chat del pomeriggio non consuma il budget
+ * della notte, che è il budget del lavoro affidato.
+ */
+export function costoDal(da: string, a?: string): number {
+  const r = db.prepare(`SELECT COALESCE(SUM(costo),0) AS c FROM uso WHERE compito IS NOT NULL AND quando >= ?${a ? ' AND quando < ?' : ''}`)
+    .get(...(a ? [da, a] : [da])) as { c: number }
+  return r.c
+}
+
+/** F9 · il costo delle ultime carte lavorate, in micro-dollari, dalla più recente: serve a dire se il resto del budget basta per un'altra. */
+export function costiUltimeCarte(quante: number): number[] {
+  const righe = db.prepare(`
+    SELECT SUM(costo) AS c, MAX(quando) AS q FROM uso WHERE compito IS NOT NULL AND costo IS NOT NULL
+    GROUP BY compito ORDER BY q DESC LIMIT ?
+  `).all(quante) as { c: number }[]
+  return righe.map(r => r.c)
 }
 
 export type Totale = { chiamate: number; entrata: number; cache: number; uscita: number }
@@ -3616,6 +3699,8 @@ export type Compito = {
   prova?: ProvaLavoro | null
   /** Quello che ha fatto, passo per passo: si legge nel dettaglio della carta (F1). */
   diario?: VoceDiario[] | null
+  /** F9 · quanto è costata, sommando ogni chiamata fatta mentre era al lavoro. Solo se ne ha fatte. */
+  costo?: CostoCompito
   /** Il turno (F2): chi l'ha messa in coda per Myynd, come, e quante volte il turno l'ha fatta partire. */
   turno?: TurnoCompito | null
 }
@@ -3665,6 +3750,10 @@ export type ProvaLavoro = {
 export type VoceDiario = {
   t: string
   tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto' | 'turno'
+    /** F9 · un file scritto fuori dalla copia, col percorso intero: «disfa» lo cerca qui. */
+    | 'file'
+    /** F9 · una nota creata in Note: non si disfa, e lo si dice. */
+    | 'nota'
   dettaglio?: string
 }
 
@@ -3811,7 +3900,14 @@ export function compitiChiusi(limite = 30): Compito[] {
     SELECT * FROM compiti WHERE stato IN ('fatto','lasciato') AND sparito IS NULL
     ORDER BY chiuso DESC LIMIT ?
   `).all(limite) as Record<string, unknown>[]
-  return righe.map(compitoDaRiga)
+  return conCosti(righe.map(compitoDaRiga))
+}
+
+/** F9 · il conto su ogni carta che ne ha uno, in una query sola. Non lancia: il conto è un di più. */
+export function conCosti<T extends Compito>(cs: T[]): T[] {
+  let costi: Map<string, CostoCompito>
+  try { costi = usoDeiCompiti(cs.map(c => c.id)) } catch { return cs }
+  return costi.size ? cs.map(c => { const k = costi.get(c.id); return k ? { ...c, costo: k } : c }) : cs
 }
 
 /**
@@ -4056,7 +4152,9 @@ export function segnaNelDiario(id: string, voce: Omit<VoceDiario, 't'> & { t?: s
     if (!r) return
     const prima = jsonOppureNulla(r.diario)
     const voci: VoceDiario[] = Array.isArray(prima) ? prima as VoceDiario[] : []
-    const nuova: VoceDiario = { t: voce.t ?? new Date().toISOString(), tipo: voce.tipo, ...(voce.dettaglio ? { dettaglio: voce.dettaglio.slice(0, 240) } : {}) }
+    // un percorso si tiene intero (F9): tagliato non si ritroverebbe più per disfarlo
+    const tetto = voce.tipo === 'file' ? 2000 : 240
+    const nuova: VoceDiario = { t: voce.t ?? new Date().toISOString(), tipo: voce.tipo, ...(voce.dettaglio ? { dettaglio: voce.dettaglio.slice(0, tetto) } : {}) }
     const ultima = voci[voci.length - 1]
     // lo stesso passo detto due volte di fila non è un passo in più
     if (ultima && ultima.tipo === nuova.tipo && (ultima.dettaglio ?? '') === (nuova.dettaglio ?? '')) return
@@ -4236,6 +4334,20 @@ export function mettiCompitoInCoda(id: string, modo: string, turno: TurnoCompito
     UPDATE compiti SET stato = 'aperto', modo = ?, guaio = NULL, turno = ?, aggiornato = ?, versione = versione + 1
     WHERE id = ? AND stato = 'aperto' AND sparito IS NULL
   `).run(modo, JSON.stringify(turno), new Date().toISOString(), id)
+  return Number(r.changes) > 0
+}
+
+/**
+ * F9 · una carta fermata a metà (il bottone, o il budget della notte) torna
+ * in coda com'era: aperta, di Myynd col suo modo, senza guaio e senza il
+ * lavoro a metà, con il turno che le si passa. Solo da affidata: una carta
+ * che nel frattempo lei ha ripreso resta sua. Torna vero se l'ha rimessa.
+ */
+export function rimettiCompitoInCoda(id: string, turno: TurnoCompito | null): boolean {
+  const r = db.prepare(`
+    UPDATE compiti SET stato = 'aperto', guaio = NULL, chiesto = NULL, consegna = NULL, turno = ?, aggiornato = ?, versione = versione + 1
+    WHERE id = ? AND stato = 'delegato'
+  `).run(turno ? JSON.stringify(turno) : null, new Date().toISOString(), id)
   return Number(r.changes) > 0
 }
 

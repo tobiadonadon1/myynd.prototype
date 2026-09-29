@@ -500,8 +500,12 @@ export function useCompiti(
     try {
       const r = await api.disfaCompito(id)
       setCompiti(r.compiti)
+      // F9 · una carta chiusa disfatta esce dalle chiuse
+      if (r.chiusi) setChiusi(r.chiusi)
       scorda(id)
-      mostraToast(r.file === 'cestino'
+      mostraToast(r.noteRestano
+        ? (r.file === 'cestino' ? t('Disfatta: la nota resta in Note, i file sono nel Cestino. La carta è di nuovo tua.') : t('Disfatta: la nota resta in Note. La carta è di nuovo tua.'))
+        : r.file === 'cestino'
         ? (r.bozzaResta ? t('Disfatta: il file è nel Cestino, la bozza resta in Bozze. La carta è di nuovo tua.') : t('Disfatta: il file è nel Cestino. La carta è di nuovo tua.'))
         : r.bozzaResta ? t('Disfatta: la bozza resta in Bozze, toglila da lì se non la vuoi. La carta è di nuovo tua.') : t('Disfatta: la carta è di nuovo tua.'))
     } catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a disfarla.')) }
@@ -510,6 +514,15 @@ export function useCompiti(
   /** F2 · acceso, spento, in pausa, quante carte, quale notte. */
   const impostaTurno = useCallback(async (p: Parameters<typeof api.impostaTurno>[0]): Promise<boolean> => {
     try { setTurno(await api.impostaTurno(p)); return true }
+    catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a salvarlo.')); return false }
+  }, [mostraToast])
+
+  /**
+   * F9 · «Stop now»: il turno si ferma, e la carta al lavoro torna in coda.
+   * Non ottimistico: la riga cambia quando il server dice che è ferma.
+   */
+  const fermaTurno = useCallback(async (): Promise<boolean> => {
+    try { const r = await api.fermaTurno(); setCompiti(r.compiti); setTurno(r.turno); return true }
     catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a salvarlo.')); return false }
   }, [mostraToast])
 
@@ -825,7 +838,7 @@ export function useCompiti(
     pronte, chiedono,
     /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
     inAttesa,
-    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, disfa, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, fermaTurno, disfa, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

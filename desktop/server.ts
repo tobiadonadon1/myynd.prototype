@@ -112,6 +112,8 @@ export type Ascolto = {
   suMorte(ultimeRighe: string[]): void
   /** Un `osservatore-stato`: com'è l'osservatore per il server (`osservatore.ts`). */
   suOsservatore?: (m: unknown) => void
+  /** F9 · un `turno-stato`: se c'è una notte in attesa, e se una carta del turno lavora. */
+  suTurno?: (m: unknown) => void
 }
 
 const RIAVVII_MASSIMI = 3
@@ -192,6 +194,7 @@ export async function avvia(ascolto: Ascolto, opzioni: { script?: string } = {})
   p.on('message', (m: unknown) => {
     ascolto.suLavoro?.(m)
     if ((m as { tipo?: unknown })?.tipo === 'osservatore-stato') ascolto.suOsservatore?.(m)
+    if ((m as { tipo?: unknown })?.tipo === 'turno-stato') ascolto.suTurno?.(m)
     const porta = (m as { porta?: unknown })?.porta
     if (typeof porta === 'number') {
       portaDetta = true

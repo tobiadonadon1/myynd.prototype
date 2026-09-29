@@ -1,0 +1,9 @@
+[
+  { "aspetta": 2000 },
+  { "clicca": "To do" },
+  { "aspetta": 1200 },
+  { "clicca": "Board" },
+  { "aspetta": 1500 },
+  { "scatta": "bacheca" },
+  { "testo": "bacheca" }
+]

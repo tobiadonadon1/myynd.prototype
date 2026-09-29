@@ -147,13 +147,14 @@ export function compitiAttuali(adesso = Date.now()): (store.Compito & { puoInvia
   }
   const fonti = compiti.flatMap(c => c.origine === 'punto' && c.doc ? store.documento(c.doc) ?? [] : [])
   const ignorati = store.docsIgnoratiDalFeed(fonti)
-  return compiti.filter(c => {
+  // F9 · e il conto di ogni carta che ha lavorato: «Cosa ha fatto · $0.12» nel dettaglio
+  return store.conCosti(compiti.filter(c => {
     if (c.origine !== 'punto' || c.stato !== 'aperto' || c.versione > 1) return true
     const d = c.doc ? store.documento(c.doc) : null
     return !!d && !ignorati.has(d.id) && pertinente(d, adesso) && validaVoceFeed({
       titolo: c.testo, testo: c.nota ?? '', perche: (c.nota ?? '').slice(0, 200)
     }, d, { richiediProva: false })
-  }).map(c => ({ ...c, puoInviare: !!conf.posta, tocca: regole.tocca(c, ctx) }))
+  }).map(c => ({ ...c, puoInviare: !!conf.posta, tocca: regole.tocca(c, ctx) })))
 }
 
 /**

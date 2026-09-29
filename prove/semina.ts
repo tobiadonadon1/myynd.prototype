@@ -234,9 +234,39 @@ chi.dentro(conto.id, () => {
     // — P3: fine —
   }
 
-  // F2 · quante carte il turno ha già fatto partire oggi
-  if (typeof (scena as { turnoAvviate?: unknown }).turnoAvviate === 'number') {
-    writeFileSync(join(cfg.cartella(), 'turno.json'), JSON.stringify({ giornata: regoleTurno.inizioGiornata(new Date()).toISOString(), avviate: (scena as { turnoAvviate: number }).turnoAvviate }))
+  // — F9: inizio —
+  // Il turno di una scena: il budget, e una notte messa attorno all'ora della
+  // prova («dentro»: cominciata un'ora fa; «fuori»: finita un'ora fa), così la
+  // scena non dipende da quando gira. Poi le spese delle carte nel registro
+  // dell'uso, il diario con i tempi relativi resi veri, e quello che il conto
+  // del turno ricorda dell'ultima notte (la fermata, i buchi).
+  const f9 = scena as { turno?: { budget?: number; notte?: 'dentro' | 'fuori' }; uso?: { compito: string; quando?: string; dollari: number; motore?: string }[]; turnoNotte?: { fermata?: 'budget' | 'stop'; buchi?: { da: string; a: string }[] } }
+  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  let finestra = regoleTurno.NOTTE_DI_SERIE
+  if (f9.turno) {
+    const adesso = Date.now()
+    if (f9.turno.notte === 'dentro') finestra = { da: hhmm(new Date(adesso - 3_600_000)), a: hhmm(new Date(adesso + 6 * 3_600_000)) }
+    if (f9.turno.notte === 'fuori') finestra = { da: hhmm(new Date(adesso - 8 * 3_600_000)), a: hhmm(new Date(adesso - 3_600_000)) }
+    cfg.aggiorna({ turno: { ...(f9.turno.budget !== undefined ? { budget: f9.turno.budget } : {}), ...(f9.turno.notte ? { notteDa: finestra.da, notteA: finestra.a } : {}) } })
+  }
+  for (const u of f9.uso ?? []) {
+    store.default.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita, compito, costo) VALUES (?,?,?,?,?,?,?,?)')
+      .run(tempo(u.quando ?? '-1h'), 'bozza', u.motore ?? 'claude-sonnet-5', 4000, 0, 800, u.compito, Math.round(u.dollari * 1_000_000))
+  }
+  for (const c of scena.compiti ?? []) {
+    if (!Array.isArray(c.diario)) continue
+    const diario = (c.diario as { t?: string }[]).map(v => (typeof v.t === 'string' ? { ...v, t: tempo(v.t) } : v))
+    store.default.prepare('UPDATE compiti SET diario = ? WHERE id = ?').run(JSON.stringify(diario), c.id)
+  }
+  // — F9: fine —
+
+  // F2 · quante carte il turno ha già fatto partire oggi (F9: e quello che ricorda dell'ultima notte)
+  if (typeof (scena as { turnoAvviate?: unknown }).turnoAvviate === 'number' || f9.turnoNotte) {
+    const adesso = new Date()
+    const notte = f9.turnoNotte
+      ? { dal: regoleTurno.inizioUltimaNotte(adesso, finestra).toISOString(), fermata: f9.turnoNotte.fermata ? { perche: f9.turnoNotte.fermata, quando: tempo('-2h') } : null, buchi: (f9.turnoNotte.buchi ?? []).map(b => ({ da: tempo(b.da), a: tempo(b.a) })) }
+      : undefined
+    writeFileSync(join(cfg.cartella(), 'turno.json'), JSON.stringify({ giornata: regoleTurno.inizioGiornata(adesso, finestra).toISOString(), avviate: (scena as { turnoAvviate?: number }).turnoAvviate ?? 0, ...(notte ? { notte } : {}) }))
   }
   for (const d of scena.domande ?? []) {
     store.apriDomanda({ tema: d.tema, testo: d.testo, spunto: [], progetto: progetto(d.progetto) })

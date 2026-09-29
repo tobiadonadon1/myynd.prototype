@@ -1,0 +1,17 @@
+[
+  { "aspetta": 2000 },
+  { "clicca": "To do" },
+  { "aspetta": 1200 },
+  { "clicca": "Board" },
+  { "aspetta": 1200 },
+  { "clicca": "Done · 1" },
+  { "aspetta": 800 },
+  { "scatta": "fatte" },
+  { "testo": "fatte" },
+  { "clicca": "Write the first course outline" },
+  { "aspetta": 1200 },
+  { "js": "(() => { const d = document.querySelector('.task-detail-diario'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }) } return !!d })()" },
+  { "aspetta": 600 },
+  { "scatta": "dettaglio" },
+  { "testo": "dettaglio" }
+]

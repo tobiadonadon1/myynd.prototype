@@ -1,0 +1,15 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "ruolo": "Founder",
+ "progetti": [
+  { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" }
+ ],
+ "turno": { "budget": 3, "notte": "dentro" },
+ "compiti": [
+  { "id": "s1", "testo": "Draft the release notes for 1.0.4", "quando": "oggi", "progetto": "nw", "modo": "tutto",
+    "turno": { "da": "tu", "quando": "presto", "dal": "-1h", "tentativi": 0 } },
+  { "id": "s2", "testo": "Outline the onboarding checklist for new testers", "quando": "poi", "modo": "tutto",
+    "turno": { "da": "myynd", "quando": "notte", "dal": "-1h", "tentativi": 0 } }
+ ]
+}

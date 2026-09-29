@@ -954,9 +954,12 @@ export type Config = {
   /**
    * Il turno (F2): Myynd lavora da solo le carte in coda. Acceso se manca;
    * `carte` è quante ne può far partire in una giornata (di serie dodici),
-   * `notteDa`/`notteA` la notte in cui lavora mentre lei dorme.
+   * `notteDa`/`notteA` la notte in cui lavora mentre lei dorme. F9:
+   * `budget` i dollari che può spendere in una giornata del turno (di serie
+   * tre, zero nessuno), `fermo` l'istante del bottone «Stop now»: fermo
+   * finché lei non lo riprende, senza una fine come la pausa.
    */
-  turno?: { spento?: boolean; pausaFino?: string | null; carte?: number; notteDa?: string; notteA?: string }
+  turno?: { spento?: boolean; pausaFino?: string | null; carte?: number; notteDa?: string; notteA?: string; budget?: number; fermo?: string | null }
   /** Il gemello (P1): le previsioni sigillate fino alla sera. */
   gemello?: { previsioni?: boolean }
   /** L'esame settimanale delle risposte (P7): spento se manca, perché costa. */

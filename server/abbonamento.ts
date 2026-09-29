@@ -36,12 +36,44 @@
 
 import * as bandiere from './bandiere-cli.ts'
 import * as provaChiusa from './prova-chiusa.ts'
-import { spawn } from 'node:child_process'
+import { spawn as spawnVero } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { RADICE, leggi, modello } from './config.ts'
-import { installato } from './lavoro.ts'
+import { installato as installatoVero } from './lavoro.ts'
 import { controllaIlTetto, segnaAccount as segna, type UsoCLI } from './tetto.ts'
+
+/*
+ * Le mani che lanciano `claude`, sostituibili solo nelle prove (F9): per
+ * provare che un lavoro fermato uccide davvero il processo serve un processo
+ * finto, e `installato()` guarda solo i posti veri. In produzione sono sempre
+ * quelle di Node e di `lavoro.ts`, e non c'è altra strada per cambiarle.
+ */
+type Ferri = { spawn: typeof spawnVero; installato: typeof installatoVero }
+const VERI: Ferri = { spawn: spawnVero, installato: installatoVero }
+let ferri: Ferri = VERI
+/** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
+export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
+const spawn = ((...a: Parameters<typeof spawnVero>) => (ferri.spawn as (...x: unknown[]) => ReturnType<typeof spawnVero>)(...a)) as typeof spawnVero
+const installato = () => ferri.installato()
+
+/**
+ * Ferma un `claude` e tutto quello che ha lanciato (F9): il processo parte in
+ * un gruppo suo, e si manda il segnale al gruppo. Un figlio lasciato vivo
+ * dopo «Stop now» continuerebbe a spendere di notte, che è proprio quello che
+ * il bottone promette di non fare. Dopo due secondi, se c'è ancora, SIGKILL.
+ */
+function fermaIlGruppo(p: ReturnType<typeof spawnVero>) {
+  const colpo = (segnale: NodeJS.Signals) => {
+    try { if (p.pid && process.platform !== 'win32') process.kill(-p.pid, segnale); else p.kill(segnale) }
+    catch { try { p.kill(segnale) } catch { /* già andato */ } }
+  }
+  colpo('SIGTERM')
+  setTimeout(() => { if (p.exitCode === null && p.signalCode === null) colpo('SIGKILL') }, 2000).unref?.()
+}
+
+/** L'errore di un lavoro fermato da chi l'aveva chiesto: si riconosce, non è un guasto della strada. */
+const FERMATO = 'Il lavoro è stato fermato.'
 
 /**
  * Una cartella vuota, che è tutto quello che gli diamo da guardare.
@@ -489,9 +521,12 @@ export async function chiedi(o: {
   modello?: string
   /** Il lavoro, per il registro dell'uso. */
   lavoro?: string
+  /** F9 · fermato («Stop now», il richiamo): il processo muore con tutto il suo gruppo. */
+  signal?: AbortSignal
 }): Promise<string> {
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è su questa macchina.')
+  o.signal?.throwIfAborted()
   // il tetto di oggi vale anche qui: l'account Claude non è un modo di scavalcarlo
   controllaIlTetto()
   const sistema = conLoSchema(o.system, o.formato)
@@ -509,10 +544,14 @@ export async function chiedi(o: {
   }
 }
 
-function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa: number; modello?: string; lavoro?: string }, senzaNuove = false): Promise<string> {
+function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa: number; modello?: string; lavoro?: string; signal?: AbortSignal }, senzaNuove = false): Promise<string> {
   return new Promise<string>((risolvi, rifiuta) => {
     // `chiedi` non chiede mai meno sforzo: solo la chat, per una domanda secca
-    const p = spawn(exe, argomenti(sistema, 'json', o.modello, { exe, senzaNuove }), { cwd: VUOTA, env: ambiente() })
+    const p = spawn(exe, argomenti(sistema, 'json', o.modello, { exe, senzaNuove }), { cwd: VUOTA, env: ambiente(), detached: process.platform !== 'win32' })
+    // F9 · fermato da fuori: il gruppo muore subito, e chi aspetta lo sa senza aspettare la chiusura
+    let fermato = false
+    const ferma = () => { fermato = true; clearTimeout(tetto); fermaIlGruppo(p); rifiuta(o.signal?.reason instanceof Error ? o.signal.reason : new Error(FERMATO)) }
+    if (o.signal?.aborted) { queueMicrotask(ferma) } else o.signal?.addEventListener('abort', ferma, { once: true })
 
     /*
       La domanda entra dallo stdin, non dagli argomenti.
@@ -530,7 +569,7 @@ function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa
     let male = ''
 
     const tetto = setTimeout(() => {
-      p.kill('SIGTERM')
+      fermaIlGruppo(p)
       rifiuta(new Error('Claude Code ci ha messo troppo.'))
     }, o.attesa)
 
@@ -539,11 +578,14 @@ function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa
 
     p.on('error', e => {
       clearTimeout(tetto)
+      o.signal?.removeEventListener('abort', ferma)
       rifiuta(new Error(`Non sono riuscito ad avviare Claude Code: ${e.message}`))
     })
 
     p.on('close', codice => {
       clearTimeout(tetto)
+      o.signal?.removeEventListener('abort', ferma)
+      if (fermato) return
       if (codice !== 0) {
         return rifiuta(new Error(male.trim().split('\n')[0] || `Claude Code è uscito con ${codice}.`))
       }
@@ -552,7 +594,7 @@ function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa
       if (b.is_error || typeof b.result !== 'string' || !b.result.trim()) {
         return rifiuta(new Error(motivo(b)))
       }
-      segna(o.lavoro ?? 'bozza', b.usage, sistema + domanda, b.result)
+      segna(o.lavoro ?? 'bozza', b.usage, sistema + domanda, b.result, { costoUsd: b.total_cost_usd, modello: o.modello ?? modello() })
       risolvi(b.result)
     })
   })
@@ -566,6 +608,7 @@ type Pezzo = {
   is_error?: boolean
   subtype?: string
   usage?: UsoCLI
+  total_cost_usd?: number
 }
 
 /**
@@ -623,6 +666,8 @@ function lanciaInStreaming(exe: string, domanda: string, o: { system: string; si
     let testo = ''
     /** I token detti dalla riga finale, se li dice. */
     let usoDetto: UsoCLI | undefined
+    /** F9 · e quanto è costata, se lo dice. */
+    let costoDetto: number | undefined
     /** La riga rimasta a metà fra due pezzi di stdout: si completa col prossimo. */
     let resto = ''
     let male = ''
@@ -674,6 +719,7 @@ function lanciaInStreaming(exe: string, domanda: string, o: { system: string; si
           return
         }
         usoDetto = d.usage
+        costoDetto = d.total_cost_usd
         // Se i pezzi non sono arrivati — una versione che non li manda — la
         // riga finale ha comunque tutta la risposta. Darla intera alla fine è
         // peggio che darla a poco a poco, ed è molto meglio che non darla.
@@ -704,7 +750,7 @@ function lanciaInStreaming(exe: string, domanda: string, o: { system: string; si
         return rifiuta(new Error(male.trim().split('\n')[0] || `Claude Code è uscito con ${codice}.`))
       }
       if (!testo.trim()) return rifiuta(new Error('Claude Code non ha risposto niente.'))
-      segna(o.lavoro ?? 'risposta', usoDetto, o.system + domanda, testo)
+      segna(o.lavoro ?? 'risposta', usoDetto, o.system + domanda, testo, { costoUsd: costoDetto, modello: modello() })
       risolvi(testo)
     })
   })

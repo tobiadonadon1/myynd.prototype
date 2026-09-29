@@ -41,6 +41,7 @@ import { leggiSeAncoraCollegata } from './fonti-collegate.ts'
 import * as compiti from './compiti.ts'
 import * as contratto from './contratto.ts'
 import * as turno from './turno.ts'
+import * as turnoGuscio from './turno-guscio.ts'
 import * as presenza from './presenza.ts'
 import * as disfa from './disfa.ts'
 import * as progettoRiga from './progetto-riga.ts'
@@ -3561,10 +3562,19 @@ app.post('/api/compiti/:id/disfa', (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
   let esito: disfa.Disfatto
   try { esito = disfa.disfaLavoro(c.id) } catch (e) { return errore(res, e, 400) }
-  res.json({ ok: true, ...esito, compiti: compitiAttuali() })
+  res.json({ ok: true, ...esito, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
   compiti.annunciaCambio()
 })
 app.get('/api/turno', (_req, res) => { res.json(turno.stato()) })
+/*
+ * F9 · «Stop now»: il turno si ferma adesso, la carta al lavoro si interrompe
+ * e torna in coda con le altre. Resta fermo finché non lo si riprende (PATCH
+ * con `pausa: 0`, o riacceso).
+ */
+app.post('/api/turno/ferma', (_req, res) => {
+  const fermate = turno.ferma()
+  res.json({ ok: true, fermate, compiti: compitiAttuali(), turno: turno.stato() })
+})
 app.patch('/api/turno', (req, res) => {
   try { turno.imposta(req.body ?? {}) } catch (e) { return errore(res, e, 400) }
   res.json(turno.stato())
@@ -5885,6 +5895,8 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // turno quando una persona ha le mani libere, e il turno guarda ogni minuto
   presenza.ascolta()
   turno.avvia()
+  // F9 · il Mac sveglio per la notte, l'avviso prima di uscire, «Stop» nella barra dei menu
+  turnoGuscio.avvia()
   const giroDelTurno = perOgnuno('il turno non ha finito il giro', async () => { await store.senzaToccare(() => turno.giro()) })
   setTimeout(giroDelTurno, 45_000)
   setInterval(giroDelTurno, 60_000)

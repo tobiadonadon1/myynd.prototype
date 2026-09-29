@@ -320,13 +320,15 @@ function oraDi(iso: string | null | undefined): string {
 /**
  * Il turno in una riga, sopra le corsie (F2).
  *
- * Dice com'è, non come funziona: spento, in pausa fino a…, stanotte dalle…,
- * quante carte ha fatto partire oggi sul suo tetto, e la mattina quello che
- * ha fatto la notte. Un bottone solo: la pausa di un'ora, o riprendere.
+ * Dice com'è, non come funziona: spento, fermo, in pausa fino a…, stanotte
+ * dalle…, quante carte ha fatto partire oggi sul suo tetto, quanto ha speso
+ * sul suo budget (F9), e la mattina quello che ha fatto la notte. Un bottone
+ * solo: «Stop now» mentre lavora o di notte, «Resume the shift» da fermo.
  */
 function RigaTurno({ s, l }: { s: StatoTurno; l: Lista }) {
   const [occupato, setOccupato] = useState(false)
   const fai = async (p: Parameters<Lista['impostaTurno']>[0]) => { setOccupato(true); await l.impostaTurno(p); setOccupato(false) }
+  const ferma = async () => { setOccupato(true); await l.fermaTurno(); setOccupato(false) }
   if (!s.acceso) {
     return (
       <div className="tavola-turno spento">
@@ -340,17 +342,22 @@ function RigaTurno({ s, l }: { s: StatoTurno; l: Lista }) {
   }
   const pezzi: string[] = []
   if (!s.inNotte && s.stanotte.fatte + s.stanotte.attende > 0) pezzi.push(frasi.stanotteFatte(s.stanotte.fatte, s.stanotte.attende))
-  if (s.pausaFino) pezzi.push(frasi.inPausaFino(oraDi(s.pausaFino)))
+  if (s.fermo) pezzi.push(t('Fermato'))
+  else if (s.pausaFino) pezzi.push(frasi.inPausaFino(oraDi(s.pausaFino)))
   else if (s.inNotte) pezzi.push(t('Lavora la notte'))
   else if (s.prossimaNotte) pezzi.push(frasi.stanotteDalle(oraDi(s.prossimaNotte)))
   pezzi.push(frasi.carteDelTurno(s.avviate, s.carte))
-  const vivo = !s.pausaFino && (s.inNotte || s.prontePerOra > 0)
+  // F9 · la spesa sul budget, e quando è finito lo dice: le carte aspettano la notte dopo
+  if (s.budget?.limite) pezzi.push(s.budget.finito ? frasi.budgetFinito(s.budget.speso, s.budget.limite) : frasi.spesaDelTurno(s.budget.speso, s.budget.limite))
+  const fermo = !!s.fermo || !!s.pausaFino
+  const vivo = !fermo && !s.budget?.finito && (s.inNotte || s.prontePerOra > 0 || !!s.lavora)
+  const fermabile = !fermo && (!!s.lavora || s.inNotte || s.prontePerOra > 0)
   return (
-    <div className={`tavola-turno${vivo ? ' vivo' : ''}${s.pausaFino ? ' pausa' : ''}`}>
+    <div className={`tavola-turno${vivo ? ' vivo' : ''}${fermo ? ' pausa' : ''}`}>
       <span><i aria-hidden="true" />{pezzi.join(' · ')}</span>
-      {s.pausaFino
+      {fermo
         ? <button type="button" className="tavola-gesto" disabled={occupato} onClick={() => fai({ pausa: 0 })}>{t('Riprendi il turno')}</button>
-        : <button type="button" className="tavola-gesto" disabled={occupato} onClick={() => fai({ pausa: 60 })}>{t('Pausa di un’ora')}</button>}
+        : fermabile && <button type="button" className="tavola-gesto" data-ferma disabled={occupato} onClick={() => void ferma()}>{t('Ferma adesso')}</button>}
     </div>
   )
 }

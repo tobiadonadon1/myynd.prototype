@@ -36,6 +36,8 @@ import * as regole from './turno-regole.ts'
 import { fonteValida } from './iniziativa.ts'
 import * as primoGiorno from './primo-giorno.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
+import * as budgetNotte from './budget-notte.ts'
+import { conCompito } from './etichetta-uso.ts'
 
 /** Quante carte in una giornata, di serie; e il minimo e il massimo che si possono scegliere. */
 export const CARTE_DI_SERIE = 12
@@ -51,7 +53,12 @@ export type Impostazioni = {
   pausaFino: string | null
   carte: number
   notte: regole.Finestra
+  /** F9 · fermato col bottone, da quell'istante: non riparte finché lei non lo riprende. */
+  fermo: string | null
 }
+
+/** F9 · i budget fra cui scegliere nelle preferenze, in dollari; zero è «nessun limite». */
+export const BUDGET_SCELTE = [1, 3, 5, 10, 0]
 
 export function impostazioni(c: cfg.Config = cfg.leggi(), adesso = new Date()): Impostazioni {
   const t = c.turno ?? {}
@@ -64,28 +71,34 @@ export function impostazioni(c: cfg.Config = cfg.leggi(), adesso = new Date()): 
     notte: {
       da: regole.oraValida(t.notteDa) ? t.notteDa : regole.NOTTE_DI_SERIE.da,
       a: regole.oraValida(t.notteA) ? t.notteA : regole.NOTTE_DI_SERIE.a
-    }
+    },
+    fermo: typeof t.fermo === 'string' && Number.isFinite(Date.parse(t.fermo)) ? t.fermo : null
   }
 }
 
 /** Cambia le impostazioni del turno. Lancia con una frase sua se un valore non va. */
-export function imposta(p: { acceso?: unknown; pausa?: unknown; carte?: unknown; notteDa?: unknown; notteA?: unknown }, adesso = new Date()): Impostazioni {
+export function imposta(p: { acceso?: unknown; pausa?: unknown; carte?: unknown; notteDa?: unknown; notteA?: unknown; budget?: unknown }, adesso = new Date()): Impostazioni {
   const c = cfg.leggi()
   const t = { ...(c.turno ?? {}) }
   if (p.acceso !== undefined) {
     if (typeof p.acceso !== 'boolean') throw new Error('Acceso o spento?')
     t.spento = !p.acceso
-    if (p.acceso) t.pausaFino = null
+    // riaccenderlo è anche riprenderlo, dal bottone come dalla pausa
+    if (p.acceso) { t.pausaFino = null; t.fermo = null }
   }
   if (p.pausa !== undefined) {
-    // zero, o null, riprende; un numero di minuti mette in pausa
-    if (p.pausa === null || p.pausa === 0) t.pausaFino = null
+    // zero, o null, riprende (anche dopo «Stop now»); un numero di minuti mette in pausa
+    if (p.pausa === null || p.pausa === 0) { t.pausaFino = null; t.fermo = null }
     else if (typeof p.pausa === 'number' && Number.isInteger(p.pausa) && p.pausa >= 1 && p.pausa <= PAUSA_MAX) t.pausaFino = new Date(adesso.getTime() + p.pausa * 60_000).toISOString()
     else throw new Error('Quanto deve durare la pausa?')
   }
   if (p.carte !== undefined) {
     if (typeof p.carte !== 'number' || !Number.isInteger(p.carte) || p.carte < CARTE_MIN || p.carte > CARTE_MAX) throw new Error('Quante carte in una giornata?')
     t.carte = p.carte
+  }
+  if (p.budget !== undefined) {
+    if (typeof p.budget !== 'number' || !Number.isFinite(p.budget) || p.budget < 0 || p.budget > 1000) throw new Error('Quanto può spendere in una notte?')
+    t.budget = Math.round(p.budget * 100) / 100
   }
   for (const k of ['notteDa', 'notteA'] as const) {
     if (p[k] === undefined) continue
@@ -99,23 +112,89 @@ export function imposta(p: { acceso?: unknown; pausa?: unknown; carte?: unknown;
 
 // — il conto della giornata: su disco, per persona —
 
-type Conto = { giornata: string; avviate: number }
+/** F9 · perché il turno si è fermato: il budget finito, o il bottone. */
+export type Fermata = { perche: 'budget' | 'stop'; quando: string }
+/** F9 · un tratto di notte in cui il turno non ha battuto: il Mac dormiva, o l'app era chiusa. */
+export type Buco = { da: string; a: string }
+/**
+ * Il conto su disco. `giornata`/`avviate`/`fermata` valgono per la giornata
+ * del turno e ripartono con lei; `battito` è l'ultimo giro; `notte` tiene
+ * quello che la mattina si racconta dell'ultima notte (la fermata e i buchi),
+ * e riparte quando comincia la notte dopo.
+ */
+type Conto = { giornata: string; avviate: number; fermata?: Fermata | null; battito?: string; notte?: { dal: string; fermata?: Fermata | null; buchi: Buco[] } }
 const fileConto = () => join(cfg.cartella(), 'turno.json')
 
-function leggiConto(inizio: string): Conto {
+function leggiFile(): Partial<Conto> {
   try {
     if (existsSync(fileConto())) {
       const c = JSON.parse(readFileSync(fileConto(), 'utf8'))
-      if (c && c.giornata === inizio && Number.isInteger(c.avviate)) return { giornata: inizio, avviate: c.avviate }
+      if (c && typeof c === 'object') return c as Partial<Conto>
     }
   } catch { /* un conto illeggibile riparte da zero: meglio una carta in più che il turno fermo */ }
-  return { giornata: inizio, avviate: 0 }
+  return {}
+}
+
+function leggiConto(inizio: string): Conto {
+  const c = leggiFile()
+  const stessa = c.giornata === inizio
+  return {
+    giornata: inizio,
+    avviate: stessa && Number.isInteger(c.avviate) ? c.avviate as number : 0,
+    fermata: stessa ? c.fermata ?? null : null,
+    ...(typeof c.battito === 'string' ? { battito: c.battito } : {}),
+    ...(c.notte && typeof c.notte.dal === 'string' ? { notte: { dal: c.notte.dal, fermata: c.notte.fermata ?? null, buchi: Array.isArray(c.notte.buchi) ? c.notte.buchi : [] } } : {})
+  }
+}
+
+/** Quello che si ricorda dell'ultima notte, se è quella cominciata a `dal`. */
+function laNotte(c: Conto, dal: string): NonNullable<Conto['notte']> {
+  return c.notte?.dal === dal ? c.notte : { dal, fermata: null, buchi: [] }
 }
 
 function scriviConto(c: Conto) {
   mkdirSync(cfg.cartella(), { recursive: true })
   writeFileSync(fileConto() + '.tmp', JSON.stringify(c), { mode: 0o600 })
   renameSync(fileConto() + '.tmp', fileConto())
+}
+
+/** F9 · una fermata scritta nel conto della giornata e, se è notte, in quello della notte. */
+function segnaFermata(perche: Fermata['perche'], adesso: Date, notte: regole.Finestra) {
+  const c = leggiConto(regole.inizioGiornata(adesso, notte).toISOString())
+  const f: Fermata = { perche, quando: adesso.toISOString() }
+  c.fermata = f
+  if (regole.inNotte(adesso, notte)) {
+    const n = laNotte(c, regole.inizioUltimaNotte(adesso, notte).toISOString())
+    c.notte = { ...n, fermata: f }
+  }
+  scriviConto(c)
+}
+
+/** Un battito più lontano di così, di notte, è un buco: il Mac dormiva o l'app era chiusa. */
+export const BUCO_DOPO = 5 * 60_000
+
+/**
+ * F9 · il battito: ogni giro del turno acceso scrive l'ora. Se fra l'ultimo
+ * battito e questo, di notte e con carte in coda, sono passati più di cinque
+ * minuti, il tratto va fra i buchi della notte: la mattina il punto lo dice
+ * («Mac asleep 01:10–05:40»), perché una notte che non ha lavorato deve avere
+ * un perché che si vede.
+ */
+function battito(adesso: Date, notte: regole.Finestra, conCarte: boolean) {
+  const c = leggiConto(regole.inizioGiornata(adesso, notte).toISOString())
+  const prima = Date.parse(c.battito ?? '')
+  const dal = regole.inizioUltimaNotte(adesso, notte)
+  if (conCarte && Number.isFinite(prima) && prima >= dal.getTime() && regole.inNotte(new Date(prima), notte) && adesso.getTime() - prima > BUCO_DOPO) {
+    // il buco finisce con la notte, se la notte è finita mentre dormiva
+    const fine = regole.inizioGiornata(adesso, notte)
+    const a = fine.getTime() > prima && fine.getTime() < adesso.getTime() ? fine : adesso
+    if (a.getTime() - prima > BUCO_DOPO) {
+      const n = laNotte(c, dal.toISOString())
+      c.notte = { ...n, buchi: [...n.buchi, { da: new Date(prima).toISOString(), a: a.toISOString() }].slice(-12) }
+    }
+  }
+  c.battito = adesso.toISOString()
+  scriviConto(c)
 }
 
 /**
@@ -131,7 +210,7 @@ type Ferri = {
   contratto: (id: string) => Promise<unknown>
 }
 const VERI: Ferri = {
-  affida: (id, modo, nativa) => compiti.affida(id, modo, nativa),
+  affida: (id, modo, nativa) => compiti.affida(id, modo, nativa, { turno: true }),
   motore: () => {
     if (!puoLavorare()) return false
     const t = testaAlLavoro()
@@ -191,14 +270,30 @@ export async function giro(adesso = new Date()): Promise<string | null> {
   inGiro.add(conto)
   try {
     const imp = impostazioni(cfg.leggi(), adesso)
-    if (!imp.acceso || imp.pausaFino) return null
+    if (!imp.acceso || imp.pausaFino || imp.fermo) return null
+    // F9 · il battito, prima di tutto il resto: una notte che non ha lavorato deve dire perché
+    try { battito(adesso, imp.notte, store.elencoCompiti().some(regole.inCoda)) } catch { /* il battito è un di più */ }
     if (!ferri.motore()) return null
     const utente = chi.adesso() ?? ''
     if (ferri.occupato(utente)) return null
     const inizio = regole.inizioGiornata(adesso, imp.notte).toISOString()
     const c = leggiConto(inizio)
     if (c.avviate >= imp.carte) return null
-    for (const carta of pronte(adesso)) {
+    const candidate = pronte(adesso)
+    /*
+     * F9 · il budget della notte, prima di far partire qualunque cosa: se è
+     * finito, o se quello che resta non basta per una carta come le ultime,
+     * le carte restano in coda per la notte dopo, e il conto lo scrive (una
+     * volta sola: il turno guarda ogni minuto).
+     */
+    if (candidate.length && budgetNotte.stato(adesso).finito) {
+      if (c.fermata?.perche !== 'budget') {
+        segnaFermata('budget', adesso, imp.notte)
+        console.info(`myynd · turno · fermo: finito il budget ($${budgetNotte.budget()}) · ${candidate.length} in coda`)
+      }
+      return null
+    }
+    for (const carta of candidate) {
       if (ritirabile(carta, adesso)) {
         store.cambiaStatoCompito(carta.id, 'ritirato', 'Source changed or preparation paused')
         compiti.annunciaCambio()
@@ -206,7 +301,7 @@ export async function giro(adesso = new Date()): Promise<string | null> {
       }
       // il contratto preciso prima di partire, se il modello risponde in
       // qualche secondo: chi scrive e chi rilegge guardano la stessa riga
-      await ferri.contratto(carta.id)
+      await conCompito(carta.id, () => ferri.contratto(carta.id), { turno: true })
       // nel frattempo la carta può essere cambiata di mano
       const ora = store.compito(carta.id)
       if (!ora || !regole.inCoda(ora) || ferri.occupato(utente)) return null
@@ -217,7 +312,7 @@ export async function giro(adesso = new Date()): Promise<string | null> {
       }
       store.scriviTurnoCompito(ora.id, t)
       store.segnaNelDiario(ora.id, { tipo: 'turno', dettaglio: notte ? 'notte' : ferri.assente() ? 'via' : 'giorno' })
-      scriviConto({ giornata: inizio, avviate: c.avviate + 1 })
+      scriviConto({ ...leggiConto(inizio), avviate: c.avviate + 1 })
       console.info(`myynd · turno · parte · ${ora.id} · ${t.da} · ${notte ? 'notte' : 'giorno'} · ${c.avviate + 1}/${imp.carte}`)
       ferri.affida(ora.id, ora.modo && ora.modo !== 'io' ? ora.modo : 'tutto', t.da !== 'myynd')
       return ora.id
@@ -265,17 +360,33 @@ export type Stato = Impostazioni & {
   motore: boolean
   inCoda: number
   prontePerOra: number
-  /** Quello che il turno ha fatto da quando è cominciata l'ultima notte: finite e che aspettano lei. */
-  stanotte: { fatte: number; attende: number; dal: string }
+  /** F9 · una carta del turno è al lavoro adesso: la bacheca offre «Stop now». */
+  lavora: boolean
+  /** F9 · il Mac va a batteria: le preferenze dicono di tenerlo in carica, col coperchio aperto. */
+  batteria: boolean
+  /** F9 · quanto ha speso il turno nella sua giornata, su quanto può, e se è finito. */
+  budget: budgetNotte.Budget
+  /**
+   * Quello che il turno ha fatto da quando è cominciata l'ultima notte: finite
+   * e che aspettano lei. F9: quanto è costata (in dollari), il budget di
+   * quella notte, quante carte sono rimaste in coda perché si è fermato, il
+   * perché della fermata, e i tratti in cui il Mac dormiva.
+   */
+  stanotte: { fatte: number; attende: number; dal: string; costo: number; limite: number; rimaste: number; fermata: Fermata['perche'] | null; buchi: Buco[] }
 }
 
 /** Com'è il turno adesso: quello che la bacheca dice in una riga. Non lancia mai. */
 export function stato(adesso = new Date()): Stato {
   const imp = impostazioni(cfg.leggi(), adesso)
-  let avviate = 0, inCoda = 0, prontePerOra = 0, fatte = 0, attende = 0
+  let avviate = 0, inCoda = 0, prontePerOra = 0, fatte = 0, attende = 0, costo = 0
   const dal = regole.inizioUltimaNotte(adesso, imp.notte)
+  const giornata = regole.inizioGiornata(adesso, imp.notte)
+  const conto = (() => { try { return leggiConto(giornata.toISOString()) } catch { return null } })()
+  const notte = conto ? laNotte(conto, dal.toISOString()) : { dal: dal.toISOString(), fermata: null, buchi: [] }
   try {
-    avviate = leggiConto(regole.inizioGiornata(adesso, imp.notte).toISOString()).avviate
+    avviate = conto?.avviate ?? 0
+    // la notte finita si conta fino alla sua fine, non fino a adesso: il lavoro del mattino è di oggi
+    costo = store.costoDal(dal.toISOString(), giornata.getTime() > dal.getTime() ? giornata.toISOString() : undefined) / 1_000_000
     const ctx = { adesso, notte: imp.notte, assente: ferri.assente() }
     const vive = store.elencoCompiti()
     for (const c of vive) {
@@ -289,10 +400,66 @@ export function stato(adesso = new Date()): Stato {
     }
   } catch { /* senza indice il turno dice solo come è impostato */ }
   const prossima = regole.prossimaNotte(adesso, imp.notte)
+  const fermata = notte.fermata?.perche ?? null
   return {
     ...imp, avviate, inNotte: regole.inNotte(adesso, imp.notte), prossimaNotte: prossima ? prossima.toISOString() : null,
     assente: ferri.assente(), motore: ferri.motore(), inCoda, prontePerOra,
-    stanotte: { fatte, attende, dal: dal.toISOString() }
+    lavora: compiti.turnoAlLavoro(chi.adesso()),
+    batteria: presenza.aBatteria(),
+    budget: budgetNotte.stato(adesso),
+    stanotte: { fatte, attende, dal: dal.toISOString(), costo, limite: budgetNotte.budget(), rimaste: fermata ? inCoda : 0, fermata, buchi: notte.buchi }
+  }
+}
+
+/**
+ * F9 · «Stop now»: il turno si ferma adesso, e resta fermo finché lei non lo
+ * riprende («Resume the shift», o riaccenderlo). La carta al lavoro si
+ * interrompe e torna in coda con le altre (`compiti.fermaPer`), i file
+ * scritti a metà vanno nel Cestino. Non è la pausa: la pausa finisce da sola,
+ * questo no. Torna le carte fermate.
+ */
+export function ferma(adesso = new Date()): string[] {
+  const c = cfg.leggi()
+  cfg.aggiorna({ turno: { ...(c.turno ?? {}), fermo: adesso.toISOString() } })
+  try { segnaFermata('stop', adesso, impostazioni(cfg.leggi(), adesso).notte) } catch { /* il conto è un di più */ }
+  const fermate = compiti.fermaPer(chi.adesso())
+  console.info(`myynd · turno · stop · ${fermate.length ? fermate.join(', ') : 'niente al lavoro'}`)
+  compiti.annunciaCambio()
+  return fermate
+}
+
+/** Quanto prima della notte il Mac resta sveglio per lei: un'ora. */
+export const VEGLIA_PRIMA = 60 * 60_000
+
+export type Veglia = {
+  /** Il Mac non deve addormentarsi: è notte (o manca meno di un'ora), e c'è lavoro con budget. */
+  sveglio: boolean
+  /** C'è una notte che aspetta: il turno acceso e non fermo, carte in coda, budget. Uscire la salterebbe. */
+  inAttesa: boolean
+  /** Una carta del turno è al lavoro adesso. */
+  lavora: boolean
+  fermo: boolean
+}
+
+/**
+ * F9 · quello che il guscio deve sapere del turno, ogni quindici secondi:
+ * tenere sveglio il Mac, avvisare prima di uscire, offrire «Stop» nella
+ * barra dei menu. Leggero apposta (niente carte chiuse, niente costi della
+ * notte), e non lancia mai.
+ */
+export function veglia(adesso = new Date()): Veglia {
+  try {
+    const imp = impostazioni(cfg.leggi(), adesso)
+    const lavora = compiti.turnoAlLavoro(chi.adesso())
+    if (!imp.acceso || imp.fermo) return { sveglio: false, inAttesa: false, lavora, fermo: !!imp.fermo }
+    const inCoda = store.elencoCompiti().some(regole.inCoda)
+    const conBudget = !budgetNotte.stato(adesso).finito
+    const inAttesa = inCoda && conBudget && !imp.pausaFino
+    const prossima = regole.prossimaNotte(adesso, imp.notte)
+    const vicina = regole.inNotte(adesso, imp.notte) || (!!prossima && prossima.getTime() - adesso.getTime() <= VEGLIA_PRIMA)
+    return { sveglio: inAttesa && vicina, inAttesa, lavora, fermo: false }
+  } catch {
+    return { sveglio: false, inAttesa: false, lavora: false, fermo: false }
   }
 }
 

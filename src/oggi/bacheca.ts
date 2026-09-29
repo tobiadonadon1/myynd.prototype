@@ -133,7 +133,10 @@ export function cosaAspetta(c: Compito): string {
 export function quandoParte(c: Compito, s: StatoTurno | null | undefined): { chiave: string; giorno?: string; prossima: boolean } | null {
   if (c.stato === 'delegato') return { chiave: 'Prossima', prossima: true }
   if (!s?.acceso || !s.motore) return { chiave: 'Aspetta il turno', prossima: false }
+  if (s.fermo) return { chiave: 'Fermato', prossima: false }
   if (s.pausaFino) return { chiave: 'In pausa', prossima: false }
+  // F9 · il budget della notte è finito: la carta aspetta quello della notte dopo
+  if (s.budget?.finito && (c.tocca === 'adesso' || c.tocca === 'notte' || c.tocca === 'via')) return { chiave: 'Aspetta il budget di domani', prossima: false }
   if (c.tocca === 'adesso') return s.avviate >= s.carte ? { chiave: 'Domani', prossima: false } : { chiave: 'Prossima', prossima: true }
   if (c.tocca === 'notte') return { chiave: 'Stanotte', prossima: false }
   if (c.tocca === 'via') return { chiave: 'Quando non ci sei', prossima: false }

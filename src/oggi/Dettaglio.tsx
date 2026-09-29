@@ -106,12 +106,14 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
           {c.prova.controlli.length > 0 && <ul>{c.prova.controlli.map((x, i) => <li key={i}>{x}</li>)}</ul>}
         </div>}
         {!!c.diario?.length && <details className="task-detail-diario">
-          <summary>{t('Cosa ha fatto')}</summary>
+          <summary>{[t('Cosa ha fatto'), ...pezziDelCosto(c)].join(' · ')}</summary>
           <ol>{c.diario.slice(-24).map((v, i) => <li key={i}><time>{oraDellaVoce(v.t)}</time><span>{fraseDiario(v)}</span></li>)}</ol>
         </details>}
         {errore && <p role="alert" className="task-detail-error">{t('Non sono riuscito a salvarlo.')}</p>}
       </div>
-      <footer><div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center' }}>{!salvando && <Cestino fai={() => { l.elimina(c.id); chiudi() }} titolo={t('Toglila')} visibile dim={32} icona={14} subito />}</div><button type="button" disabled={salvando} onClick={chiudi}>{t('Annulla')}</button><button type="submit" className="task-detail-save" disabled={!testo.trim() || salvando}>{salvando ? t('Salvo…') : t('Salva')}</button></footer>
+      <footer><div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>{!salvando && <Cestino fai={() => { l.elimina(c.id); chiudi() }} titolo={t('Toglila')} visibile dim={32} icona={14} subito />}
+        {/* F9 · il lavoro di Myynd si disfa per sette giorni: i file nel Cestino, la carta torna sua */}
+        {!salvando && puoDisfare(c) && <button type="button" data-disfa onClick={() => { void l.disfa(c.id); chiudi() }}>{t('Disfa')}</button>}</div><button type="button" disabled={salvando} onClick={chiudi}>{t('Annulla')}</button><button type="submit" className="task-detail-save" disabled={!testo.trim() || salvando}>{salvando ? t('Salvo…') : t('Salva')}</button></footer>
     </form>
   </dialog>, document.body)
 }
@@ -122,6 +124,25 @@ const NOME_MANO: Record<ManoCompito, string> = {
   nota: 'Nota',
   web: 'Web',
   codice: 'Codice, in una copia'
+}
+
+/** F9 · per quanti giorni dopo la chiusura il lavoro di Myynd si disfa ancora: la stessa regola di `server/disfa.ts`. */
+const GIORNI_PER_DISFARE = 7
+
+/** F9 · «Disfa» c'è solo quando il server lo farebbe: un lavoro di Myynd, pronto, o chiuso da meno di sette giorni. */
+export function puoDisfare(c: Compito, adesso = Date.now()): boolean {
+  const lavoro = !!c.risultato || !!c.consegna || !!c.diario?.some(v => v.tipo === 'consegnato' || v.tipo === 'file')
+  if (c.stato === 'pronto' || c.stato === 'chiede') return lavoro
+  if (c.stato !== 'fatto' || !lavoro) return false
+  const chiuso = Date.parse(c.chiuso ?? '')
+  return Number.isFinite(chiuso) && adesso - chiuso <= GIORNI_PER_DISFARE * 86_400_000
+}
+
+/** F9 · il conto della carta accanto a «Cosa ha fatto»: «$0.12 · 9 calls», con la tilde se è una stima. */
+function pezziDelCosto(c: Compito): string[] {
+  const k = c.costo
+  if (!k?.chiamate) return []
+  return [...(k.costo !== null ? [`${k.stimato ? '~' : ''}${frasi.dollari(k.costo / 1_000_000)}`] : []), frasi.chiamate(k.chiamate)]
 }
 
 /** L'ora di una voce del diario, «HH:MM». */
@@ -148,7 +169,12 @@ export function fraseDiario(v: VoceDiario): string {
     case 'guaio': return d ? `${t('Fermata')}: ${t(d)}` : t('Fermata')
     case 'prova': return d.startsWith('pass') ? t('Controllata: regge') : d.startsWith('fail') ? t('Controllata: non regge ancora') : t('Nessuno ha potuto controllarla')
     case 'scaduto': return t('Finito il tempo che aveva')
-    case 'fermato': return t('Ripresa da te')
+    case 'fermato': return d === 'stop' ? t('Fermata con «Ferma adesso»: torna in coda')
+      : d === 'budget' ? t('Finito il budget della notte: torna in coda')
+      : d.startsWith('disfatto') ? t('Disfatta') : t('Ripresa da te')
+    case 'turno': return d === 'notte' ? t('Partita di notte, col turno') : d === 'via' ? t('Partita col turno, mentre non c’eri') : t('Partita col turno')
+    case 'file': return frasi.fileScritto(d)
+    case 'nota': return frasi.notaCreata(d)
     default: return d
   }
 }

@@ -46,6 +46,11 @@ import * as abitudini from './abitudini.ts'
 import * as regoleTono from './regole-tono.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi, type Stesa } from './stesura.ts'
+import { conCompito, fuoriDalCompito } from './etichetta-uso.ts'
+import { delBudget } from './tetto.ts'
+import * as budgetNotte from './budget-notte.ts'
+import * as regoleTurno from './turno-regole.ts'
+import * as cestino from './cestino.ts'
 import { corpoPerChiRiceve, haSegnaposto, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
 import type { Lettura } from './lettura-chiesta.ts'
@@ -209,7 +214,9 @@ function annuncia(e: Evento) {
  * riavvio. Qui la persona si segna quando la riga entra, e si rimette prima di
  * lavorarla. Gli id li fa il client, quindi da soli non bastano a distinguere.
  */
-type Voce = { utente: string | null; id: string; nativa: boolean; accodato: number }
+type Voce = { utente: string | null; id: string; nativa: boolean; accodato: number
+  /** L'ha fatta partire il turno (F2): vale il budget della notte, e «Stop now» la ferma (F9). */
+  turno?: boolean }
 const coda: Voce[] = []
 /**
  * Su cosa sta lavorando adesso, per persona. Una riga alla volta per ciascuno
@@ -218,6 +225,10 @@ const coda: Voce[] = []
  * la delega di B restava «da Myynd» per i cinque minuti del lavoro di A.
  */
 const inCorsoDi = new Map<string, string>()
+/** F9 · di ogni lavoro in corso (per chiave): l'id, se l'ha fatto partire il turno, e da quando. */
+const alLavoro = new Map<string, { id: string; turno: boolean; dal: string }>()
+/** F9 · i lavori fermati a metà (il bottone, il budget): alla fine si buttano i file scritti nel frattempo. */
+const fermati = new Map<string, 'stop' | 'budget'>()
 /** Quanti lavori insieme, in tutto il processo: ogni lavoro è un modello che scrive. */
 const LAVORANTI = 2
 
@@ -243,7 +254,7 @@ const interruzioni = new Map<string, AbortController>()
  * ad aspettarlo. Riaffidare un compito già in coda non lo mette due volte —
  * capita, cliccando due volte, e due bozze per la stessa riga sono un difetto.
  */
-export function affida(id: string, modo: string, nativa = true) {
+export function affida(id: string, modo: string, nativa = true, o: { turno?: boolean } = {}) {
   const c = store.compito(id)
   if (!c) return
 
@@ -267,7 +278,7 @@ export function affida(id: string, modo: string, nativa = true) {
 
   console.info(`myynd · worker · queued · ${id} · busy=${inCorsoDi.has(utente ?? '')} · native=${nativa}`)
   store.affidaCompito(id, modo)
-  coda.push({ utente, id, nativa, accodato: Date.now() })
+  coda.push({ utente, id, nativa, accodato: Date.now(), ...(o.turno ? { turno: true } : {}) })
   gira()
 }
 
@@ -284,24 +295,27 @@ function gira() {
     const [voce] = coda.splice(dove, 1)
     const k = chiave(voce.id, voce.utente)
     inCorsoDi.set(voce.utente ?? '', k)
+    alLavoro.set(k, { id: voce.id, turno: !!voce.turno, dal: new Date().toISOString() })
     console.info(`myynd · worker · starting · ${voce.id} · queue_ms=${Date.now() - voce.accodato}`)
     // si lavora come la persona che l'ha affidato, non come chi ha acceso il
     // giro: è la differenza fra il suo indice e quello di un altro
     void Promise.resolve()
-      .then(() => withBackgroundWork(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id, voce.nativa)) : svolgiUno(voce.id, voce.nativa)))
+      .then(() => withBackgroundWork(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id, voce.nativa, !!voce.turno)) : svolgiUno(voce.id, voce.nativa, !!voce.turno)))
       .catch(e => console.error('myynd · compito', voce.id, e))
-      .finally(() => {
+      .finally(() => fuoriDalCompito(() => {
         console.info(`myynd · worker · released · ${voce.id}`)
         inCorsoDi.delete(voce.utente ?? '')
         interruzioni.delete(k)
         passiAttivi.delete(k)
         richiamati.delete(k)
+        alLavoro.delete(k)
+        fermati.delete(k)
         gira()
         // la persona ha le mani libere: il turno (F2) guarda se c'è un'altra carta pronta
         if (!inCorsoDi.has(voce.utente ?? '') && !coda.some(v => v.utente === voce.utente)) {
           for (const f of liberi) { try { f(voce.utente) } catch { /* chi ascolta si arrangia */ } }
         }
-      })
+      }))
   }
 }
 
@@ -397,7 +411,16 @@ export function occupatoPer(utente: string): boolean {
   return inCorsoDi.has(utente) || coda.some(v => (v.utente ?? '') === utente)
 }
 
-async function svolgiUno(id: string, nativa: boolean) {
+/*
+ * Il lavoro di una carta, con il conto sulla carta (F9): ogni chiamata a un
+ * modello fatta da qui dentro finisce nel registro con il suo id accanto, e
+ * `turno` dice che vale il budget della notte (`tetto.ts` la ferma a metà).
+ */
+function svolgiUno(id: string, nativa: boolean, turno = false): Promise<void> {
+  return conCompito(id, () => svolgiUnoDentro(id, nativa, turno), { turno })
+}
+
+async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
   // tutto dentro il try, compresa la lettura: `compito()` può fallire come
   // qualunque altra query, e se fallisce fuori di qui si porta via la coda
   let c: store.Compito | null = null
@@ -491,6 +514,7 @@ async function svolgiUno(id: string, nativa: boolean) {
     let v: voce.Voce | null = null
     try { v = ferri.voce.perRiga(c) } catch (e) { console.warn(`myynd · voce · ${id}:`, e instanceof Error ? e.message : e) }
     const giriDelBudget = k?.budget.giri
+    const soloCopia = turno && regoleTurno.inNotte(new Date(), budgetNotte.finestra())
     const lavora = (notaGiro: string | null, extra?: { fissa?: string[]; giri?: number }) => ferri.svolgi(
       c.testo, notaGiro, c.modo,
       concessi,
@@ -502,6 +526,8 @@ async function svolgiUno(id: string, nativa: boolean) {
       dato,
       {
         nativa, signal: controller.signal, taskId: c.id,
+        // F9 · di notte una carta del turno non posa il codice nel progetto vero: resta nella copia
+        ...(soloCopia ? { soloCopia: true } : {}),
         ...(k?.criterio ? { criterio: k.criterio } : {}),
         // F3: le mani del contratto sono le sue, anche per una carta scritta da Myynd
         ...(k?.mani?.length ? { mani: k.mani } : {}),
@@ -545,6 +571,19 @@ async function svolgiUno(id: string, nativa: boolean) {
   } catch (e) {
     clearTimeout(scadenza)
     if (richiamati.has(chiave(id))) return
+    /*
+     * F9 · il budget della notte è finito a metà della carta: non è un guaio
+     * suo, e lei non deve trovarla rossa la mattina. Torna in coda com'era,
+     * senza il tentativo, e i file scritti nel frattempo vanno nel Cestino:
+     * la notte dopo riparte da capo.
+     */
+    if (turno && (delBudget(e) || budgetNotte.sforato())) {
+      ritentati.delete(chiave(id))
+      fermati.set(chiave(id), 'budget')
+      rimettiInCoda(id, 'budget', alLavoro.get(chiave(id))?.dal ?? new Date(iniziato).toISOString())
+      console.info(`myynd · turno · ${id} · fermata: finito il budget della notte`)
+      return
+    }
     if (scaduto) {
       // il tempo della carta è finito: non si riprova da soli, lo si dice
       ritentati.delete(chiave(id))
@@ -562,7 +601,7 @@ async function svolgiUno(id: string, nativa: boolean) {
       const utente = chi.adesso()
       setTimeout(() => {
         const ancora = () => store.compito(id)?.stato === 'delegato'
-        if (utente ? chi.dentro(utente, ancora) : ancora()) { coda.push({ utente, id, nativa, accodato: Date.now() }); gira() }
+        if (utente ? chi.dentro(utente, ancora) : ancora()) { coda.push({ utente, id, nativa, accodato: Date.now(), ...(turno ? { turno: true } : {}) }); gira() }
         else ritentati.delete(k)
       }, RIPROVA_FRA).unref()
       return
@@ -578,7 +617,86 @@ async function svolgiUno(id: string, nativa: boolean) {
     annuncia({ fase: 'guaio', id, guaio })
   } finally {
     clearTimeout(scadenza)
+    // F9 · fermata a metà: quello che una mano ha scritto dopo il bottone si butta anche lui
+    const k = chiave(id)
+    if (fermati.has(k)) buttaIFileDelGiro(id, alLavoro.get(k)?.dal ?? new Date(iniziato).toISOString())
   }
+}
+
+/**
+ * F9 · i file scritti durante questo giro (il diario li tiene col percorso
+ * intero) vanno nel Cestino, se stanno nei luoghi delle consegne. Un lavoro
+ * fermato a metà non lascia file a metà. Non lancia mai.
+ */
+function buttaIFileDelGiro(id: string, dal: string) {
+  try {
+    const c = store.compito(id)
+    for (const v of c?.diario ?? []) {
+      if (v.tipo !== 'file' || !v.dettaglio || v.t < dal) continue
+      try { if (cestino.butta(v.dettaglio) === 'cestino') console.info(`myynd · turno · ${id} · nel Cestino · ${v.dettaglio}`) }
+      catch (e) { console.warn(`myynd · non riesco a buttare ${v.dettaglio}:`, e instanceof Error ? e.message : e) }
+    }
+  } catch { /* il Cestino è un di più: la carta torna in coda comunque */ }
+}
+
+/**
+ * F9 · una carta fermata a metà torna in coda com'era: aperta, di Myynd col
+ * suo modo, con il turno di prima (il tentativo di stanotte non conta, non è
+ * caduta lei), senza guaio e senza file scritti a metà. Il diario lo dice.
+ */
+export function rimettiInCoda(id: string, perche: 'stop' | 'budget', dal: string | null) {
+  try {
+    const c = store.compito(id)
+    if (!c) return false
+    const t = c.turno ? { ...c.turno, tentativi: Math.max(0, (c.turno.tentativi ?? 1) - 1) } : null
+    const rimessa = store.rimettiCompitoInCoda(id, t)
+    if (dal) buttaIFileDelGiro(id, dal)
+    if (rimessa) store.segnaNelDiario(id, { tipo: 'fermato', dettaglio: perche })
+    annuncia({ fase: 'richiamato', id })
+    annunciaCambio()
+    return rimessa
+  } catch (e) {
+    console.warn(`myynd · non riesco a rimettere in coda ${id}:`, e instanceof Error ? e.message : e)
+    return false
+  }
+}
+
+/**
+ * F9 · «Stop now»: il turno di questa persona si ferma adesso.
+ *
+ * Le carte che il turno aveva messo in fila escono dalla fila, e quella al
+ * lavoro si interrompe: il segnale arriva al modello, agli attrezzi, a Claude
+ * Code (che muore con il suo gruppo). Tornano tutte in coda (non sue: le
+ * aveva passate a Myynd, e il bottone ferma il turno, non le carte), e i
+ * file scritti a metà vanno nel Cestino. Le carte che lei ha affidato a mano
+ * adesso non si toccano: le sta guardando. Torna gli id fermati.
+ */
+export function fermaPer(utente: string | null = chi.adesso()): string[] {
+  const fermate: string[] = []
+  for (let i = coda.length - 1; i >= 0; i--) {
+    const v = coda[i]
+    if (v.utente !== utente || !v.turno) continue
+    coda.splice(i, 1)
+    rimettiInCoda(v.id, 'stop', null)
+    fermate.push(v.id)
+  }
+  const k = inCorsoDi.get(utente ?? '')
+  const info = k ? alLavoro.get(k) : undefined
+  if (k && info?.turno && !richiamati.has(k)) {
+    fermati.set(k, 'stop')
+    richiamati.add(k)
+    interruzioni.get(k)?.abort()
+    rimettiInCoda(info.id, 'stop', info.dal)
+    fermate.push(info.id)
+  }
+  if (fermate.length) console.info(`myynd · turno · fermato · ${fermate.join(', ')}`)
+  return fermate
+}
+
+/** F9 · questa persona ha una carta del turno al lavoro adesso? (la riga della bacheca, la barra dei menu) */
+export function turnoAlLavoro(utente: string | null = chi.adesso()): boolean {
+  const k = inCorsoDi.get(utente ?? '')
+  return !!k && !!alLavoro.get(k)?.turno && !richiamati.has(k)
 }
 
 /** Quando il budget di tempo della carta finisce (F1): una frase fissa, così si traduce sempre. */
@@ -666,6 +784,8 @@ export async function dopoLaStesura(
         const { corpo, nota: perLei } = mani.rigaPerLei(mani.senzaChiusura(testo))
         const salvato = ferri.salvaConsegna({ titolo: c.testo, testo: corpo, luogo })
         fatti.push({ attrezzo: 'scrivi_file', esito: 'ok', dettaglio: salvato.percorso })
+        // F9 · anche sul diario, col percorso intero: «Disfa» per sette giorni lo cerca qui
+        store.segnaNelDiario(id, { tipo: 'file', dettaglio: salvato.percorso })
         testo = mani.fraseDelFile(salvato, cfg.lingua(), imparato) + (perLei ? `\n\n${perLei}` : '')
         consegnaFile = {
           app: 'File', titolo: salvato.nome, percorso: salvato.percorso, dove: salvato.luogo,

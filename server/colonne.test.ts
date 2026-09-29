@@ -84,10 +84,10 @@ test('e COLONNE non ha colonne che nessuna migrazione aggiunge', () => {
   }
 })
 
-test('un database nuovo arriva allo schema 69, una voce per migrazione', () => {
+test('un database nuovo arriva allo schema 70, una voce per migrazione', () => {
   const voci = (testoMigrazioni().match(/^ {2}d =>/gm) ?? []).length
   assert.equal(voci, schema.migrazioni, 'il numero di voci scritte non è la lunghezza della lista')
-  assert.equal(schema.migrazioni, 69)
+  assert.equal(schema.migrazioni, 70)
   const v = (store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
   assert.equal(v, schema.migrazioni)
 })
@@ -119,7 +119,7 @@ test('il database nuovo ha ogni tabella, colonna e indice che le liste prometton
     for (const [c] of colonne) assert.ok(nomi.includes(c), `manca ${t}.${c}`)
   }
   for (const i of ['idx_doc_risponde', 'idx_compiti_chiuso', 'idx_segnali_genere', 'idx_segnali_giorno', 'idx_sessioni_app_giorno',
-    'idx_mancate_quando', 'idx_misure_affidato', 'idx_prove_auto', 'idx_esiti_prova', 'idx_esiti_doc', 'idx_feed_stato']) {
+    'idx_mancate_quando', 'idx_misure_affidato', 'idx_prove_auto', 'idx_esiti_prova', 'idx_esiti_doc', 'idx_feed_stato', 'idx_uso_compito']) {
     assert.ok(indici().includes(i), `manca l'indice ${i}`)
   }
   // le forme scritte nella specifica, controllate su un paio di punti che contano
@@ -128,6 +128,8 @@ test('il database nuovo ha ogni tabella, colonna e indice che le liste prometton
   assert.equal(colonneDi('abitudini').find(c => c.name === 'stato')?.dflt_value, "'osservata'")
   assert.equal(colonneDi('fiducia').find(c => c.name === 'gradino')?.dflt_value, "'guarda'")
   assert.equal(colonneDi('compiti').find(c => c.name === 'domandeFatte')?.notnull, 1)
+  // F9 · il conto di una carta
+  assert.deepEqual(colonneDi('uso').filter(c => c.name === 'compito' || c.name === 'costo').map(c => [c.name, c.type]), [['compito', 'TEXT'], ['costo', 'INTEGER']])
   const salute = store.default.prepare("SELECT sql FROM sqlite_master WHERE name = 'salute_fonti'").get() as { sql: string }
   assert.match(salute.sql, /PRIMARY KEY \(giorno, fonte\)/)
   const unica = store.default.prepare("SELECT sql FROM sqlite_master WHERE name = 'previsioni'").get() as { sql: string }
@@ -170,7 +172,7 @@ test('un indice vero fermo alla 47 arriva alla 64 senza perdere niente', () => {
   writeFileSync(join(CASA, 'mente.db'), gunzipSync(readFileSync(join(QUI, 'fixture', 'mente-47.db.gz'))))
 
   const v = (store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
-  assert.equal(v, 69)
+  assert.equal(v, 70)
   // un indice con documenti dentro si copia prima di migrare
   assert.ok(existsSync(join(CASA, 'istantanee')) && readdirSync(join(CASA, 'istantanee')).some(n => /^mente-v47-/.test(n)),
     'nessuna istantanea prima della migrazione')
@@ -199,5 +201,5 @@ test('un indice vero fermo alla 47 arriva alla 64 senza perdere niente', () => {
 
   // e riaprirlo non rifà niente
   store.chiudiIndici()
-  assert.equal((store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 69)
+  assert.equal((store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 70)
 })

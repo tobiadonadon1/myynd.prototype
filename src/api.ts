@@ -693,7 +693,11 @@ export type Compito = {
   turno?: TurnoCompito | null
   /** F2 · quando tocca a una carta in coda: adesso, stanotte, quando lei non c'è, o la notte prima del suo giorno. */
   tocca?: 'adesso' | 'notte' | 'via' | `prima:${string}` | null
+  /** F9 · quanto è costata: le chiamate e i micro-dollari; `stimato` se la cifra è una stima. */
+  costo?: CostoCompito
 }
+
+export type CostoCompito = { chiamate: number; entrata: number; uscita: number; costo: number | null; stimato: boolean }
 
 export type TurnoCompito = { da: 'tu' | 'myynd'; quando: 'presto' | 'notte'; dal: string; tentativi: number; ultimo?: string | null; notte?: boolean }
 
@@ -710,7 +714,17 @@ export type StatoTurno = {
   motore: boolean
   inCoda: number
   prontePerOra: number
-  stanotte: { fatte: number; attende: number; dal: string }
+  /** F9 · fermato col bottone, da quell'istante. */
+  fermo?: string | null
+  /** F9 · una carta del turno è al lavoro adesso. */
+  lavora?: boolean
+  /** F9 · il Mac va a batteria. */
+  batteria?: boolean
+  /** F9 · quanto ha speso il turno nella sua giornata, su quanto può (in dollari; zero è nessun limite). */
+  budget?: { speso: number; limite: number; finito: boolean }
+  stanotte: { fatte: number; attende: number; dal: string
+    /** F9 · il costo della notte, il budget, quante sono rimaste in coda, perché si è fermato, e quando il Mac dormiva. */
+    costo?: number; limite?: number; rimaste?: number; fermata?: 'budget' | 'stop' | null; buchi?: { da: string; a: string }[] }
 }
 
 export type ManoCompito = 'posta' | 'file' | 'nota' | 'web' | 'codice'
@@ -724,7 +738,7 @@ export type ContrattoCompito = {
 export type ProvaCompito = { esito: 'pass' | 'fail' | 'unavailable'; perche: string; controlli: string[]; quando: string }
 export type VoceDiario = {
   t: string
-  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto' | 'turno'
+  tipo: 'preso' | 'contratto' | 'cerco' | 'apro' | 'scrivo' | 'rileggo' | 'riscrivo' | 'presumo' | 'consegnato' | 'domanda' | 'guaio' | 'prova' | 'fermato' | 'scaduto' | 'turno' | 'file' | 'nota'
   dettaglio?: string
 }
 
@@ -1207,9 +1221,12 @@ export const api = {
   turno: () => json<StatoTurno>('/api/turno'),
   /** F5 · disfare il lavoro consegnato: il file nel Cestino, la bozza resta nella casella, la carta torna sua. */
   disfaCompito: (id: string) =>
-    json<{ ok: true; file: 'cestino' | 'fuori' | null; bozzaResta: boolean; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/disfa`, { method: 'POST' }),
-  impostaTurno: (p: { acceso?: boolean; pausa?: number | null; carte?: number; notteDa?: string; notteA?: string }) =>
+    json<{ ok: true; file: 'cestino' | 'fuori' | null; bozzaResta: boolean; noteRestano?: true; compiti: Compito[]; chiusi?: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/disfa`, { method: 'POST' }),
+  impostaTurno: (p: { acceso?: boolean; pausa?: number | null; carte?: number; notteDa?: string; notteA?: string; budget?: number }) =>
     json<StatoTurno>('/api/turno', { method: 'PATCH', body: JSON.stringify(p) }),
+  /** F9 · «Stop now»: il turno si ferma, la carta al lavoro torna in coda. */
+  fermaTurno: () =>
+    json<{ ok: true; fermate: string[]; compiti: Compito[]; turno: StatoTurno }>('/api/turno/ferma', { method: 'POST' }),
 
   /** F1 · il «fatto» scritto (o riscritto) da Myynd adesso. */
   contrattoCompito: (id: string, rifai = false) =>

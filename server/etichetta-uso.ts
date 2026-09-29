@@ -27,3 +27,37 @@ export function etichettato(lavoro: string): string {
 export function etichettaInCorso(): string | null {
   return etichetta.getStore() ?? null
 }
+
+// — la carta a cui va il conto (F9) —
+//
+// Lo stesso trucco per un'altra domanda: «quanto è costata questa carta?».
+// Tutto quello che succede mentre una carta è al lavoro (la stesura, la
+// rilettura, la cosa dopo, il contratto scritto prima di partire) finisce
+// nel registro con l'id della carta accanto. Per contesto asincrono, come
+// l'etichetta: la chat viva che gira accanto non si prende il conto di nessuno.
+
+export type CompitoAlLavoro = {
+  id: string
+  /** L'ha fatta partire il turno (F2): per lei vale il budget della notte. */
+  turno: boolean
+}
+
+const alLavoro = new AsyncLocalStorage<CompitoAlLavoro>()
+
+/** Tutto quello che `fai` registra nell'uso va sul conto della carta `id`. */
+export function conCompito<T>(id: string, fai: () => T, o: { turno?: boolean } = {}): T {
+  return alLavoro.run({ id, turno: !!o.turno }, fai)
+}
+
+/** La carta al lavoro nel contesto in corso, o null. */
+export function compitoInCorso(): CompitoAlLavoro | null {
+  return alLavoro.getStore() ?? null
+}
+
+/**
+ * Fuori dal conto di qualunque carta: per chi parte da dentro una carta ma
+ * non è suo (il turno che guarda la carta dopo, quando questa ha finito).
+ */
+export function fuoriDalCompito<T>(fai: () => T): T {
+  return alLavoro.exit(fai)
+}

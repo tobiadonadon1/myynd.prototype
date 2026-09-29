@@ -1,0 +1,217 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "ruolo": "Founder",
+ "progetti": [
+  {
+   "chiave": "nw",
+   "nome": "Northwind",
+   "obiettivo": "Ship Northwind 1.0 on the App Store",
+   "priorita": "alta"
+  },
+  {
+   "chiave": "hb",
+   "nome": "Harbor Labs",
+   "obiettivo": "Run a two-week AI pilot with the Harbor finance team"
+  },
+  {
+   "chiave": "ls",
+   "nome": "Lumen Studio",
+   "obiettivo": "Sell the first course on lumenstudio.example"
+  }
+ ],
+ "turno": {
+  "budget": 1.5,
+  "notte": "fuori"
+ },
+ "turnoNotte": {
+  "fermata": "budget",
+  "buchi": [
+   {
+    "da": "-6h",
+    "a": "-4.5h"
+   }
+  ]
+ },
+ "compiti": [
+  {
+   "id": "n1",
+   "testo": "Write the first course outline",
+   "quando": "oggi",
+   "progetto": "ls",
+   "stato": "fatto",
+   "modo": "tutto",
+   "risultato": "Done: I saved Course outline.md to your Desktop.",
+   "consegna": {
+    "app": "File",
+    "titolo": "Course outline.md",
+    "percorso": "/tmp/myynd-scena-finta/Desktop/Course outline.md",
+    "dove": "scrivania"
+   },
+   "prova": {
+    "esito": "pass",
+    "perche": "Five modules, each with a goal and one exercise.",
+    "controlli": [
+     "The file is on your Desktop"
+    ],
+    "quando": "-3h"
+   },
+   "turno": {
+    "da": "tu",
+    "quando": "notte",
+    "dal": "-9h",
+    "tentativi": 1,
+    "ultimo": "-7h",
+    "notte": true
+   },
+   "diario": [
+    {
+     "t": "-7h",
+     "tipo": "turno",
+     "dettaglio": "notte"
+    },
+    {
+     "t": "-7h",
+     "tipo": "preso",
+     "dettaglio": "tutto"
+    },
+    {
+     "t": "-7h",
+     "tipo": "contratto",
+     "dettaglio": "A course outline file on your Desktop with five modules, each with its goal and one exercise."
+    },
+    {
+     "t": "-6h",
+     "tipo": "cerco",
+     "dettaglio": "course modules"
+    },
+    {
+     "t": "-6h",
+     "tipo": "scrivo"
+    },
+    {
+     "t": "-6h",
+     "tipo": "file",
+     "dettaglio": "/tmp/myynd-scena-finta/Desktop/Course research notes.md"
+    },
+    {
+     "t": "-6h",
+     "tipo": "nota",
+     "dettaglio": "Course ideas"
+    },
+    {
+     "t": "-5h",
+     "tipo": "rileggo"
+    },
+    {
+     "t": "-5h",
+     "tipo": "consegnato",
+     "dettaglio": "Course outline.md"
+    },
+    {
+     "t": "-5h",
+     "tipo": "prova",
+     "dettaglio": "pass: Five modules, each with a goal and one exercise."
+    }
+   ],
+   "chiuso": "-2h"
+  },
+  {
+   "id": "n2",
+   "testo": "Reply to Nora about the pilot scope",
+   "quando": "oggi",
+   "progetto": "hb",
+   "stato": "pronto",
+   "modo": "tutto",
+   "risultato": "Done: the reply is in your drafts.",
+   "prova": {
+    "esito": "pass",
+    "perche": "The reply confirms Thursday and the two engineers.",
+    "controlli": [],
+    "quando": "-4h"
+   },
+   "turno": {
+    "da": "tu",
+    "quando": "notte",
+    "dal": "-9h",
+    "tentativi": 1,
+    "ultimo": "-6h",
+    "notte": true
+   }
+  },
+  {
+   "id": "n3",
+   "testo": "Draft the release notes for 1.0.4",
+   "quando": "oggi",
+   "progetto": "nw",
+   "stato": "chiede",
+   "modo": "tutto",
+   "risultato": "Which build number goes in the notes?",
+   "chieste": [
+    {
+     "domanda": "Which build number goes in the notes?",
+     "opzioni": [
+      "1.0.4",
+      "1.0.5"
+     ],
+     "multipla": false
+    }
+   ],
+   "turno": {
+    "da": "tu",
+    "quando": "notte",
+    "dal": "-9h",
+    "tentativi": 1,
+    "ultimo": "-5h",
+    "notte": true
+   }
+  },
+  {
+   "id": "n4",
+   "testo": "Summarise the Harbor pilot feedback",
+   "quando": "poi",
+   "progetto": "hb",
+   "modo": "tutto",
+   "turno": {
+    "da": "tu",
+    "quando": "notte",
+    "dal": "-9h",
+    "tentativi": 0
+   }
+  },
+  {
+   "id": "n5",
+   "testo": "Outline the onboarding checklist for new testers",
+   "quando": "poi",
+   "modo": "tutto",
+   "turno": {
+    "da": "myynd",
+    "quando": "notte",
+    "dal": "-9h",
+    "tentativi": 0
+   }
+  }
+ ],
+ "uso": [
+  {
+   "compito": "n1",
+   "quando": "-6.5h",
+   "dollari": 0.21
+  },
+  {
+   "compito": "n1",
+   "quando": "-6h",
+   "dollari": 0.17
+  },
+  {
+   "compito": "n2",
+   "quando": "-5.8h",
+   "dollari": 0.46
+  },
+  {
+   "compito": "n3",
+   "quando": "-5h",
+   "dollari": 0.58
+  }
+ ]
+}

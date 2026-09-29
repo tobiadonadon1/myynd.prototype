@@ -33,7 +33,7 @@ import type { Vals } from '../vals'
 import { usePunto } from '../usePunto'
 import type { Compito, Punto as PuntoDelGiorno, RigaPunto } from '../api'
 import type { Lista } from '../oggi/useCompiti'
-import { laNotte, RigheDellaNotte } from './Stanotte'
+import { laNotte, rigaDellaNotte, RigheDellaNotte } from './Stanotte'
 
 /**
  * Il lavoro della notte, per il foglio del punto (F5): la lista delle righe e
@@ -317,7 +317,8 @@ export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
   const [soloNotte, setSoloNotte] = useState(false)
   const n = notte ? laNotte(notte.l) : null
   // sulla carta, una riga: quante ne ha fatte e quante aspettano lei
-  const rigaNotte = n && <div style={SOTTO}>{frasi.stanotteFatte(n.fatte.length, n.attende.length)}.</div>
+  // F9 · con quanto è costata, cosa l'ha fermata, e quando il Mac dormiva
+  const rigaNotte = n && <div style={SOTTO}>{rigaDellaNotte(notte?.l.turno, n)}.</div>
   if (!p.punto) {
     if (!n) return p.vecchio ? <Scaduto p={p} /> : null
     if (soloNotte) return <Finestra v={v} punto={null} guaio={null} chiudi={() => setSoloNotte(false)} notte={notte} />

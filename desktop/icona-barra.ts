@@ -19,9 +19,11 @@ export function iconaPer(s: { guarda: boolean; attesa: boolean; piattaforma: str
   return `${nome}.${s.piattaforma === 'win32' ? 'ico' : 'png'}`
 }
 
-export type Voce = 'pausa' | 'riprendi' | 'apri' | 'nuova-chat' | 'preferenze' | 'esci' | 'togli' | '-'
+export type Voce = 'pausa' | 'riprendi' | 'apri' | 'nuova-chat' | 'preferenze' | 'esci' | 'togli' | 'ferma-turno' | '-'
 
-type Osservatore = { disponibile: boolean; acceso: boolean; pausaFino: string | null; adesso: number }
+type Osservatore = { disponibile: boolean; acceso: boolean; pausaFino: string | null; adesso: number
+  /** F9 · il turno ha una carta al lavoro, o una notte che aspetta: si può fermare da qui. */
+  turno?: boolean }
 
 /** Pausa o riprendi, se c'è un osservatore acceso su questo Mac; niente altrimenti. */
 function primaVoce(s: Osservatore): Voce[] {
@@ -31,7 +33,8 @@ function primaVoce(s: Osservatore): Voce[] {
 
 /** Il menu del tasto destro sulla barra: con l'osservatore spento è quello di sempre. */
 export function vociMenu(s: Osservatore): Voce[] {
-  const prima = primaVoce(s)
+  // F9 · «Ferma il turno» per primo quando c'è qualcosa da fermare: è la voce che si cerca di notte
+  const prima: Voce[] = [...(s.turno ? ['ferma-turno' as const] : []), ...primaVoce(s)]
   return [...prima, ...(prima.length ? ['-' as const] : []), 'apri', 'nuova-chat', 'preferenze', '-', 'esci']
 }
 

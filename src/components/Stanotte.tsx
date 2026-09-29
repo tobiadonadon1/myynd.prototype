@@ -12,18 +12,45 @@
 // Non si dice niente di notte (il turno sta ancora lavorando), né se la notte
 // non ha fatto niente: «stanotte niente» è rumore.
 
-import type { Compito } from '../api'
-import { t } from '../lingua'
+import type { Compito, StatoTurno } from '../api'
+import { frasi, t } from '../lingua'
 import type { Lista } from '../oggi/useCompiti'
 import { carteDiStanotte, consegnata } from '../oggi/bacheca'
 import './stanotte.css'
 
-/** Le carte della notte da dire, o null se non c'è niente da dire adesso. */
+/**
+ * Le carte della notte da dire, o null se non c'è niente da dire adesso.
+ * F9: anche una notte senza carte finite ha da dire, se si è fermata (il
+ * budget, il bottone) o se il Mac ha dormito con delle carte in coda.
+ */
 export function laNotte(l: Lista | undefined): { fatte: Compito[]; attende: Compito[] } | null {
   const s = l?.turno
   if (!l || !s || s.inNotte) return null
   const { fatte, attende } = carteDiStanotte(l.compiti, l.chiusi, s)
-  return fatte.length || attende.length ? { fatte, attende } : null
+  const daDire = !!s.stanotte.fermata || !!s.stanotte.buchi?.length
+  return fatte.length || attende.length || daDire ? { fatte, attende } : null
+}
+
+/** «HH:MM» di un istante ISO. */
+const ora = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+
+/**
+ * F9 · la riga della notte, solo con i pezzi che ci sono: «Last night: 5
+ * done, 1 needs you · $1.42 of $3 · 2 wait for tonight's budget · Mac asleep
+ * 01:10 to 05:40». Il costo si dice se la notte ha speso, o se c'è un budget.
+ */
+export function rigaDellaNotte(s: StatoTurno | null | undefined, n: { fatte: Compito[]; attende: Compito[] }): string {
+  const pezzi = [frasi.stanotteFatte(n.fatte.length, n.attende.length)]
+  const x = s?.stanotte
+  if (x) {
+    const costo = x.costo ?? 0
+    if (x.limite) { if (costo > 0 || x.fermata === 'budget') pezzi.push(frasi.spesaDelTurno(costo, x.limite)) }
+    else if (costo > 0) pezzi.push(frasi.dollari(costo))
+    if (x.fermata === 'budget' && x.rimaste) pezzi.push(frasi.aspettanoIlBudget(x.rimaste))
+    if (x.fermata === 'stop') pezzi.push(t('fermato da te'))
+    for (const b of (x.buchi ?? []).slice(0, 2)) pezzi.push(frasi.macAddormentato(ora(b.da), ora(b.a)))
+  }
+  return pezzi.join(' · ')
 }
 
 /** Le righe della notte: prima quelle che aspettano lei, poi quelle finite. */
@@ -31,10 +58,14 @@ export function RigheDellaNotte({ l, notte, apri }: {
   l: Lista; notte: { fatte: Compito[]; attende: Compito[] }; apri: (c: Compito) => void
 }) {
   return (
+    <>
+    {/* F9 · in testa, la riga della notte: quante, quanto è costata, cosa l'ha fermata */}
+    <p className="stanotte-conto">{rigaDellaNotte(l.turno, notte)}</p>
     <ul className="stanotte-righe">
       {notte.attende.map(c => <Riga key={c.id} c={c} l={l} apri={apri} aspetta />)}
       {notte.fatte.map(c => <Riga key={c.id} c={c} l={l} apri={apri} />)}
     </ul>
+    </>
   )
 }
 
