@@ -638,5 +638,61 @@ if (f6) {
 }
 // — F6: fine —
 
+// — F8: inizio —
+/*
+ * Il lavoro senza la chiave API: `scena.f8` = { account?: true, incluso?: { token } }.
+ *
+ * `account`: un `claude` finto nella casa finta (`~/.local/bin/claude`, dove lo
+ * cerca `lavoro.ts` all'avvio del server), che manda la domanda al modello
+ * finto (`/v1/chat/completions`, con il prompt di sistema e lo stdin) e
+ * rimette la risposta nella busta di `claude -p --output-format json`; il
+ * conto lavora con l'account (`claudeCon: 'abbonamento'`), senza il fornitore
+ * compatibile. `incluso`: il conto sceglie l'AI inclusa con quel gettone; il
+ * ponte lo dà `INCLUSO=1 prove/scena.sh`, che punta MYYND_INCLUSO_URL al
+ * modello finto.
+ */
+type ScenaF8 = { account?: boolean; incluso?: { token: string } }
+const f8 = (scena as Record<string, unknown>).f8 as ScenaF8 | undefined
+if (f8) {
+  if (f8.account) {
+    if (!urlModello) esci('f8.account vuole --modello: il claude finto parla con il modello finto')
+    const bin = join(CASA, '.local', 'bin')
+    mkdirSync(bin, { recursive: true })
+    const { chmodSync } = await import('node:fs')
+    writeFileSync(join(bin, 'claude'), `#!${process.execPath}
+// Claude Code finto (F8): la domanda va al modello finto, la risposta torna nella busta.
+const args = process.argv.slice(2)
+if (args[0] === 'auth') { console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' })); process.exit(0) }
+if (args[0] === '--help') { console.log('  --tools <tools>  --effort <level>  --no-session-persistence'); process.exit(0) }
+let dentro = ''
+process.stdin.on('data', d => { dentro += d })
+process.stdin.on('end', async () => {
+  const sistema = args[args.indexOf('--system-prompt') + 1] || ''
+  try {
+    const r = await fetch(${JSON.stringify(urlModello.replace(/\/?$/, '/'))} + 'chat/completions', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'finto', messages: [{ role: 'system', content: sistema }, { role: 'user', content: dentro }] })
+    })
+    const d = await r.json()
+    const result = d.choices?.[0]?.message?.content ?? ''
+    console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: !result, result, usage: { input_tokens: Math.ceil((sistema.length + dentro.length) / 4), output_tokens: Math.ceil(result.length / 4) } }))
+  } catch (e) {
+    console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'finto: ' + e.message }))
+  }
+})
+`)
+    chmodSync(join(bin, 'claude'), 0o755)
+  }
+  chi.dentro(conto.id, () => {
+    const c = cfg.leggi()
+    delete c.compatibile
+    delete c.motore
+    if (f8.account) c.claudeCon = 'abbonamento'
+    if (f8.incluso) { c.motore = 'incluso'; c.incluso = { token: f8.incluso.token } }
+    cfg.scrivi(c, { togli: ['compatibile', 'motore', 'credenzialiModelli'] })
+  })
+}
+// — F8: fine —
+
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

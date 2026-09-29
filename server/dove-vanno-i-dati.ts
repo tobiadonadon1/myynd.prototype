@@ -11,6 +11,7 @@
 //   · il modello che ragiona, lo stesso che sceglie `modello.motore()`: ChatGPT,
 //     OpenAI con la chiave, un fornitore compatibile (e se sta su questa
 //     macchina, nessuno lo riceve), Claude con la chiave o con l'account;
+//   · con l'AI inclusa (F8), il ponte di Myynd prima di Anthropic;
 //   · Jev, se c'è la sua chiave: riceve pezzi dei documenti per giudicarli
 //     (`giudizi.ts`, `rifinitura.ts`);
 //   · ospitati, i dati stanno sul server, non sul computer di chi collega.
@@ -23,8 +24,12 @@ import { OSPITATO } from './ospitato.ts'
 export type Destinatari = {
   /** I dati stanno sul server di chi ospita, non su questo computer. */
   ospitato: boolean
-  /** Chi riceve i pezzi da ragionare; `null` se nessun modello è collegato. */
-  modello: { chi: string; locale: boolean } | null
+  /**
+   * Chi riceve i pezzi da ragionare; `null` se nessun modello è collegato.
+   * `tramite`: prima di arrivare a `chi` passano da un server nostro (F8,
+   * l'AI inclusa: il ponte di Myynd inoltra ad Anthropic e conta i token).
+   */
+  modello: { chi: string; locale: boolean; tramite?: 'Myynd' } | null
   /** Pezzi dei documenti vanno anche a TypeSafe, per i giudizi di Jev. */
   jev: boolean
 }
@@ -41,7 +46,9 @@ export function doveVanno(): Destinatari {
   const c = leggi()
   let chi: Destinatari['modello'] = null
   const m = modello.motore()
-  if (m?.tipo === 'chatgpt') chi = { chi: 'OpenAI (ChatGPT)', locale: false }
+  // F8 · l'AI inclusa: il materiale va a noi (il ponte) e ad Anthropic; ospitati il ponte è questo server
+  if (modello.inclusoInUso(c)) chi = { chi: 'Anthropic (Claude)', locale: false, ...(OSPITATO ? {} : { tramite: 'Myynd' as const }) }
+  else if (m?.tipo === 'chatgpt') chi = { chi: 'OpenAI (ChatGPT)', locale: false }
   else if (m?.tipo === 'claude') chi = { chi: 'Anthropic (Claude)', locale: false }
   else if (m?.tipo === 'compatibile') {
     if (c.motore === 'openai') chi = { chi: 'OpenAI', locale: false }

@@ -331,7 +331,8 @@ export function quandoLibero(f: (utente: string | null) => void): () => void {
  * caduto — non merita una riga rossa in lista alle sette di mattina: si
  * riprova una volta, fra due minuti, in silenzio. Alla seconda si dice.
  */
-const PASSEGGERO = /sotto sforzo|ha un problema in questo momento|Ci ha messo troppo|Non riesco a raggiungere|interrotta a metà|Non ce l’ho fatta|Non ce l'ho fatta/
+// «[Cc]i»: «Claude Code ci ha messo troppo» (l'account, F8) è lo stesso guaio passeggero di «Ci ha messo troppo»
+const PASSEGGERO = /sotto sforzo|ha un problema in questo momento|[Cc]i ha messo troppo|Non riesco a raggiungere|interrotta a metà|Non ce l’ho fatta|Non ce l'ho fatta/
 const RIPROVA_FRA = 2 * 60_000
 const ritentati = new Set<string>()
 

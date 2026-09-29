@@ -1,0 +1,15 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "file": [
+    { "nome": "price-list-2026.md", "testo": "# Price list 2026\n\nCourse, up to 12 people: 890 EUR per person.\nWorkshop, half day: 1,400 EUR flat.\nDelivery: three weeks from the signed order.\n" }
+  ],
+  "documenti": [
+    { "id": "desktop:price-list-2026.md", "fonte": "desktop", "tipo": "file", "titolo": "price-list-2026.md", "corpo": "Price list 2026\n\nCourse, up to 12 people: 890 EUR per person.\nWorkshop, half day: 1,400 EUR flat.\nDelivery: three weeks from the signed order.\n", "quando": "-30d", "gruppo": "file" }
+  ],
+  "compiti": [
+    { "id": "c-f8", "testo": "Write the Harbor price summary and save it as a markdown file", "quando": "oggi", "stato": "aperto" }
+  ],
+  "f8": { "account": true }
+}

@@ -1,0 +1,10 @@
+{
+  "modello": "finto",
+  "risposte": [
+    { "se": "File scritto:", "in": "utente", "json": { "text": "Done: the price summary is saved as harbor-price-summary.md on your Desktop.\n\nCourse for up to 12 people: 890 EUR per person, delivery three weeks from the signed order [1].", "calls": [] } },
+    { "se": "\"role\":\"tool\"", "in": "utente", "json": { "text": "", "calls": [{ "name": "scrivi_file", "arguments": "{\"percorso\":\"harbor-price-summary.md\",\"testo\":\"# Harbor price summary\\n\\nCourse, up to 12 people: 890 EUR per person.\\nWorkshop, half day: 1,400 EUR flat.\\nDelivery: three weeks from the signed order.\\n\"}" }] } },
+    { "se": "calls \\(requested Myynd functions\\)", "in": "system", "json": { "text": "", "calls": [{ "name": "cerca", "arguments": "{\"query\":\"price list\"}" }] } },
+    { "se": "Sei il revisore di un lavoro", "in": "system", "json": { "esito": "pass", "per": "Alex", "comeTe": "The summary matches the price list and the file is saved.", "comeLoro": "Clear and short.", "problemi": [], "verificato": ["the prices against the price list", "the file was written"], "criterio": "met", "criterioPerche": "The summary is saved as a markdown file with the three prices." } }
+  ],
+  "predefinita": "Done."
+}

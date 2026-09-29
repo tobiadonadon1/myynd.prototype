@@ -135,7 +135,8 @@ function cosaCambiare(caso: CasoAmministratore): Due {
 export type DoveVanno = {
   /** L'indirizzo del server, se Myynd è ospitato; `null` in casa. */
   ospitato: string | null
-  modello: { chi: string; locale: boolean } | null
+  /** `tramite`: prima passano da un server di Myynd (l'AI inclusa, F8). */
+  modello: { chi: string; locale: boolean; tramite?: 'Myynd' } | null
   jev: boolean
 }
 
@@ -158,6 +159,11 @@ const MODELLO_SUL_SERVER: Due = { it: ' Il modello di intelligenza artificiale g
 const NESSUN_FORNITORE: Due = { it: ' Nessun fornitore di intelligenza artificiale li riceve.', en: ' No AI provider receives it.' }
 const ESTRATTI_JEV: Due = { it: ' Brevi estratti vanno anche a TypeSafe (Jev), che giudica cosa conta.', en: ' Short excerpts also go to TypeSafe (Jev), which judges what matters.' }
 const VUOTO: Due = { it: '', en: '' }
+/** F8 · l'AI inclusa: il ponte di Myynd sta in mezzo, e lo si dice. */
+const TRAMITE_MYYND: Due = {
+  it: ' Passano prima dal server di Myynd, che li inoltra ad Anthropic e ne conta solo i token.',
+  en: ' They pass through Myynd’s server first, which forwards them to Anthropic and keeps only the token count.'
+}
 function sulServer(host: string): Due {
   return { it: `stanno nel mio account sul server Myynd di ${host}.`, en: `it is stored in my account on the Myynd server at ${host}.` }
 }
@@ -173,6 +179,7 @@ function doveVanno(d: DoveVanno): Due {
   const pezzi: Due[] = [
     d.ospitato ? sulServer(d.ospitato) : IN_CASA,
     !m ? NESSUN_MODELLO : !m.locale ? aChi(m.chi) : d.ospitato ? MODELLO_SUL_SERVER : MODELLO_QUI,
+    m?.tramite ? TRAMITE_MYYND : VUOTO,
     // «nessun fornitore» solo se è vero fino in fondo: con Jev, TypeSafe riceve estratti
     m?.locale && !d.jev ? NESSUN_FORNITORE : VUOTO,
     d.jev ? ESTRATTI_JEV : VUOTO

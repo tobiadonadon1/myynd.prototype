@@ -857,7 +857,13 @@ export type Config = {
    * — e vale solo se il fornitore c'è davvero: una scelta senza un indirizzo
    * dietro torna a Claude senza dirlo due volte.
    */
-  motore?: 'claude' | 'compatibile' | 'chatgpt' | 'openai'
+  motore?: 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso'
+  /**
+   * F8 · l'AI inclusa con Myynd: il gettone del conto Myynd con cui il ponte
+   * (`MYYND_INCLUSO_URL`) riconosce chi chiede. È una credenziale come le altre
+   * e non esce mai verso la schermata. Senza, l'AI inclusa non c'è.
+   */
+  incluso?: { token?: string }
   /** Consent to use the locally managed ChatGPT account; no OAuth tokens here. */
   chatgpt?: { attivo: boolean; email?: string; modelli?: Partial<Record<Livello, string>> }
   /**
@@ -1071,7 +1077,7 @@ export function leggi(): Config {
  * quello nuovo, mai una via di mezzo.
  */
 /** I campi che portano una credenziale: non spariscono da una scrittura qualunque. */
-export const CON_SEGRETI = ['claude', 'jev', 'posta', 'notion', 'slack', 'github', 'compatibile', 'openai', 'credenzialiModelli', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni', 'agendamac', 'postamac'] as const
+export const CON_SEGRETI = ['claude', 'incluso', 'jev', 'posta', 'notion', 'slack', 'github', 'compatibile', 'openai', 'credenzialiModelli', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni', 'agendamac', 'postamac'] as const
 const CAMPI_SEGRETI = new Set(['apiKey', 'chiave', 'password', 'token', 'refresh', 'clientSecret', 'segreto', 'parola'])
 const segretoPresente = (v: unknown): v is string => typeof v === 'string' && !!v.trim()
   && !/^[*•●…\.\s]+$/.test(v) && v !== '[credenziale rimossa / credential removed]'
@@ -1225,7 +1231,7 @@ export function pubblica(c: Config = leggi()) {
     claudeCon: c.claudeCon ?? (c.abbonamento?.attivo === true ? 'abbonamento' : 'chiave'),
     // «compatibile» solo se il fornitore c'è: una scelta rimasta nel file dopo
     // uno scollega non deve far credere alla schermata che ci sia un motore
-    motore: c.motore === 'chatgpt' ? 'chatgpt' : c.motore === 'openai' && segretoPresente(c.openai?.chiave) ? 'openai' : c.motore === 'compatibile' && c.compatibile ? 'compatibile' : 'claude',
+    motore: c.motore === 'chatgpt' ? 'chatgpt' : c.motore === 'incluso' ? 'incluso' : c.motore === 'openai' && segretoPresente(c.openai?.chiave) ? 'openai' : c.motore === 'compatibile' && c.compatibile ? 'compatibile' : 'claude',
     // vuoto = il modello predefinito del piano
     chatgpt: { attivo: c.chatgpt?.attivo === true, modelli: Object.fromEntries(LIVELLI.map(l => [l, c.chatgpt?.modelli?.[l] ?? ''])) as Record<Livello, string> },
     // il modello esce, la chiave no; un livello senza scelta usa il modello della scheda

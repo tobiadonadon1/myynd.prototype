@@ -19,6 +19,7 @@ import * as store from './store.ts'
 import { feedAttuale, compitiAttuali, percheVuoto, iniziativeProgetti, progettoDelTesto } from './attenzione.ts'
 import * as claude from './claude.ts'
 import * as mod from './modello.ts'
+import * as incluso from './incluso.ts'
 import * as jev from './jev.ts'
 import * as giudizi from './giudizi.ts'
 import * as compatibile from './compatibile.ts'
@@ -230,7 +231,8 @@ app.post('/api/whatsapp/webhook', express.raw({ type: '*/*', limit: '2mb' }), (r
  * al primo PDF da tre mega — con un 413 che la schermata leggeva come «non
  * sono riuscito a collegare».
  */
-const CORPO_GRANDE = new Set(['/api/connettori/desktop/carica', '/api/connettori/desktop/carica-file'])
+// il ponte dell'AI inclusa (F8) porta anche le pagine da rileggere, come immagini
+const CORPO_GRANDE = new Set(['/api/connettori/desktop/carica', '/api/connettori/desktop/carica-file', '/api/incluso/v1/messages'])
 const jsonNormale = express.json({ limit: '2mb' })
 const jsonGrande = express.json({ limit: '50mb' })
 app.use((req, res, next) => (CORPO_GRANDE.has(req.path) ? jsonGrande : jsonNormale)(req, res, next))
@@ -528,6 +530,15 @@ app.post('/api/auth/reimposta', async (req, res) => {
   if (!e.ok) return res.status(400).json({ errore: e.errore })
   chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
+
+/*
+ * Il ponte dell'AI inclusa (F8), sopra la guardia: chi lo chiama è l'app sul
+ * Mac di qualcuno, con il gettone del suo conto al posto di una chiave, e il
+ * ponte lo controlla da sé (`incluso.ts`). Senza la chiave del conto
+ * aziendale sul server risponde 503 a tutti.
+ */
+app.post('/api/incluso/v1/messages', incluso.ponte())
+app.get('/api/incluso/stato', incluso.statoDelPonte())
 
 // da qui in giù serve essere dentro
 app.use(auth.guardia)
@@ -1781,6 +1792,15 @@ app.post('/api/connettori/compatibile/modelli', async (req, res) => {
   res.json({ modelli: await compatibile.modelli({ url, ...(chiave ? { chiave } : {}) }) })
 })
 
+/** F8 · l'AI inclusa: la chiamata di salute al ponte, e la dose di oggi. */
+function statoIncluso() {
+  const c = cfg.leggi()
+  return incluso.statoQui({ ospitato: ospitato.OSPITATO, motore: c.motore, gettone: c.incluso?.token })
+}
+app.get('/api/incluso', async (_req, res) => {
+  res.json(await statoIncluso())
+})
+
 /**
  * Chi fa il lavoro grosso: Claude, o il fornitore collegato.
  *
@@ -1789,7 +1809,11 @@ app.post('/api/connettori/compatibile/modelli', async (req, res) => {
  */
 app.post('/api/modello/motore', async (req, res) => {
   const scelto = req.body?.motore
-  if (!['claude', 'compatibile', 'chatgpt', 'openai'].includes(scelto)) return res.status(400).json({ errore: 'Choose an available model provider.' })
+  if (!['claude', 'compatibile', 'chatgpt', 'openai', 'incluso'].includes(scelto)) return res.status(400).json({ errore: 'Choose an available model provider.' })
+  // F8 · l'AI inclusa si sceglie solo se il ponte ha appena risposto: niente «in uso» per una cosa che non c'è
+  if (scelto === 'incluso' && (!mod.fornitoreIncluso() || (await statoIncluso()).stato === 'assente')) {
+    return res.status(400).json({ errore: mod.INCLUSO_ASSENTE })
+  }
   if (scelto === 'openai' && !mod.fornitoreOpenAI()) {
     return res.status(400).json({ errore: 'Prima collega OpenAI con una chiave API.' })
   }

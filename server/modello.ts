@@ -44,6 +44,7 @@ import * as store from './store.ts'
 import * as compatibile from './compatibile.ts'
 import * as chatgpt from './chatgpt.ts'
 import * as tettoDiOggi from './tetto.ts'
+import { estraiJSON } from './chiamate-emulate.ts'
 
 // — chi c'è —
 
@@ -131,6 +132,8 @@ export function fornitore(): compatibile.Fornitore | null {
  */
 export function collegato(): boolean {
   if (chatgpt.scelto()) return chatgpt.pronto()
+  // F8 · l'AI inclusa, quando è lei la scelta: c'è se c'è il ponte (e il gettone)
+  if (leggi().motore === 'incluso' && fornitoreIncluso()) return true
   return conClaude() || !!fornitore()
 }
 
@@ -184,7 +187,9 @@ export function riparaIlMotore(): boolean {
   if (collegato()) return false
   if (scegliClaudeSeServe()) return true
   const c = leggi()
-  const candidati: ['compatibile' | 'openai' | 'chatgpt', boolean][] = [
+  const candidati: ['incluso' | 'compatibile' | 'openai' | 'chatgpt', boolean][] = [
+    // F8 · l'AI inclusa non costa niente a chi la usa: subito dopo Claude
+    ['incluso', !!fornitoreIncluso(c)],
     ['compatibile', !!(c.compatibile?.url && c.compatibile.modello)],
     ['openai', !!fornitoreOpenAI(c)],
     ['chatgpt', c.chatgpt?.attivo === true && !!chatgpt.installato()]
@@ -207,9 +212,69 @@ export function riparaIlMotore(): boolean {
  * lo chiede per la singola chiamata.
  */
 export function cliente(): Anthropic | null {
-  const chiave = leggi().claude?.apiKey || chiaveDiCasa()
+  const c = leggi()
+  /*
+   * F8 · l'AI inclusa: lo stesso client, verso il ponte di Myynd, che parla
+   * la lingua dei Messaggi di Anthropic. Il giro degli attrezzi e la cache
+   * restano identici. Nessun ritentativo dell'SDK: un 429 del ponte vuol dire
+   * «la dose di oggi è finita», e riprovarlo è solo un'altra richiesta.
+   */
+  if (c.motore === 'incluso') {
+    const f = fornitoreIncluso(c)
+    return f ? new Anthropic({ ...(f.baseURL ? { baseURL: f.baseURL } : {}), apiKey: f.chiave, timeout: 60_000, maxRetries: 0 }) : null
+  }
+  const chiave = c.claude?.apiKey || chiaveDiCasa()
   return chiave ? new Anthropic({ apiKey: chiave, timeout: 60_000, maxRetries: 1 }) : null
 }
+
+// — l'AI inclusa (F8) —
+
+/*
+ * «For customers the AI is in the price, on our key.» Sul computer di chi la
+ * usa non c'è nessuna chiave nostra: c'è un ponte (`MYYND_INCLUSO_URL`, lo
+ * mette il pacchetto dell'app) e il gettone del suo conto Myynd, e il ponte
+ * guarda la dose del piano prima di inoltrare ad Anthropic (`incluso.ts`).
+ * Ospitati la chiave sta sul server (`MYYND_INCLUSO_CHIAVE`) e non esce mai
+ * dal server: è l'unica chiave condivisa che un server ospitato usi, e la
+ * dose del piano la tiene `tetto.ts` sul registro di ognuno.
+ *
+ * Senza ponte o senza gettone non c'è: `null`, e nessuna schermata deve dire
+ * «in uso» per una cosa che non ha mai risposto.
+ */
+export function fornitoreIncluso(c = leggi()): { baseURL?: string; chiave: string } | null {
+  if (OSPITATO) {
+    const k = (process.env.MYYND_INCLUSO_CHIAVE ?? '').trim()
+    return k ? { chiave: k } : null
+  }
+  const url = (process.env.MYYND_INCLUSO_URL ?? '').trim().replace(/\/+$/, '')
+  const gettone = typeof c.incluso?.token === 'string' ? c.incluso.token.trim() : ''
+  if (!url || !gettone) return null
+  try { if (!['https:', 'http:'].includes(new URL(url).protocol)) return null } catch { return null }
+  return { baseURL: `${url}/api/incluso`, chiave: gettone }
+}
+
+/** L'AI inclusa è quella scelta, e c'è davvero. */
+export function inclusoInUso(c = leggi()): boolean {
+  return c.motore === 'incluso' && !!fornitoreIncluso(c)
+}
+
+/**
+ * Un rifiuto del ponte che non è un guasto: la dose di oggi è finita (429
+ * `budget_exhausted`), o il ponte non è ancora acceso (503 `not_configured`).
+ * Il primo è un errore del tetto: niente ritentativo fra due minuti, niente
+ * chiave di riserva. Il secondo si dice per quello che è.
+ */
+function dalPonte(e: unknown): Error | null {
+  const stato = Number((e as { status?: unknown } | null)?.status)
+  if (stato !== 429 && stato !== 503) return null
+  let corpo = ''
+  try { corpo = JSON.stringify((e as { error?: unknown }).error ?? '') } catch { /* resta vuoto */ }
+  corpo += e instanceof Error ? e.message : ''
+  if (stato === 429 && /budget_exhausted/.test(corpo)) return tradotto(tettoDiOggi.erroreDelTetto(tettoDiOggi.INCLUSO_FINITO))
+  if (stato === 503 && /not_configured/.test(corpo)) return tradotto(new Error(INCLUSO_ASSENTE))
+  return null
+}
+export const INCLUSO_ASSENTE = 'L’AI inclusa con Myynd non è ancora disponibile.'
 
 // — cosa accetta ogni modello —
 
@@ -727,7 +792,7 @@ function traduci(e: unknown): Error {
  * strada sua, senza strumenti, e chi la vuole la chiede prima.
  */
 export type Motore = {
-  tipo: 'claude' | 'compatibile' | 'chatgpt'
+  tipo: 'claude' | 'compatibile' | 'chatgpt' | 'abbonamento'
   /** Come si chiama, per i registri: il modello di Claude, o il nome dato al fornitore. */
   nome: string
   /**
@@ -803,12 +868,29 @@ function senzaSilenzi(f: ReturnType<Anthropic['messages']['stream']>): Promise<A
  * serviva una chiave API. Una regola sola, qui, per la rotta e per `svolgi`.
  */
 export function puoLavorare(): boolean {
-  return motore() !== null || soloAbbonamento()
+  return motoreDelLavoro() !== null
 }
 
 /** L'account Claude, quando è lui a lavorare e non c'è un altro motore scelto. */
 export function soloAbbonamento(): boolean {
-  return !chatgpt.scelto() && abbonamento.disponibile() && fornitore() === null
+  return !chatgpt.scelto() && abbonamento.disponibile() && fornitore() === null && !inclusoInUso()
+}
+
+/**
+ * Chi fa il lavoro affidato (F8): l'account Claude quando è lui la scelta, con
+ * il giro intero degli attrezzi (`abbonamento.motore`), altrimenti il motore di
+ * sempre. L'account prima della chiave, com'era: la chiave resta la riserva,
+ * e la usa `svolgi` solo se l'account cade prima che una mano abbia scritto
+ * qualcosa. Solo `svolgi`: la chat e `chiedi` hanno le loro strade.
+ */
+export function motoreDelLavoro(): Motore | null {
+  if (!soloAbbonamento()) return motore()
+  const a = abbonamento.motore()
+  return {
+    ...a,
+    crea: (p, attesa) => a.crea(p, attesa).then(r => { avvisaUsato(); return r }),
+    flusso: (p, onTesto, attesa, segnale, conversazione) => a.flusso(p, onTesto, attesa, segnale, conversazione).then(r => { avvisaUsato(); return r })
+  }
 }
 
 /** P10 · l'ultima volta che il fornitore compatibile ha risposto «ci sono», per indirizzo. */
@@ -858,6 +940,13 @@ export function motore(): Motore | null {
   }
   const a = cliente()
   if (!a) return null
+  // F8 · con l'AI inclusa la chiave non è sua: un rifiuto non si segna sulla sua, e il ponte ha i suoi no
+  const incluso = leggi().motore === 'incluso'
+  const guaio = (e: unknown): Error => {
+    if (incluso) return dalPonte(e) ?? inItaliano(e)
+    notaRifiuto(e, 'claude')
+    return inItaliano(e)
+  }
   return {
     tipo: 'claude',
     nome: modello(),
@@ -869,8 +958,7 @@ export function motore(): Motore | null {
       try {
         return await a.messages.create(p, attesa ? { timeout: attesa } : undefined)
       } catch (e) {
-        notaRifiuto(e, 'claude')
-        throw inItaliano(e)
+        throw guaio(e)
       }
     },
     flusso: async (p, onTesto, attesa, segnale) => {
@@ -881,8 +969,7 @@ export function motore(): Motore | null {
         s.on('text', onTesto)
         return await senzaSilenzi(s)
       } catch (e) {
-        notaRifiuto(e, 'claude')
-        throw inItaliano(e)
+        throw guaio(e)
       }
     }
   }
@@ -901,6 +988,8 @@ export function testaAlLavoro(): 'claude' | 'openai' | 'compatibile' | null {
   const c = leggi()
   if (c.motore === 'openai') return fornitoreOpenAI(c) ? 'openai' : null
   if (c.motore === 'compatibile') return c.compatibile?.url && c.compatibile.modello ? 'compatibile' : null
+  // F8 · l'AI inclusa è Claude, dietro il ponte
+  if (c.motore === 'incluso') return fornitoreIncluso(c) ? 'claude' : null
   if (conLaChiave() || abbonamento.scelto()) return 'claude'
   return null
 }
@@ -1193,7 +1282,7 @@ export async function chiedi(o: {
    * E se il motore scelto è un altro fornitore, di qui non si passa: l'abbonamento
    * è un modo di pagare Claude di meno, non un motore in più.
    */
-  if (!chatgpt.scelto() && abbonamento.disponibile() && !fornitore()) {
+  if (soloAbbonamento()) {
     try {
       const testo = await abbonamento.chiedi({ ...o, attesa, modello: modelloPer(o.lavoro) })
       avvisaUsato()
@@ -1282,21 +1371,8 @@ export async function chiediJSON<T>(o: {
   }
 }
 
-/**
- * L'oggetto, ripulito da quello che un modello piccolo ci mette attorno.
- *
- * Claude con uno schema restituisce JSON e basta. Un modello locale, anche
- * vincolato, ogni tanto lo incornicia in un blocco di codice o ci premette una
- * riga di cortesia. Costa tre righe accettarlo, e senza queste tre righe metà
- * del guadagno del locale se ne andrebbe in fallimenti di lettura.
+/*
+ * `estraiJSON` sta in `chiamate-emulate.ts` da F8 (la usa anche l'account
+ * Claude): da qui si riesporta com'era.
  */
-export function estraiJSON(t: string): string {
-  const pulito = t.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
-  if (pulito.startsWith('{') || pulito.startsWith('[')) return pulito
-  const primo = pulito.search(/[{[]/)
-  if (primo < 0) return pulito
-  const apre = pulito[primo]
-  const chiude = apre === '{' ? '}' : ']'
-  const ultimo = pulito.lastIndexOf(chiude)
-  return ultimo > primo ? pulito.slice(primo, ultimo + 1) : pulito
-}
+export { estraiJSON }

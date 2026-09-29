@@ -1,0 +1,20 @@
+[
+  { "aspetta": 2000 },
+  { "clicca": "To do" },
+  { "aspetta": 1200 },
+  { "clicca": "Board" },
+  { "aspetta": 1200 },
+  { "clicca": "Write the Harbor price summary" },
+  { "aspetta": 1500 },
+  { "scatta": "consegna" },
+  { "premi": "Escape" },
+  { "aspetta": 600 },
+  { "clicca": "Calendar" },
+  { "aspetta": 1200 },
+  { "js": "(() => { const b = [...document.querySelectorAll('button.quaderno-icona')].find(x => /Harbor price summary/.test(x.getAttribute('aria-label') || '')); if (b) b.click(); return !!b })()" },
+  { "aspetta": 1200 },
+  { "js": "(() => { const d = document.querySelector('.task-detail-diario'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }) } return !!d })()" },
+  { "aspetta": 600 },
+  { "scatta": "dettaglio" },
+  { "testo": "dettaglio" }
+]

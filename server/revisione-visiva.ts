@@ -58,4 +58,5 @@ export function creaRevisoreVisivo(deps: { motore: () => mod.Motore | null; para
   }
 }
 
-export const revisioneVisiva = creaRevisoreVisivo({ motore: mod.motore, parametri: () => ({ model: mod.parametri('bozza', 3000).model }), uso: r => mod.segnaUso('bozza', r.usage, 'Rendered document visual review') })
+// F8 · il motore del lavoro, non quello della chat: sull'account Claude la rilettura visiva non c'è, e lo dice (`unavailable`)
+export const revisioneVisiva = creaRevisoreVisivo({ motore: mod.motoreDelLavoro, parametri: () => ({ model: mod.parametri('bozza', 3000).model }), uso: r => mod.segnaUso('bozza', r.usage, 'Rendered document visual review') })

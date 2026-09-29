@@ -21,9 +21,10 @@ import { appDocumento, CREA_DOCUMENTO, validaDocumento, pagineDocumento } from '
 import { creaDocumento, pubblicaDocumentoDesktop, apriDocumento, type DocumentoCreato } from './native-document.ts'
 import * as mani from './mani.ts'
 import { OSPITATO } from './ospitato.ts'
-import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
+import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, motoreDelLavoro, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { delTetto } from './tetto.ts'
+import type { Motore } from './modello.ts'
 import { ancora, eUnRifiuto, NON_CE_LHO, type FonteAncorata, type Verifica, type Via } from './ancoraggio.ts'
 import * as chatgpt from './chatgpt.ts'
 import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, segnaNelDiario, stessoFilo, type Concessione, type Documento } from './store.ts'
@@ -1707,7 +1708,8 @@ async function rispondiInStreamingDentro(
   const m = motore()
   // l'abbonamento è un modo di pagare Claude di meno: se ha scelto un altro
   // fornitore come motore, il lavoro va a lui e basta
-  const suoAbbonamento = !chatgpt.scelto() && abbonamento.disponibile() && m?.tipo !== 'compatibile'
+  // `conLAccountClaude` è la stessa regola, più l'AI inclusa scelta (F8): allora la chat va al ponte, non all'account
+  const suoAbbonamento = conLAccountClaude() && m?.tipo !== 'compatibile'
   if (!m && !suoAbbonamento) {
     return scorciatoia(SENZA_MOTORE_CHAT, 'nessuno')
   }
@@ -3036,6 +3038,8 @@ function dentroIlRecinto(fonti: string[]): string {
  * arriverà mai a chi lo legge.
  */
 const GIRI = { bozza: 4, tutto: 7, prompt: 7 } as const
+/** F8 · il tetto dei giri sull'account Claude, qualunque sia il modo. */
+export const GIRI_ACCOUNT = 4
 
 /**
  * Un passo del lavoro, detto a chi guarda.
@@ -3107,28 +3111,23 @@ export async function svolgi(
   const produzioneIniziata = Date.now()
   const tracciaProduzione = (fase: string) => console.info(`myynd · production · run=${produzioneIniziata} · ${fase} · elapsed_ms=${Date.now() - produzioneIniziata}`)
   tracciaProduzione('provider-selection-start')
-  const m = motore()
-  tracciaProduzione('provider-selection-end')
   /*
-   * Le bozze sull'abbonamento, quando è quello che ha scelto.
+   * Le bozze sull'account Claude, quando è quello che ha scelto (F8).
    *
-   * Finora una bozza passava sempre dalla chiave, anche a chi aveva acceso
-   * l'abbonamento — e non era una svista: il giro degli attrezzi ha bisogno di
-   * un modello che chiami `cerca` e `apri` e riceva indietro il risultato, e
-   * Claude Code da riga di comando quel giro non lo sa fare. Ma il risultato era
-   * che «lavora con l'abbonamento» non valeva per la cosa che l'app fa di più.
-   *
-   * Quello che si può fare, e che si fa qui: il materiale lo trova Myynd —
-   * `materiale()` cerca nell'indice prima di chiamare chiunque — e all'abbonamento
-   * si chiede una passata sola su quello. Meno accurato di quattro giri di
-   * ricerca, e la scheda lo dice a chi sceglie. Molto meglio di «questa cosa non
-   * funziona con l'abbonamento».
+   * Fino al 28 settembre qui c'era una passata sola: Claude Code da riga di
+   * comando non sa restituire un `tool_use`, e allora il materiale lo cercava
+   * Myynd e all'account si chiedeva di scrivere su quello. Niente `cerca`,
+   * niente mani, e un Pages chiesto sull'account finiva in «Collega Claude».
+   * Adesso l'account ha il giro intero, con le chiamate agli attrezzi dette
+   * come dati (`abbonamento.motore`): lo stesso giro della chiave, qui sotto,
+   * con al massimo quattro giri. La chiave, se c'è, resta la riserva.
    */
-  const soloAbbonamento = conLAccountClaude() && m?.tipo !== 'compatibile'
+  let m = motoreDelLavoro()
+  tracciaProduzione('provider-selection-end')
   // Non `{ testo: '' }`: quello faceva finire il compito fra i «pronti» con una
   // bozza vuota sotto — cioè l'app diceva di aver fatto un lavoro che non aveva
   // fatto. È l'unico modo di sbagliare che questo prodotto non si può permettere.
-  if (!m && !soloAbbonamento) throw new Error('Collega Claude e potrò lavorarci.')
+  if (!m) throw new Error('Collega Claude e potrò lavorarci.')
 
   const passo = (p: Passo) => { try { onPasso?.(p) } catch { /* chi guarda si arrangia */ } }
 
@@ -3287,7 +3286,9 @@ export async function svolgi(
     : []
   const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi), ...leMani, ...(appNativa ? [CREA_DOCUMENTO] : [])]
 
-  const tettoGiri = Math.max(1, Math.min(GIRI[modo as keyof typeof GIRI] ?? GIRI.bozza, esecuzione?.giri ?? Infinity))
+  /** F8 · sull'account al massimo quattro giri: ogni giro è un `claude -p` con il suo preambolo. */
+  const tettoPer = (x: Motore) => Math.max(1, Math.min(GIRI[modo as keyof typeof GIRI] ?? GIRI.bozza, esecuzione?.giri ?? Infinity, x.tipo === 'abbonamento' ? GIRI_ACCOUNT : Infinity))
+  let tettoGiri = tettoPer(m)
   /*
    * Ogni `svolgi` è lavoro affidato con un gesto (decisioni P3: premere
    * «Se ne occupa Myynd» è il consenso): la riga dell'autonomia che dice
@@ -3340,46 +3341,22 @@ export async function svolgi(
   let testo = ''
 
   /*
-   * La passata sola sull'abbonamento.
-   *
-   * Senza attrezzi non ha senso mandargli le loro istruzioni: gli si dice quello
-   * che è vero, cioè che ha davanti tutto quello che avrà. Se non basta, la
-   * risposta giusta è chiedere — che è la stessa cosa che farebbe con gli
-   * attrezzi dopo aver cercato invano, e `chiedeAiuto` la riconosce uguale.
+   * F8 · l'account cade: si passa alla chiave, se c'è, ma solo finché nessuna
+   * mano ha scritto niente. Una nota o un file già fatti e poi rifatti dalla
+   * chiave sarebbero due note e due file; il tetto, «Stop now» e una prova
+   * sul passato (P6) non sono guasti dell'account, e non passano mai.
    */
-  if (soloAbbonamento && !appNativa) {
-    passo({ passo: 'scrivo' })
-    const senzaAttrezzi = sistemaLavoro +
-      '\n\nQuesto è tutto il materiale che avrai. Se manca un dato duro che costa sbagliare, un ' +
-      'indirizzo, una cifra, quale di due persone, fai una domanda sola. Per tutto il resto scegli ' +
-      'la strada più ragionevole, fai il lavoro intero e scrivi l\'ipotesi in una riga che comincia ' +
-      'con «Ho supposto».'
-    try {
-      const uscito = await abbonamento.chiedi({
-        system: conLaLingua(senzaAttrezzi, { consegna }),
-        messages: [{ role: 'user', content: testoDi(messaggi[0].content) }],
-        attesa: attesaDi('bozza'),
-        modello: modelloPer('bozza'),
-        // F9 · «Stop now» e il richiamo arrivano fin qui: il processo muore con il suo gruppo
-        ...(esecuzione?.signal ? { signal: esecuzione.signal } : {})
-      })
-      return { ...risultatoVerificato(uscito), fatti }
-    } catch (e) {
-      if (delTetto(e)) throw e
-      // fermato da lei (o dal budget): non è l'account che non risponde, e non si passa alla chiave
-      if (esecuzione?.signal.aborted) throw e
-      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
-      abbonamento.nonRisponde()
-      console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
-      // senza una chiave di riserva l'errore è la risposta: il compito torna
-      // indietro con il suo guaio invece che con una bozza vuota
-      if (!m) throw e instanceof Error ? e : new Error(String(e))
-    }
+  const riservaDellAccount = (e: unknown): Motore | null => {
+    if (m?.tipo !== 'abbonamento') return null
+    if (delTetto(e) || esecuzione?.signal.aborted) return null
+    if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
+    abbonamento.nonRisponde()
+    console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
+    const giaScritto = !!copiaDiLavoro || tentativiVisivi > 0 || fatti.some(f => mani.CHE_PRODUCONO.includes(f.attrezzo))
+    if (giaScritto) return null
+    const chiave = motore()
+    return chiave && chiave.tipo !== 'abbonamento' ? chiave : null
   }
-
-  // Arrivati qui il motore c'è: o non si è passati di sopra, o di sopra è
-  // andata male e c'è la chiave a raccogliere.
-  if (!m) throw new Error('Collega Claude e potrò lavorarci.')
 
   for (let giro = 0; giro < tettoGiri; giro++) {
     esecuzione?.signal.throwIfAborted()
@@ -3402,19 +3379,32 @@ export async function svolgi(
     // blocco di sistema è segnato per la cache: su Claude si rilegge a un
     // decimo dal secondo giro, e il fornitore compatibile lo appiattisce.
     tracciaProduzione(`provider-turn-${giro + 1}-start`)
-    const finale = await m.flusso({
-      ...parametri('bozza', 16000),
-      system: [{ type: 'text', text: conLaLingua(sistemaLavoro, { consegna }), cache_control: { type: 'ephemeral' } }],
-      messages: messaggi,
-      tools: ferri,
-      ...(ultimo && !appNativa ? { tool_choice: { type: 'none' } } : {})
-    } as Anthropic.MessageStreamParams, delta => {
-      if (dettoScrivo || !delta.trim()) return
-      dettoScrivo = true
-      passo({ passo: 'scrivo' })
-    }, undefined, esecuzione?.signal)
+    const chi: Motore = m
+    let finale: Anthropic.Message
+    try {
+      finale = await chi.flusso({
+        ...parametri('bozza', 16000),
+        system: [{ type: 'text', text: conLaLingua(sistemaLavoro, { consegna }), cache_control: { type: 'ephemeral' } }],
+        messages: messaggi,
+        tools: ferri,
+        ...(ultimo && !appNativa ? { tool_choice: { type: 'none' } } : {})
+      } as Anthropic.MessageStreamParams, delta => {
+        if (dettoScrivo || !delta.trim()) return
+        dettoScrivo = true
+        passo({ passo: 'scrivo' })
+      }, undefined, esecuzione?.signal)
+    } catch (e) {
+      const riserva = riservaDellAccount(e)
+      if (!riserva) throw e
+      // lo stesso giro, sulla chiave, con la conversazione com'era
+      m = riserva
+      tettoGiri = tettoPer(riserva)
+      giro--
+      continue
+    }
     tracciaProduzione(`provider-turn-${giro + 1}-end`)
-    segnaUso('bozza', finale.usage, `giro ${giro + 1} di ${tettoGiri} · ${m.nome}`)
+    // l'account l'ha già contato lui, con i token veri della busta
+    if (chi.tipo !== 'abbonamento') segnaUso('bozza', finale.usage, `giro ${giro + 1} di ${tettoGiri} · ${chi.nome}`)
 
     if (finale.stop_reason === 'refusal') throw new Error('Su questo compito non posso lavorare.')
     if (finale.stop_reason === 'max_tokens') throw new Error('Il lavoro si è interrotto prima di essere completo. Riprova.')

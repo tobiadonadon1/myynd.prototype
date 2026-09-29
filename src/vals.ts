@@ -1855,7 +1855,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      */
     ricaricaStato,
 
-    scegliMotore: async (m: 'claude' | 'compatibile' | 'chatgpt' | 'openai') => {
+    scegliMotore: async (m: 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso') => {
       if ((stato.config.motore ?? 'claude') === m && !(m === 'chatgpt' && !stato.config.chatgpt?.attivo)) return
       // senza un fornitore collegato non c'è niente da scegliere: si apre la
       // scheda per collegarlo, e collegarlo lo sceglie da sé

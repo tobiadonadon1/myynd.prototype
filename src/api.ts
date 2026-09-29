@@ -99,7 +99,7 @@ export type Stato = {
     /** Con cosa lavora Claude, quando è lui: l'account (tramite Claude Code) o la chiave. */
     claudeCon?: 'abbonamento' | 'chiave'
     /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile con OpenAI. */
-    motore: 'claude' | 'compatibile' | 'chatgpt' | 'openai'
+    motore: 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso'
     chatgpt?: { attivo: boolean; modelli?: Record<'casa' | 'media' | 'frontiera', string> }
     /** OpenAI con la chiave: il modello esce, la chiave no. */
     openai?: { collegato: boolean; modello: string; chiaveSalvata: boolean; modelli?: Record<'casa' | 'media' | 'frontiera', string> } | null
@@ -1099,6 +1099,9 @@ export type Abbonamento = {
   inRiposo: boolean
 }
 
+/** F8 · l'AI inclusa: «pronto» solo dopo una risposta vera del ponte. */
+export type Incluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; scelto: boolean }
+
 export type ChatGPT = {
   installato: boolean
   entrato: boolean
@@ -1419,7 +1422,7 @@ export const api = {
     json<{ ok: true } & AccessoGranola>(`/api/connettori/granola/avvia/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** Chi riceve i dati su questa installazione: la riga vera della richiesta all'amministratore. */
   datiPerAmministratore: () =>
-    json<{ ospitato: boolean; modello: { chi: string; locale: boolean } | null; jev: boolean }>('/api/amministratore/dati'),
+    json<{ ospitato: boolean; modello: { chi: string; locale: boolean; tramite?: 'Myynd' } | null; jev: boolean }>('/api/amministratore/dati'),
 
 
   /** Le Note di Apple: come Granola, niente da mandare. Senza il permesso risponde con la strada per darlo. */
@@ -1643,6 +1646,8 @@ export const api = {
   claude: () => json<ClaudeCon>('/api/modello/claude'),
 
   chatgpt: (signal?: AbortSignal) => json<ChatGPT>('/api/modello/chatgpt', { signal }),
+  /** F8 · l'AI inclusa con Myynd: una chiamata vera al ponte, e la dose di oggi. */
+  incluso: (signal?: AbortSignal) => json<Incluso>('/api/incluso', { signal }),
   accediChatGPT: (signal?: AbortSignal) => json<{ authUrl: string; loginId: string }>('/api/modello/chatgpt/login', { method: 'POST', signal }),
   statoAccessoChatGPT: (id: string, signal?: AbortSignal) => json<AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}`, { signal }),
   annullaAccessoChatGPT: (id: string) => json<{ ok: true } & AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
@@ -1682,7 +1687,7 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ attivo }) }),
 
   /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile collegato. */
-  scegliMotore: async (motore: 'claude' | 'compatibile' | 'chatgpt' | 'openai') => {
+  scegliMotore: async (motore: 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso') => {
     if (motore === 'chatgpt') {
       await json<{ ok: true } & ChatGPT>('/api/modello/chatgpt', { method: 'POST', body: JSON.stringify({ attivo: true }) })
       return { ok: true as const, motore }

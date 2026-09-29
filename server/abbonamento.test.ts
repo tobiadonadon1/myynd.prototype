@@ -96,8 +96,10 @@ test('scelto l’abbonamento, ci passa tutto il lavoro e non solo quello grosso'
   // la seconda condizione — `!fornitore()` — è arrivata con il fornitore
   // compatibile con OpenAI: se è lui il motore scelto, l'abbonamento non
   // c'entra, perché è un modo di pagare Claude di meno e non un motore in più
-  assert.match(m, /if \(!chatgpt\.scelto\(\) && abbonamento\.disponibile\(\) && !fornitore\(\)\) \{/,
+  // F8 · la catena sta in `soloAbbonamento()`, la stessa che guarda `svolgi`; l'AI inclusa scelta la ferma
+  assert.match(m, /if \(soloAbbonamento\(\)\) \{/,
     'la catena è cambiata: rileggere perché prima di riscriverla')
+  assert.match(m, /return !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\) && fornitore\(\) === null && !inclusoInUso\(\)/)
   // sull'`if`, non su tutto il file: il commento qui sopra la vecchia regola la
   // cita apposta, e una prova che legge i commenti non prova niente
   assert.ok(!/if \([^\n]*p\.frontiera \|\| !conLaChiave\(\)/.test(m),
@@ -120,22 +122,18 @@ test('con quale dei due si paga Claude lo dice `claudeCon`, e il vecchio interru
     'una configurazione vecchia non si legge più: chi aggiorna si ritrova l’abbonamento spento')
 })
 
-test('le bozze passano dall’abbonamento quando è quello scelto', () => {
+test('le bozze passano dall’abbonamento quando è quello scelto, con il giro intero degli attrezzi (F8)', () => {
   // finché non lo facevano, «lavora con l'abbonamento» non valeva per la cosa
-  // che l'app fa di più — e nessuna schermata lo diceva
+  // che l'app fa di più — e nessuna schermata lo diceva. Dal 28 settembre 2026
+  // non è più una passata sola: `svolgi` chiede il motore del lavoro, che
+  // sull'account è `abbonamento.motore()`, e fa lo stesso giro della chiave
   const c = readFileSync(join(QUI, 'claude.ts'), 'utf8')
-  // la regola sta in `modello.ts` dal 22 settembre 2026: la guardano insieme
-  // `svolgi` e la rotta che affida, così non possono più dire cose diverse
-  assert.match(c, /const soloAbbonamento = conLAccountClaude\(\)/,
+  assert.match(c, /let m = motoreDelLavoro\(\)/,
     'le bozze non guardano più l’abbonamento: tornano tutte sulla chiave')
+  assert.doesNotMatch(c, /Questo è tutto il materiale che avrai/, 'è tornata la passata sola senza attrezzi')
   const m = readFileSync(join(QUI, 'modello.ts'), 'utf8')
   assert.match(m, /export function soloAbbonamento\(\): boolean \{\s*return !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\)/)
-  // senza attrezzi non ha senso mandargli le loro istruzioni: gli si dice che
-  // quello che ha davanti è tutto quello che avrà
-  assert.match(c, /Questo è tutto il materiale che avrai/,
-    'gli si chiede una bozza con gli attrezzi che non ha: cercherà, non troverà, e lo dirà come un guasto')
-  // e la regola della domanda sola (P3) vale anche su questa strada
-  assert.match(c, /fai una domanda sola\. Per tutto il resto scegli/)
+  assert.match(m, /export function motoreDelLavoro\(\): Motore \| null \{\s*if \(!soloAbbonamento\(\)\) return motore\(\)/)
 })
 
 test('anche la chat passa dall’abbonamento, non solo il resto', () => {

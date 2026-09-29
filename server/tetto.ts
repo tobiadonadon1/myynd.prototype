@@ -22,7 +22,31 @@ function inizioDiOggi(): string {
 /** Il tetto giornaliero in token (entrata + uscita, la cache non conta). Zero = nessuno. */
 export function tetto(): number {
   const t = Number(leggi().tetto ?? 0)
-  return Number.isFinite(t) && t > 0 ? Math.floor(t) : 0
+  const suo = Number.isFinite(t) && t > 0 ? Math.floor(t) : 0
+  // F8 · con l'AI inclusa vale il più basso fra il suo e quello del piano: il suo si abbassa, quello del piano non si alza
+  const piano = tettoDelPiano()
+  return piano ? (suo ? Math.min(suo, piano) : piano) : suo
+}
+
+/*
+ * F8 · la dose di ogni giorno dell'AI inclusa, in token.
+ *
+ * Prudente di serie: duecentomila token al giorno sono una giornata di lavoro
+ * vero e non una bolletta. La cifra del piano la mette chi ospita o chi
+ * impacchetta (`MYYND_INCLUSO_TETTO`), mai la persona dalle preferenze. Sul suo
+ * computer questo conto sta nel suo database, quindi è una cortesia e non un
+ * limite: il limite vero lo tiene il ponte (`incluso.ts`), sul registro del
+ * server. La spesa della notte è il budget di F9, non un secondo budget.
+ */
+export const TETTO_DEL_PIANO = 200_000
+export function tettoDelPiano(c = leggi()): number {
+  if (c.motore !== 'incluso') return 0
+  return tettoDelPianoSulServer()
+}
+/** La dose del piano, a prescindere da chi è scelto: la usa il ponte, sul server. */
+export function tettoDelPianoSulServer(): number {
+  const n = Number((process.env.MYYND_INCLUSO_TETTO ?? '').trim())
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : TETTO_DEL_PIANO
 }
 
 /** Quanto si è speso oggi, e se il tetto è stato raggiunto. */
@@ -34,6 +58,8 @@ export function usoDiOggi(): store.Totale & { tetto: number; raggiunto: boolean 
 }
 
 export const TETTO_RAGGIUNTO = 'Hai raggiunto il tetto di token di oggi. Si riparte domani, o lo alzi nelle preferenze.'
+/** F8 · la dose dell'AI inclusa: non si alza dalle preferenze, e lo si dice. */
+export const INCLUSO_FINITO = 'Hai finito l’AI inclusa di oggi. Si riparte domani.'
 
 /** Gli errori del tetto: chi li prende deve sapere che non sono un guasto della strada. */
 const DEL_TETTO = new WeakSet<Error>()
@@ -46,10 +72,21 @@ const DEL_TETTO = new WeakSet<Error>()
 export function controllaIlTetto(): void {
   provaChiusa.controllaBudget()
   controllaLaNotte()
-  if (!usoDiOggi().raggiunto) return
-  const e = new Error(TETTO_RAGGIUNTO)
+  const u = usoDiOggi()
+  if (!u.raggiunto) return
+  // il tetto che si è toccato è quello del piano, non il suo: dirgli di alzarlo sarebbe falso
+  const piano = tettoDelPiano()
+  throw erroreDelTetto(piano && u.tetto === piano ? INCLUSO_FINITO : TETTO_RAGGIUNTO)
+}
+
+/**
+ * Un errore che chi lo prende deve leggere come il tetto, non come la strada
+ * rotta (F8: anche il 429 `budget_exhausted` del ponte dell'AI inclusa).
+ */
+export function erroreDelTetto(messaggio: string): Error {
+  const e = new Error(messaggio)
   DEL_TETTO.add(e)
-  throw e
+  return e
 }
 
 export const BUDGET_NOTTE = 'Ha finito il budget di stanotte. La carta torna in coda per la notte dopo.'

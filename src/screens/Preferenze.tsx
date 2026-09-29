@@ -15,7 +15,7 @@
 //     sotto node; `v.apri('pref', sezione, scheda)` porta su una scheda.
 
 import { useEffect, useMemo, useState } from 'react'
-import { api, memoriaP5, sessione, type ChatGPT, type ClaudeCon, type StatoTurno } from '../api'
+import { api, memoriaP5, sessione, type ChatGPT, type ClaudeCon, type Incluso, type StatoTurno } from '../api'
 import { rilettura, suCollegamento } from '../collegamenti'
 import { frasi, t } from '../lingua'
 import { daTastiera } from '../ui'
@@ -385,9 +385,11 @@ function chiEComeSiChiama(f: NonNullable<Vals['compatibile']>): string {
  * Qui si sceglie solo chi lavora; collegare apre la sua scheda delle Fonti.
  */
 function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
-  type Via = 'claude' | 'openai' | 'compatibile'
+  type Via = 'claude' | 'openai' | 'compatibile' | 'incluso'
   const [s, setS] = useState<ClaudeCon | null>(null)
   const [chatgpt, setChatgpt] = useState<ChatGPT | null>(null)
+  // F8 · l'AI inclusa: lo stato viene da una chiamata vera al ponte, mai da una supposizione
+  const [incluso, setIncluso] = useState<Incluso | null>(null)
   const [occupato, setOccupato] = useState(false)
   // una lettura alla volta, e di nuovo quando cambia un collegamento qualunque
   const guarda = useMemo(() => { const r = rilettura(() => api.claude(), setS); return () => { r().catch(() => setS(null)) } }, [])
@@ -398,8 +400,10 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
     const controller = new AbortController()
     api.chatgpt(controller.signal).then(r => { if (!controller.signal.aborted) setChatgpt(r) })
       .catch(() => { if (!controller.signal.aborted) setChatgpt(null) })
+    api.incluso(controller.signal).then(r => { if (!controller.signal.aborted) setIncluso(r) })
+      .catch(() => { if (!controller.signal.aborted) setIncluso(null) })
     return () => controller.abort()
-  }, [giroCollegamento])
+  }, [giroCollegamento, v.motore])
 
   const f = v.compatibile
   const o = v.openai
@@ -421,7 +425,9 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   /** Sopra i dieci secondi non è un dettaglio: è la chat che sembra rotta. */
   const LENTO = 10_000
 
-  const attuale: Via = v.motore === 'chatgpt' || v.motore === 'openai' ? 'openai' : v.motore === 'compatibile' ? 'compatibile' : 'claude'
+  const attuale: Via = v.motore === 'chatgpt' || v.motore === 'openai' ? 'openai' : v.motore === 'compatibile' ? 'compatibile' : v.motore === 'incluso' ? 'incluso' : 'claude'
+  /** «41k»: la dose dell'AI inclusa si legge a migliaia. */
+  const migliaia = (n = 0) => n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
   const claudeCollegato = v.claudeCollegato
   const accountChatGPT = !!chatgpt?.entrato
   const openaiCollegato = accountChatGPT || !!o?.collegato
@@ -429,6 +435,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
 
   /** Da quale strada passa, detto in una riga. Vuoto = niente da dire. */
   const dettaglio = (via: Via): string | undefined => {
+    if (via === 'incluso') return incluso?.stato === 'pronto' ? frasi.inclusoOggi(migliaia(incluso.usati), migliaia(incluso.tetto)) : undefined
     if (via === 'claude') {
       if (!claudeCollegato) return undefined
       return v.claudeVia === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API')
@@ -452,6 +459,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
 
   /** Cosa manca a questa strada per poter lavorare adesso. Vuoto = niente. */
   const manca = (via: Via): string => {
+    if (via === 'incluso') return incluso?.stato === 'finito' ? t('La dose di oggi è finita.') : ''
     if (via === 'claude') return claudeCollegato ? '' : t('Non ancora collegato.')
     if (via === 'openai') return openaiCollegato || !chatgpt ? '' : t('Non ancora collegato.')
     return f ? '' : t('Non ancora collegato.')
@@ -468,6 +476,14 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
       }
       return
     }
+    // l'AI inclusa si sceglie solo quando il ponte ha risposto: non c'è niente da collegare
+    if (via === 'incluso') {
+      if (!incluso || incluso.stato === 'assente') return
+      setOccupato(true)
+      try { await v.scegliMotore('incluso') } catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare motore.')) }
+      finally { setOccupato(false); v.ricaricaStato() }
+      return
+    }
     // non collegata: si apre la scheda, e collegarla la sceglie
     if (via === 'compatibile') { void v.scegliMotore('compatibile'); return }
     if (via === 'claude' && !claudeCollegato) { v.apriConnessioni('claude'); return }
@@ -481,10 +497,12 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
     finally { setOccupato(false); guarda(); v.ricaricaStato() }
   }
 
-  const vie: { id: Via; titolo: string; collegato: boolean; apri: () => void }[] = [
+  const vie: { id: Via; titolo: string; collegato: boolean; apri?: () => void }[] = [
     { id: 'claude', titolo: 'Anthropic', collegato: claudeCollegato, apri: () => v.apriConnessioni('claude') },
     { id: 'openai', titolo: 'OpenAI', collegato: openaiCollegato, apri: () => v.apriConnessioni('openai') },
-    { id: 'compatibile', titolo: t('Un modello sul tuo computer, o un altro fornitore'), collegato: !!f, apri: () => v.apriConnessioni('compatibile') }
+    { id: 'compatibile', titolo: t('Un modello sul tuo computer, o un altro fornitore'), collegato: !!f, apri: () => v.apriConnessioni('compatibile') },
+    // F8 · niente da collegare né da gestire: c'è, o non c'è ancora
+    { id: 'incluso', titolo: t('Incluso con Myynd'), collegato: incluso?.stato === 'pronto' || incluso?.stato === 'finito' }
   ]
 
   return (
@@ -495,6 +513,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
           const guaio = manca(x.id)
           const riga = dettaglio(x.id)
           const spento = x.id === 'openai' && scelto && v.motore === 'chatgpt' && chatgpt && !chatgpt.acceso
+          const nonAncora = x.id === 'incluso' && (!incluso || incluso.stato === 'assente')
           return (
             // dentro c'è il bottone «Gestisci»: la riga tiene il ruolo, non il tag
             <div key={x.id} className="prefs-via" role="radio" aria-checked={scelto} tabIndex={0}
@@ -503,10 +522,10 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="prefs-via-cima">
                   <span>{x.titolo}</span>
-                  <span className={`prefs-status ${guaio || spento ? 'needs-attention' : 'ready'}`}>
-                    {spento ? t('Disattivato in Myynd') : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
+                  <span className={`prefs-status ${guaio || spento || nonAncora ? 'needs-attention' : 'ready'}`}>
+                    {spento ? t('Disattivato in Myynd') : nonAncora ? t('Non ancora disponibile') : x.id === 'incluso' && guaio ? (scelto ? t('In uso') : t('Pronto')) : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
                   </span>
-                  <Bottone piccolo onClick={e => { e.stopPropagation(); x.apri() }}>{x.collegato ? t('Gestisci') : t('Collega')}</Bottone>
+                  {x.apri && <Bottone piccolo onClick={e => { e.stopPropagation(); x.apri?.() }}>{x.collegato ? t('Gestisci') : t('Collega')}</Bottone>}
                 </div>
                 {(riga || guaio) && <div className={`f-stato${guaio ? ' rame' : ''}`} style={{ marginTop: 5 }}>{riga ?? guaio}</div>}
                 {scelto && x.id === 'claude' && s?.con === 'abbonamento' && s.abbonamento.inRiposo && (
@@ -518,7 +537,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                 {scelto && x.id === 'compatibile' && velocita?.ok && velocita.ms > LENTO && (
                   <div className="f-stato rame" style={{ marginTop: 5 }}>{t('Questo modello è lento sul tuo computer: prova uno più piccolo.')}</div>
                 )}
-                {scelto && x.id !== 'claude' && (
+                {scelto && x.id !== 'claude' && x.id !== 'incluso' && (
                   <div className="f-stato rame" style={{ marginTop: 5 }}>{t('Messo a punto su Claude: con un altro modello rileggi le bozze e le fonti citate.')}</div>
                 )}
               </div>
@@ -678,7 +697,7 @@ export function Preferenze({ v }: { v: Vals }) {
       {sezione === 'intelligenza' && (
         <div className="f-griglia">
           <Motore v={v} avvisa={v.mostraToast} />
-          {v.motore === 'claude' && <Modelli v={v} />}
+          {(v.motore === 'claude' || v.motore === 'incluso') && <Modelli v={v} />}
           {(v.motore === 'openai' || v.motore === 'chatgpt') && <ModelliOpenAI v={v} />}
           <Uso />
         </div>

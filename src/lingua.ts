@@ -3477,6 +3477,16 @@ const EN: Record<string, string> = {
   'Sono passati più di sette giorni: questo lavoro non si disfa più da qui.': 'More than seven days have passed: this work can’t be undone from here anymore.',
   'Quanto può spendere in una notte?': 'How much can it spend in a night?',
   // — F9: fine —
+
+  // — F8: inizio —
+  'Incluso con Myynd': 'Included with Myynd',
+  'Non ancora disponibile': 'Not available yet',
+  'La dose di oggi è finita.': 'Today’s allowance is used up.',
+  'Hai finito l’AI inclusa di oggi. Si riparte domani.': 'You’ve used today’s included AI. It starts again tomorrow.',
+  'L’AI inclusa con Myynd non è ancora disponibile.': 'The AI included with Myynd isn’t available yet.',
+  'Claude Code non riceve immagini da Myynd.': 'Claude Code doesn’t receive images from Myynd.',
+  'Claude Code non è pronto su questo computer.': 'Claude Code isn’t ready on this computer.',
+  // — F8: fine —
 }
 
 
@@ -4216,6 +4226,11 @@ export const frasi = {
     ? `${n} ${n === 1 ? 'waits' : 'wait'} for tonight’s budget`
     : `${n} ${n === 1 ? 'aspetta' : 'aspettano'} il budget di stanotte`,
   /** Nella riga della notte: un tratto in cui il Mac dormiva, con delle carte in coda. */
-  macAddormentato: (da: string, a: string) => corrente === 'en' ? `Mac asleep ${da} to ${a}` : `Mac addormentato dalle ${da} alle ${a}`
+  macAddormentato: (da: string, a: string) => corrente === 'en' ? `Mac asleep ${da} to ${a}` : `Mac addormentato dalle ${da} alle ${a}`,
   // — F9: fine —
+
+  // — F8: inizio —
+  /** La dose dell'AI inclusa, nella riga del motore: «41k of 200k today». */
+  inclusoOggi: (usati: string, tetto: string) => corrente === 'en' ? `${usati} of ${tetto} today` : `${usati} di ${tetto} oggi`
+  // — F8: fine —
 }

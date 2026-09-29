@@ -31,6 +31,10 @@
 // /api/tags risponde 404 apposta: Myynd bussa lì per capire se è Ollama, e
 // questo non deve sembrarlo.
 //
+// F8 · una regola con `"stato": 429` risponde con quello stato e `json` come
+// corpo (il ponte dell'AI inclusa a dose finita); `incluso` nel copione è la
+// risposta di GET /api/incluso/stato.
+//
 // P10 · parla anche come Anthropic: POST /v1/messages, intero o in streaming
 // (message_start, content_block_start, un text_delta per parola,
 // content_block_stop, message_delta, message_stop). Ci si arriva con
@@ -139,7 +143,8 @@ function scegli(corpo) {
       return { regola: i, testo: '', chiama: String(r.chiama), attesa: Number(r.attesa || 0), system, utente: dove.utente }
     }
     const testo = r.json !== undefined ? JSON.stringify(r.json) : String(r.testo ?? '')
-    return { regola: i, testo, attesa: Number(r.attesa || 0), system, utente: dove.utente }
+    // F8 · `stato`: un rifiuto del fornitore (un 429 del ponte dell'AI inclusa), con `json` come corpo
+    return { regola: i, testo, attesa: Number(r.attesa || 0), system, utente: dove.utente, ...(r.stato ? { stato: Number(r.stato) } : {}) }
   }
   const schema = corpo.response_format?.json_schema?.schema
   const testo = vuoleJSON
@@ -207,6 +212,13 @@ const server = createServer(async (req, res) => {
     return res.end(JSON.stringify({ richieste, trattenute: inAttesa.length }))
   }
   if (req.method === 'POST' && /\/v1\/messages$/.test(percorso)) return anthropic(req, res)
+  // F8 · la salute del ponte dell'AI inclusa: `incluso` nel copione ({ stato?, usati, tetto }); senza, 503 come un ponte spento
+  if (req.method === 'GET' && percorso === '/api/incluso/stato') {
+    const i = copione().incluso
+    const stato = i ? Number(i.stato || 200) : 503
+    res.writeHead(stato, { 'content-type': 'application/json' })
+    return res.end(JSON.stringify(stato === 200 ? { usati: i.usati ?? 0, tetto: i.tetto ?? 200000 } : { type: 'error', error: { type: stato === 429 ? 'budget_exhausted' : 'not_configured' } }))
+  }
   if (req.method === 'GET' && percorso.startsWith('/statici/')) return statico(req, res)
   if (req.method === 'GET' && /\/models$/.test(percorso)) {
     res.writeHead(200, { 'content-type': 'application/json' })
@@ -287,6 +299,10 @@ async function anthropic(req, res) {
   })
   await aspettaIlFermo()
   if (s.attesa > 0) await new Promise(r => setTimeout(r, s.attesa))
+  if (s.stato) {
+    res.writeHead(s.stato, { 'content-type': 'application/json' })
+    return res.end(s.testo)
+  }
   const id = 'msg_finto' + Date.now().toString(36)
   const blocco = s.chiama
     ? { type: 'tool_use', id: 'toolu_' + Date.now().toString(36), name: s.chiama, input: {} }
