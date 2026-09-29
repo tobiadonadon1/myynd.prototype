@@ -452,7 +452,11 @@ export function veglia(adesso = new Date()): Veglia {
     const imp = impostazioni(cfg.leggi(), adesso)
     const lavora = compiti.turnoAlLavoro(chi.adesso())
     if (!imp.acceso || imp.fermo) return { sveglio: false, inAttesa: false, lavora, fermo: !!imp.fermo }
-    const inCoda = store.elencoCompiti().some(regole.inCoda)
+    // le carte che partirebbero stanotte, non tutte quelle in coda: una carta del 20
+    // ottobre non tiene sveglio il Mac ogni notte fino al 20 ottobre
+    const prossimaNotte = regole.prossimaNotte(adesso, imp.notte)
+    const stanotte = regole.inNotte(adesso, imp.notte) ? adesso : (prossimaNotte ?? adesso)
+    const inCoda = pronte(stanotte).length > 0
     const conBudget = !budgetNotte.stato(adesso).finito
     const inAttesa = inCoda && conBudget && !imp.pausaFino
     const prossima = regole.prossimaNotte(adesso, imp.notte)

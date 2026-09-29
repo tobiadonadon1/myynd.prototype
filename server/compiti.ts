@@ -47,7 +47,7 @@ import * as regoleTono from './regole-tono.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi, type Stesa } from './stesura.ts'
 import { conCompito, fuoriDalCompito } from './etichetta-uso.ts'
-import { delBudget } from './tetto.ts'
+import { BUDGET_NOTTE, delBudget } from './tetto.ts'
 import * as budgetNotte from './budget-notte.ts'
 import * as regoleTurno from './turno-regole.ts'
 import * as cestino from './cestino.ts'
@@ -443,6 +443,17 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
   /** Il budget di tempo della carta è finito (F1): il lavoro si ferma, e non è un guaio passeggero. */
   let scaduto = false
   let scadenza: ReturnType<typeof setTimeout> | undefined
+  /*
+   * F9 · il budget della notte guardato anche fra un passo e l'altro. Il conto
+   * si rifà prima di ogni chiamata al modello (`tetto.controllaIlTetto`), ma
+   * Claude Code lavora in un processo solo che può durare mezz'ora senza
+   * chiedere niente a nessuno: qui, ogni quindici secondi, se la notte ha
+   * sforato la carta si interrompe, e il `catch` la rimette in coda.
+   */
+  const vegliaBudget = turno
+    ? setInterval(() => { try { if (budgetNotte.sforato()) interruzioni.get(chiave(id))?.abort() } catch { /* il conto riprova fra poco */ } }, 15_000)
+    : null
+  vegliaBudget?.unref()
   // una riga riaffidata non si porta dietro la prova di ieri
   store.scriviProvaCompito(id, null)
   store.segnaNelDiario(id, { tipo: 'preso', dettaglio: c.modo })
@@ -567,6 +578,14 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
       collegata: g => g === 'posta' ? ferri.postaCollegata() : g === 'file' ? !!cfg.leggi().desktop?.cartelle?.length : false
     })
     if (!stesa) return
+    /*
+     * F9 · una risposta sola può passare il budget di colpo: il conto ferma le
+     * chiamate dopo (la rilettura, la classifica), ma quelle si arrendono in
+     * silenzio e la carta arrivava in fondo, consegnata oltre il tetto e senza
+     * rilettura. Qui, prima di consegnare, la notte sforata vince: la carta
+     * torna in coda come per il budget finito a metà.
+     */
+    if (turno && budgetNotte.sforato()) throw new Error(BUDGET_NOTTE)
     clearTimeout(scadenza)
     await dopoLaStesura(c, stesa, progetto, { nota, voce: v, fermato: () => richiamati.has(chiave(id)) })
   } catch (e) {
@@ -618,10 +637,17 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     annuncia({ fase: 'guaio', id, guaio })
   } finally {
     clearTimeout(scadenza)
-    // F9 · fermata a metà: quello che una mano ha scritto dopo il bottone si butta anche lui
+    if (vegliaBudget) clearInterval(vegliaBudget)
+    // F9 · fermata a metà: quello che una mano ha scritto dopo il bottone si butta anche lui,
+    // ma solo se la carta è davvero tornata in coda: finita un attimo prima del bottone, il suo file resta
     const k = chiave(id)
-    if (fermati.has(k)) buttaIFileDelGiro(id, alLavoro.get(k)?.dal ?? new Date(iniziato).toISOString())
+    if (fermati.has(k) && tornataInCoda(id)) buttaIFileDelGiro(id, alLavoro.get(k)?.dal ?? new Date(iniziato).toISOString())
   }
+}
+
+/** La carta è tornata in coda (aperta o di nuovo affidata), non consegnata né chiusa. */
+function tornataInCoda(id: string): boolean {
+  try { const s = store.compito(id)?.stato; return s === 'aperto' || s === 'delegato' } catch { return false }
 }
 
 /**
@@ -651,7 +677,8 @@ export function rimettiInCoda(id: string, perche: 'stop' | 'budget', dal: string
     if (!c) return false
     const t = c.turno ? { ...c.turno, tentativi: Math.max(0, (c.turno.tentativi ?? 1) - 1) } : null
     const rimessa = store.rimettiCompitoInCoda(id, t)
-    if (dal) buttaIFileDelGiro(id, dal)
+    // una carta che ha finito un attimo prima del bottone non torna in coda, e il suo lavoro consegnato resta
+    if (dal && rimessa) buttaIFileDelGiro(id, dal)
     if (rimessa) store.segnaNelDiario(id, { tipo: 'fermato', dettaglio: perche })
     annuncia({ fase: 'richiamato', id })
     annunciaCambio()

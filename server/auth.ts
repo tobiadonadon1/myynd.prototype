@@ -15,6 +15,7 @@ import { timingSafeEqual } from 'node:crypto'
 import * as conti from './conti.ts'
 import * as chi from './chi.ts'
 import * as gettoni from './gettoni.ts'
+import * as davanti from './davanti.ts'
 import * as gettoniEmail from './gettoniEmail.ts'
 import * as postaUscita from './postaUscita.ts'
 import { REGISTRAZIONE, INVITO, DOMINI_AMMESSI, type Registrazione } from './ospitato.ts'
@@ -443,6 +444,7 @@ export async function guardia(req: Request, res: Response, next: NextFunction): 
   // aspetta una promessa, e se si rompe la passa al gestore degli errori
   const utente = await conti.utenteDelToken(portato)
   if (!utente) { res.status(401).json({ errore: 'Sessione scaduta.', serve: 'accesso' }); return }
+  davanti.segna(utente)
   chi.dentro(utente, next)
 }
 

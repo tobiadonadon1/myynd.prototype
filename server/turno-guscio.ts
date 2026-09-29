@@ -22,6 +22,7 @@ import * as conti from './conti.ts'
 import * as store from './store.ts'
 import * as osservatore from './osservatore.ts'
 import * as turno from './turno.ts'
+import * as davanti from './davanti.ts'
 
 type Filo = {
   on(evento: 'message', f: (m: { data?: unknown }) => void): unknown
@@ -38,6 +39,20 @@ const filoDiProcesso = () => (process as unknown as { parentPort?: Filo }).paren
 export function contiDelMac(): string[] {
   const p = osservatore.proprietario()
   return p ? [p] : conti.tutti()
+}
+
+/**
+ * Il turno da fermare dalla barra dei menu: quello di chi ha l'osservatore, o
+ * di chi ha usato la finestra per ultimo. Solo se non si sa (l'app appena
+ * partita, nessuno ancora davanti, più conti) si fermano tutti: fermare resta
+ * una sicurezza, ma non si ferma la notte di un altro quando si sa chi c'è.
+ */
+export function contiDaFermare(): string[] {
+  const p = osservatore.proprietario()
+  if (p) return [p]
+  const d = davanti.chi()
+  if (d && conti.conto(d)) return [d]
+  return conti.tutti()
 }
 
 /** Il turno, visto dal guscio: quello di tutti i conti del Mac messo insieme. */
@@ -67,7 +82,7 @@ export function avvia(filo: Filo | null = filoDiProcesso()): boolean {
   filo.on('message', m => {
     const d = m?.data as { tipo?: unknown; azione?: unknown } | undefined
     if (d?.tipo !== 'turno' || d.azione !== 'ferma') return
-    for (const u of contiDelMac()) {
+    for (const u of contiDaFermare()) {
       try { chi.dentro(u, () => turno.ferma()) } catch (e) { console.warn('myynd · il turno non si è fermato:', e instanceof Error ? e.message : e) }
     }
     manda(filo)

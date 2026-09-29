@@ -16,6 +16,7 @@ import type { Compito, StatoTurno } from '../api'
 import { frasi, t } from '../lingua'
 import type { Lista } from '../oggi/useCompiti'
 import { carteDiStanotte, consegnata } from '../oggi/bacheca'
+import { puoDisfare } from '../oggi/Dettaglio'
 import './stanotte.css'
 
 /**
@@ -84,6 +85,12 @@ function Riga({ c, l, apri, aspetta = false }: { c: Compito; l: Lista; apri: (c:
         {!aspetta && cosa.tipo === 'file' && cosa.nome && <span className="stanotte-cosa">{cosa.nome}</span>}
         {!aspetta && cosa.tipo === 'casella' && <span className="stanotte-cosa">{t('Bozza nella tua casella')}</span>}
       </div>
+      {/* F9 · una carta chiusa si disfa per sette giorni, anche da qui */}
+      {chiusa && puoDisfare(c) && (
+        <span className="stanotte-gesti">
+          <button type="button" onClick={() => void l.disfa(c.id)}>{t('Disfa')}</button>
+        </span>
+      )}
       {!chiusa && (c.stato === 'pronto' || c.stato === 'chiede') && (
         <span className="stanotte-gesti">
           <button type="button" className="pieno" onClick={() => apri(c)}>{aspetta ? t('Rispondi') : t('Apri')}</button>

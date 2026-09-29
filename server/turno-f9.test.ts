@@ -226,3 +226,61 @@ test('la veglia: il Mac resta sveglio da un’ora prima della notte, con carte i
   turno.imposta({ acceso: true })
   assert.equal(turno.impostazioni().fermo, null, 'riacceso è anche ripreso')
 })
+
+test('finita un attimo prima del bottone: la carta resta consegnata, e il suo file resta dove l’ha messo', () => {
+  const id = carta('Draft the board summary')
+  const percorso = join(SCRIVANIA, `Delivered ${id}.md`)
+  writeFileSync(percorso, 'finished work')
+  const dal = new Date(Date.now() - 60_000).toISOString()
+  store.segnaNelDiario(id, { tipo: 'file', dettaglio: percorso })
+  store.affidaCompito(id, 'tutto')
+  store.risultatoCompito(id, 'Done: saved.', [], 'pronto')
+  assert.equal(compiti.rimettiInCoda(id, 'stop', dal), false, 'una carta consegnata non torna in coda')
+  assert.equal(store.compito(id)?.stato, 'pronto')
+  assert.equal(existsSync(percorso), true, 'il file consegnato è finito nel Cestino')
+})
+
+test('la veglia guarda le carte che partirebbero stanotte: una carta di fra tre settimane non tiene sveglio il Mac', () => {
+  turno.perProva({ motore: () => true, assente: () => false, contratto: async () => null, occupato: () => true })
+  const id = carta('Prepare the October board pack')
+  store.cambiaCompito(id, { giorno: '2026-10-20', quando: 'settimana' })
+  const c = store.compito(id)!
+  store.mettiCompitoInCoda(id, 'tutto', { ...c.turno!, quando: 'notte' })
+  const v = turno.veglia(alle(21, 15))
+  assert.deepEqual([v.sveglio, v.inAttesa], [false, false], `la carta del 20 ottobre tiene sveglio il Mac: ${JSON.stringify(store.compito(id)?.turno)}`)
+})
+
+test('il budget sforato mentre un lavoro lungo non chiede niente al modello (Claude Code): la carta si ferma lo stesso', { timeout: 40_000 }, async () => {
+  turno.imposta({ budget: 1 })
+  const lavoro = lavoroCheAspetta()
+  const id = carta('Refactor the importer')
+  assert.equal(await turno.giro(), id)
+  assert.ok(await aspetta(() => lavoro.chiamate() === 1))
+  // la spesa arriva da fuori (il processo di Claude Code che riporta il suo costo), senza un'altra chiamata al modello
+  spesa(id, new Date(), 1_400_000)
+  assert.ok(await aspetta(() => store.compito(id)?.stato === 'aperto' && !compiti.occupatoPer(''), 25_000), `non si è fermata: ${store.compito(id)?.stato}`)
+  const c = store.compito(id)!
+  assert.equal(c.guaio, null)
+  assert.ok(c.diario?.some(v => v.tipo === 'fermato' && v.dettaglio === 'budget'))
+  assert.equal(existsSync(join(SCRIVANIA, `Half ${id}.md`)), false, 'il file a metà è rimasto sulla Scrivania')
+})
+
+test('una risposta sola che passa il budget: la carta non si consegna oltre il tetto, torna in coda', async () => {
+  turno.imposta({ budget: 1 })
+  compiti.perProva({
+    svolgi: async () => {
+      // una risposta enorme: la spesa passa il tetto in una chiamata, e nessuno lancia
+      store.segnaUso({ lavoro: 'bozza', motore: 'claude-sonnet-5', entrata: 0, cache: 0, uscita: 0, costo: 1_800_000 })
+      return { testo: 'Done: the note is below.\n\nA short note with the three points, ready to read on its own.', fonti: [] }
+    },
+    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], prossimoPasso: async () => null,
+    giudica: async () => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
+  })
+  const id = carta('Write the long market overview')
+  assert.equal(await turno.giro(), id)
+  assert.ok(await aspetta(() => !compiti.occupatoPer('') && store.compito(id)?.stato !== 'delegato'))
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'aperto', `consegnata oltre il tetto: ${c.stato}`)
+  assert.equal(c.guaio, null)
+  assert.ok(c.diario?.some(v => v.tipo === 'fermato' && v.dettaglio === 'budget'))
+})
