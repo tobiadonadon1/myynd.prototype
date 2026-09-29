@@ -201,3 +201,28 @@ test('la salute del ponte: «pronto» solo dopo un 200, «finito» a dose usata,
 })
 
 before(() => { cfg.scrivi({ lingua: 'en' }) })
+
+test('il ponte: un modello fuori lista diventa uno permesso, e le richieste in volo si contano prima di finire', async () => {
+  let lascia: () => void = () => {}
+  const ferma = new Promise<void>(r => { lascia = r })
+  const chiesti: string[] = []
+  const rete = (async (_u: string | URL | Request, init?: RequestInit) => {
+    chiesti.push(String((JSON.parse(String(init?.body)) as { model: string }).model))
+    await ferma
+    return new Response(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 10, output_tokens: 10 } }), { headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  // tetto 1000: una richiesta prenota quello che manda più fino a 4096 d'uscita
+  const { app } = ponteFinto({ chiave: 'sk-ant-aziendale', usati: 0, rete })
+  const { s, url } = await accendi(app)
+  try {
+    const grande = JSON.stringify({ model: 'claude-opus-5', max_tokens: 990, messages: [{ role: 'user', content: 'hi' }] })
+    const prima = manda(url, 'sessione-buona', grande)
+    // la prima è ancora in volo: la seconda, insieme, non ci sta più
+    await new Promise(r => setTimeout(r, 50))
+    const seconda = await manda(url, 'sessione-buona', grande)
+    assert.equal(seconda.status, 429, 'due richieste insieme hanno letto la stessa dose')
+    lascia()
+    assert.equal((await prima).status, 200)
+    assert.deepEqual(chiesti, ['claude-sonnet-5'], 'il modello più caro è passato')
+  } finally { s.close() }
+})

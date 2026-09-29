@@ -29,6 +29,37 @@ export const MOTORE_INCLUSO = 'Myynd included'
 /** Il tetto di una sola risposta: il ponte non inoltra richieste da un milione di token. */
 const USCITA_MAX = 32_000
 
+/**
+ * I modelli che il ponte inoltra, e basta. La dose di oggi si conta in token,
+ * e un token del modello più caro costa cinque volte uno di quello medio: senza
+ * una lista, chiunque con una sessione poteva chiedere il più caro e spendere
+ * con la stessa dose cinque volte i soldi. Un modello fuori lista diventa
+ * l'ultimo della lista (il più capace fra quelli permessi), non un errore: l'app
+ * chiede per livelli, e il lavoro non deve cadere per un nome.
+ */
+export function modelliPermessi(): string[] {
+  const d = (process.env.MYYND_INCLUSO_MODELLI ?? '').split(',').map(x => x.trim()).filter(x => /^claude-/.test(x))
+  return d.length ? d : ['claude-haiku-4-5', 'claude-sonnet-5']
+}
+
+/**
+ * I token già promessi alle richieste in volo, per persona. Il conto vero si
+ * scrive a risposta finita: senza questa riserva, dieci richieste insieme
+ * leggevano tutte la stessa dose e passavano tutte (la revisione ne ha fatte
+ * passare due da 90 su un tetto di 100). Una Map per persona, sul server: non
+ * dipende dalla richiesta, dipende da chi.
+ */
+const riservati = new Map<string, number>()
+/** Quello che una richiesta manda, a occhio: quattro caratteri per token. */
+const entrataDi = (corpo: Record<string, unknown>) => Math.ceil(JSON.stringify(corpo).length / 4)
+/**
+ * Quanto promettere a una richiesta in volo: quello che manda, più una
+ * risposta media (non la più lunga possibile: prenotare 32k per ogni chiamata
+ * negherebbe l'ultima ora della giornata a chi ha ancora dose).
+ */
+const USCITA_PRENOTATA = 4_096
+const stimaDi = (corpo: Record<string, unknown>) => entrataDi(corpo) + Math.min(n(corpo.max_tokens), USCITA_PRENOTATA)
+
 export type FerriPonte = {
   /** La chiave del conto aziendale, solo sul server. Assente = il ponte non c'è ancora. */
   chiave: () => string | undefined
@@ -99,7 +130,16 @@ export function ponte(f: FerriPonte = PONTE_VERO): express.RequestHandler {
         return no(res, 400, 'invalid_request_error', 'This request is not a Messages API request.')
       }
       corpo.max_tokens = Math.min(n(corpo.max_tokens) || 1024, USCITA_MAX)
+      const permessi = modelliPermessi()
+      if (!permessi.includes(corpo.model as string)) corpo.model = permessi[permessi.length - 1]
       const modello = corpo.model as string
+      // la dose si prenota prima di inoltrare, e si libera a risposta finita (quando si scrive il conto vero)
+      const stima = stimaDi(corpo)
+      const giaPromessi = riservati.get(dentro.utente) ?? 0
+      // passa se quello che manda ci sta, contando quello che le altre richieste in volo hanno già prenotato
+      if (f.usati() + giaPromessi + entrataDi(corpo) > f.tetto()) return no(res, 429, 'budget_exhausted', 'Today’s included AI allowance is used up.')
+      riservati.set(dentro.utente, giaPromessi + stima)
+      try {
       const fermo = new AbortController()
       res.on('close', () => { if (!res.writableFinished) fermo.abort() })
       let su: Response
@@ -154,6 +194,10 @@ export function ponte(f: FerriPonte = PONTE_VERO): express.RequestHandler {
       }
       res.status(su.status).setHeader('content-type', su.headers.get('content-type') ?? 'application/json')
       res.end(testo)
+      } finally {
+        const resta = (riservati.get(dentro.utente) ?? 0) - stima
+        if (resta > 0) riservati.set(dentro.utente, resta); else riservati.delete(dentro.utente)
+      }
     })
   }
 }
