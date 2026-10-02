@@ -850,16 +850,29 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   const scelte = quadro.scegli(quadri, gia, alti)
   if (!scelte.length) return { quadri, titoli: [], salvate: 0 }
   const adessoIso = new Date().toISOString()
-  const voci: Priorita[] = scelte.map(m => ({
-    genere: 'priorita', titolo: m.titolo, testo: m.testo, perche: m.perche, progetto: m.progetto,
-    doc: m.doc && store.documento(m.doc) ? m.doc : null, offerta: m.offerta, quando: '', prova: m.prova,
-    origine: m.doc && store.documento(m.doc) ? 'doc' : m.origine === 'riferimento' ? 'riferimento' : 'memoria'
-  }))
+  /*
+   * Il documento sulla carta solo per la posta, le note e i file: una cartella
+   * di codice o una sessione reggono tante mosse nel tempo, e `salvaFeed`
+   * tiene una carta sola per documento, per sempre. Una mossa da lì è una
+   * proposta senza documento (`eProposta` la lascia passare); una dalla
+   * memoria o dal riferimento porta la sua istantanea, come le priorità.
+   */
+  const daUnaFonteLunga = (doc: string) => doc.startsWith('lavoro:') || doc.startsWith('conversazioni:')
+  const voci: Priorita[] = scelte.map(m => {
+    const doc = m.doc && !daUnaFonteLunga(m.doc) && store.documento(m.doc) ? m.doc : null
+    return {
+      genere: 'priorita', titolo: m.titolo, testo: m.testo, perche: m.perche, progetto: m.progetto,
+      doc, offerta: m.offerta, quando: '', prova: m.prova,
+      origine: doc || m.origine === 'doc' ? 'doc' : m.origine
+    }
+  })
   const rifinite = await rifinisci(voci.map(p => ({
     ...p, tipo: TIPO[p.genere], urgenza: p.quando, nata: (p.doc && store.documento(p.doc)?.quando) || adessoIso
   })), { progetti: progetti.elenco('attivo'), registro: 'quadro' })
   const tenute: Priorita[] = rifinite.map(({ tipo: _tipo, urgenza, nata: _nata, ...p }) => ({ ...p, quando: urgenza ?? '' }))
   const salvate = tenute.length ? store.salvaFeed(tenute.map(voceDelFeed)) : 0
+  // segnate anche se `salvaFeed` le ha fermate come doppioni: in un caso o nell'altro non vanno riproposte
+  quadro.segnaMesse(scelte)
   if (salvate) console.log(`myynd · quadro · ${salvate} carte sul feed: ${tenute.map(t => t.titolo).join(' · ')}`)
   return { quadri, titoli: tenute.map(t => t.titolo), salvate }
 }

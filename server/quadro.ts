@@ -59,6 +59,8 @@ export const CARTE_AL_GIRO = 4
 const GIORNI = 45
 /** Quanto materiale per progetto, in caratteri: abbastanza per capire, non un romanzo. */
 const TETTO_MATERIALE = 42_000
+/** Una cartella non può mangiarsi da sola il posto delle sessioni e della posta. */
+const TETTO_CARTELLA = 12_000
 
 export type Mossa = {
   titolo: string
@@ -85,6 +87,8 @@ export type Quadro = {
   mosse: Mossa[]
   quando: string
   impronta: string
+  /** I titoli delle mosse già messe sul feed: non si rimettono al giro dopo, anche se la rifinitura le ha riscritte. */
+  messe?: string[]
 }
 
 // — dove si tengono —
@@ -231,7 +235,13 @@ type Leggi = (percorso: string) => Promise<string>
 export async function materiale(p: progetti.Progetto, docs: readonly store.Documento[], leggi: Leggi = cartellaProfonda, adesso = Date.now()): Promise<Materiale> {
   const soglia = adesso - GIORNI * 86_400_000
   const fonti = new Map<string, string>()
-  const blocchi: string[] = []
+  /*
+   * I blocchi in fila per importanza, ognuno col suo tetto, e la prova vale
+   * solo per quelli che entrano davvero nel testo: una fonte tagliata via non
+   * può reggere una mossa che il modello non ha potuto leggere.
+   */
+  const blocchi: { testo: string; id: string; fonte: string }[] = []
+  const metti = (id: string, testo: string, fonte: string) => blocchi.push({ id, testo, fonte })
   let ultima = p.aggiornato || ''
   const segna = (q: string | null | undefined) => { if (q && q > ultima) ultima = q }
 
@@ -240,10 +250,9 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   const percorsi = new Set(cartelle.map(d => d.id.slice('lavoro:'.length)))
   for (const d of cartelle) {
     const percorso = d.id.slice('lavoro:'.length)
-    const t = (await leggi(percorso)) || d.corpo
-    fonti.set(d.id, t)
+    const t = ((await leggi(percorso)) || d.corpo).slice(0, TETTO_CARTELLA)
     segna(d.quando)
-    blocchi.push(`[${d.id}] Cartella di codice ${basename(percorso)} (ultima modifica ${(d.quando ?? '').slice(0, 10)})\n${t}`)
+    metti(d.id, `[${d.id}] Cartella di codice ${basename(percorso)} (ultima modifica ${(d.quando ?? '').slice(0, 10)})\n${t}`, t)
   }
 
   // le sessioni con gli assistenti: in una sua cartella, o che lo nominano nel titolo
@@ -255,9 +264,8 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   }).sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 6)
   for (const d of sessioni) {
     const t = sessioneRidotta(d.corpo)
-    fonti.set(d.id, `${d.titolo}\n${d.corpo}`)
     segna(d.quando)
-    blocchi.push(`[${d.id}] Sessione con un assistente: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`)
+    metti(d.id, `[${d.id}] Sessione con un assistente: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`)
   }
 
   // la posta, le note, i file, l'agenda che lo toccano
@@ -267,17 +275,16 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 8)
   for (const d of altri) {
     const t = d.corpo.replace(/\s+/g, ' ').trim().slice(0, 700)
-    fonti.set(d.id, `${d.titolo}\n${d.corpo}`)
     segna(d.quando)
-    blocchi.push(`[${d.id}] ${d.fonte}${d.autore ? ` da ${d.autore.slice(0, 60)}` : ''}${d.inviato ? ' (scritta da lui)' : ''}: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`)
+    metti(d.id, `[${d.id}] ${d.fonte}${d.autore ? ` da ${d.autore.slice(0, 60)}` : ''}${d.inviato ? ' (scritta da lui)' : ''}: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`)
   }
 
   // la memoria del progetto e quello che ha scritto lui
   const memoria = testoDelProgetto(p.id).slice(0, 3000)
-  if (memoria) { fonti.set('memoria', memoria); blocchi.unshift(`[memoria] Obiettivo e memoria del progetto\n${memoria}`) }
+  if (memoria) blocchi.unshift({ id: 'memoria', testo: `[memoria] Obiettivo e memoria del progetto\n${memoria}`, fonte: memoria })
   const nomi = [p.nome, ...p.alias, ...[...riferimento.alias()].filter(([, id]) => id === p.id).map(([n]) => n)]
   const suoi = riferimento.leggi().testo.split('\n').filter(r => nomi.some(n => nominaAmbito(r, n))).join('\n').slice(0, 1500)
-  if (suoi) { fonti.set('riferimento', suoi); blocchi.unshift(`[riferimento] Quello che ha scritto lui su questo progetto, di suo pugno (vale più di tutto il resto)\n${suoi}`) }
+  if (suoi) blocchi.unshift({ id: 'riferimento', testo: `[riferimento] Quello che ha scritto lui su questo progetto, di suo pugno (vale più di tutto il resto)\n${suoi}`, fonte: suoi })
 
   // la lista, e com'è andata con le carte di prima: è così che impara
   const aperti = store.elencoCompiti().filter(c => c.progetto === p.id).map(c => `— ${c.testo}${c.stato !== 'aperto' ? ` (${c.stato})` : ''}`)
@@ -291,8 +298,15 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     carte.length ? `Le carte che gli hai già proposto su questo progetto, e cosa ne ha fatto:\n${carte.join('\n')}` : ''
   ].filter(Boolean).join('\n\n')
 
-  let testo = blocchi.join('\n\n')
-  if (testo.length > TETTO_MATERIALE) testo = testo.slice(0, TETTO_MATERIALE) + '\n[…]'
+  // in ordine: quello che ha scritto lui, la memoria, le cartelle, le sessioni, la posta
+  const dentro: string[] = []
+  let lungo = 0
+  for (const b of blocchi) {
+    if (lungo + b.testo.length > TETTO_MATERIALE) continue
+    dentro.push(b.testo); lungo += b.testo.length + 2
+    fonti.set(b.id, b.fonte)
+  }
+  let testo = dentro.join('\n\n')
   if (lista) testo += `\n\n${lista}`
   return { testo, fonti, impronta: hash(`${p.nome}|${p.obiettivo}|${testo}`), ultima }
 }
@@ -376,7 +390,13 @@ export function ripulisciMossa(g: MossaGrezza, fonti: Map<string, string>, gia: 
   if (prova.length < PROVA_MIN || prova.length > PROVA_MAX) return null
   const fonte = typeof g.fonte === 'string' ? g.fonte.replace(/^\[|\]$/g, '').trim() : ''
   const testoFonte = fonti.get(fonte)
-  if (!testoFonte || !normalizzata(testoFonte).includes(normalizzata(prova))) return null
+  if (!testoFonte) return null
+  const cercata = normalizzata(prova)
+  // quello che ha scritto lui si ricontrolla riga per riga sul feed (`attenzione.reggeAncora`): la prova deve stare in una riga
+  const regge = fonte === 'riferimento'
+    ? testoFonte.split('\n').some(r => normalizzata(r).includes(cercata))
+    : normalizzata(testoFonte).includes(cercata)
+  if (!regge) return null
   const doc = fonte === 'memoria' || fonte === 'riferimento' ? null : fonte
   const origine = fonte === 'memoria' || fonte === 'riferimento' ? fonte : 'doc'
   return { titolo, testo, leva, urgenza, offerta, prova, doc, origine }
@@ -443,15 +463,16 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
       try {
         const q = await quadroDi(p, m)
         if (!q) continue
-        archivio[p.id] = q
+        archivio[p.id] = { ...q, messe: archivio[p.id]?.messe }
         scriviQuadri(archivio)
         console.log(`myynd · quadro · ${p.nome}: ${q.mosse.length} mosse · traguardo «${q.traguardo.slice(0, 80)}»`)
       } catch (e) {
         console.warn(`myynd · quadro · ${p.nome}:`, e instanceof Error ? e.message : e)
       }
     }
-    // via i quadri dei progetti che non sono più vivi
-    for (const id of Object.keys(archivio)) if (!vivi.some(p => p.id === id)) delete archivio[id]
+    // via i quadri dei progetti che non sono più attivi; un progetto detto morto lo tiene, se torna non si ripaga
+    const attivi = new Set(progetti.elenco('attivo').map(p => p.id))
+    for (const id of Object.keys(archivio)) if (!attivi.has(id)) delete archivio[id]
     scriviQuadri(archivio)
     return vivi.flatMap(p => archivio[p.id] ?? [])
   } catch (e) {
@@ -478,8 +499,9 @@ export type Scelta = Mossa & { progetto: string; perche: string }
 export function scegli(quadri: readonly Quadro[], gia: string[], alti: Set<string> = new Set()): Scelta[] {
   const migliori: Scelta[] = []
   for (const q of quadri) {
+    const messe = q.messe ?? []
     const buone = q.mosse
-      .filter(m => (m.leva >= 2 || m.urgenza === 'oggi') && !gia.some(t => stessaCosa(t, m.titolo)))
+      .filter(m => (m.leva >= 2 || m.urgenza === 'oggi') && !messe.includes(m.titolo) && !gia.some(t => stessaCosa(t, m.titolo)))
       .sort((a, b) => punteggio(b, alti.has(q.progetto)) - punteggio(a, alti.has(q.progetto)))
     // il perché sulla carta è quello che sposta: il blocco se c'è, se no il traguardo
     if (buone[0]) migliori.push({ ...buone[0], progetto: q.progetto, perche: (q.blocco || q.traguardo).slice(0, 200) })
@@ -487,6 +509,17 @@ export function scegli(quadri: readonly Quadro[], gia: string[], alti: Set<strin
   return migliori
     .sort((a, b) => punteggio(b, alti.has(b.progetto)) - punteggio(a, alti.has(a.progetto)))
     .slice(0, CARTE_AL_GIRO)
+}
+
+/** Segna le mosse messe sul feed, per titolo originale: dal giro dopo non tornano, nemmeno rifinite. */
+export function segnaMesse(scelte: readonly Pick<Scelta, 'progetto' | 'titolo'>[]) {
+  if (!scelte.length) return
+  const archivio = leggiQuadri()
+  for (const m of scelte) {
+    const q = archivio[m.progetto]
+    if (q && !(q.messe ?? []).includes(m.titolo)) q.messe = [...(q.messe ?? []), m.titolo]
+  }
+  scriviQuadri(archivio)
 }
 
 /** Il quadro detto in poche righe, per le priorità: così le loro carte non ripetono queste e sanno dove sta ogni progetto. */

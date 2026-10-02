@@ -129,11 +129,46 @@ test('il giro intero: il quadro chiede al modello per ogni progetto cambiato, e 
   assert.ok(voce, 'la mossa è sul feed')
   assert.equal(voce.progetto, evermute.id)
   assert.match(String(voce.offerta), /I upload build 15/)
-  assert.equal(voce.doc, 'conversazioni:codice:e1')
+  assert.equal(voce.doc ?? null, null, 'una sessione regge tante mosse: la carta non la prende come suo documento')
   assert.ok(!(feedAttuale() as Record<string, unknown>[]).some(v => v.titolo === 'Invent a launch party'), 'la mossa senza prova vera non c\'è')
   // il quadro resta: un giro dopo, con il materiale fermo, non si richiede
   chiesti.length = 0
   await quadro.aggiorna()
   assert.equal(chiesti.length, 0, 'materiale uguale, niente chiamate')
   assert.match(quadro.leggiQuadri()[evermute.id]!.traguardo, /approved on the App Store/)
+})
+
+test('una mossa già messa non torna, e una seconda mossa dalla stessa cartella non resta bloccata dalla prima', async () => {
+  rifinitura.perProva({ collegato: () => false })
+  let giro = 0
+  quadro.perProva({
+    collegato: () => true,
+    leggi: async p => p.endsWith('Evermute') ? 'README:\nEvermute build 15 is ready to upload.\nThe Italian store listing still needs screenshots.' + ' '.repeat(giro) : '',
+    chiediJSON: (async (o: { system: string }) => {
+      if (!/«Evermute deck»/.test(o.system)) return { stato: 'Quiet.', traguardo: '', blocco: '', mosse: [] }
+      return { stato: 'Ready.', traguardo: 'Approved', blocco: '', mosse: [
+        { titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Evermute build 15 is ready to upload.', fonte: 'lavoro:/Users/t/Desktop/Evermute' },
+        { titolo: 'Make the Italian store screenshots for Evermute', testo: 'The Italian listing is the last missing piece before the release goes out.', leva: 2, urgenza: 'settimana', offerta: 'I draft the five screenshots captions in Italian.', prova: 'The Italian store listing still needs screenshots.', fonte: 'lavoro:/Users/t/Desktop/Evermute' }
+      ] }
+    }) as never
+  })
+  priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [], domande: [], superate: [] })) as never })
+  priorita.dimentica()
+  // il giro di prima ha già messo «Sign in to Xcode…»: il quadro va rifatto (materiale cambiato) e la seconda mossa arriva
+  giro = 1
+  const archivio = quadro.leggiQuadri()
+  for (const id of Object.keys(archivio)) archivio[id]!.quando = new Date(Date.now() - 3 * 3_600_000).toISOString()
+  writeFileSync(join(dati, 'quadri.json'), JSON.stringify({ quadri: archivio }))
+  assert.equal(await priorita.forse(true), 1)
+  const titoli = (feedAttuale() as Record<string, unknown>[]).map(v => v.titolo)
+  assert.ok(titoli.includes('Make the Italian store screenshots for Evermute'), 'la seconda mossa dalla stessa cartella arriva')
+  assert.equal(titoli.filter(t => t === 'Sign in to Xcode so build 15 can upload').length, 1, 'la prima non si rimette')
+  assert.deepEqual(quadro.leggiQuadri()[evermute.id]!.messe?.sort(), ['Make the Italian store screenshots for Evermute', 'Sign in to Xcode so build 15 can upload'])
+})
+
+test('quello che ha scritto lui regge una mossa solo dentro una riga', () => {
+  const fonti = new Map([['riferimento', 'Evermute: waiting on Apple.\nThe recording goes out on Friday.']])
+  const base = { titolo: 'Send Apple the recording on Friday', testo: 'Apple waits for the recording before the review of Evermute continues.', leva: 3, urgenza: 'settimana', offerta: 'I draft the reply to Apple with the recording.', fonte: 'riferimento' }
+  assert.ok(quadro.ripulisciMossa({ ...base, prova: 'The recording goes out on Friday.' }, fonti, []))
+  assert.equal(quadro.ripulisciMossa({ ...base, prova: 'waiting on Apple. The recording goes out' }, fonti, []), null, 'a cavallo di due righe il feed la nasconderebbe subito')
 })
