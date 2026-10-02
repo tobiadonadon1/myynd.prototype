@@ -75,7 +75,9 @@ const TETTO_MATERIALE = 42_000
 /** Una cartella non può mangiarsi da sola il posto delle sessioni e della posta. */
 const TETTO_CARTELLA = 12_000
 /** Cambia quando cambia il modo di ragionare: i quadri vecchi si rifanno subito. */
-export const VERSIONE = 2
+export const VERSIONE = 3
+/** Un progetto con una pagina pubblica si rilegge almeno ogni tante ore: «it should read my website constantly». */
+export const ORE_SITO = 12
 /** Sotto questa certezza l'obiettivo dedotto non basta, e si chiede a lui. */
 export const CERTEZZA_MINIMA = 0.5
 
@@ -117,8 +119,14 @@ export type Quadro = {
   impronta: string
   /** L'obiettivo che ha capito dal suo lavoro, con quanta certezza: guida le mosse, e sotto lo 0,5 si chiede. */
   obiettivo?: { testo: string; certezza: number }
-  /** La domanda da fargli, solo quando l'obiettivo non si capisce dal lavoro. */
+  /** La domanda da fargli: sull'obiettivo quando non si capisce, o su una cosa precisa che ha visto. */
   domanda?: string
+  /** Di che cosa è la domanda: l'obiettivo diventa l'obiettivo del progetto, un'osservazione va nelle sue note. */
+  domandaTipo?: 'obiettivo' | 'osservazione'
+  /** L'impronta della pagina pubblica letta l'ultima volta: se cambia, il quadro si rifà. */
+  fuori?: string
+  /** Se il progetto ha una pagina pubblica: allora lo si guarda almeno ogni `ORE_SITO`. */
+  conSito?: boolean
   /** La versione del ragionamento: un quadro di una versione vecchia si rifà al giro dopo, senza aspettare. */
   versione?: number
   /** I titoli delle mosse già messe sul feed: non si rimettono al giro dopo, anche se la rifinitura le ha riscritte. */
@@ -250,6 +258,10 @@ export type Materiale = {
   impronta: string
   /** L'ultima volta che il progetto si è mosso, per scegliere chi rifare prima. */
   ultima: string
+  /** L'impronta della pagina pubblica, se è stata letta. */
+  fuori?: string
+  /** Gli indirizzi pubblici trovati, anche se non letti questa volta. */
+  indirizzi?: string[]
 }
 
 function hash(s: string): string {
@@ -369,9 +381,9 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   // la cosa vista da fuori, come la vede un cliente: il sito vero, e se il blog è fermo.
   // Non entra nell'impronta (una pagina viva cambia a ogni visita): il quadro non si rifà per questo.
   const fuori: { id: string; testo: string }[] = []
+  const indirizzi = indirizziDi(p.nome, `${p.obiettivo}\n${p.note}\n${blocchi.map(b => b.fonte).join('\n')}`)
   if (guarda) {
-    const sue = blocchi.map(b => b.fonte).join('\n')
-    for (const url of indirizziDi(p.nome, `${p.obiettivo}\n${p.note}\n${sue}`)) {
+    for (const url of indirizzi) {
       const t = await guarda(url).catch(() => '')
       if (t) fuori.push({ id: `esterno:${url}`, testo: `[esterno:${url}] La pagina pubblica, letta adesso come la vede chi la visita\n${t}` })
     }
@@ -408,7 +420,7 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   if (lista) testo += `\n\n${lista}`
   const impronta = hash(`${VERSIONE}|${p.nome}|${p.obiettivo}|${testo}`)
   for (const f of fuori) { testo += `\n\n${f.testo}`; fonti.set(f.id, f.testo) }
-  return { testo, fonti, impronta, ultima }
+  return { testo, fonti, impronta, ultima, indirizzi, ...(fuori.length ? { fuori: hash(fuori.map(f => f.testo).join('|')) } : {}) }
 }
 
 // — la domanda al modello —
@@ -426,7 +438,8 @@ const FORMA = {
       required: ['testo', 'certezza'],
       additionalProperties: false
     },
-    domanda: { type: 'string', description: 'Solo se la certezza sull\'obiettivo è sotto 0,5: una domanda corta e gentile su cosa vuole da questo progetto, che parte da quello che hai visto. Altrimenti stringa vuota.' },
+    domanda: { type: 'string', description: 'Una domanda sola, e solo se serve davvero: sull\'obiettivo se la certezza è sotto 0,5, oppure su una cosa precisa che hai visto (nel sito, nel lavoro) e che non sai se è voluta. Corta, gentile, che nomina la cosa. Stringa vuota altrimenti.' },
+    domandaTipo: { type: 'string', enum: ['obiettivo', 'osservazione', ''], description: '«obiettivo» o «osservazione» se hai scritto una domanda, vuoto altrimenti.' },
     stato: { type: 'string', description: 'Dove sta davvero il progetto, in due o tre frasi corte con i fatti: cosa è fatto, cosa no, da quando.' },
     traguardo: { type: 'string', description: 'Il prossimo traguardo che conta per l\'obiettivo, in al massimo quattordici parole: pubblicato, venduto, mandato, firmato, un utente vero.' },
     blocco: { type: 'string', description: 'Cosa lo ferma adesso, in al massimo venti parole, o una stringa vuota.' },
@@ -450,11 +463,11 @@ const FORMA = {
       }
     }
   },
-  required: ['obiettivo', 'domanda', 'stato', 'traguardo', 'blocco', 'mosse'],
+  required: ['obiettivo', 'domanda', 'domandaTipo', 'stato', 'traguardo', 'blocco', 'mosse'],
   additionalProperties: false
 }
 
-type Grezzo = { obiettivo?: { testo?: unknown; certezza?: unknown }; domanda?: unknown; stato?: unknown; traguardo?: unknown; blocco?: unknown; mosse?: unknown }
+type Grezzo = { obiettivo?: { testo?: unknown; certezza?: unknown }; domanda?: unknown; domandaTipo?: unknown; stato?: unknown; traguardo?: unknown; blocco?: unknown; mosse?: unknown }
 type MossaGrezza = Partial<Record<'genere' | 'titolo' | 'testo' | 'leva' | 'urgenza' | 'offerta' | 'prova' | 'fonte', unknown>>
 
 type Ferri = { chiediJSON: typeof chiediJSON; collegato: typeof collegato; leggi: Leggi; guarda: Guarda }
@@ -468,7 +481,7 @@ function sistema(p: progetti.Progetto): string {
 
 Hai davanti tutto quello che gli appartiene: le cartelle di codice, le sue sessioni con gli assistenti (le sue parole e come sono finite), la posta e le note, la memoria del progetto, quello che ha scritto lui, la sua lista, come ha accolto le carte di prima, e, se c'è, la pagina pubblica letta adesso. Leggi tutto, poi:
 
-1. L'obiettivo. Capiscilo dal suo lavoro: cosa costruisce, cosa vende, a chi scrive, cosa ripete nelle sessioni. Dai una certezza da 0 a 1. Solo se sei sotto 0,5 scrivi una domanda corta e gentile su cosa vuole da questo progetto, partendo da quello che hai visto («Ho guardato il sito: si legge bene, ma il blog è fermo dal 12 settembre. Cosa vuoi che ti porti questo mese?»). Se l'obiettivo si capisce, niente domanda: chiedere quello che si vede già lo fa sentire non ascoltato.
+1. L'obiettivo. Capiscilo dal suo lavoro: cosa costruisce, cosa vende, a chi scrive, cosa ripete nelle sessioni. Dai una certezza da 0 a 1. Solo se sei sotto 0,5 scrivi una domanda corta e gentile su cosa vuole da questo progetto, partendo da quello che hai visto («Ho guardato il sito: si legge bene, ma il blog è fermo dal 12 settembre. Cosa vuoi che ti porti questo mese?»). Se l'obiettivo si capisce, niente domanda sull'obiettivo: chiedere quello che si vede già lo fa sentire non ascoltato. Puoi invece fare una domanda su una cosa precisa che hai notato e che non sai se è voluta («Sulla home c'è ancora "coming soon" sotto Offerte: è voluto o la apriamo?»): una sola, e solo se la risposta cambia cosa faresti.
 2. Dove sta davvero, in fatti. Quello che ha scritto lui vale più di tutto.
 3. Il prossimo traguardo che si vede fuori (pubblicato, venduto, mandato, un utente vero) e cosa lo blocca.
 4. Al massimo tre mosse, la più forte prima, ognuna di un genere:
@@ -478,6 +491,8 @@ Hai davanti tutto quello che gli appartiene: le cartelle di codice, le sue sessi
 — «automazione»: un controllo che si ripete e che gli toglie un pensiero, con un motivo vero nel materiale (il blog fermo da tre settimane: ogni lunedì guardo quando è uscito l'ultimo articolo e ne preparo uno se sono passati quattordici giorni).
 
 Le faccende di codice NON sono mosse e non vanno mai sul suo feed: fare il merge di un ramo o di un worktree, riempire file di configurazione o variabili d'ambiente, committare, fare build, pulire cartelle, guardare log, verificare pipeline. Il codice lo segue lui con i suoi assistenti; tu guardi il risultato che si vede fuori. Non sono mosse nemmeno: quello che sta facendo proprio adesso in una sessione di oggi, quello che è già in lista, quello che ha già fatto, quello che somiglia a una carta che ha scartato o lasciato scadere (lì ha già risposto, e il perché te lo dice), e i documenti nominati per file senza dire a cosa servono («il deck», «l'outline»): se una cosa non la capirebbe un collega appena arrivato, non è una mossa. Zero mosse è una risposta giusta.
+
+Ogni mossa è precisa: dice quale pagina, quale post, quale persona, quante cose, entro quando. Niente verbi astratti nel titolo (congela, concentrati, dai priorità, allinea, ottimizza, consolida, rivedi la strategia): se il titolo non dice cosa fare di preciso, non è una mossa. Bene: «Pubblica su X il post sul primo mese di Myynd, già scritto nella cartella drafts». Male: «Freeze engine work and post one original weekly».
 
 Ogni mossa porta la prova: una citazione esatta, da 12 a 300 caratteri, copiata da una fonte del materiale, con l'id della fonte fra parentesi quadre. Senza prova, la mossa non c'è.
 
@@ -497,6 +512,13 @@ const testoDi = (v: unknown, min: number, max: number) => {
  */
 export const FACCENDA = /\b(?:worktree|merge|branch|ramo|rami|\.env|env(?:ironment)? (?:file|values?|vars?|variables?)|launch values|vercel|supabase|commit(?:s|ta|tare)?|rebase|build folders?|ci pipeline|pipeline|deploy config|config(?:uration)? (?:file|values?)|uncommitted|log files?|outline into)\b/i
 
+/**
+ * I titoli che non dicono cosa fare: un verbo astratto in testa. «Freeze
+ * engine work and post one original weekly»: «I don't understand what this
+ * means» (2 ottobre).
+ */
+export const VAGO = /^(?:freeze|focus|prioriti[sz]e|align|streamline|leverage|consolidate|consider|explore|think|revisit|rethink|refine|optimi[sz]e|keep|stay|continue|maintain|double down|congela|concentrati|dai priorit|allinea|ottimizza|consolida|valuta|esplora|ripensa|rivedi|continua|mantieni)\b/i
+
 /** Da quello che ha scritto il modello a una mossa che regge, o niente: la prova deve stare nella fonte che nomina. */
 export function ripulisciMossa(g: MossaGrezza, fonti: Map<string, string>, gia: string[]): Mossa | null {
   const genere = typeof g.genere === 'string' && (GENERI as readonly string[]).includes(g.genere) ? g.genere as Genere : null
@@ -506,8 +528,8 @@ export function ripulisciMossa(g: MossaGrezza, fonti: Map<string, string>, gia: 
   if (!genere || !titolo || !testo || !offerta) return null
   if ([titolo, testo, offerta].some(conGergo)) return null
   if (/["“”«»]/.test(titolo)) return null
-  // le faccende di codice non vanno sul feed, nemmeno se il modello ci casca
-  if (FACCENDA.test(titolo)) return null
+  // le faccende di codice non vanno sul feed, nemmeno se il modello ci casca; e nemmeno i titoli astratti
+  if (FACCENDA.test(titolo) || VAGO.test(titolo)) return null
   // un'automazione è una proposta che si accende con un tocco: l'offerta lo deve dire così
   if (genere === 'automazione' && !/^(?:i set up an automation|imposto un'automazione)/i.test(offerta)) return null
   if (gia.some(t => stessaCosa(t, titolo))) return null
@@ -550,11 +572,15 @@ export async function quadroDi(p: progetti.Progetto, m: Materiale): Promise<Quad
   const certezza = typeof out.obiettivo?.certezza === 'number' ? Math.max(0, Math.min(1, out.obiettivo.certezza)) : 0
   const obiettivo = testoDi(out.obiettivo?.testo, 4, 200)
   // la domanda solo sotto la soglia: «it shouldn't always ask me questions… it should have learned by looking at my work»
-  const domanda = certezza < CERTEZZA_MINIMA ? (testoDi(out.domanda, 10, 260) ?? '') : ''
+  // sull'obiettivo solo sotto la soglia; su una cosa vista sempre, se il modello la ritiene necessaria
+  const tipo = out.domandaTipo === 'osservazione' ? 'osservazione' : 'obiettivo'
+  const domanda = tipo === 'osservazione' || certezza < CERTEZZA_MINIMA ? (testoDi(out.domanda, 10, 260) ?? '') : ''
   return {
     progetto: p.id, nome: p.nome,
     ...(obiettivo ? { obiettivo: { testo: obiettivo, certezza } } : {}),
-    ...(domanda && domanda.includes('?') ? { domanda } : {}),
+    ...(domanda && domanda.includes('?') ? { domanda, domandaTipo: tipo } : {}),
+    ...(m.fuori ? { fuori: m.fuori } : {}),
+    conSito: !!m.indirizzi?.length,
     versione: VERSIONE,
     stato: testoDi(out.stato, 1, 600) ?? '',
     traguardo: testoDi(out.traguardo, 1, 160) ?? '',
@@ -590,10 +616,16 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
       const prima = archivio[p.id]
       const eta = prima ? adesso - Date.parse(prima.quando) : Infinity
       const vecchio = !prima || prima.versione !== VERSIONE
-      // la pagina pubblica si guarda solo quando il quadro si rifà davvero: non a ogni giro
       const m = await materiale(p, docs, ferri.leggi, adesso)
       const cambiato = vecchio || prima.impronta !== m.impronta
-      if ((cambiato && (vecchio || eta >= ORE_MINIME * 3_600_000)) || eta >= ORE_MASSIME * 3_600_000) candidati.push({ p, m })
+      // la pagina pubblica: un progetto che ne ha una si rilegge almeno ogni ORE_SITO, e se la pagina è cambiata il quadro si rifà
+      let fuoriCambiato = false
+      if (!cambiato && m.indirizzi?.length && eta >= ORE_MINIME * 3_600_000) {
+        const conFuori = await materiale(p, docs, ferri.leggi, adesso, ferri.guarda).catch(() => m)
+        fuoriCambiato = !!conFuori.fuori && conFuori.fuori !== prima?.fuori
+      }
+      const sitoScaduto = !!m.indirizzi?.length && eta >= ORE_SITO * 3_600_000
+      if ((cambiato && (vecchio || eta >= ORE_MINIME * 3_600_000)) || fuoriCambiato || sitoScaduto || eta >= ORE_MASSIME * 3_600_000) candidati.push({ p, m })
     }
     candidati.sort((a, b) => b.m.ultima.localeCompare(a.m.ultima))
     for (const { p, m: interno } of candidati.slice(0, QUADRI_AL_GIRO)) {
@@ -665,9 +697,14 @@ export function segnaMesse(scelte: readonly Pick<Scelta, 'progetto' | 'titolo'>[
   scriviQuadri(archivio)
 }
 
+/** C'è un progetto con una pagina pubblica che non si guarda da `ORE_SITO`? Allora il giro parte anche col feed pieno. */
+export function sitoDaRiguardare(adesso = Date.now()): boolean {
+  return Object.values(leggiQuadri()).some(q => q.conSito && adesso - Date.parse(q.quando) >= ORE_SITO * 3_600_000)
+}
+
 /** Le domande sull'obiettivo, una per progetto che non si capisce: la prima pagina ne mostra una alla volta. */
-export function domandeSullObiettivo(quadri: readonly Quadro[]): { progetto: string; testo: string }[] {
-  return quadri.filter(q => q.domanda).map(q => ({ progetto: q.progetto, testo: q.domanda! }))
+export function domandeSullObiettivo(quadri: readonly Quadro[]): { progetto: string; testo: string; tipo: 'obiettivo' | 'osservazione' }[] {
+  return quadri.filter(q => q.domanda).map(q => ({ progetto: q.progetto, testo: q.domanda!, tipo: q.domandaTipo ?? 'obiettivo' }))
 }
 
 /** Dopo una risposta sull'obiettivo il quadro di quel progetto si rifà al giro dopo, senza aspettare. */

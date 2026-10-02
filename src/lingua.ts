@@ -444,6 +444,8 @@ const EN: Record<string, string> = {
   'Data non valida.': 'Invalid date.',
   'Dettagli attività': 'Task details',
   'Domani': 'Tomorrow',
+  'Lunedì prossimo': 'Next Monday',
+  'Sposta a un altro giorno': 'Move to another day',
   'Dopodomani': 'Day after tomorrow',
   'Scegli un giorno': 'Choose a day',
   'Settimana precedente': 'Previous week',

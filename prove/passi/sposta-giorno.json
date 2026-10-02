@@ -1,0 +1,11 @@
+[
+ {"aspetta": 2500},
+ {"clicca": "To do"},
+ {"aspetta": 3000},
+ {"js": "const r=document.querySelector('[data-id=\"t2\"]'); r.dispatchEvent(new MouseEvent('mouseover',{bubbles:true})); r.querySelector('.quaderno-sposta button').click(); 1"},
+ {"aspetta": 600},
+ {"scatta": "sposta-menu"},
+ {"js": "[...document.querySelectorAll('.quaderno-sposta-menu button')].find(b=>/Tomorrow/.test(b.textContent)).click(); 1"},
+ {"aspetta": 1500},
+ {"scatta": "sposta-dopo"}
+]

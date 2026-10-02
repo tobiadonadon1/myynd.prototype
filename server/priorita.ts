@@ -792,6 +792,8 @@ export function pronta(forza = false): boolean {
     rifattiPerVersione.add(cartella())
     return true
   }
+  // un sito che non si guarda da dodici ore: «why doesn't it read my website, fetch it, and look for stuff that has to get better?»
+  if (da >= ORE_LAVORO * 3_600_000 && quadro.sitoDaRiguardare()) return true
   // il feed quasi vuoto: come prima, un giro ogni dodici ore
   if (da >= ORE_FRA * 3_600_000 && feedAttuale().length < ABBASTANZA) return true
   // il lavoro è cambiato: un giro ogni quattro ore, anche col feed pieno —
@@ -871,12 +873,17 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   const lavori = quadro.scegli(quadri, gia, alti, ['lavoro'])
   const messi = mettiAlLavoro(lavori)
 
-  // le carte: sblocchi, consigli, automazioni
-  const scelte = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo)], alti, ['sblocco', 'consiglio', 'automazione'])
+  // quello che può fare solo lui va nella sua lista di oggi, non solo sul feed:
+  // «the ones that I should do, should be on my to-do list» (2 ottobre)
+  const sue = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo)], alti, ['sblocco'])
+  const inLista = mettiInLista(sue)
+
+  // le carte: consigli e automazioni
+  const scelte = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo), ...inLista.map(m => m.titolo)], alti, ['consiglio', 'automazione'])
   const domande = salvaDomandeSullObiettivo(quadri)
   if (!scelte.length) {
-    quadro.segnaMesse(messi)
-    return { quadri, titoli: messi.map(m => m.titolo), salvate: messi.length + domande }
+    quadro.segnaMesse([...messi, ...inLista])
+    return { quadri, titoli: [...messi, ...inLista].map(m => m.titolo), salvate: messi.length + inLista.length + domande }
   }
   const adessoIso = new Date().toISOString()
   /*
@@ -903,8 +910,8 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   const salvate = tenute.length ? store.salvaFeed(tenute.map(voceDelFeed)) : 0
   if (salvate) console.log(`myynd · quadro · ${salvate} carte sul feed: ${tenute.map(t => t.titolo).join(' · ')}`)
   // segnate anche se `salvaFeed` le ha fermate come doppioni: in un caso o nell'altro non vanno riproposte
-  quadro.segnaMesse([...scelte, ...messi])
-  return { quadri, titoli: [...tenute.map(t => t.titolo), ...messi.map(m => m.titolo)], salvate: salvate + messi.length + domande }
+  quadro.segnaMesse([...scelte, ...messi, ...inLista])
+  return { quadri, titoli: [...tenute.map(t => t.titolo), ...messi.map(m => m.titolo), ...inLista.map(m => m.titolo)], salvate: salvate + messi.length + inLista.length + domande }
 }
 
 /** Quante righe nate dal quadro possono aspettare o lavorare insieme: oltre, il lavoro nuovo aspetta. */
@@ -919,7 +926,7 @@ const ORIGINE_QUADRO = 'quadro'
  * «I came up with a couple of ideas. I saved them into this folder.»
  */
 function mettiAlLavoro(lavori: quadro.Scelta[]): quadro.Scelta[] {
-  const vivi = store.elencoCompiti().filter(c => c.origine === ORIGINE_QUADRO).length
+  const vivi = store.elencoCompiti().filter(c => c.origine === ORIGINE_QUADRO && c.modo !== 'io').length
   const posti = Math.max(0, LAVORI_VIVI_MAX - vivi)
   const messi: quadro.Scelta[] = []
   for (const m of lavori.slice(0, posti)) {
@@ -935,18 +942,42 @@ function mettiAlLavoro(lavori: quadro.Scelta[]): quadro.Scelta[] {
   return messi
 }
 
-/** Le domande sull'obiettivo, quando il lavoro non basta a capirlo: una alla volta, mai due sullo stesso progetto. */
-function salvaDomandeSullObiettivo(quadri: readonly quadro.Quadro[]): number {
-  let nuove = 0
-  for (const d of quadro.domandeSullObiettivo(quadri)) {
-    const tema = `${TEMA_OBIETTIVO}${d.progetto}`
-    if (store.domandaPerTema(tema)) continue
-    if (store.domandeConTema(TEMA_OBIETTIVO).some(x => x.stato === 'aperta')) break
-    if (store.apriDomanda({ tema, testo: d.testo, spunto: [], progetto: d.progetto })) nuove++
+/**
+ * Quello che solo lui può fare, nella sua lista di oggi: una riga sua, sotto
+ * il progetto, con nella nota quello che Myynd prepara se gliela passa.
+ */
+function mettiInLista(sue: quadro.Scelta[]): quadro.Scelta[] {
+  const messe: quadro.Scelta[] = []
+  const oggi = new Date().toLocaleDateString('en-CA')
+  for (const m of sue.slice(0, 2)) {
+    const id = `quadro-${impronta(`${m.progetto}:${m.titolo}`)}`
+    if (store.compito(id)) continue
+    store.scriviCompito({ id, testo: m.titolo, nota: `${m.testo}\nSe me la passi: ${m.offerta}`, progetto: m.progetto, origine: ORIGINE_QUADRO, quando: 'oggi', giorno: oggi, ordine: fra(store.ultimoOrdine('oggi'), '') })
+    messe.push(m)
+    console.log(`myynd · quadro · nella tua lista di oggi: ${m.titolo}`)
   }
-  return nuove
+  return messe
 }
-/** Il tema delle domande sull'obiettivo di un progetto: `obiettivo:<id>`. */
+
+/**
+ * Le domande del quadro: sull'obiettivo quando non si capisce, o su una cosa
+ * vista che non si sa se è voluta. Una aperta alla volta, una nuova al giorno
+ * al massimo: «questions are needed, but not always».
+ */
+function salvaDomandeSullObiettivo(quadri: readonly quadro.Quadro[]): number {
+  const fatte = store.domandeConTema(TEMA_QUADRO)
+  if (fatte.some(x => x.stato === 'aperta')) return 0
+  if (fatte.some(x => Date.now() - Date.parse(x.creata) < 20 * 3_600_000)) return 0
+  for (const d of quadro.domandeSullObiettivo(quadri)) {
+    const tema = `${TEMA_QUADRO}${d.tipo}:${d.progetto}:${impronta(d.testo)}`
+    if (store.domandaPerTema(tema)) continue
+    if (store.apriDomanda({ tema, testo: d.testo, spunto: [], progetto: d.progetto })) return 1
+  }
+  return 0
+}
+/** Il tema delle domande del quadro: `quadro:<obiettivo|osservazione>:<progetto>:<impronta>`. */
+export const TEMA_QUADRO = 'quadro:'
+/** Il tema di prima, solo sull'obiettivo: le risposte a quelle ancora aperte valgono ancora. */
 export const TEMA_OBIETTIVO = 'obiettivo:'
 
 /** Serve ai test: il conto ricomincia da zero. */

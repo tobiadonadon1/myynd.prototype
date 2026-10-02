@@ -335,10 +335,55 @@ function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, 
               <Marchio dim={14} animato={false} />
             </button>
           )}
+          <Sposta c={c} l={l} oggi={oggi} />
           <button type="button" className="quaderno-icona" onClick={() => modifica(c)} aria-label={`${t('Dettagli attività')}: ${c.testo}`}>⋯</button>
         </span>
       </span>
     </li>
+  )
+}
+
+/**
+ * Spostare una riga a un altro giorno senza trascinarla: «I should be able to
+ * move my to-do list items from one day to another… right now I can, but it's
+ * a bit sketchy to do» (2 ottobre). Trascinare resta; qui c'è un dito solo:
+ * oggi, domani, lunedì prossimo, senza data.
+ */
+function Sposta({ c, l, oggi }: { c: Compito; l: Lista; oggi: string }) {
+  const [aperto, setAperto] = useState(false)
+  const dove = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!aperto) return
+    const fuori = (e: MouseEvent) => { if (!dove.current?.contains(e.target as Node)) setAperto(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setAperto(false) }
+    document.addEventListener('mousedown', fuori)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', fuori); document.removeEventListener('keydown', esc) }
+  }, [aperto])
+  const lunedi = (() => { const d = dataLocale(oggi).getDay(); return spostaGiorno(oggi, ((8 - d) % 7) || 7) })()
+  const scelte: [string, string | null][] = [['Oggi', oggi], ['Domani', spostaGiorno(oggi, 1)], ['Lunedì prossimo', lunedi], ['Senza data', null]]
+  const suo = giornoCompito(c, oggi)
+  const vai = (g: string | null) => {
+    setAperto(false)
+    if (g === suo) return
+    void l.cambia(c.id, { giorno: g, quando: g ? secchioDelGiorno(g, oggi) : 'poi', ...(g ? {} : { ora: null }) })
+  }
+  return (
+    <span ref={dove} className="quaderno-sposta">
+      <button type="button" className="quaderno-icona" aria-haspopup="menu" aria-expanded={aperto}
+        aria-label={`${t('Sposta a un altro giorno')}: ${c.testo}`} title={t('Sposta a un altro giorno')} onClick={() => setAperto(a => !a)}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="16" rx="3" /><path d="M8 3v4M16 3v4M3 10h18" />
+        </svg>
+      </button>
+      {aperto && (
+        <span className="quaderno-sposta-menu" role="menu">
+          {scelte.map(([nome, g]) => (
+            <button key={nome} type="button" role="menuitem" aria-current={g === suo || undefined} onClick={() => vai(g)}>{t(nome)}</button>
+          ))}
+        </span>
+      )}
+    </span>
   )
 }
 

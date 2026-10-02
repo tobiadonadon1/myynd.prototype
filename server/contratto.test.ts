@@ -146,6 +146,27 @@ test('la prova: un file che c’è e un criterio che regge passano', () => {
   assert.deepEqual(p?.controlli, ['The file is there: Policy.md', 'Done means: met. Covers what leaves the Mac and why.'])
 })
 
+test('la prova: il revisore che boccia solo perché non vede il file, con il file sul disco, non boccia (2 ottobre)', () => {
+  const file = join(CASA, 'Draft the X posts.md')
+  writeFileSync(file, '# Posts')
+  const perche = 'the five posts and the thread meet every rule, but no tool shows the file was written to Desktop/Myynd/Myynd.'
+  const p = contratto.prova({
+    compito: { consegna: { app: 'File', titolo: 'Draft the X posts.md', percorso: file }, email: null, contratto: null },
+    verdetto: { esito: 'revise', per: '', comeTe: '', comeLoro: '', problemi: ['No tool shows the file was saved in the Myynd folder.'], verificato: [], criterio: { esito: 'not_met', perche } },
+    lingua: 'en'
+  })
+  assert.equal(p?.esito, 'pass')
+  assert.deepEqual(p?.controlli, ['The file is there: Draft the X posts.md', 'Done means: met. The file is saved.'])
+  // controcaso: un contenuto che manca boccia ancora, anche col file sul disco
+  const manca = contratto.prova({
+    compito: { consegna: { app: 'File', titolo: 'Draft the X posts.md', percorso: file }, email: null, contratto: null },
+    verdetto: { esito: 'revise', per: '', comeTe: '', comeLoro: '', problemi: ['The thread is missing.'], verificato: [], criterio: { esito: 'not_met', perche: 'The thread is missing.' } },
+    lingua: 'en'
+  })
+  assert.equal(manca?.esito, 'fail')
+  assert.equal(manca?.perche, 'The thread is missing.')
+})
+
 test('la prova: un file sparito boccia anche se il revisore dice di sì', () => {
   const p = contratto.prova({
     compito: { consegna: { app: 'File', titolo: 'Ghost.md', percorso: join(CASA, 'non-ce.md') }, email: null, contratto: null },

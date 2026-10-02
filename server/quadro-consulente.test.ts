@@ -38,7 +38,7 @@ function nato(nome: string): import('./progetti.ts').Progetto {
 test('le faccende di codice non passano, le mosse vere sì', () => {
   const fonti = new Map([['memoria', 'The blog has had no new post since September 14.']])
   const base = { genere: 'consiglio', testo: 'The blog has been quiet for eighteen days and the site loses search traffic.', leva: 2, urgenza: 'settimana', offerta: 'I draft two posts from your recent work.', prova: 'The blog has had no new post since September 14.', fonte: 'memoria' }
-  for (const titolo of ['Ship the sito worktree changes to tobiadonadon.com', 'Fill the Myynd website launch values for Vercel', 'Turn the Evermute deck outline into full slides', 'Merge the site branch into main'])
+  for (const titolo of ['Ship the sito worktree changes to tobiadonadon.com', 'Fill the Myynd website launch values for Vercel', 'Turn the Evermute deck outline into full slides', 'Merge the site branch into main', 'Freeze engine work and post one original weekly', 'Focus on the launch this week'])
     assert.equal(quadro.ripulisciMossa({ ...base, titolo }, fonti, []), null, titolo)
   assert.ok(quadro.ripulisciMossa({ ...base, titolo: 'Write a new blog post: it has been 18 days' }, fonti, []))
   // un'automazione si accende con un tocco solo se l'offerta lo dice così
@@ -145,7 +145,7 @@ test('il lavoro che fa da sé va in coda per la notte, non sul feed; la domanda 
   const auto = feed.find(v => v.titolo === 'Watch the blog and draft a post every two weeks')
   assert.ok(auto && auto.tipo === 'Proposta' && /^I set up an automation/.test(String(auto.offerta)))
   // la domanda sull'obiettivo: per Orbita sì, per il sito (certezza 0.85) no
-  const aperte = store.domandeConTema(priorita.TEMA_OBIETTIVO).filter(d => d.stato === 'aperta')
+  const aperte = store.domandeConTema(priorita.TEMA_QUADRO).filter(d => d.stato === 'aperta')
   assert.deepEqual(aperte.map(d => d.progetto), [vaga.id])
   assert.equal(quadro.leggiQuadri()[sito.id]!.domanda, undefined)
   // la risposta diventa l'obiettivo, e il quadro di Orbita si rifà
@@ -163,4 +163,39 @@ test('la consegna del quadro va nella sottocartella del progetto', () => {
   assert.match(readFileSync(s.percorso, 'utf8'), /Draft one/)
   const strano = mani.salvaConsegna({ titolo: 'x note', testo: 'Testo.', luogo: 'myynd', sotto: '../../etc' })
   assert.ok(strano.percorso.startsWith(join(scrivania, 'Myynd')), 'un nome storto non esce dalla cartella')
+})
+
+test('quello che solo lui può fare va nella sua lista di oggi; una domanda su una cosa vista va nelle note', async () => {
+  for (const d of store.domandeConTema('')) if (d.stato === 'aperta') store.chiudiDomanda(d.id, 'ignorata')
+  store.default.prepare("DELETE FROM domande").run()
+  const ev = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Get Evermute approved in the US' })
+  rifinitura.perProva({ collegato: () => false })
+  quadro.perProva({
+    collegato: () => true, guarda: async () => '',
+    leggi: async () => 'README: Evermute. Build 15 waits for signing access from Tommaso.',
+    chiediJSON: (async (o: { system: string }) => {
+      if (!/«Evermute»/.test(o.system)) return { obiettivo: { testo: 'x', certezza: 0.9 }, domanda: '', domandaTipo: '', stato: 'Quiet.', traguardo: '', blocco: '', mosse: [] }
+      return {
+        obiettivo: { testo: 'Get Evermute approved in the US', certezza: 0.9 },
+        domanda: 'The App Store page still shows the Italian screenshots: is that on purpose for the US listing?', domandaTipo: 'osservazione',
+        stato: 'Build 15 is ready.', traguardo: 'Build 15 approved', blocco: 'Signing access from Tommaso',
+        mosse: [{ genere: 'sblocco', titolo: 'Ask Tommaso for signing access on build 15', testo: 'The upload of build 15 waits only on this access in his Apple team.', leva: 3, urgenza: 'oggi', offerta: 'I draft the two line message to Tommaso.', prova: 'Build 15 waits for signing access from Tommaso.', fonte: 'lavoro:/Users/t/Desktop/Evermute' }]
+      }
+    }) as never
+  })
+  store.salvaDocumenti([{ id: 'lavoro:/Users/t/Desktop/Evermute', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: Evermute', corpo: 'README: Evermute.', percorso: '/Users/t/Desktop/Evermute', quando: giorniFa(0) }] as never)
+  priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [], domande: [], superate: [] })) as never })
+  priorita.dimentica()
+  await priorita.forse(true)
+  const riga = store.elencoCompiti().find(c => c.testo === 'Ask Tommaso for signing access on build 15')
+  assert.ok(riga, 'nella sua lista')
+  assert.equal(riga.modo, 'io')
+  assert.equal(riga.giorno, new Date().toLocaleDateString('en-CA'), 'di oggi')
+  assert.match(riga.nota ?? '', /I draft the two line message to Tommaso/)
+  assert.ok(!(feedAttuale() as Record<string, unknown>[]).some(v => v.titolo === riga.testo), 'non anche come carta')
+  const d = store.domandeConTema(priorita.TEMA_QUADRO).find(x => x.stato === 'aperta')
+  assert.ok(d && d.tema.startsWith('quadro:osservazione:'), 'la domanda su una cosa vista, anche con l\'obiettivo chiaro')
+  const { esito } = await domande.rispondiADomanda(d.id, 'No, swap them for the English ones')
+  assert.match(esito, /Saved in Evermute's notes/)
+  assert.match(progetti.trova(ev.id)!.note, /Italian screenshots.*swap them for the English ones/)
 })

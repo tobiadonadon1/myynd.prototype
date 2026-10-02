@@ -113,7 +113,7 @@ test('il giro intero: il quadro chiede al modello per ogni progetto cambiato, e 
         traguardo: 'Evermute 1.0.6 approved on the App Store',
         blocco: 'Xcode needs his Apple ID sign in',
         mosse: [
-          { genere: 'sblocco', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Upload build 15.', fonte: 'conversazioni:codice:e1' },
+          { genere: 'consiglio', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Upload build 15.', fonte: 'conversazioni:codice:e1' },
           { genere: 'consiglio', titolo: 'Invent a launch party', testo: 'Nothing in the material says this, it is made up.', leva: 3, urgenza: 'oggi', offerta: 'I plan it.', prova: 'a party for the launch on Friday', fonte: 'posta:INBOX:9' }
         ]
       }
@@ -150,7 +150,7 @@ test('una mossa già messa non torna, e una seconda mossa dalla stessa cartella 
     chiediJSON: (async (o: { system: string }) => {
       if (!/«Evermute deck»/.test(o.system)) return { stato: 'Quiet.', traguardo: '', blocco: '', mosse: [] }
       return { stato: 'Ready.', traguardo: 'Approved', blocco: '', mosse: [
-        { genere: 'sblocco', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Evermute build 15 is ready to upload.', fonte: 'lavoro:/Users/t/Desktop/Evermute' },
+        { genere: 'consiglio', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Evermute build 15 is ready to upload.', fonte: 'lavoro:/Users/t/Desktop/Evermute' },
         { genere: 'consiglio', titolo: 'Make the Italian store screenshots for Evermute', testo: 'The Italian listing is the last missing piece before the release goes out.', leva: 2, urgenza: 'settimana', offerta: 'I draft the five screenshots captions in Italian.', prova: 'The Italian store listing still needs screenshots.', fonte: 'lavoro:/Users/t/Desktop/Evermute' }
       ] }
     }) as never

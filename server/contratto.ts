@@ -414,14 +414,27 @@ export function prova(o: {
 
   const v = o.verdetto
   let perche = ''
+  /*
+   * Il revisore giudica prima che il file sia scritto: se quello che dice
+   * mancare è solo il file, e il disco dice che c'è, il «fatto» regge. Il 2
+   * ottobre una carta buona è tornata «da finire» per questo, con la domanda
+   * «in che file salvo?» sotto un file già salvato.
+   */
+  const parlaDelFile = (t: string) => /\b(?:no tool|nothing|nessun|non .{0,20}(?:mostra|risulta))\b[^.]*\b(?:file|written|saved|scritt|salvat)/i.test(t)
+  const fileCe = !!file && ferri.esiste(file)
   if (v?.criterio) {
-    controlli.push(v.criterio.esito === 'met'
-      ? (en ? `Done means: met. ${v.criterio.perche}` : `Il «fatto»: regge. ${v.criterio.perche}`)
+    const soloIlFile = fileCe && v.criterio.esito === 'not_met' && parlaDelFile(v.criterio.perche)
+    const regge = v.criterio.esito === 'met' || soloIlFile
+    controlli.push(regge
+      ? (en ? `Done means: met. ${soloIlFile ? 'The file is saved.' : v.criterio.perche}` : `Il «fatto»: regge. ${soloIlFile ? 'Il file è salvato.' : v.criterio.perche}`)
       : (en ? `Done means: not met. ${v.criterio.perche}` : `Il «fatto»: non regge. ${v.criterio.perche}`))
-    perche = v.criterio.perche
-    if (v.criterio.esito === 'not_met') caduto = caduto ?? v.criterio.perche
+    perche = soloIlFile ? '' : v.criterio.perche
+    if (!regge) caduto = caduto ?? v.criterio.perche
   }
-  if (v?.esito === 'revise' && v.problemi.length) caduto = caduto ?? v.problemi[0]
+  if (v?.esito === 'revise' && v.problemi.length) {
+    const problema = v.problemi.find(x => !(fileCe && parlaDelFile(x)))
+    if (problema) caduto = caduto ?? problema
+  }
   if (!controlli.length && !caduto && (!v || v.esito === 'unavailable')) {
     return { esito: 'unavailable', perche: en ? 'Nobody could check it: read it before you use it.' : 'Nessuno ha potuto controllarlo: rileggilo prima di usarlo.', controlli: [], quando: (o.adesso ?? new Date()).toISOString() }
   }

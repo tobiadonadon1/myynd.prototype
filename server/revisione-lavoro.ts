@@ -369,7 +369,7 @@ export async function giudica(o: {
     '4. La lunghezza: quanta ne serve a chi legge, non di più e non di meno.\n' +
     '5. La riga finale per lei, se c\'è: quando il lavoro contiene cifre o date, deve dire da ' +
     'quali fonti vengono.\n' +
-    (o.criterio ? `5b. Il «fatto» della carta, scritto prima del lavoro: «${o.criterio}». Il lavoro lo soddisfa per intero? Se ne manca anche una parte, o se il criterio dice un posto (la casella, un file, una nota, il codice) e gli attrezzi usati non mostrano che il lavoro è arrivato lì, non regge: allora l'esito è revise e fra i problemi c'è quello che manca, detto in modo che chi riscrive possa rimediare. Non chiedere più di quello che il criterio dice.\n` : '') +
+    (o.criterio ? `5b. Il «fatto» della carta, scritto prima del lavoro: «${o.criterio}». Il lavoro lo soddisfa per intero? Se ne manca anche una parte, o se il criterio dice un posto (la casella, una nota, il codice) e gli attrezzi usati non mostrano che il lavoro è arrivato lì, non regge: allora l'esito è revise e fra i problemi c'è quello che manca, detto in modo che chi riscrive possa rimediare. Un file sulla Scrivania o nella cartella Myynd invece non lo giudicare: lo salva Myynd dopo di te, e un controllo sul disco guarda che ci sia. Giudica solo quello che il file deve contenere. Non chiedere più di quello che il criterio dice.\n` : '') +
     '6. La frase di chiusura, cioè la prima riga: comincia con «Fatto:» o «Done:» e dice cosa ' +
     'è stato prodotto e dove. Dev\'essere vera contro l\'elenco degli attrezzi usati che trovi ' +
     'sotto il lavoro: «salvato in Pages», «la nota è in Note», «il file è in…», «le modifiche ' +

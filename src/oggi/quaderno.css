@@ -68,6 +68,14 @@
 .quaderno-gesti {display:none;align-items:center;gap:2px;}
 .quaderno-riga:hover .quaderno-gesti,.quaderno-riga:focus-within .quaderno-gesti {display:flex;}
 .quaderno-riga:hover .quaderno-segno,.quaderno-riga:focus-within .quaderno-segno {display:none;}
+.quaderno-sposta {position:relative;display:inline-flex;}
+.quaderno-sposta-menu {position:absolute;right:0;top:calc(100% + 4px);z-index:20;display:flex;flex-direction:column;min-width:150px;padding:5px;background:var(--carta-piena);border:1px solid rgba(var(--inchiostro-rgb),.12);border-radius:14px;box-shadow:0 12px 30px -12px rgba(var(--ombra-rgb),.35);}
+.quaderno-sposta-menu button {border:0;background:transparent;text-align:left;padding:7px 10px;border-radius:10px;font-size:13px;color:var(--inchiostro);white-space:nowrap;}
+.quaderno-sposta-menu button:hover {background:rgba(var(--rame-rgb),.10);color:var(--rame-testo);}
+.quaderno-sposta-menu button[aria-current] {color:var(--rame-testo);font-weight:600;}
+/* il menu aperto tiene accesi i gesti anche se il mouse esce dalla riga */
+.quaderno-riga:has(.quaderno-sposta-menu) .quaderno-gesti {display:flex;}
+.quaderno-riga:has(.quaderno-sposta-menu) .quaderno-segno {display:none;}
 .quaderno-icona {display:inline-grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;font-size:14px;line-height:1;color:rgba(var(--inchiostro-rgb),.6);}
 .quaderno-icona:hover {color:var(--rame-testo);}
 .quaderno-icona[data-togli] {color:rgba(var(--inchiostro-rgb),.42);}

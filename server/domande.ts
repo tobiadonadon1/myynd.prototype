@@ -305,8 +305,25 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
    * parole diventano l'obiettivo, e il quadro di quel progetto si rifà al giro
    * dopo con l'obiettivo vero davanti.
    */
-  if (questa?.tema.startsWith('obiettivo:')) {
-    const id = questa.tema.slice('obiettivo:'.length)
+  /*
+   * Una domanda del quadro su una cosa vista («sulla home c'è ancora "coming
+   * soon": è voluto?»): la risposta va nelle note del progetto, che il quadro
+   * legge, e il quadro si rifà al giro dopo.
+   */
+  if (questa?.tema.startsWith('quadro:osservazione:')) {
+    const id = questa.tema.split(':')[2] ?? ''
+    const p = progetti.trova(id)
+    const riga = `${new Date().toISOString().slice(0, 10)} · ${questa.testo} → ${senzaTrattini(pulita.replace(/\s+/g, ' ')).slice(0, 300)}`
+    if (p) { progetti.cambia(p.id, { note: p.note ? `${p.note}\n${riga}` : riga }, 'user-chat'); quadro.dimenticaQuadro(p.id) }
+    const esito = p
+      ? (lingua() === 'it' ? `Segnato nelle note di ${p.nome}. Ne tengo conto da subito.` : `Saved in ${p.nome}'s notes. I'll take it into account right away.`)
+      : (lingua() === 'it' ? 'Me lo sono segnato.' : 'Noted.')
+    store.chiudiDomanda(questa.id, 'risposta', pulita, esito)
+    return { esito }
+  }
+
+  if (questa?.tema.startsWith('obiettivo:') || questa?.tema.startsWith('quadro:obiettivo:')) {
+    const id = questa.tema.startsWith('quadro:') ? questa.tema.split(':')[2] ?? '' : questa.tema.slice('obiettivo:'.length)
     const p = progetti.trova(id)
     const obiettivo = senzaTrattini(pulita.replace(/\s+/g, ' ')).slice(0, 300)
     if (p) { progetti.cambia(p.id, { obiettivo }, 'user-chat'); quadro.dimenticaQuadro(p.id) }
