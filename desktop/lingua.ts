@@ -71,7 +71,10 @@ const EN: Record<string, string> = {
   'Pausa per un’ora': 'Pause watching for an hour',
   'Riprendi a guardare': 'Resume watching',
   'in pausa fino alle': 'paused until',
-  'Togli dallo schermo': 'Remove from screen'
+  'Togli dallo schermo': 'Remove from screen',
+  // i due bottoni della pastiglia sotto il mostriciattolo
+  'Scrivi a Myynd': 'Write to Myynd',
+  'Parla con Myynd': 'Talk to Myynd'
 }
 
 /** Quale lingua parla il guscio adesso. */

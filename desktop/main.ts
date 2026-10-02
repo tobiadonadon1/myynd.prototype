@@ -171,6 +171,8 @@ async function avvio() {
   // c'è, la finestra
   compagno.prepara({
     parla: r => { if (!richiamo.alternaAccanto(r)) finestra.alterna() },
+    scrivi: r => { if (!richiamo.mostraAccanto(r)) finestra.alterna() },
+    detta: r => { if (!richiamo.dettaAccanto(r)) finestra.alterna() },
     mosso: r => richiamo.segui(r),
     apri: finestra.mostra,
     pausa: () => osservatore.pausa(60), riprendi: () => osservatore.riprendi(),
@@ -396,6 +398,7 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
     impostazioni.scrivi({ lingua: nuova })
     menu.costruisci(azioni)
     tray.aggiorna()
+    compagno.rinfresca()
   })
   /*
    * L'osservatore del Mac, dalle Preferenze.

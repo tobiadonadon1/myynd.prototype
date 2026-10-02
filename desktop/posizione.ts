@@ -43,26 +43,38 @@ export function doveSiApre(schermo: Schermo, r: Area): string {
 /* ------------------------------------------------------------ il mostriciattolo */
 
 /**
- * Il riquadro del mostriciattolo sullo schermo, in punti. È in 3D, e il
- * quadrato tiene anche le antenne, i piedi e il salto: il corpo ne occupa
- * più o meno la metà in mezzo, il resto è trasparente.
+ * Il riquadro del mostriciattolo sullo schermo, in punti. È in 3D: il
+ * quadrato in alto (`LATO_COMPAGNO`) tiene lui, con le antenne, i piedi e il
+ * salto; la striscia sotto (`PIEDE_COMPAGNO`) tiene la pastiglia con i due
+ * bottoni, che compare quando il cursore gli passa sopra. Il resto è
+ * trasparente, e il mouse ci passa attraverso.
  */
 export const LATO_COMPAGNO = 144
+export const PIEDE_COMPAGNO = 44
+export const ALTO_COMPAGNO = LATO_COMPAGNO + PIEDE_COMPAGNO
 /** Quanto sta lontano dai bordi quando nessuno l'ha spostato. */
 export const MARGINE_COMPAGNO = 24
 
 type Punto = { x: number; y: number }
 
 const dentroTutto = (a: Area, p: Punto) =>
-  p.x >= a.x && p.y >= a.y && p.x + LATO_COMPAGNO <= a.x + a.width && p.y + LATO_COMPAGNO <= a.y + a.height
+  p.x >= a.x && p.y >= a.y && p.x + LATO_COMPAGNO <= a.x + a.width && p.y + ALTO_COMPAGNO <= a.y + a.height
 const contiene = (a: Area, x: number, y: number) => x >= a.x && x < a.x + a.width && y >= a.y && y < a.y + a.height
 /** Il punto spinto dentro l'area, se ci sta. */
 const dentro = (a: Area, p: Punto): Punto => ({
   x: Math.round(Math.min(Math.max(p.x, a.x), a.x + a.width - LATO_COMPAGNO)),
-  y: Math.round(Math.min(Math.max(p.y, a.y), a.y + a.height - LATO_COMPAGNO))
+  y: Math.round(Math.min(Math.max(p.y, a.y), a.y + a.height - ALTO_COMPAGNO))
 })
 const areaDelCentro = (aree: Area[], p: Punto) =>
-  aree.find(a => contiene(a, p.x + LATO_COMPAGNO / 2, p.y + LATO_COMPAGNO / 2))
+  aree.find(a => contiene(a, p.x + LATO_COMPAGNO / 2, p.y + ALTO_COMPAGNO / 2))
+
+/**
+ * Il quadrato dove sta lui, dentro la finestra `finestra`: senza la striscia
+ * della pastiglia. È da lì che si misurano lo sguardo e il posto del fumetto.
+ */
+export function corpoDelCompagno(finestra: Area): Area {
+  return { x: finestra.x, y: finestra.y, width: finestra.width, height: Math.min(finestra.height, LATO_COMPAGNO) }
+}
 
 /**
  * Dove sta il mostriciattolo. Senza un posto salvato: in basso a destra dello
@@ -73,7 +85,7 @@ const areaDelCentro = (aree: Area[], p: Punto) =>
 export function posizioneCompagno(aree: Area[], voluta: { x?: number; y?: number } | undefined, principale: Area): Punto {
   const predefinita = dentro(principale, {
     x: principale.x + principale.width - LATO_COMPAGNO - MARGINE_COMPAGNO,
-    y: principale.y + principale.height - LATO_COMPAGNO - MARGINE_COMPAGNO
+    y: principale.y + principale.height - ALTO_COMPAGNO - MARGINE_COMPAGNO
   })
   if (!voluta || !Number.isFinite(voluta.x) || !Number.isFinite(voluta.y)) return predefinita
   const p = { x: Math.round(voluta.x!), y: Math.round(voluta.y!) }

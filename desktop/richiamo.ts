@@ -30,7 +30,7 @@
 // l'app, quindi ci si scrive, e ci si detta (fn due volte), senza che
 // Myynd venga avanti e senza cambiare Space.
 
-import { app, BrowserWindow, screen } from 'electron'
+import { app, BrowserWindow, Menu, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { ALTEZZA_MINIMA, doveSiApre, posizioneFumetto, posizioneRichiamo, type Area } from './posizione.ts'
 import { scriviRegistro } from './server.ts'
@@ -76,6 +76,10 @@ if (MAC) {
 let attivaAllApertura = false
 /** Aperta come fumetto: il riquadro del mostriciattolo accanto a cui sta. Null: la barra in mezzo. */
 let accanto: Area | null = null
+/** Aperto dal bottone «parla»: la casella dice come dettare, e la dettatura si chiede al Mac. */
+let detta = false
+/** Quanto si aspetta prima di chiedere la dettatura: il tempo che il fuoco arrivi nella casella. */
+const ATTESA_DETTATURA = 320
 /**
  * Quando l'ha nascosta un `blur`. Un clic sul mostriciattolo col fumetto
  * aperto è un «chiudi»; se macOS ha già tolto il fuoco al fumetto per quel
@@ -183,13 +187,43 @@ export function visibile(): boolean {
  */
 export function mostra(): boolean {
   accanto = null
+  detta = false
   return apri()
 }
 
 /** Il fumetto: la stessa barra, accanto al mostriciattolo che sta in `compagno`. */
 export function mostraAccanto(compagno: Area): boolean {
   accanto = compagno
+  detta = false
   return apri()
+}
+
+/**
+ * Il fumetto, e la dettatura del Mac: il bottone «parla» del mostriciattolo.
+ *
+ * La dettatura parte da sola chiedendola al primo che risponde nella finestra
+ * chiave (`startDictation:`, la stessa azione della voce «Avvia dettatura» del
+ * menu Modifica): dopo un attimo, quando il fumetto ha il fuoco e la pagina
+ * l'ha messo nella casella. Se il Mac non la fa partire (dettatura spenta
+ * nelle Impostazioni, o l'azione non arriva) resta il fumetto aperto con la
+ * casella pronta, e la casella dice di premere fn due volte.
+ */
+export function dettaAccanto(compagno: Area): boolean {
+  accanto = compagno
+  detta = true
+  const aperto = apri()
+  if (aperto && MAC) {
+    setTimeout(() => {
+      const w = attuale()
+      if (!w || !w.isVisible() || !w.isFocused()) {
+        scriviRegistro('guscio · la dettatura non parte: il fumetto non ha il fuoco')
+        return
+      }
+      Menu.sendActionToFirstResponder('startDictation:')
+      scriviRegistro('guscio · il fumetto chiede la dettatura')
+    }, ATTESA_DETTATURA)
+  }
+  return aperto
 }
 
 /** Dove va: accanto al mostriciattolo, se è il fumetto; altrimenti sullo schermo del cursore. */
@@ -211,14 +245,16 @@ function apri(): boolean {
     scriviRegistro('guscio · il richiamo aspetta la pagina')
     return true
   }
-  const { schermo, riquadro } = dove(altezza)
+  // già aperto accanto a lui: si rimette il fuoco nella casella e basta, la risposta resta
+  const ancora = !!accanto && w.isVisible()
+  const { schermo, riquadro } = dove(ancora ? w.getBounds().height : altezza)
   w.setBounds(riquadro)
   mostrataAlle = Date.now()
   attivaAllApertura = appAttiva
   w.show()
   w.focus()
   // la pagina rimette il fuoco nella casella e toglie la risposta di prima
-  w.webContents.send('myynd:richiamo-mostrato', { accanto: !!accanto })
+  w.webContents.send('myynd:richiamo-mostrato', { accanto: !!accanto, detta, ancora })
   scriviRegistro(`guscio · ${accanto ? 'il fumetto' : 'il richiamo'} si apre su ${doveSiApre(schermo, riquadro)}`)
   return true
 }

@@ -8,8 +8,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  ALTEZZA_MASSIMA, ALTEZZA_MASSIMA_FUMETTO, ALTEZZA_MINIMA, LARGHEZZA, LARGHEZZA_FUMETTO, LATO_COMPAGNO, MARGINE_COMPAGNO,
-  doveSiApre, posizioneCompagno, posizioneFumetto, posizioneRichiamo, sguardoVerso, trascinaCompagno
+  ALTEZZA_MASSIMA, ALTEZZA_MASSIMA_FUMETTO, ALTEZZA_MINIMA, ALTO_COMPAGNO, LARGHEZZA, LARGHEZZA_FUMETTO, LATO_COMPAGNO, MARGINE_COMPAGNO,
+  corpoDelCompagno, doveSiApre, posizioneCompagno, posizioneFumetto, posizioneRichiamo, sguardoVerso, trascinaCompagno
 } from './posizione.ts'
 
 const SCHERMO = { x: 0, y: 25, width: 1440, height: 875 }
@@ -53,7 +53,7 @@ const PRINCIPALE = { x: 0, y: 25, width: 1440, height: 875 }
 const SECONDO = { x: 1440, y: 0, width: 1920, height: 1080 }
 
 test('mostriciattolo: senza posto salvato, in basso a destra dello schermo principale', () => {
-  const atteso = { x: 1440 - LATO_COMPAGNO - MARGINE_COMPAGNO, y: 25 + 875 - LATO_COMPAGNO - MARGINE_COMPAGNO }
+  const atteso = { x: 1440 - LATO_COMPAGNO - MARGINE_COMPAGNO, y: 25 + 875 - ALTO_COMPAGNO - MARGINE_COMPAGNO }
   assert.deepEqual(posizioneCompagno([PRINCIPALE], undefined, PRINCIPALE), atteso)
   assert.deepEqual(posizioneCompagno([PRINCIPALE], {}, PRINCIPALE), atteso)
   assert.deepEqual(posizioneCompagno([PRINCIPALE], { x: Number.NaN, y: 3 }, PRINCIPALE), atteso)
@@ -87,21 +87,32 @@ test('mostriciattolo trascinato: segue, resta dentro, e fuori da tutto sta fermo
   const aree = [PRINCIPALE, SECONDO]
   assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 200 }, 30, -40), { x: 130, y: 160 })
   assert.deepEqual(trascinaCompagno(aree, { x: 1300, y: 200 }, 200, 0), { x: 1500, y: 200 }, 'passa sul secondo schermo')
-  assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 700 }, 0, 100), { x: 100, y: 25 + 875 - LATO_COMPAGNO })
+  assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 700 }, 0, 100), { x: 100, y: 25 + 875 - ALTO_COMPAGNO })
   assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 800 }, -500, 0), { x: 100, y: 800 })
   assert.deepEqual(trascinaCompagno(aree, { x: 100, y: 800 }, -500, 0, { x: 60, y: 800 }), { x: 60, y: 800 }, 'fuori da tutto: resta dov’è adesso')
 })
 
 test('mostriciattolo spinto contro il bordo e riportato indietro: torna sotto il puntatore', () => {
   const aree = [PRINCIPALE, SECONDO]
-  const presa = { x: 100, y: 700 }
-  const giu = { x: 100, y: 25 + 875 - LATO_COMPAGNO }
+  const presa = { x: 100, y: 650 }
+  const giu = { x: 100, y: 25 + 875 - ALTO_COMPAGNO }
   // il puntatore scende di 400 punti oltre il fondo: il mostriciattolo si ferma al bordo
   assert.deepEqual(trascinaCompagno(aree, presa, 0, 120), giu)
   assert.deepEqual(trascinaCompagno(aree, presa, 0, 400, giu), giu)
   // e risale: appena il puntatore torna sopra il bordo, il mostriciattolo è di nuovo sotto di lui
-  assert.deepEqual(trascinaCompagno(aree, presa, 0, 50, giu), { x: 100, y: 750 })
+  assert.deepEqual(trascinaCompagno(aree, presa, 0, 50, giu), { x: 100, y: 700 })
   assert.deepEqual(trascinaCompagno(aree, presa, 0, 0, giu), presa)
+})
+
+test('il corpo è il quadrato in alto: la striscia della pastiglia non conta per sguardo e fumetto', () => {
+  assert.equal(ALTO_COMPAGNO > LATO_COMPAGNO, true)
+  assert.deepEqual(corpoDelCompagno({ x: 10, y: 20, width: LATO_COMPAGNO, height: ALTO_COMPAGNO }),
+    { x: 10, y: 20, width: LATO_COMPAGNO, height: LATO_COMPAGNO })
+  // un mostriciattolo in basso a destra: il fondo del fumetto alla sua bocca, non sotto la pastiglia
+  const finestra = { ...posizioneCompagno([PRINCIPALE], undefined, PRINCIPALE), width: LATO_COMPAGNO, height: ALTO_COMPAGNO }
+  const lui = corpoDelCompagno(finestra)
+  const f = posizioneFumetto(PRINCIPALE, lui, 120)
+  assert.ok(f.y + f.height < lui.y + lui.height, JSON.stringify({ f, lui }))
 })
 
 /* ------------------------------------------------------------ lo sguardo e il fumetto */
