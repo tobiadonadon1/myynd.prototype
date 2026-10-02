@@ -124,7 +124,7 @@ test('le sue impostazioni: taglia e sguardo si salvano, e tolto dalla scrivania 
   assert.match(main, /ipcMain\.handle\('myynd:compagno-scegli'/)
   assert.match(main, /compagno: \{ tolto: \(\) => !compagno\.acceso\(\), mostra: \(\) => compagno\.accendi\(true\) \}/)
   const imposta = guscio.slice(guscio.indexOf('export function imposta('), guscio.indexOf('export function prepara('))
-  assert.match(imposta, /impostazioni\.scrivi\(\{ compagno: \{ \.\.\.impostazioni\.leggi\(\)\.compagno, acceso: acceso\(\), taglia, segue \} \}\)/)
+  assert.match(imposta, /impostazioni\.scrivi\(\{ compagno: \{ \.\.\.impostazioni\.leggi\(\)\.compagno, acceso: acceso\(\), taglia, segue, giocoso \} \}\)/)
   assert.match(imposta, /w\.webContents\.setZoomFactor\(m\.scala\)/)
 })
 
@@ -132,4 +132,39 @@ test('dormendo non diventa grigio, e la tela è nitida anche a 1x', () => {
   assert.doesNotMatch(pagina, /\.spenta[^{]*\{[^}]*(opacity|filter)/)
   assert.match(scena, /mix\(diffuseColor\.rgb, vec3\(grigio\), 0\.1 \* uSonno\)/)
   assert.match(scena, /const densita = \(\) => Math\.min\(Math\.max\(\(window\.devicePixelRatio \|\| 1\) \* 1\.5, 2\), 3\)/)
+})
+
+test('il personaggio del disegno: le sue ossa, e le espressioni', () => {
+  const costruisci = scena.slice(scena.indexOf('export function costruisciMostriciattolo('), scena.indexOf('export async function caricaModello('))
+  // busto, testa, spalle con i polsi, piedi, antenne: ognuno col suo perno
+  assert.match(costruisci, /return \{ radice, salto, corpo, parti: \{ busto, testa, occhi, antenne, braccia, piedi, bocca: sorriso \} \}/)
+  assert.match(scena, /spalla\.userData = \{ polso \}/)
+  // occhi aperti, ^ quando ride, chiusi quando dorme
+  assert.match(scena, /arco\.scale\.y = P\.occhi === 'chiusi' \? -1 : 1/)
+  assert.match(scena, /if \(sonno > 0\.5 && P\.occhi === 'aperti'\) P\.occhi = 'chiusi'/)
+  // le setole vanno dal quasi nero all'arancio acceso
+  assert.match(scena, /const SETOLE_BUIE = '#[0-9A-F]{6}'/)
+  assert.match(scena, /const SETOLE_VIVE = '#[0-9A-F]{6}'/)
+})
+
+test('i gesti: salto, giravolta, risatina e passetto; da solo solo se giocoso, mai col movimento ridotto', () => {
+  for (const g of ['salto', 'giravolta', 'ridacchia', 'passetto']) assert.ok(scena.includes(`g.nome === '${g}'`), g)
+  // quelli che vengono da soli: mai nelle prove, mai col movimento ridotto, mai mentre dorme
+  assert.match(scena, /if \(!prova && !calmo && !gesto && !tocco && stato\.guarda\) \{/)
+  assert.match(scena, /else if \(stato\.giocoso && tempo > prossimoGioco\) \{/)
+  // col movimento ridotto niente salti né giravolte, nemmeno a comando; la risatina sì
+  assert.match(scena, /if \(calmo && nome !== 'ridacchia'\) return false/)
+  // qualcosa aspetta: un salto
+  assert.match(scena, /if \(stato\.attesa && !primaAttesa\) comincia\('salto'\)/)
+  // il doppio clic è una giravolta; il clic singolo aspetta di sapere se ne arriva un secondo
+  assert.match(gesti, /scena\?\.gesto\('giravolta'\)/)
+  assert.match(gesti, /clicInAttesa = setTimeout\(\(\) => \{ clicInAttesa = 0; c\.premuto\(\) \}, DOPPIO\)/)
+  // gli si scrive dalla casella: ridacchia
+  const richiamo = readFileSync(fileURLToPath(new URL('../src/richiamo/Richiamo.tsx', import.meta.url)), 'utf8')
+  assert.match(richiamo, /if \(accanto\) ponte\?\.inviato\?\.\(\)/)
+  assert.match(main, /ipcMain\.on\('myynd:richiamo-inviato', \(\) => compagno\.gesto\('ridacchia'\)\)/)
+  assert.ok(preload.includes("'compagno:gesto'"))
+  // giocoso si sceglie nelle sue impostazioni e arriva alla pagina con lo stato
+  assert.match(guscio, /giocoso: scelte\(\)\.giocoso,/)
+  assert.match(gesti, /giocoso: giocosoOra/)
 })

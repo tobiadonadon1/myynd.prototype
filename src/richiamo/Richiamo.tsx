@@ -193,6 +193,8 @@ export function Richiamo() {
     const id = accanto && chat ? chat : `th${Date.now()}`
     setChat(id); setDomanda(pulita); setRisposta(''); setGuaio(''); setPensando(true)
     daCapo()
+    // sotto il mostriciattolo: gli si è appena scritto, e lui ridacchia
+    if (accanto) ponte?.inviato?.()
     try {
       const r = await api.chiedi(id, pulita, delta => setRisposta(r => r + delta), () => setRisposta(''))
       // alla fine vale quello salvato, non quello scorso: se il server non ha

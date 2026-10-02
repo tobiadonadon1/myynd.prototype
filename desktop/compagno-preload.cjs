@@ -23,8 +23,13 @@ contextBridge.exposeInMainWorld('compagno', {
     ipcRenderer.on('compagno:stato', (_e, s) => cb({
       guarda: s?.guarda === true,
       attesa: s?.attesa === true,
+      giocoso: s?.giocoso !== false,
       testi: { scrivi: String(s?.testi?.scrivi ?? ''), impostazioni: String(s?.testi?.impostazioni ?? '') }
     }))
+  },
+  /** Un gesto che decide il guscio (la risatina quando gli si scrive): solo nomi conosciuti. */
+  gesto: cb => {
+    ipcRenderer.on('compagno:gesto', (_e, nome) => { if (['salto', 'giravolta', 'ridacchia'].includes(nome)) cb(nome) })
   },
   /** Dove sta il cursore rispetto a lui, fra -1 e 1: il guscio lo manda finché lo si vede. */
   sguardo: cb => {

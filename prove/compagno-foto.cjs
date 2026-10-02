@@ -116,12 +116,15 @@ async function carica(w, query) {
 
 const POSE = [
   ['fronte', { guarda: [0, 0.05], sveglio: true, tempo: 0.2 }, 'guarda'],
+  ['tre-quarti', { guarda: [0, 0.05], sveglio: true, tempo: 0.2, giro: 0.75 }, 'guarda'],
+  ['retro', { guarda: [0, 0], sveglio: true, tempo: 0.2, giro: Math.PI }, 'guarda'],
   ['sinistra', { guarda: [-0.85, 0.05], sveglio: true, tempo: 0.2 }, 'guarda'],
   ['destra', { guarda: [0.85, 0.05], sveglio: true, tempo: 0.2 }, 'guarda'],
-  ['su', { guarda: [0.2, -0.8], sveglio: true, tempo: 0.2 }, 'guarda'],
   ['smorto', { sveglio: false, attento: false, tempo: 0.2 }, 'smorto'],
-  ['salto', { guarda: [0, 0], sveglio: true, tempo: 2, salto: 0.28 }, 'attesa'],
-  ['sopra', { guarda: [0.15, 0.3], sveglio: true, attento: true, tempo: 0.2 }, 'guarda']
+  ['salto', { guarda: [0, 0], sveglio: true, tempo: 2, gesto: 'salto', fase: 0.49 }, 'attesa'],
+  ['giravolta', { guarda: [0, 0], sveglio: true, tempo: 2, gesto: 'giravolta', fase: 0.4 }, 'guarda'],
+  ['ridacchia', { guarda: [0, 0], sveglio: true, tempo: 2.1, gesto: 'ridacchia', fase: 0.5 }, 'guarda'],
+  ['sopra', { guarda: [0.15, 0.3], sveglio: true, attento: true, tempo: 0.31 }, 'guarda']
 ]
 
 app.whenReady().then(async () => {
@@ -187,8 +190,18 @@ app.whenReady().then(async () => {
   topo('mouseMove', cx, cy); await pausa(60)
   gesti.length = 0
   topo('mouseDown', cx, cy); topo('mouseUp', cx, cy)
-  await pausa(150)
-  verifica(gesti.some(g => g[0] === 'premuto') && !gesti.some(g => g[0] === 'lascia'), `un clic è premuto (${JSON.stringify(gesti)})`)
+  await pausa(450)
+  verifica(gesti.some(g => g[0] === 'premuto') && !gesti.some(g => g[0] === 'lascia'), `un clic è premuto, dopo un attimo (${JSON.stringify(gesti)})`)
+  // il doppio clic: niente casella, una giravolta
+  gesti.length = 0
+  topo('mouseDown', cx, cy); topo('mouseUp', cx, cy)
+  await pausa(80)
+  topo('mouseDown', cx, cy, 'left', { clickCount: 2 }); topo('mouseUp', cx, cy, 'left', { clickCount: 2 })
+  await pausa(60)
+  const gira = await w.webContents.executeJavaScript('window.scena.gestoInCorso()')
+  await pausa(450)
+  verifica(!gesti.some(g => g[0] === 'premuto') && gira === 'giravolta', `il doppio clic è una giravolta, non la casella (${gira}, ${JSON.stringify(gesti)})`)
+  await pausa(1000)
   gesti.length = 0
   topo('mouseDown', cx, cy)
   for (let i = 1; i <= 6; i++) { topo('mouseMove', cx + i * 8, cy, 'left', { modifiers: ['leftButtonDown'] }); await pausa(30) }
@@ -247,7 +260,7 @@ app.whenReady().then(async () => {
   const totale = r => r.renderer + r.gpu + r.principale
   const oltre = r => (totale(r) - totale(vuota)).toFixed(2)
   console.log(`compagno-foto · oltre la pagina vuota, in percento di un core: a riposo +${oltre(fermo)}, smorto +${oltre(dorme)}, col cursore +${oltre(segue)}`)
-  verifica(fermo.fps <= 5, `a riposo bastano 4 fotogrammi al secondo (${fermo.fps.toFixed(1)})`)
+  verifica(fermo.fps <= 4, `a riposo bastano 3 fotogrammi al secondo (${fermo.fps.toFixed(1)})`)
   verifica(dorme.fps <= 3, `smorto 2 (${dorme.fps.toFixed(1)})`)
   verifica(segue.fps > 15 && segue.fps <= 31, `col cursore fino a 30 (${segue.fps.toFixed(1)})`)
   w.destroy()

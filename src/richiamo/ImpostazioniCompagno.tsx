@@ -1,8 +1,9 @@
 // Le impostazioni del mostriciattolo: il pannellino che l'ingranaggio della
 // sua pastiglia apre sotto di lui.
 //
-// Tre cose sole: quanto è grande, se segue il cursore con lo sguardo, e
-// toglierlo dalla scrivania (con dove si va a riprenderlo). Si salvano nel
+// Quattro cose sole: quanto è grande, se segue il cursore con lo sguardo, se
+// è giocoso (salta e fa le giravolte da solo ogni tanto), e toglierlo dalla
+// scrivania (con dove si va a riprenderlo). Si salvano nel
 // guscio (`desktop/compagno.ts`, `impostazioni.json`) appena le si tocca.
 // È nella stessa finestra del richiamo, quindi si chiude come lei: Esc, la ×,
 // un clic altrove.
@@ -24,7 +25,7 @@ export function ImpostazioniCompagno({ versione, chiudi }: {
   chiudi: () => void
 }) {
   const ponte = desktop()?.compagno
-  const [scelte, setScelte] = useState<SceltaCompagno>({ taglia: 'medio', segue: true })
+  const [scelte, setScelte] = useState<SceltaCompagno>({ taglia: 'medio', segue: true, giocoso: true })
 
   useEffect(() => {
     void ponte?.scelte?.().then(s => { if (s) setScelte(s) }).catch(() => {})
@@ -65,6 +66,10 @@ export function ImpostazioniCompagno({ versione, chiudi }: {
       <div style={riga}>
         <span style={nome}>{t('Segue il mio cursore')}</span>
         <Interruttore acceso={scelte.segue} cambia={() => scegli({ segue: !scelte.segue })} etichetta={t('Segue il mio cursore')} />
+      </div>
+      <div style={riga}>
+        <span style={nome}>{t('Giocoso')}</span>
+        <Interruttore acceso={scelte.giocoso !== false} cambia={() => scegli({ giocoso: scelte.giocoso === false })} etichetta={t('Giocoso')} />
       </div>
       <div style={{ ...riga, flexDirection: 'column', alignItems: 'stretch', gap: 6, paddingBottom: 12 }}>
         <button type="button" onClick={togli} style={{

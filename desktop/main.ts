@@ -426,10 +426,11 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
   // le sue impostazioni, dal pannellino sotto di lui: taglia e se segue il cursore
   ipcMain.handle('myynd:compagno-scelte', () => compagno.scelte())
   ipcMain.handle('myynd:compagno-scegli', (_e, patch: unknown) => {
-    const p = (patch && typeof patch === 'object' ? patch : {}) as { taglia?: unknown; segue?: unknown }
+    const p = (patch && typeof patch === 'object' ? patch : {}) as { taglia?: unknown; segue?: unknown; giocoso?: unknown }
     return compagno.imposta({
       ...(typeof p.taglia === 'string' ? { taglia: p.taglia as 'piccolo' | 'medio' | 'grande' } : {}),
-      ...(typeof p.segue === 'boolean' ? { segue: p.segue } : {})
+      ...(typeof p.segue === 'boolean' ? { segue: p.segue } : {}),
+      ...(typeof p.giocoso === 'boolean' ? { giocoso: p.giocoso } : {})
     })
   })
   ipcMain.handle('myynd:scorciatoia', () => scorciatoia.corrente())
@@ -443,6 +444,8 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
   // — il richiamo —
   ipcMain.on('myynd:richiamo-chiudi', () => richiamo.nascondi())
   ipcMain.on('myynd:richiamo-misura', (_e, altezza: unknown) => richiamo.ridimensiona(Number(altezza)))
+  // gli si è scritto dalla casella sotto di lui: ridacchia, con le mani sulla bocca
+  ipcMain.on('myynd:richiamo-inviato', () => compagno.gesto('ridacchia'))
   ipcMain.on('myynd:richiamo-apri', (_e, dove: unknown) => vai(doveValido(dove) ?? 'oggi'))
   /*
    * Un avviso di sistema, su richiesta della pagina.

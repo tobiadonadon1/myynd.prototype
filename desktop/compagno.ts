@@ -71,7 +71,7 @@ export type Azioni = {
 }
 
 /** Quello che si sceglie nelle sue impostazioni. */
-export type Scelte = { taglia: Taglia; segue: boolean }
+export type Scelte = { taglia: Taglia; segue: boolean; giocoso: boolean }
 
 let azioni: Azioni | null = null
 let finestra: BrowserWindow | null = null
@@ -106,7 +106,7 @@ export function acceso(): boolean {
 /** La taglia e se segue il cursore: medio e sì, se nessuno ha scelto. */
 export function scelte(): Scelte {
   const c = impostazioni.leggi().compagno
-  return { taglia: TAGLIE.includes(c?.taglia as Taglia) ? c!.taglia as Taglia : 'medio', segue: c?.segue !== false }
+  return { taglia: TAGLIE.includes(c?.taglia as Taglia) ? c!.taglia as Taglia : 'medio', segue: c?.segue !== false, giocoso: c?.giocoso !== false }
 }
 
 const misure = () => misureCompagno(scelte().taglia)
@@ -128,6 +128,8 @@ function mandaStato() {
   w.webContents.send('compagno:stato', {
     guarda: osservatore.guarda,
     attesa: inAttesa > 0,
+    // giocoso: i salti e le giravolte da solo, ogni tanto
+    giocoso: scelte().giocoso,
     // le parole dei bottoni della pastiglia, nella lingua dell'app
     testi: { scrivi: t('Scrivi a Myynd'), impostazioni: t('Impostazioni') }
   })
@@ -304,13 +306,16 @@ function crea(): BrowserWindow {
 
 /**
  * Dalle sue impostazioni: la taglia (la finestra cresce o cala tenendo i
- * piedi dove sono) e se segue il cursore. Si ricorda tutto.
+ * piedi dove sono), se segue il cursore, e se è giocoso (salta e fa le
+ * giravolte da solo ogni tanto). Si ricorda tutto.
  */
 export function imposta(patch: Partial<Scelte>): Scelte {
   const prima = scelte()
   const taglia = TAGLIE.includes(patch.taglia as Taglia) ? patch.taglia as Taglia : prima.taglia
   const segue = typeof patch.segue === 'boolean' ? patch.segue : prima.segue
-  impostazioni.scrivi({ compagno: { ...impostazioni.leggi().compagno, acceso: acceso(), taglia, segue } })
+  const giocoso = typeof patch.giocoso === 'boolean' ? patch.giocoso : prima.giocoso
+  impostazioni.scrivi({ compagno: { ...impostazioni.leggi().compagno, acceso: acceso(), taglia, segue, giocoso } })
+  if (giocoso !== prima.giocoso) mandaStato()
   const w = attuale()
   if (w && taglia !== prima.taglia) {
     const vecchio = w.getBounds()
@@ -332,7 +337,12 @@ export function imposta(patch: Partial<Scelte>): Scelte {
       attuale()?.webContents.send('compagno:sguardo', { x: 0, y: 0 })
     }
   }
-  return { taglia, segue }
+  return { taglia, segue, giocoso }
+}
+
+/** Un gesto che decide il guscio: la risatina quando gli si scrive dalla casella. */
+export function gesto(nome: 'salto' | 'giravolta' | 'ridacchia'): void {
+  attuale()?.webContents.send('compagno:gesto', nome)
 }
 
 /** All'avvio: c'è, a meno che la persona non l'abbia tolto. */

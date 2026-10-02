@@ -32,7 +32,7 @@ export type Impostazioni = {
    * Posizione in punti dello schermo; la taglia e se segue il cursore si
    * scelgono nelle sue impostazioni (l'ingranaggio sotto di lui).
    */
-  compagno?: { acceso: boolean; x?: number; y?: number; taglia?: 'piccolo' | 'medio' | 'grande'; segue?: boolean }
+  compagno?: { acceso: boolean; x?: number; y?: number; taglia?: 'piccolo' | 'medio' | 'grande'; segue?: boolean; giocoso?: boolean }
   /** La casella sotto il mostriciattolo, come la persona l'ha tirata col bordo. */
   casella?: { larghezza?: number; altezza?: number }
   /**
