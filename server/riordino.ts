@@ -117,8 +117,7 @@ function scriviArchivio(a: Archivio) {
 }
 
 /**
- * Se c'è disordine e nessun'altra domanda aperta, la domanda sulla prima
- * pagina. Mai una seconda volta lo stesso piano, né dopo un sì né dopo un no.
+ * Se c'è disordine, la domanda sulla prima pagina. Mai una seconda volta lo stesso piano, né dopo un sì né dopo un no.
  */
 export function forse(cartelle: readonly string[]): boolean {
   const p = trova(progetti.elenco(), cartelle)
@@ -126,8 +125,9 @@ export function forse(cartelle: readonly string[]): boolean {
   const chiave = impronta(p)
   const tema = `${TEMA}${chiave}`
   const a = leggiArchivio()
+  // non aspetta che le altre domande siano chiuse: due nomi per la stessa cosa sporcano ogni quadro, e
+  // la domanda più nuova è quella che la prima pagina mostra
   if (a.no.includes(chiave) || store.domandaPerTema(tema)) return false
-  if (store.domandaAperta()) return false
   const d = store.apriDomanda({ tema, testo: domanda(p), spunto: [], progetto: null })
   if (!d) return false
   scriviArchivio({ ...a, piani: { ...a.piani, [chiave]: p } })
