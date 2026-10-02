@@ -1,25 +1,30 @@
 <!doctype html>
 <!--
-  Il mostriciattolo sullo schermo: una pagina ferma, un'immagine e un puntino.
-  Lo stato (guarda, attesa) lo manda il guscio; i gesti li legge compagno.js.
+  Il mostriciattolo sullo schermo, in 3D: una tela WebGL trasparente e un puntino.
+  La scena è in compagno-scena.js (three.js, dai node_modules dell'app), i gesti
+  e lo stato del guscio in compagno.js. La mappa degli import dice dove sta three:
+  è uno script in riga, e la CSP lo lascia passare solo con la sua impronta
+  (sha256): cambiarne anche uno spazio vuol dire rifare l'impronta, e
+  desktop/compagno.test.ts lo controlla.
 -->
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; script-src 'self'; style-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'sha256-QHspYcLLOKSarKa9WCONpLgp80qJjPebMyusqjGSeoo='; style-src 'unsafe-inline'">
 <title>Myynd</title>
+<script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
 <style>
-  html, body { margin: 0; width: 64px; height: 64px; overflow: hidden; background: transparent; user-select: none; -webkit-user-select: none; cursor: default }
-  img { position: absolute; left: 8px; top: 8px; width: 48px; height: 48px; display: block; -webkit-user-drag: none; pointer-events: none }
-  body.animata img { transition: filter .2s, opacity .2s }
-  body.spenta img { filter: grayscale(1); opacity: .45 }
-  #punto { position: absolute; right: 7px; bottom: 7px; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #22271F; box-shadow: 0 0 0 2px #F2E9DC; display: none }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; -webkit-user-select: none; cursor: default }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block }
+  body.animata canvas { transition: opacity .6s }
+  body.spenta canvas { opacity: .78 }
+  #punto { position: absolute; right: 24%; top: 17%; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #22271F; box-shadow: 0 0 0 2px #F2E9DC; display: none }
   body.attesa #punto { display: block }
 </style>
 </head>
 <body class="spenta">
-<img src="icone/compagno.png" width="48" height="48" alt="" draggable="false">
+<canvas id="tela"></canvas>
 <div id="punto"></div>
-<script src="compagno.js"></script>
+<script type="module" src="compagno.js"></script>
 </body>
 </html>

@@ -11,8 +11,8 @@
 // (`aggiornamenti.ts`), e tre preferenze in un JSON (`impostazioni.ts`). Le
 // frasi passano tutte da `lingua.ts`. E l'osservatore (`osservatore.ts`):
 // quale app sta davanti, consegnato al server solo quando il server dice che
-// è acceso, col mostriciattolo nella barra e, se lo si vuole, sullo schermo
-// (`compagno.ts`).
+// è acceso, col mostriciattolo nella barra e sullo schermo, in 3D, a meno
+// che lo si tolga (`compagno.ts`): un clic su di lui apre il richiamo accanto.
 //
 // L'app vive anche a finestra chiusa: la X nasconde, il segno nella barra e
 // il Dock la tengono viva, e il server con le sue automazioni continua a
@@ -166,9 +166,13 @@ async function avvio() {
   // la scorciatoia apre il richiamo; finché il server non c'è, la finestra
   const alPremere = () => { if (!richiamo.alterna()) finestra.alterna() }
   scorciatoia.attiva(alPremere)
-  // il mostriciattolo sullo schermo, se la persona l'ha acceso: un clic è la scorciatoia
+  // il mostriciattolo sullo schermo, se la persona non l'ha tolto: un clic
+  // apre il fumetto, cioè il richiamo accanto a lui; finché il server non
+  // c'è, la finestra
   compagno.prepara({
-    alPremere, apri: finestra.mostra,
+    parla: r => { if (!richiamo.alternaAccanto(r)) finestra.alterna() },
+    mosso: r => richiamo.segui(r),
+    apri: finestra.mostra,
     pausa: () => osservatore.pausa(60), riprendi: () => osservatore.riprendi(),
     cambiato: on => finestra.manda('myynd:compagno-cambiato', on)
   })
@@ -414,7 +418,7 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
   ipcMain.handle('myynd:osservatore-impostazioni', async () => {
     if (MAC) await shell.openExternal(PANNELLO_ACCESSIBILITA)
   })
-  ipcMain.handle('myynd:compagno-acceso', () => impostazioni.leggi().compagno?.acceso === true)
+  ipcMain.handle('myynd:compagno-acceso', () => compagno.acceso())
   ipcMain.handle('myynd:compagno-accendi', (_e, on: unknown) => { compagno.accendi(on === true) })
   ipcMain.handle('myynd:scorciatoia', () => scorciatoia.corrente())
   ipcMain.handle('myynd:imposta-scorciatoia', (_e, acc: unknown) => scorciatoia.imposta(String(acc)))
