@@ -42,12 +42,14 @@ export function doveSiApre(schermo: Schermo, r: Area): string {
 
 /* ------------------------------------------------------------ il mostriciattolo */
 
+
 /**
- * Il riquadro del mostriciattolo sullo schermo, in punti. È in 3D: il
- * quadrato in alto (`LATO_COMPAGNO`) tiene lui, con le antenne, i piedi e il
- * salto; la striscia sotto (`PIEDE_COMPAGNO`) tiene la pastiglia con i due
- * bottoni, che compare quando il cursore gli passa sopra. Il resto è
- * trasparente, e il mouse ci passa attraverso.
+ * Il riquadro del mostriciattolo sullo schermo, in punti, nella taglia media.
+ * È in 3D: il quadrato in alto (`LATO_COMPAGNO`) tiene lui, con le antenne, i
+ * piedi e il salto; la striscia sotto (`PIEDE_COMPAGNO`) tiene la pastiglia
+ * con i due bottoni, che compare quando il cursore gli passa sopra. Il resto
+ * è trasparente, e il mouse ci passa attraverso. Le altre taglie sono la
+ * stessa finestra in scala (`misureCompagno`).
  */
 export const LATO_COMPAGNO = 144
 export const PIEDE_COMPAGNO = 44
@@ -55,43 +57,57 @@ export const ALTO_COMPAGNO = LATO_COMPAGNO + PIEDE_COMPAGNO
 /** Quanto sta lontano dai bordi quando nessuno l'ha spostato. */
 export const MARGINE_COMPAGNO = 24
 
+/** Le tre taglie che si scelgono nelle sue impostazioni: la pagina resta uguale, la si ingrandisce. */
+export type Taglia = 'piccolo' | 'medio' | 'grande'
+export const SCALE_COMPAGNO: Record<Taglia, number> = { piccolo: 0.8, medio: 1, grande: 1.3 }
+export type Misure = { lato: number; alto: number; scala: number }
+
+/** Le misure della finestra per una taglia; una taglia che non esiste vale media. */
+export function misureCompagno(taglia?: unknown): Misure {
+  const scala = typeof taglia === 'string' && taglia in SCALE_COMPAGNO ? SCALE_COMPAGNO[taglia as Taglia] : 1
+  return { lato: Math.round(LATO_COMPAGNO * scala), alto: Math.round(ALTO_COMPAGNO * scala), scala }
+}
+
+const MEDIE = misureCompagno('medio')
+
 type Punto = { x: number; y: number }
 
-const dentroTutto = (a: Area, p: Punto) =>
-  p.x >= a.x && p.y >= a.y && p.x + LATO_COMPAGNO <= a.x + a.width && p.y + ALTO_COMPAGNO <= a.y + a.height
+const dentroTutto = (a: Area, p: Punto, m: Misure) =>
+  p.x >= a.x && p.y >= a.y && p.x + m.lato <= a.x + a.width && p.y + m.alto <= a.y + a.height
 const contiene = (a: Area, x: number, y: number) => x >= a.x && x < a.x + a.width && y >= a.y && y < a.y + a.height
 /** Il punto spinto dentro l'area, se ci sta. */
-const dentro = (a: Area, p: Punto): Punto => ({
-  x: Math.round(Math.min(Math.max(p.x, a.x), a.x + a.width - LATO_COMPAGNO)),
-  y: Math.round(Math.min(Math.max(p.y, a.y), a.y + a.height - ALTO_COMPAGNO))
+const dentro = (a: Area, p: Punto, m: Misure): Punto => ({
+  x: Math.round(Math.min(Math.max(p.x, a.x), a.x + a.width - m.lato)),
+  y: Math.round(Math.min(Math.max(p.y, a.y), a.y + a.height - m.alto))
 })
-const areaDelCentro = (aree: Area[], p: Punto) =>
-  aree.find(a => contiene(a, p.x + LATO_COMPAGNO / 2, p.y + ALTO_COMPAGNO / 2))
+const areaDelCentro = (aree: Area[], p: Punto, m: Misure) =>
+  aree.find(a => contiene(a, p.x + m.lato / 2, p.y + m.alto / 2))
 
 /**
  * Il quadrato dove sta lui, dentro la finestra `finestra`: senza la striscia
- * della pastiglia. È da lì che si misurano lo sguardo e il posto del fumetto.
+ * della pastiglia. È da lì che si misurano lo sguardo e il posto della
+ * casella sotto di lui.
  */
 export function corpoDelCompagno(finestra: Area): Area {
-  return { x: finestra.x, y: finestra.y, width: finestra.width, height: Math.min(finestra.height, LATO_COMPAGNO) }
+  return { x: finestra.x, y: finestra.y, width: finestra.width, height: Math.min(finestra.height, finestra.width) }
 }
 
 /**
  * Dove sta il mostriciattolo. Senza un posto salvato: in basso a destra dello
- * schermo principale. Con un posto salvato: lì se il quadrato sta tutto dentro
- * uno schermo; spinto dentro lo schermo che ne contiene il centro, se sborda;
- * altrimenti (lo schermo non c'è più) di nuovo in basso a destra.
+ * schermo principale. Con un posto salvato: lì se la finestra sta tutta
+ * dentro uno schermo; spinta dentro lo schermo che ne contiene il centro, se
+ * sborda; altrimenti (lo schermo non c'è più) di nuovo in basso a destra.
  */
-export function posizioneCompagno(aree: Area[], voluta: { x?: number; y?: number } | undefined, principale: Area): Punto {
+export function posizioneCompagno(aree: Area[], voluta: { x?: number; y?: number } | undefined, principale: Area, m: Misure = MEDIE): Punto {
   const predefinita = dentro(principale, {
-    x: principale.x + principale.width - LATO_COMPAGNO - MARGINE_COMPAGNO,
-    y: principale.y + principale.height - ALTO_COMPAGNO - MARGINE_COMPAGNO
-  })
+    x: principale.x + principale.width - m.lato - MARGINE_COMPAGNO,
+    y: principale.y + principale.height - m.alto - MARGINE_COMPAGNO
+  }, m)
   if (!voluta || !Number.isFinite(voluta.x) || !Number.isFinite(voluta.y)) return predefinita
   const p = { x: Math.round(voluta.x!), y: Math.round(voluta.y!) }
-  if (aree.some(a => dentroTutto(a, p))) return p
-  const a = areaDelCentro(aree, p)
-  return a ? dentro(a, p) : predefinita
+  if (aree.some(a => dentroTutto(a, p, m))) return p
+  const a = areaDelCentro(aree, p, m)
+  return a ? dentro(a, p, m) : predefinita
 }
 
 /**
@@ -102,10 +118,10 @@ export function posizioneCompagno(aree: Area[], voluta: { x?: number; y?: number
  * prima: spinto contro un bordo e riportato indietro, torna sotto il
  * puntatore invece di restarne scostato.
  */
-export function trascinaCompagno(aree: Area[], origine: Punto, dx: number, dy: number, adesso: Punto = origine): Punto {
+export function trascinaCompagno(aree: Area[], origine: Punto, dx: number, dy: number, adesso: Punto = origine, m: Misure = MEDIE): Punto {
   const p = { x: origine.x + dx, y: origine.y + dy }
-  const a = areaDelCentro(aree, p)
-  return a ? dentro(a, p) : { x: adesso.x, y: adesso.y }
+  const a = areaDelCentro(aree, p, m)
+  return a ? dentro(a, p, m) : { x: adesso.x, y: adesso.y }
 }
 
 /* ------------------------------------------------------------ lo sguardo */
@@ -131,48 +147,46 @@ export function sguardoVerso(compagno: Area, cursore: Punto): Punto {
   return { x: morbido(dx), y: morbido(dy) }
 }
 
-/* ------------------------------------------------------------ il fumetto */
+/* ------------------------------------------------------------ la casella sotto di lui */
 
-/** La larghezza del fumetto: il richiamo aperto accanto al mostriciattolo. */
-export const LARGHEZZA_FUMETTO = 360
-/** Più alto di così la risposta scorre dentro: accanto a lui non deve coprire mezzo schermo. */
-export const ALTEZZA_MASSIMA_FUMETTO = 440
+/** La casella per scrivergli: larga di serie, e fin dove la si può tirare. */
+export const LARGHEZZA_SCATOLA = 320
+export const LARGHEZZA_SCATOLA_MIN = 240
+export const LARGHEZZA_SCATOLA_MAX = 640
+/** Fin dove cresce con la risposta prima di scorrere dentro; anche questo si tira col bordo. */
+export const ALTEZZA_SCATOLA = 340
+export const ALTEZZA_SCATOLA_MIN = 140
+export const ALTEZZA_SCATOLA_MAX = 760
+/** Sotto di lui ci vuole almeno questo, o la casella va sopra la testa. */
+const SPAZIO_GIU = 180
+
+export type Scatola = Area & { verso: 'giu' | 'su' }
+
+const stretto = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max))
+
 /**
- * Quanto il fumetto entra nel quadrato del mostriciattolo, in frazione del
- * lato: il quadrato è per lo più trasparente, e un fumetto staccato di mezzo
- * quadrato dal corpo non sembra suo.
+ * Dove sta la casella del mostriciattolo `compagno` (il suo quadrato, senza
+ * la striscia della pastiglia), nell'area utile del suo schermo.
+ *
+ * Centrata sotto di lui, attaccata ai piedi, e la risposta la fa crescere in
+ * giù. Se sotto non c'è posto (lui sta in basso, dove sta di serie) va sopra
+ * la testa e cresce in su: il fondo resta fermo sopra le antenne. Larga
+ * quanto la persona l'ha tirata (`voluta.larghezza`), alta quanto il
+ * contenuto fino al tetto che ha tirato lei (`voluta.altezza`), e in ogni
+ * caso dentro lo schermo.
  */
-const RIENTRO = 0.2
-
-export type Fumetto = Area & { lato: 'sinistra' | 'destra'; ancora: 'sotto' | 'sopra' }
-
-/**
- * Dove si apre il fumetto accanto al mostriciattolo `compagno`, nell'area
- * utile del suo schermo. Di fianco: a sinistra se ci sta (lui di solito è in
- * basso a destra), altrimenti a destra se ci sta, altrimenti dalla parte più
- * larga e spinto dentro. In altezza: se lui sta nella metà bassa dello
- * schermo il fondo del fumetto resta all'altezza della sua bocca e la
- * risposta cresce verso l'alto; nella metà alta il contrario. Mai fuori
- * dall'area.
- */
-export function posizioneFumetto(area: Area, compagno: Area, altezza: number, larghezza = LARGHEZZA_FUMETTO): Fumetto {
-  const width = Math.max(MARGINE * 2, Math.min(larghezza, area.width - MARGINE * 2))
-  const voluta = Number.isFinite(altezza) ? altezza : ALTEZZA_MINIMA
-  const height = Math.max(ALTEZZA_MINIMA, Math.min(Math.ceil(voluta), ALTEZZA_MASSIMA_FUMETTO, area.height - MARGINE * 2))
-  const rientro = Math.round(compagno.width * RIENTRO)
-  const sinistra = compagno.x + rientro - width
-  const destra = compagno.x + compagno.width - rientro
-  const staSinistra = sinistra >= area.x + MARGINE
-  const staDestra = destra + width <= area.x + area.width - MARGINE
-  const piuLargaASinistra = compagno.x - area.x >= area.x + area.width - (compagno.x + compagno.width)
-  const lato = staSinistra || (!staDestra && piuLargaASinistra) ? 'sinistra' : 'destra'
-  const xMin = area.x + MARGINE
-  const xMax = area.x + area.width - MARGINE - width
-  const x = Math.round(Math.min(Math.max(lato === 'sinistra' ? sinistra : destra, xMin), xMax))
-  const ancora = compagno.y + compagno.height / 2 >= area.y + area.height / 2 ? 'sotto' : 'sopra'
-  const voluto = ancora === 'sotto' ? compagno.y + compagno.height * 0.62 - height : compagno.y + compagno.height * 0.22
-  const yMin = area.y + MARGINE
-  const yMax = area.y + area.height - MARGINE - height
-  const y = Math.round(Math.min(Math.max(voluto, yMin), yMax))
-  return { x, y, width, height, lato, ancora }
+export function posizioneScatola(area: Area, compagno: Area, contenuto: number, voluta: { larghezza?: number; altezza?: number } = {}): Scatola {
+  const width = Math.round(stretto(voluta.larghezza ?? LARGHEZZA_SCATOLA, LARGHEZZA_SCATOLA_MIN, Math.min(LARGHEZZA_SCATOLA_MAX, area.width - MARGINE * 2)))
+  const tetto = stretto(voluta.altezza ?? ALTEZZA_SCATOLA, ALTEZZA_SCATOLA_MIN, Math.min(ALTEZZA_SCATOLA_MAX, area.height - MARGINE * 2))
+  const voluto = Number.isFinite(contenuto) ? Math.ceil(contenuto) : ALTEZZA_MINIMA
+  const giu = compagno.y + compagno.height - Math.round(compagno.height * 0.02)
+  const su = compagno.y + Math.round(compagno.height * 0.05)
+  const spazioGiu = area.y + area.height - MARGINE - giu
+  const spazioSu = su - (area.y + MARGINE)
+  const verso = spazioGiu >= Math.min(tetto, SPAZIO_GIU) || spazioGiu >= spazioSu ? 'giu' : 'su'
+  const posto = Math.max(ALTEZZA_MINIMA, verso === 'giu' ? spazioGiu : spazioSu)
+  const height = Math.round(stretto(voluto, ALTEZZA_MINIMA, Math.min(tetto, posto)))
+  const x = Math.round(stretto(compagno.x + compagno.width / 2 - width / 2, area.x + MARGINE, area.x + area.width - MARGINE - width))
+  const y = Math.round(stretto(verso === 'giu' ? giu : su - height, area.y + MARGINE, area.y + area.height - MARGINE - height))
+  return { x, y, width, height, verso }
 }

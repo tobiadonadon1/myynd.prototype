@@ -2,11 +2,11 @@
 //
 // Il cursore che gli passa sopra lo sveglia: si drizza con un saltello, apre
 // gli occhi, muove le antenne e lo segue con lo sguardo, e sotto di lui
-// compare la pastiglia scura con due bottoni: scrivi (il fumetto, con la
-// casella pronta) e parla (il fumetto, con la dettatura). La pastiglia resta
-// finché il cursore è su di lui o su di lei, e se ne va 400 ms dopo.
+// compare la pastiglia scura con due bottoni: scrivi (la casella sotto di
+// lui) e impostazioni (taglia, sguardo, togli). La pastiglia resta finché il
+// cursore è su di lui o su di lei, e se ne va 400 ms dopo.
 //
-// Un clic su di lui apre o chiude il fumetto; oltre tre punti con il tasto
+// Un clic su di lui apre o chiude la casella; oltre tre punti con il tasto
 // giù è un trascinamento, e allora al rilascio non si apre niente e il posto
 // si salva. Al guscio parte, una volta per fotogramma, tutto lo spostamento
 // dal momento della presa (non il pezzo dall'ultimo passo): il guscio mette
@@ -100,7 +100,7 @@ const manda = () => {
 if (c) {
   document.addEventListener('mousemove', e => dove(e.clientX, e.clientY))
   document.addEventListener('mouseleave', () => { if (!giu) { dillo(false); nascondiPastiglia() } })
-  for (const [id, fai] of [['scrivi', () => c.scrivi?.()], ['parla', () => c.detta?.()]]) {
+  for (const [id, fai] of [['scrivi', () => c.scrivi?.()], ['impostazioni', () => c.impostazioni?.()]]) {
     const b = document.getElementById(id)
     b.addEventListener('pointerdown', e => e.stopPropagation())
     b.addEventListener('click', e => { e.stopPropagation(); fai() })
@@ -140,7 +140,7 @@ if (c) {
     document.body.classList.toggle('spenta', !(s && s.guarda === true))
     document.body.classList.toggle('attesa', !!(s && s.attesa === true))
     // le parole dei bottoni arrivano dal guscio, nella lingua dell'app
-    for (const [id, testo] of [['scrivi', s?.testi?.scrivi], ['parla', s?.testi?.parla]]) {
+    for (const [id, testo] of [['scrivi', s?.testi?.scrivi], ['impostazioni', s?.testi?.impostazioni]]) {
       if (typeof testo !== 'string' || !testo) continue
       const b = document.getElementById(id)
       b.title = testo

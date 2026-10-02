@@ -2143,9 +2143,16 @@ const EN: Record<string, string> = {
   'Risponde nel filo del suo messaggio.': 'Replies in the thread of their message.',
   // — il richiamo: la barra della scorciatoia, e gli avvisi di sistema —
   'Segna una cosa, o chiedi con «?»': 'Note something, or ask with “?”',
-  // il fumetto del mostriciattolo: lo stesso richiamo, accanto a lui
+  // la casella del mostriciattolo: lo stesso richiamo, sotto di lui
   'Scrivi a Myynd': 'Write to Myynd',
-  'Premi fn due volte per parlare': 'Press fn twice to talk',
+  // le impostazioni del mostriciattolo, nel pannellino sotto di lui
+  'Taglia': 'Size',
+  'Piccolo': 'Small',
+  'Medio': 'Medium',
+  'Grande': 'Large',
+  'Segue il mio cursore': 'Follow my pointer',
+  'Togli dalla scrivania': 'Hide from the desktop',
+  'Lo rimetti dalle Preferenze o dalla barra dei menu.': 'Bring him back from Preferences or the menu bar.',
   'Continua nell’app': 'Continue in the app',
   'Apri Myynd per entrare': 'Open Myynd to sign in',
   'Apri Myynd': 'Open Myynd',

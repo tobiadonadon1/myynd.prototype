@@ -3,13 +3,14 @@
 //   node --test desktop/posizione.test.ts
 //
 // E il mostriciattolo, che resta su uno schermo anche quando uno se ne va,
-// guarda verso il cursore, e apre il fumetto dalla parte dove c'è posto.
+// guarda verso il cursore, e apre la casella sotto di lui (o sopra, se sotto non c'è posto).
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  ALTEZZA_MASSIMA, ALTEZZA_MASSIMA_FUMETTO, ALTEZZA_MINIMA, ALTO_COMPAGNO, LARGHEZZA, LARGHEZZA_FUMETTO, LATO_COMPAGNO, MARGINE_COMPAGNO,
-  corpoDelCompagno, doveSiApre, posizioneCompagno, posizioneFumetto, posizioneRichiamo, sguardoVerso, trascinaCompagno
+  ALTEZZA_MASSIMA, ALTEZZA_MINIMA, ALTEZZA_SCATOLA, ALTO_COMPAGNO, LARGHEZZA, LARGHEZZA_SCATOLA, LARGHEZZA_SCATOLA_MAX, LARGHEZZA_SCATOLA_MIN,
+  LATO_COMPAGNO, MARGINE_COMPAGNO, misureCompagno,
+  corpoDelCompagno, doveSiApre, posizioneCompagno, posizioneRichiamo, posizioneScatola, sguardoVerso, trascinaCompagno
 } from './posizione.ts'
 
 const SCHERMO = { x: 0, y: 25, width: 1440, height: 875 }
@@ -104,18 +105,27 @@ test('mostriciattolo spinto contro il bordo e riportato indietro: torna sotto il
   assert.deepEqual(trascinaCompagno(aree, presa, 0, 0, giu), presa)
 })
 
-test('il corpo è il quadrato in alto: la striscia della pastiglia non conta per sguardo e fumetto', () => {
+test('il corpo è il quadrato in alto: la striscia della pastiglia non conta per sguardo e casella', () => {
   assert.equal(ALTO_COMPAGNO > LATO_COMPAGNO, true)
   assert.deepEqual(corpoDelCompagno({ x: 10, y: 20, width: LATO_COMPAGNO, height: ALTO_COMPAGNO }),
     { x: 10, y: 20, width: LATO_COMPAGNO, height: LATO_COMPAGNO })
-  // un mostriciattolo in basso a destra: il fondo del fumetto alla sua bocca, non sotto la pastiglia
-  const finestra = { ...posizioneCompagno([PRINCIPALE], undefined, PRINCIPALE), width: LATO_COMPAGNO, height: ALTO_COMPAGNO }
-  const lui = corpoDelCompagno(finestra)
-  const f = posizioneFumetto(PRINCIPALE, lui, 120)
-  assert.ok(f.y + f.height < lui.y + lui.height, JSON.stringify({ f, lui }))
+  const grande = misureCompagno('grande')
+  assert.deepEqual(corpoDelCompagno({ x: 0, y: 0, width: grande.lato, height: grande.alto }), { x: 0, y: 0, width: grande.lato, height: grande.lato })
 })
 
-/* ------------------------------------------------------------ lo sguardo e il fumetto */
+test('le taglie: la stessa finestra in scala, e una taglia sconosciuta vale media', () => {
+  assert.deepEqual(misureCompagno('medio'), { lato: LATO_COMPAGNO, alto: ALTO_COMPAGNO, scala: 1 })
+  assert.deepEqual(misureCompagno(undefined), misureCompagno('medio'))
+  assert.deepEqual(misureCompagno('enorme'), misureCompagno('medio'))
+  const p = misureCompagno('piccolo'), g = misureCompagno('grande')
+  assert.ok(p.lato < LATO_COMPAGNO && g.lato > LATO_COMPAGNO && g.alto > ALTO_COMPAGNO)
+  // grande in basso a destra: resta dentro con le sue misure
+  const q = posizioneCompagno([PRINCIPALE], undefined, PRINCIPALE, g)
+  assert.deepEqual(q, { x: 1440 - g.lato - MARGINE_COMPAGNO, y: 25 + 875 - g.alto - MARGINE_COMPAGNO })
+  assert.deepEqual(trascinaCompagno([PRINCIPALE], q, 0, 30, q, g), { x: q.x, y: 25 + 875 - g.alto })
+})
+
+/* ------------------------------------------------------------ lo sguardo e la casella */
 
 const LUI = { x: 1272, y: 732, width: LATO_COMPAGNO, height: LATO_COMPAGNO }
 
@@ -136,46 +146,49 @@ test('sguardo: lontano non va oltre 1, e un cursore strano non lo torce', () => 
   assert.deepEqual(sguardoVerso(LUI, { x: LUI.x + 72, y: LUI.y + 55 }), sguardoVerso(LUI, { x: LUI.x + 72.4, y: LUI.y + 55 }))
 })
 
-test('fumetto: lui in basso a destra, il fumetto a sinistra e cresce verso l’alto', () => {
-  const f = posizioneFumetto(PRINCIPALE, LUI, 120)
-  assert.equal(f.lato, 'sinistra')
-  assert.equal(f.ancora, 'sotto')
-  assert.equal(f.width, LARGHEZZA_FUMETTO)
-  assert.equal(f.height, 120)
-  // entra un po' nel suo quadrato trasparente, ma non fino al corpo
-  assert.ok(f.x + f.width > LUI.x && f.x + f.width < LUI.x + LUI.width / 2, `bordo destro ${f.x + f.width}`)
-  // il fondo all'altezza della bocca
-  assert.equal(f.y + f.height, Math.round(LUI.y + LUI.height * 0.62))
-  // più alto: il fondo resta lì, cresce in su
-  const alto = posizioneFumetto(PRINCIPALE, LUI, 300)
-  assert.equal(alto.y + alto.height, f.y + f.height)
-  assert.equal(alto.x, f.x)
+test('casella: lui in alto, sta sotto di lui centrata, attaccata ai piedi, e cresce in giù', () => {
+  const lui = { x: 600, y: 100, width: LATO_COMPAGNO, height: LATO_COMPAGNO }
+  const c = posizioneScatola(PRINCIPALE, lui, 60)
+  assert.equal(c.verso, 'giu')
+  assert.equal(c.width, LARGHEZZA_SCATOLA)
+  assert.equal(c.x, Math.round(600 + 72 - LARGHEZZA_SCATOLA / 2), 'centrata sotto di lui')
+  assert.ok(c.y >= lui.y + lui.height * 0.9 && c.y <= lui.y + lui.height, `attaccata ai piedi: ${c.y}`)
+  const lunga = posizioneScatola(PRINCIPALE, lui, 300)
+  assert.equal(lunga.y, c.y, 'la cima resta ferma')
+  assert.equal(lunga.height, 300)
+  assert.equal(posizioneScatola(PRINCIPALE, lui, 5000).height, ALTEZZA_SCATOLA, 'oltre il tetto scorre dentro')
 })
 
-test('fumetto: lui contro il bordo sinistro in alto, il fumetto a destra e cresce in giù', () => {
-  const lui = { x: 0, y: 30, width: LATO_COMPAGNO, height: LATO_COMPAGNO }
-  const f = posizioneFumetto(PRINCIPALE, lui, 100)
-  assert.equal(f.lato, 'destra')
-  assert.equal(f.ancora, 'sopra')
-  assert.ok(f.x >= lui.x + lui.width / 2 && f.x < lui.x + lui.width, `x ${f.x}`)
-  assert.equal(f.y, Math.round(lui.y + lui.height * 0.22))
-  assert.equal(posizioneFumetto(PRINCIPALE, lui, 300).y, f.y, 'la cima resta ferma')
+test('casella: lui in basso (dove sta di serie), va sopra la testa e cresce in su', () => {
+  const finestra = { ...posizioneCompagno([PRINCIPALE], undefined, PRINCIPALE), width: LATO_COMPAGNO, height: ALTO_COMPAGNO }
+  const lui = corpoDelCompagno(finestra)
+  const c = posizioneScatola(PRINCIPALE, lui, 60)
+  assert.equal(c.verso, 'su')
+  assert.ok(c.y + c.height <= lui.y + lui.height * 0.1, JSON.stringify({ c, lui }))
+  const lunga = posizioneScatola(PRINCIPALE, lui, 300)
+  assert.equal(lunga.y + lunga.height, c.y + c.height, 'il fondo resta fermo sopra le antenne')
+  // contro il bordo destro: spinta dentro, non tagliata
+  assert.ok(c.x + c.width <= 1440 - 12)
 })
 
-test('fumetto: l’altezza fra il minimo e il suo tetto, e sempre dentro lo schermo', () => {
-  assert.equal(posizioneFumetto(PRINCIPALE, LUI, 5).height, ALTEZZA_MINIMA)
-  assert.equal(posizioneFumetto(PRINCIPALE, LUI, 5000).height, ALTEZZA_MASSIMA_FUMETTO)
-  assert.equal(posizioneFumetto(PRINCIPALE, LUI, Number.NaN).height, ALTEZZA_MINIMA)
-  const piccolo = { x: 0, y: 0, width: 400, height: 260 }
-  for (const lui of [{ x: 0, y: 0 }, { x: 256, y: 116 }, { x: 128, y: 60 }]) {
-    const f = posizioneFumetto(piccolo, { ...lui, width: LATO_COMPAGNO, height: LATO_COMPAGNO }, 1000)
-    assert.ok(f.x >= 0 && f.y >= 0 && f.x + f.width <= 400 && f.y + f.height <= 260, JSON.stringify(f))
+test('casella: la misura tirata dalla persona vale, dentro i limiti e dentro lo schermo', () => {
+  const lui = { x: 600, y: 100, width: LATO_COMPAGNO, height: LATO_COMPAGNO }
+  const tirata = posizioneScatola(PRINCIPALE, lui, 5000, { larghezza: 500, altezza: 520 })
+  assert.equal(tirata.width, 500)
+  assert.equal(tirata.height, 520)
+  assert.equal(posizioneScatola(PRINCIPALE, lui, 60, { larghezza: 10 }).width, LARGHEZZA_SCATOLA_MIN)
+  assert.equal(posizioneScatola(PRINCIPALE, lui, 60, { larghezza: 9000 }).width, LARGHEZZA_SCATOLA_MAX)
+  assert.equal(posizioneScatola(PRINCIPALE, lui, 5000, { altezza: 9000 }).height <= 875 - 24, true)
+  const piccolo = { x: 0, y: 0, width: 400, height: 300 }
+  for (const p of [{ x: 0, y: 0 }, { x: 256, y: 156 }, { x: 128, y: 60 }]) {
+    const c = posizioneScatola(piccolo, { ...p, width: LATO_COMPAGNO, height: LATO_COMPAGNO }, 1000)
+    assert.ok(c.x >= 0 && c.y >= 0 && c.x + c.width <= 400 && c.y + c.height <= 300 && c.height >= ALTEZZA_MINIMA, JSON.stringify(c))
   }
+  assert.equal(posizioneScatola(PRINCIPALE, lui, Number.NaN).height, ALTEZZA_MINIMA)
 })
 
-test('fumetto: su un secondo schermo resta su quello', () => {
+test('casella: su un secondo schermo resta su quello', () => {
   const lui = { x: SECONDO.x + 1700, y: 900, width: LATO_COMPAGNO, height: LATO_COMPAGNO }
-  const f = posizioneFumetto(SECONDO, lui, 200)
-  assert.equal(f.lato, 'sinistra')
-  assert.ok(f.x >= SECONDO.x && f.x + f.width <= SECONDO.x + SECONDO.width, JSON.stringify(f))
+  const c = posizioneScatola(SECONDO, lui, 200)
+  assert.ok(c.x >= SECONDO.x && c.x + c.width <= SECONDO.x + SECONDO.width, JSON.stringify(c))
 })

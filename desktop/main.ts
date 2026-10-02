@@ -146,7 +146,8 @@ async function avvio() {
     esci: () => app.quit(),
     pausa: () => osservatore.pausa(60),
     riprendi: () => osservatore.riprendi(),
-    fermaTurno: () => { server.manda({ tipo: 'turno', azione: 'ferma' }) }
+    fermaTurno: () => { server.manda({ tipo: 'turno', azione: 'ferma' }) },
+    compagno: { tolto: () => !compagno.acceso(), mostra: () => compagno.accendi(true) }
   })
   // l'osservatore: spento finché il server non dice il contrario
   osservatore.avvia({
@@ -167,12 +168,11 @@ async function avvio() {
   const alPremere = () => { if (!richiamo.alterna()) finestra.alterna() }
   scorciatoia.attiva(alPremere)
   // il mostriciattolo sullo schermo, se la persona non l'ha tolto: un clic
-  // apre il fumetto, cioè il richiamo accanto a lui; finché il server non
-  // c'è, la finestra
+  // apre la casella sotto di lui, cioè il richiamo lì sotto, e l'ingranaggio
+  // le sue impostazioni; finché il server non c'è, la finestra
   compagno.prepara({
-    parla: r => { if (!richiamo.alternaAccanto(r)) finestra.alterna() },
-    scrivi: r => { if (!richiamo.mostraAccanto(r)) finestra.alterna() },
-    detta: r => { if (!richiamo.dettaAccanto(r)) finestra.alterna() },
+    parla: r => { if (!richiamo.alternaSotto(r, 'scrivi')) finestra.alterna() },
+    impostazioni: r => { if (!richiamo.alternaSotto(r, 'impostazioni')) finestra.alterna() },
     mosso: r => richiamo.segui(r),
     apri: finestra.mostra,
     pausa: () => osservatore.pausa(60), riprendi: () => osservatore.riprendi(),
@@ -423,6 +423,15 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
   })
   ipcMain.handle('myynd:compagno-acceso', () => compagno.acceso())
   ipcMain.handle('myynd:compagno-accendi', (_e, on: unknown) => { compagno.accendi(on === true) })
+  // le sue impostazioni, dal pannellino sotto di lui: taglia e se segue il cursore
+  ipcMain.handle('myynd:compagno-scelte', () => compagno.scelte())
+  ipcMain.handle('myynd:compagno-scegli', (_e, patch: unknown) => {
+    const p = (patch && typeof patch === 'object' ? patch : {}) as { taglia?: unknown; segue?: unknown }
+    return compagno.imposta({
+      ...(typeof p.taglia === 'string' ? { taglia: p.taglia as 'piccolo' | 'medio' | 'grande' } : {}),
+      ...(typeof p.segue === 'boolean' ? { segue: p.segue } : {})
+    })
+  })
   ipcMain.handle('myynd:scorciatoia', () => scorciatoia.corrente())
   ipcMain.handle('myynd:imposta-scorciatoia', (_e, acc: unknown) => scorciatoia.imposta(String(acc)))
   ipcMain.handle('myynd:avvio-automatico', () => app.getLoginItemSettings().openAtLogin)

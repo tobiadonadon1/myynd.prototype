@@ -34,6 +34,8 @@ export type Azioni = {
   riprendi(): void
   /** F9 · ferma il turno di notte: la carta al lavoro torna in coda. */
   fermaTurno(): void
+  /** Il mostriciattolo tolto dalla scrivania: la barra lo dice e lo rimette. */
+  compagno?: { tolto(): boolean; mostra(): void }
 }
 
 let tray: Tray | null = null
@@ -67,11 +69,12 @@ function menu() {
       case 'apri': return { label: t('Apri Myynd'), click: () => su.apri() }
       case 'nuova-chat': return { label: t('Nuova chat'), click: () => su.nuovaChat() }
       case 'preferenze': return { label: t('Preferenze…'), click: () => su.preferenze() }
+      case 'mostra-compagno': return { label: t('Mostra Myynd sullo schermo'), click: () => su.compagno?.mostra() }
       case 'esci': return { label: t('Esci'), click: () => su.esci() }
       default: return { type: 'separator' }
     }
   }
-  return Menu.buildFromTemplate(vociMenu({ ...osservatore, adesso: Date.now(), turno: turnoDaFermare }).map(voce))
+  return Menu.buildFromTemplate(vociMenu({ ...osservatore, adesso: Date.now(), turno: turnoDaFermare, compagnoTolto: su.compagno?.tolto() === true }).map(voce))
 }
 
 const orario = (iso: string) => new Intl.DateTimeFormat(lingua() === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))

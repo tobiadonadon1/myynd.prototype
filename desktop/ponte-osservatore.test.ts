@@ -21,17 +21,19 @@ const CANALI = [
   ['chiediPermessoTitoli', 'myynd:osservatore-chiedi-permesso'],
   ['apriImpostazioniTitoli', 'myynd:osservatore-impostazioni'],
   ['acceso', 'myynd:compagno-acceso'],
-  ['accendi', 'myynd:compagno-accendi']
+  ['accendi', 'myynd:compagno-accendi'],
+  ['scelte', 'myynd:compagno-scelte'],
+  ['scegli', 'myynd:compagno-scegli']
 ]
 
 test('ogni metodo del ponte ha il suo canale nel preload e il suo gestore nel guscio', () => {
   for (const [metodo, canale] of CANALI) {
     assert.match(preload, new RegExp(`${metodo}: [^\\n]*chiedi\\('${canale}'`), metodo)
     assert.match(main, new RegExp(`ipcMain\\.handle\\('${canale}'`), canale)
-    assert.match(tipi, new RegExp(`${metodo}\\(`), `src/desktop.ts: ${metodo}`)
+    assert.match(tipi, new RegExp(`${metodo}\\??\\(`), `src/desktop.ts: ${metodo}`)
   }
   assert.match(tipi, /osservatore\?: \{ permessoTitoli\(\): Promise<boolean>; chiediPermessoTitoli\(\): Promise<boolean>; apriImpostazioniTitoli\(\): Promise<void> \}/)
-  assert.match(tipi, /compagno\?: \{ acceso\(\): Promise<boolean>; accendi\(on: boolean\): Promise<void>; suCambio\?\(cb: \(on: boolean\) => void\): \(\) => void \}/)
+  assert.match(tipi, /compagno\?: \{ acceso\(\): Promise<boolean>; accendi\(on: boolean\): Promise<void>; suCambio\?\(cb: \(on: boolean\) => void\): \(\) => void;/)
   assert.match(prova, /'osservatore', 'compagno'/)
 })
 
