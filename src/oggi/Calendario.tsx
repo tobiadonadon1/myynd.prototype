@@ -319,16 +319,23 @@ function RigaQuaderno({ c, oggi, locale, l, progetto, progetti, sopra, suSopra, 
       </button>
       <span className="quaderno-fine">
         {(stato?.tipo === 'lavora' || stato?.tipo === 'coda') && <i className={`quaderno-segno ${stato.tipo}`} title={parola} aria-hidden="true" />}
+        {/*
+          Il cestino a sinistra e il dettaglio in fondo: in fondo alla riga c'è
+          il punto verde di chi ci lavora, e chi lo indica deve trovarci sotto
+          una cosa innocua. Il primo ottobre, col cestino in fondo, un clic sul
+          punto di una carta affidata l'ha tolta a metà lavoro: «the task
+          disappeared, and I don't know where the thing went».
+        */}
         <span className="quaderno-gesti">
+          <button type="button" className="quaderno-icona" data-togli onClick={() => void l.elimina(c.id)} aria-label={`${t('Toglila')}: ${c.testo}`}>
+            <IconCestino size={12} />
+          </button>
           {siScrive && (!c.modo || c.modo === 'io') && (
             <button type="button" className="quaderno-icona" onClick={() => void l.mettiInCoda(c.id)} aria-label={`${t('A Myynd')}: ${c.testo}`} title={t('A Myynd')}>
               <Marchio dim={14} animato={false} />
             </button>
           )}
           <button type="button" className="quaderno-icona" onClick={() => modifica(c)} aria-label={`${t('Dettagli attività')}: ${c.testo}`}>⋯</button>
-          <button type="button" className="quaderno-icona" data-togli onClick={() => void l.elimina(c.id)} aria-label={`${t('Toglila')}: ${c.testo}`}>
-            <IconCestino size={12} />
-          </button>
         </span>
       </span>
     </li>
