@@ -24,6 +24,8 @@ import * as store from './store.ts'
 import * as riferimento from './riferimento.ts'
 import * as progetti from './progetti.ts'
 import * as dopoFatto from './dopo-fatto.ts'
+import * as riordino from './riordino.ts'
+import * as quadro from './quadro.ts'
 
 /**
  * Quanti scarti muti sullo stesso tema prima di considerarlo un segnale.
@@ -288,6 +290,33 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
    * va nella memoria del progetto e basta. A distinguere è `dopo-fatto.ts`,
    * e l'esito dice dove è finita.
    */
+  /*
+   * Il riordino dei progetti: un sì fa quello che la domanda diceva per
+   * intero, qualunque altra cosa non tocca niente (`riordino.rispondi`).
+   */
+  if (questa?.tema.startsWith(riordino.TEMA)) {
+    const esito = riordino.rispondi(questa.tema, pulita)
+    store.chiudiDomanda(id, 'risposta', pulita, esito)
+    return { esito }
+  }
+
+  /*
+   * L'obiettivo di un progetto, quando dal suo lavoro non si capiva: le sue
+   * parole diventano l'obiettivo, e il quadro di quel progetto si rifà al giro
+   * dopo con l'obiettivo vero davanti.
+   */
+  if (questa?.tema.startsWith('obiettivo:')) {
+    const id = questa.tema.slice('obiettivo:'.length)
+    const p = progetti.trova(id)
+    const obiettivo = senzaTrattini(pulita.replace(/\s+/g, ' ')).slice(0, 300)
+    if (p) { progetti.cambia(p.id, { obiettivo }, 'user-chat'); quadro.dimenticaQuadro(p.id) }
+    const esito = p
+      ? (lingua() === 'it' ? `Segnato come obiettivo di ${p.nome}. Le prossime proposte partono da qui.` : `Saved as the goal for ${p.nome}. My next suggestions start from it.`)
+      : (lingua() === 'it' ? 'Me lo sono segnato.' : 'Noted.')
+    store.chiudiDomanda(questa.id, 'risposta', pulita, esito)
+    return { esito }
+  }
+
   if (questa?.tema.startsWith(dopoFatto.TEMA)) {
     const esito = await dopoFatto.rispostaSulPasso(questa, pulita)
     store.chiudiDomanda(id, 'risposta', pulita, esito)

@@ -67,7 +67,7 @@ test('il materiale di un progetto: la sua cartella letta a fondo, le sue session
 
 test('una mossa regge solo con la prova nella fonte che nomina', () => {
   const fonti = new Map([['conversazioni:codice:e1', FINE_EVERMUTE], ['memoria', 'Ship Evermute 1.0 on the App Store']])
-  const buona = { titolo: 'Sign in to Xcode so build 15 can upload', testo: 'Claude is waiting on your Apple ID sign-in to upload build 15 and resubmit.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit as soon as you sign in.', prova: 'Upload build 15.', fonte: 'conversazioni:codice:e1' }
+  const buona = { genere: 'sblocco', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'Claude is waiting on your Apple ID sign-in to upload build 15 and resubmit.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit as soon as you sign in.', prova: 'Upload build 15.', fonte: 'conversazioni:codice:e1' }
   const m = quadro.ripulisciMossa(buona, fonti, [])
   assert.ok(m)
   assert.equal(m.doc, 'conversazioni:codice:e1')
@@ -82,7 +82,7 @@ test('una mossa regge solo con la prova nella fonte che nomina', () => {
 
 test('la scelta: la mossa più forte per progetto, le faccende di leva 1 fuori, il progetto importante prima a parità', () => {
   const mossa = (titolo: string, leva: 1 | 2 | 3, urgenza: 'oggi' | 'settimana' | 'poi') =>
-    ({ titolo, testo: 'x'.repeat(20), leva, urgenza, offerta: 'I do it', prova: 'p'.repeat(12), doc: null, origine: 'memoria' as const })
+    ({ genere: 'consiglio' as const, titolo, testo: 'x'.repeat(20), leva, urgenza, offerta: 'I do it', prova: 'p'.repeat(12), doc: null, origine: 'memoria' as const })
   const q = (progetto: string, mosse: ReturnType<typeof mossa>[]) => ({ progetto, nome: progetto, stato: '', traguardo: 'Live', blocco: '', mosse, quando: '', impronta: '' })
   const scelte = quadro.scegli([
     q('a', [mossa('Clean the old build folders today', 1, 'settimana'), mossa('Send the deck to Marco with the numbers', 3, 'settimana')]),
@@ -99,12 +99,13 @@ test('il giro intero: il quadro chiede al modello per ogni progetto cambiato, e 
   const chiesti: string[] = []
   quadro.perProva({
     collegato: () => true,
+    guarda: async () => '',
     leggi: async p => p.endsWith('Evermute') ? 'README:\nEvermute build 15 is ready to upload.' : '',
     chiediJSON: (async (o: { system: string; messages: { content: string }[] }) => {
-      const nome = o.system.match(/guardi un progetto solo: «([^»]+)»/)?.[1] ?? ''
+      const nome = o.system.match(/su un progetto: «([^»]+)»/)?.[1] ?? ''
       chiesti.push(nome)
-      assert.match(o.system, /Non sono mosse: le faccende/, 'il prompt dice cosa non è una mossa')
-      assert.match(o.system, /solo lui .* la prima mossa è proprio quella/s, 'un blocco che scioglie solo lui è la prima mossa')
+      assert.match(o.system, /faccende di codice NON sono mosse/, 'il prompt dice cosa non è una mossa')
+      assert.match(o.system, /solo lui può fare[\s\S]*È la prima mossa/, 'un blocco che scioglie solo lui è la prima mossa')
       if (nome !== 'Evermute deck') return { stato: 'Quiet.', traguardo: '', blocco: '', mosse: [] }
       assert.match(o.messages[0].content, /Upload build 15/)
       return {
@@ -112,8 +113,8 @@ test('il giro intero: il quadro chiede al modello per ogni progetto cambiato, e 
         traguardo: 'Evermute 1.0.6 approved on the App Store',
         blocco: 'Xcode needs his Apple ID sign in',
         mosse: [
-          { titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Upload build 15.', fonte: 'conversazioni:codice:e1' },
-          { titolo: 'Invent a launch party', testo: 'Nothing in the material says this, it is made up.', leva: 3, urgenza: 'oggi', offerta: 'I plan it.', prova: 'a party for the launch on Friday', fonte: 'posta:INBOX:9' }
+          { genere: 'sblocco', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Upload build 15.', fonte: 'conversazioni:codice:e1' },
+          { genere: 'consiglio', titolo: 'Invent a launch party', testo: 'Nothing in the material says this, it is made up.', leva: 3, urgenza: 'oggi', offerta: 'I plan it.', prova: 'a party for the launch on Friday', fonte: 'posta:INBOX:9' }
         ]
       }
     }) as never
@@ -144,12 +145,13 @@ test('una mossa già messa non torna, e una seconda mossa dalla stessa cartella 
   let giro = 0
   quadro.perProva({
     collegato: () => true,
+    guarda: async () => '',
     leggi: async p => p.endsWith('Evermute') ? 'README:\nEvermute build 15 is ready to upload.\nThe Italian store listing still needs screenshots.' + ' '.repeat(giro) : '',
     chiediJSON: (async (o: { system: string }) => {
       if (!/«Evermute deck»/.test(o.system)) return { stato: 'Quiet.', traguardo: '', blocco: '', mosse: [] }
       return { stato: 'Ready.', traguardo: 'Approved', blocco: '', mosse: [
-        { titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Evermute build 15 is ready to upload.', fonte: 'lavoro:/Users/t/Desktop/Evermute' },
-        { titolo: 'Make the Italian store screenshots for Evermute', testo: 'The Italian listing is the last missing piece before the release goes out.', leva: 2, urgenza: 'settimana', offerta: 'I draft the five screenshots captions in Italian.', prova: 'The Italian store listing still needs screenshots.', fonte: 'lavoro:/Users/t/Desktop/Evermute' }
+        { genere: 'sblocco', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'The upload and the resubmission wait only on your Apple ID sign in.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit once you sign in.', prova: 'Evermute build 15 is ready to upload.', fonte: 'lavoro:/Users/t/Desktop/Evermute' },
+        { genere: 'consiglio', titolo: 'Make the Italian store screenshots for Evermute', testo: 'The Italian listing is the last missing piece before the release goes out.', leva: 2, urgenza: 'settimana', offerta: 'I draft the five screenshots captions in Italian.', prova: 'The Italian store listing still needs screenshots.', fonte: 'lavoro:/Users/t/Desktop/Evermute' }
       ] }
     }) as never
   })
@@ -169,7 +171,7 @@ test('una mossa già messa non torna, e una seconda mossa dalla stessa cartella 
 
 test('quello che ha scritto lui regge una mossa solo dentro una riga', () => {
   const fonti = new Map([['riferimento', 'Evermute: waiting on Apple.\nThe recording goes out on Friday.']])
-  const base = { titolo: 'Send Apple the recording on Friday', testo: 'Apple waits for the recording before the review of Evermute continues.', leva: 3, urgenza: 'settimana', offerta: 'I draft the reply to Apple with the recording.', fonte: 'riferimento' }
+  const base = { genere: 'sblocco', titolo: 'Send Apple the recording on Friday', testo: 'Apple waits for the recording before the review of Evermute continues.', leva: 3, urgenza: 'settimana', offerta: 'I draft the reply to Apple with the recording.', fonte: 'riferimento' }
   assert.ok(quadro.ripulisciMossa({ ...base, prova: 'The recording goes out on Friday.' }, fonti, []))
   assert.equal(quadro.ripulisciMossa({ ...base, prova: 'waiting on Apple. The recording goes out' }, fonti, []), null, 'a cavallo di due righe il feed la nasconderebbe subito')
 })

@@ -813,18 +813,22 @@ export async function dopoLaStesura(
     || EPISTOLARE.test(c.testo) || invio.sembraUnMessaggio('', testo)
   let consegnaFile: store.ConsegnaCompito | null = null
   if (!chiede && !eseguito && RILETTI.has(c.modo)) {
-    const dettoDaLei = mani.luogoNelTesto(`${c.testo}\n${claude.dettaglioDellaRiga(nota)}`)
+    // il lavoro che Myynd fa da sé dal quadro va nella cartella Myynd, sotto il progetto, e non insegna un posto nuovo
+    const dalQuadro = c.origine === 'quadro'
+    const dettoDaLei = dalQuadro ? null : mani.luogoNelTesto(`${c.testo}\n${claude.dettaglioDellaRiga(nota)}`)
     const diPrima = mani.luogoPreferito()
-    const luogo = dettoDaLei ?? diPrima
+    const luogo: mani.Luogo = dalQuadro ? 'myynd' : dettoDaLei ?? diPrima
     const imparato = !!dettoDaLei && dettoDaLei !== diPrima
     if (imparato) {
       try { cfg.aggiorna({ consegne: { luogo } }); console.info(`myynd · consegne · ${id} · da oggi ${luogo}`) }
       catch (e) { console.warn('myynd · non riesco a ricordare dove salvare:', e instanceof Error ? e.message : e) }
     }
-    if (mani.vaSalvato({ risultato: testo, fatti, messaggio, chiesto: !!dettoDaLei })) {
+    // il lavoro dal quadro si consegna sempre in un file: è quello che la carta gli promette
+    if (mani.vaSalvato({ risultato: testo, fatti, messaggio, chiesto: !!dettoDaLei || dalQuadro })) {
       try {
         const { corpo, nota: perLei } = mani.rigaPerLei(mani.senzaChiusura(testo))
-        const salvato = ferri.salvaConsegna({ titolo: c.testo, testo: corpo, luogo })
+        const sotto = dalQuadro && c.progetto ? progetti.trova(c.progetto)?.nome ?? null : null
+        const salvato = ferri.salvaConsegna({ titolo: c.testo, testo: corpo, luogo, sotto })
         fatti.push({ attrezzo: 'scrivi_file', esito: 'ok', dettaglio: salvato.percorso })
         // F9 · anche sul diario, col percorso intero: «Disfa» per sette giorni lo cerca qui
         store.segnaNelDiario(id, { tipo: 'file', dettaglio: salvato.percorso })

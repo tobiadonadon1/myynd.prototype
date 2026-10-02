@@ -621,10 +621,13 @@ export function scriviFile(o: { percorso: string; testo: string }, copia?: strin
  * H-Farm.md». Mai sopra a un file che c'era: se il nome è preso si numera,
  * come per ogni altra scrittura sulla Scrivania.
  */
-export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo }): { percorso: string; nome: string; luogo: Luogo } {
+export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo; sotto?: string | null }): { percorso: string; nome: string; luogo: Luogo } {
   vietato('mani.salvaConsegna')
   if (ferri.ospitato()) throw new Error('Su un server non ho una Scrivania su cui scrivere.')
-  const percorso = scriviFile({ percorso: join(cartellaDelLuogo(o.luogo), `${nomeFile(o.titolo)}.md`), testo: o.testo }, null, o.luogo)
+  // una sottocartella per progetto, col suo nome ripulito: «Desktop/Myynd/tobiadonadon.com»
+  const sotto = o.sotto ? o.sotto.replace(/[\/\\:*?"<>|\0]+/g, ' ').replace(/^\.+/, '').replace(/\s+/g, ' ').trim().slice(0, 60) : ''
+  const cartella = sotto ? join(cartellaDelLuogo(o.luogo), sotto) : cartellaDelLuogo(o.luogo)
+  const percorso = scriviFile({ percorso: join(cartella, `${nomeFile(o.titolo)}.md`), testo: o.testo }, null, o.luogo)
   return { percorso, nome: basename(percorso), luogo: o.luogo }
 }
 
