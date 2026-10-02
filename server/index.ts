@@ -3772,9 +3772,13 @@ app.patch('/api/compiti/:id', (req, res) => {
     if (patch.testo !== undefined && patch.testo !== c.testo && c.contratto?.scritto === 'myynd') store.scriviContrattoCompito(req.params.id, null)
     // cambiare il lavoro ferma il lavoro in corso; cambiarne la priorità no:
     // la cosa da fare è la stessa, e buttare via mezz'ora di codice per un
-    // «alta» sarebbe un prezzo che nessuno ha chiesto di pagare
-    if (Object.keys(patch).some(k => k !== 'priorita') && stopProjectWork(req.params.id)) compiti.richiama(req.params.id)
-    if (Object.keys(patch).length) store.cambiaCompito(req.params.id, patch)
+    // «alta» sarebbe un prezzo che nessuno ha chiesto di pagare. Nemmeno il
+    // giorno, e nemmeno un «Salva» del dettaglio che rimanda i valori di
+    // prima: aprire una riga che lavora e chiuderla non la deve fermare
+    // (`compiti.cambiaIlLavoro`). Si scrive solo quello che è cambiato davvero.
+    const cambiato = compiti.soloCambiati(c, patch)
+    if (compiti.cambiaIlLavoro(c, cambiato) && stopProjectWork(req.params.id)) compiti.richiama(req.params.id, 'modificata')
+    if (Object.keys(cambiato).length) store.cambiaCompito(req.params.id, cambiato)
     // Cambiare secchio vuol dire cambiare fila, e una chiave nata nell'altra
     // fila lì non vuol dire niente: può essere identica a una che c'è già, e da
     // due righe con la stessa chiave in poi l'ordine non esiste più.
@@ -4307,10 +4311,16 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
   const controller=new AbortController()
   lavoriInCorso.set(runKey,controller)
   store.affidaCompito(c.id, 'tutto')
-  const delegatedVersion=store.compito(c.id)!.versione
+  /*
+   * Ancora la stessa cosa da fare: non la versione della riga, che sale anche
+   * per una priorità o un giorno spostato, e con quella il lavoro finito si
+   * buttava in silenzio lasciando la riga «al lavoro» per sempre. Il testo e
+   * la nota cambiati fermano già il lavoro (PATCH, `cambiaIlLavoro`); qui si
+   * guarda che siano ancora quelli con cui è partito.
+   */
   const stillCurrent=()=>{
     const current=store.compito(c.id)
-    return !controller.signal.aborted && current?.stato==='delegato' && !current.sparito && current.versione===delegatedVersion
+    return !controller.signal.aborted && current?.stato==='delegato' && !current.sparito && current.testo===c.testo && (current.nota??'')===(c.nota??'')
   }
   compiti.annunciaCambio()
   try {
@@ -4500,6 +4510,18 @@ app.post('/api/compiti/:id/riapri', (req, res) => {
     store.riordina(req.params.id, c.quando, ordine.dopo(store.ultimoOrdine(c.quando)))
   } catch (e) { return errore(res, e) }
   res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
+  compiti.annunciaCambio()
+})
+
+/**
+ * «Annulla» sotto il cestino: la riga tolta torna in lista com'era stata
+ * lasciata (sua, senza il lavoro a metà). Se la stava facendo Myynd, la
+ * riaffida chi ha premuto, con la sua rotta: qui si rimette e basta.
+ */
+app.post('/api/compiti/:id/rimetti', (req, res) => {
+  if (!store.compito(req.params.id)) return res.status(404).json({ errore: 'Compito non trovato.' })
+  try { store.rimettiCompitoTolto(req.params.id) } catch (e) { return errore(res, e) }
+  res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
 

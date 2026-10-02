@@ -301,7 +301,16 @@ function gira() {
     // giro: è la differenza fra il suo indice e quello di un altro
     void Promise.resolve()
       .then(() => withBackgroundWork(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id, voce.nativa, !!voce.turno)) : svolgiUno(voce.id, voce.nativa, !!voce.turno)))
-      .catch(e => console.error('myynd · compito', voce.id, e))
+      .catch(e => {
+        console.error('myynd · compito', voce.id, e)
+        // sfuggito al `try` di `svolgiUno` (una scrittura prima del lavoro, il
+        // `finally`): la riga restava «al lavoro» senza nessuno sotto fino al
+        // riavvio. Torna sua con il perché, se è ancora affidata e nessuno l'ha richiamata
+        if (richiamati.has(k)) return
+        const guaio = e instanceof Error && e.message ? e.message : INTERROTTA
+        const segna = () => { if (store.guaioCompito(voce.id, guaio)) { store.segnaNelDiario(voce.id, { tipo: 'guaio', dettaglio: guaio }); annuncia({ fase: 'guaio', id: voce.id, guaio }) } }
+        try { if (voce.utente) chi.dentro(voce.utente, segna); else segna() } catch { /* il riavvio la riprende */ }
+      })
       .finally(() => fuoriDalCompito(() => {
         console.info(`myynd · worker · released · ${voce.id}`)
         inCorsoDi.delete(voce.utente ?? '')
@@ -1158,8 +1167,16 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
  * Torna aperto subito — chi ha premuto non deve aspettare che il modello si
  * accorga di niente. Quello che sta girando finisce comunque il suo giro, ma il
  * risultato non lo scrive più nessuno.
+ *
+ * E lo dice il diario della riga. Il primo ottobre una riga affidata dal feed
+ * è stata richiamata tredici secondi dopo, a metà del terzo giro del modello:
+ * il lavoro si è fermato senza un errore, la riga è tornata sua senza una
+ * parola, e lui: «it kind of worked through it, and then the task
+ * disappeared, and I don't know where the thing went». Una riga che era nelle
+ * mani di Myynd e torna sua porta il perché: ripresa da te, o fermata perché
+ * l'hai cambiata. `perche` lo dice chi chiama; null se l'ha già scritto lui.
  */
-export function richiama(id: string) {
+export function richiama(id: string, perche: 'tu' | 'modificata' | null = 'tu') {
   const utente = chi.adesso()
   const dove = coda.findIndex(v => v.id === id && v.utente === utente)
   if (dove >= 0) coda.splice(dove, 1)
@@ -1167,8 +1184,13 @@ export function richiama(id: string) {
   // lasciava id nell'insieme per sempre, e — peggio — un riaffido subito dopo
   // ripuliva il segno di un lavoro ancora in volo, che quindi tornava a scrivere
   const k = chiave(id, utente)
-  if (inLavoro(k, utente)) { richiamati.add(k); interruzioni.get(k)?.abort() }
+  const girava = inLavoro(k, utente)
+  if (girava) { richiamati.add(k); interruzioni.get(k)?.abort() }
   const c = store.compito(id)
+  // era di Myynd: al lavoro, in fila, pronta, o in coda per il turno (aperta col suo modo)
+  const diMyynd = !!c && (c.stato === 'delegato' || c.stato === 'pronto' || c.stato === 'chiede' || (c.stato === 'aperto' && !!c.modo && c.modo !== 'io'))
+  // null: chi chiama ha già scritto il suo perché (disfare, F9)
+  if (perche && (diMyynd || girava)) store.segnaNelDiario(id, { tipo: 'fermato', dettaglio: perche })
   // 'chiede' mancava, ed è lo stato in cui si preme «richiama» più spesso:
   // la riga ti fa una domanda, tu decidi di fartela da solo, e la riga
   // restava «ti chiede» per sempre — con la pastiglia accesa su una domanda
@@ -1179,6 +1201,43 @@ export function richiama(id: string) {
   }
   store.riprendiCompito(id)
   annuncia({ fase: 'richiamato', id })
+}
+
+/** I campi di una riga che si cambiano dal dettaglio (`PATCH /api/compiti/:id`). */
+export type CambioRiga = { testo?: string; nota?: string | null; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: store.Priorita | null }
+
+/** Una nota vuota e una nota che manca sono la stessa nota; gli spazi in fondo pure. */
+const notaPiana = (n: string | null | undefined) => (n ?? '').trim()
+
+/**
+ * Del cambio, solo quello che è cambiato davvero.
+ *
+ * Il dettaglio salva tutti i campi insieme, anche quelli che non ha toccato:
+ * il testo uguale, la nota rifilata, il progetto di prima. Scritti tutti, una
+ * riga che lavora passava per «cambiata» (e il testo riscritto le toglieva il
+ * titolo corto) solo perché qualcuno l'aveva aperta per guardarla.
+ */
+export function soloCambiati(c: store.Compito, p: CambioRiga): CambioRiga {
+  const out: CambioRiga = {}
+  if (p.testo !== undefined && p.testo !== c.testo) out.testo = p.testo
+  if (p.nota !== undefined && notaPiana(p.nota) !== notaPiana(c.nota)) out.nota = p.nota
+  if (p.progetto !== undefined && (p.progetto ?? null) !== (c.progetto ?? null)) out.progetto = p.progetto
+  if (p.giorno !== undefined && (p.giorno ?? null) !== (c.giorno ?? null)) out.giorno = p.giorno
+  if (p.ora !== undefined && (p.ora ?? null) !== (c.ora ?? null)) out.ora = p.ora
+  if (p.priorita !== undefined && (p.priorita ?? null) !== (c.priorita ?? null)) out.priorita = p.priorita
+  return out
+}
+
+/**
+ * Questo cambio tocca il lavoro? Il testo, la nota, il progetto sì: sono la
+ * cosa da fare e il materiale con cui farla. La priorità, il giorno e l'ora
+ * no: dicono quando, e il lavoro in corso è lo stesso. Va dato il cambio già
+ * passato da `soloCambiati`.
+ */
+export function cambiaIlLavoro(c: store.Compito, p: CambioRiga): boolean {
+  return (p.testo !== undefined && p.testo !== c.testo)
+    || (p.nota !== undefined && notaPiana(p.nota) !== notaPiana(c.nota))
+    || (p.progetto !== undefined && (p.progetto ?? null) !== (c.progetto ?? null))
 }
 
 /**
@@ -1195,6 +1254,8 @@ export function richiama(id: string) {
  * deve farla cadere a ogni avvio.
  */
 export const INTERROTTA_DUE_VOLTE = 'Si è interrotta due volte a metà. Riaffidamela quando vuoi.'
+/** Un errore sfuggito al lavoro senza un messaggio suo: una frase fissa, così si traduce. */
+export const INTERROTTA = 'Si è fermata a metà per un errore. Riaffidamela quando vuoi.'
 export function riprendiAppesi(): number {
   const { inCoda, ferme } = store.rimettiInCodaGliAppesi(2, INTERROTTA_DUE_VOLTE)
   if (inCoda) console.info(`myynd · turno · ${inCoda} ${inCoda === 1 ? 'carta interrotta torna' : 'carte interrotte tornano'} in coda`)

@@ -64,7 +64,7 @@ before(async () => {
     store.scriviCompito({ id: 'route-edit', testo: 'Update the local value', origine: 'mano', ordine: 'a' })
     store.scriviCompito({ id: 'route-hermes', testo: 'Update selected value with Hermes', origine: 'mano', ordine: 'b' })
     store.scriviCompito({ id: 'route-team', testo: 'Update selected value with a reviewer', origine: 'mano', ordine: 'c' })
-    for(const suffix of ['cancel','delete','close','revise']) store.scriviCompito({id:'route-'+suffix,testo:'slowFixture project work',origine:'mano',ordine:suffix})
+    for(const suffix of ['cancel','delete','close','revise','noop']) store.scriviCompito({id:'route-'+suffix,testo:'slowFixture project work',origine:'mano',ordine:suffix})
   })
   store.chiudiIndici()
   service = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
@@ -207,4 +207,27 @@ test('recall, deletion, closure and task edits stop project work without overwri
     else {assert.equal(current.stato,'aperto');if(action==='revise')assert.equal(current.testo,'User replacement task')}
     assert.equal(readFileSync(join(source,'value.mjs'),'utf8'),'export const value = 1\n')
   }
+})
+
+/*
+ * Aprire il dettaglio di una riga al lavoro e premere «Salva» senza toccare
+ * niente, o alzarle la priorità, non la ferma: il primo ottobre una riga
+ * affidata è sparita a metà lavoro, e il dettaglio che rimandava tutti i
+ * campi uguali era il primo indiziato. Il lavoro arriva in fondo, e il suo
+ * risultato si scrive (prima la versione salita per la priorità lo buttava).
+ */
+test('an unchanged detail save and a priority change do not stop running project work, and its result lands',async()=>{
+  const id='route-noop'
+  const running=post('/api/compiti/'+id+'/lavora',firstToken,{cartella:source,passo:'piano'})
+  await new Promise(r=>setTimeout(r,300))
+  const r=await fetch(base+'/api/compiti/'+id,{method:'PATCH',headers:{authorization:`Bearer ${firstToken}`,'content-type':'application/json'},body:JSON.stringify({testo:'slowFixture project work',nota:null,progetto:null,priorita:'alta'})})
+  assert.equal(r.status,200)
+  const done=await running
+  assert.equal(done.status,200,JSON.stringify(done.data))
+  assert.equal(done.data.finito,true)
+  const current=done.data.compito as {stato:string;risultato?:string;priorita?:string;diario?:{tipo:string}[]}
+  assert.equal(current.stato,'pronto')
+  assert.match(current.risultato ?? '',/Plan:/)
+  assert.equal(current.priorita,'alta')
+  assert.ok(!current.diario?.some(v=>v.tipo==='fermato'),'nothing stopped it')
 })
