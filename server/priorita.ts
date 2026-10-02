@@ -776,6 +776,9 @@ function salvaDomande(domande: DomandaDelGiro[]): number {
 
 const inCorso = new Set<string>()
 
+/** I conti il cui quadro vecchio è già stato rifatto in questo avvio. */
+const rifattiPerVersione = new Set<string>()
+
 /** Se un giro partirebbe adesso: gli stessi cancelli di `forse`, senza farlo. */
 export function pronta(forza = false): boolean {
   if (!ferri.collegato() || inCorso.has(cartella())) return false
@@ -783,6 +786,12 @@ export function pronta(forza = false): boolean {
   const da = a.ultimo ? Date.now() - Date.parse(a.ultimo) : Infinity
   if (da < MINUTI_MINIMI * 60_000) return false
   if (forza) return true
+  // un quadro scritto da un ragionamento vecchio si rifà al primo giro utile, senza aspettare le ore;
+  // una volta sola per conto e per avvio, così un modello che non risponde non lo fa ripartire ogni dieci minuti
+  if (!rifattiPerVersione.has(cartella()) && Object.values(quadro.leggiQuadri()).some(q => q.versione !== quadro.VERSIONE)) {
+    rifattiPerVersione.add(cartella())
+    return true
+  }
   // il feed quasi vuoto: come prima, un giro ogni dodici ore
   if (da >= ORE_FRA * 3_600_000 && feedAttuale().length < ABBASTANZA) return true
   // il lavoro è cambiato: un giro ogni quattro ore, anche col feed pieno —
