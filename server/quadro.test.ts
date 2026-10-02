@@ -104,6 +104,7 @@ test('il giro intero: il quadro chiede al modello per ogni progetto cambiato, e 
       const nome = o.system.match(/guardi un progetto solo: «([^»]+)»/)?.[1] ?? ''
       chiesti.push(nome)
       assert.match(o.system, /Non sono mosse: le faccende/, 'il prompt dice cosa non è una mossa')
+      assert.match(o.system, /solo lui .* la prima mossa è proprio quella/s, 'un blocco che scioglie solo lui è la prima mossa')
       if (nome !== 'Evermute deck') return { stato: 'Quiet.', traguardo: '', blocco: '', mosse: [] }
       assert.match(o.messages[0].content, /Upload build 15/)
       return {

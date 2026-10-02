@@ -361,6 +361,8 @@ Hai davanti tutto quello che gli appartiene: le cartelle di codice lette a fondo
 3. Cosa lo blocca adesso, se qualcosa lo blocca: chi deve rispondere, cosa manca, cosa è rotto.
 4. Al massimo tre mosse che avvicinano quel traguardo questa settimana, la più forte prima. Una mossa buona è precisa (nomi, file, numeri, persone), si fa in due giorni al massimo, e se la fa sposta il traguardo: sblocca, consegna, mette davanti a qualcuno. Per ognuna dì cosa faccio io, Myynd, da solo e da subito: una bozza di mail, un file, una ricerca, una pagina, il codice in una copia del progetto.
 
+Se il blocco è una cosa che può sciogliere solo lui (un accesso da chiedere, un'approvazione da dare, una firma, una risposta a qualcuno), la prima mossa è proprio quella, con leva 3: è la mossa che sposta di più anche se la fa lui. L'offerta dice cosa preparo io perché gli basti un minuto: il messaggio da mandare, l'elenco da approvare, i passi da seguire.
+
 Non sono mosse: le faccende (pulire build, ordinare file, guardare i log), il «verifica» o «controlla» che non sblocca niente, il lavoro sugli strumenti invece che sul progetto, quello che sta facendo proprio adesso in una sessione di oggi, quello che è già nella sua lista, quello che ha già fatto, e quello che somiglia a una carta che ha scartato o lasciato scadere: lì ha già risposto. Se non c'è una mossa che passa questa asticella, zero mosse è la risposta giusta.
 
 Ogni mossa porta la prova: una citazione esatta, da 12 a 300 caratteri, copiata da una fonte del materiale, con l'id della fonte fra parentesi quadre. Senza prova, la mossa non c'è.
@@ -503,8 +505,10 @@ export function scegli(quadri: readonly Quadro[], gia: string[], alti: Set<strin
     const buone = q.mosse
       .filter(m => (m.leva >= 2 || m.urgenza === 'oggi') && !messe.includes(m.titolo) && !gia.some(t => stessaCosa(t, m.titolo)))
       .sort((a, b) => punteggio(b, alti.has(q.progetto)) - punteggio(a, alti.has(q.progetto)))
-    // il perché sulla carta è quello che sposta: il blocco se c'è, se no il traguardo
-    if (buone[0]) migliori.push({ ...buone[0], progetto: q.progetto, perche: (q.blocco || q.traguardo).slice(0, 200) })
+    // il perché sulla carta è il traguardo che la mossa avvicina: il blocco del
+    // progetto sotto una mossa che non lo scioglie confondeva («slides» con
+    // sotto «la build 15 aspetta il certificato»)
+    if (buone[0]) migliori.push({ ...buone[0], progetto: q.progetto, perche: (q.traguardo || q.blocco).slice(0, 200) })
   }
   return migliori
     .sort((a, b) => punteggio(b, alti.has(b.progetto)) - punteggio(a, alti.has(a.progetto)))
