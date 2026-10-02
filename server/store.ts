@@ -3364,6 +3364,18 @@ export function voceFeed(id: string) {
  * terrebbe chiuse, ma avrebbero comunque occupato uno dei pochi posti della
  * lettura, e le cose nuove resterebbero fuori.
  */
+/**
+ * Le ultime carte di un progetto con com'è andata: fatte, scartate (col
+ * perché, se l'ha detto), lasciate scadere. Il quadro le legge per imparare
+ * cosa per lui muove le cose e cosa no.
+ */
+export function feedDelProgetto(progetto: string, limite = 15): { titolo: string; stato: string; motivo: string | null; quando: string }[] {
+  return db.prepare(`
+    SELECT titolo, stato, motivo, COALESCE(risposto, quando) AS quando FROM feed
+    WHERE progetto = ? ORDER BY COALESCE(risposto, quando) DESC LIMIT ?
+  `).all(progetto, limite) as unknown as { titolo: string; stato: string; motivo: string | null; quando: string }[]
+}
+
 export function feedGiaVisto(limite = 30): { titolo: string; stato: string; motivo: string | null }[] {
   // una voce scaduta non è una risposta: lui non l'ha vista, o non l'ha voluta
   // vedere. Raccontarla al modello come «liquidata» sarebbe una bugia e un

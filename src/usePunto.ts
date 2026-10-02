@@ -21,6 +21,16 @@ const ORE_VIA = 3
 const CHIAVE_FUOCO = 'myynd.punto.fuoco'
 /** Il punto che ha chiuso con la ×: non torna finché non ce n'è uno nuovo. */
 const CHIAVE_NASCOSTO = 'myynd.punto.nascosto'
+/**
+ * Il giorno in cui il punto si è aperto da solo l'ultima volta.
+ *
+ * «The brief, every time that I open the app, opens with me, and it's very
+ * annoying» (2 ottobre 2026). Ogni punto nuovo si apriva sopra la pagina: tre
+ * al giorno, più uno a ogni ritorno dopo tre ore. Adesso si apre da solo una
+ * volta al giorno, la prima; gli altri restano la carta in cima, e si aprono
+ * con un dito.
+ */
+const CHIAVE_GIORNO_APERTO = 'myynd.punto.apertoDaSolo'
 
 function leggi(k: string): string | null {
   try { return localStorage.getItem(k) } catch { return null }
@@ -35,6 +45,9 @@ const giorno = (ms: number) => new Date(ms).toDateString()
 export function usePunto(ragiona: boolean) {
   const [punto, setPunto] = useState<Punto | null>(null)
   const [nascosto, setNascosto] = useState<string | null>(() => leggi(CHIAVE_NASCOSTO))
+  const [apertoDaSolo, setApertoDaSolo] = useState<string | null>(() => leggi(CHIAVE_GIORNO_APERTO))
+  /** Aperto con un dito, dalla carta: vale finché non lo chiude. */
+  const [chiesto, setChiesto] = useState(false)
   const [carico, setCarico] = useState(false)
   const [tetto, setTetto] = useState(false)
   /** La data dell'ultimo punto, quando è di ieri: allora non se ne mostra il testo. */
@@ -122,10 +135,23 @@ export function usePunto(ragiona: boolean) {
   const rifai = useCallback(() => prendi(true), [prendi])
 
   const nascondi = useCallback(() => {
+    setChiesto(false); setTenuto(false)
     if (!punto) return
     scrivi(CHIAVE_NASCOSTO, punto.quando)
     setNascosto(punto.quando)
   }, [punto])
+
+  const oggi = giorno(Date.now())
+  const daSolo = !!punto && nascosto !== punto.quando && apertoDaSolo !== oggi
+  // si segna il giorno appena si apre da solo: dal punto dopo, stesso giorno, resta la carta
+  useEffect(() => {
+    if (!daSolo) return
+    scrivi(CHIAVE_GIORNO_APERTO, oggi)
+    setApertoDaSolo(oggi)
+  }, [daSolo, oggi])
+  // aperto da solo e poi segnato: resta aperto finché non lo chiude lui
+  const [tenuto, setTenuto] = useState(false)
+  useEffect(() => { if (daSolo) setTenuto(true) }, [daSolo])
 
   /*
    * Qui non si fa più niente.
@@ -139,10 +165,10 @@ export function usePunto(ragiona: boolean) {
   return {
     /** Il punto, anche se l'ha già chiuso: chi lo chiama decide se aprirlo o solo nominarlo. */
     punto,
-    /** Vero se questo punto non l'ha ancora chiuso con la ×. */
-    daVedere: !!punto && nascosto !== punto.quando,
+    /** Vero se il foglio va mostrato: aperto da lui, o la prima volta oggi e non ancora chiuso con la ×. */
+    daVedere: !!punto && (chiesto || ((daSolo || tenuto) && nascosto !== punto.quando)),
     /** Riapre quello di prima, da un dito. */
-    riapri: () => { try { localStorage.removeItem(CHIAVE_NASCOSTO) } catch { /* pazienza */ } setNascosto(null) },
+    riapri: () => { try { localStorage.removeItem(CHIAVE_NASCOSTO) } catch { /* pazienza */ } setNascosto(null); setChiesto(true) },
     /** C'è un punto, ma è di ieri: si dice, e si offre di rifarlo. */
     vecchio,
     /** Perché l'ultimo tentativo non è andato: già in italiano, da tradurre in pagina. */

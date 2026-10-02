@@ -340,6 +340,7 @@ export type Lavoro =
   | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
   | 'priorita'      // cosa dovrebbe fare adesso, guardando tutto: le fonti non lo chiedono, lo propone lui
+  | 'quadro'        // a che punto è davvero un progetto, il prossimo traguardo e le mosse che lo avvicinano
   | 'valutazione'   // il voto alle priorità, contro quello che lui ha scritto di suo pugno: attuali, morte, nel progetto giusto
   | 'email'         // dalla bozza all'email pronta: a chi va, che oggetto, che testo
   | 'revisione'     // rileggere il lavoro consegnato come lei e come chi lo riceve, prima di dirlo pronto
@@ -426,6 +427,15 @@ const LAVORI: Record<Lavoro, Profilo> = {
   // fonti non chiedono niente: frontiera, e con il pensiero acceso. Il conto
   // lo tiene `priorita.ts`: al massimo due volte al giorno per conto.
   priorita:   { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
+  /*
+   * Il quadro di un progetto: leggere tutto quello che gli appartiene (le
+   * cartelle, le sue sessioni con gli assistenti, la posta, la memoria) e dire
+   * dove sta davvero e cosa lo sposta. È il ragionamento da cui nascono le
+   * carte che contano, e lui l'ha chiesto al modello più grande: «the thing
+   * powering Myynd could be Opus 5.5». Gira solo quando il materiale del
+   * progetto cambia, quindi il prezzo è per cambiamento, non per ora.
+   */
+  quadro:     { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 180_000 },
   // La valutazione delle priorità: ogni carta contro il riferimento che ha
   // scritto lui («su cosa sono, cosa è morto, cosa è bloccato»). È un voto,
   // non una cosa che esce di qui: `media` perché deve leggere bene un testo

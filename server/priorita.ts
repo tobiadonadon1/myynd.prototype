@@ -49,6 +49,7 @@ import { feedAttuale } from './attenzione.ts'
 import { projectEvidence } from './project-memory.ts'
 import { assoluto, conRelativi, PERCHE_DESCRIZIONE } from './data-carta.ts'
 import { percheFondato } from './perche-oggi.ts'
+import * as quadro from './quadro.ts'
 
 export type Genere = 'priorita' | 'proposta' | 'da-leggere' | 'scadenza'
 
@@ -444,7 +445,7 @@ const AUTOMAZIONE = /^(?:imposto un'automazione|i set up an automation)/i
 function parole(s: string): Set<string> {
   return new Set(s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 3))
 }
-function stessaCosa(a: string, b: string): boolean {
+export function stessaCosa(a: string, b: string): boolean {
   const pa = parole(a), pb = parole(b)
   if (pa.size < 2 || pb.size < 2) return false
   let comuni = 0
@@ -573,7 +574,7 @@ export type Giro = { voci: Priorita[]; domande: DomandaDelGiro[]; superate: { id
  * niente e non tocca il conto dei giri: è quello che serve a chi vuole
  * vedere le carte prima di metterle sul feed, o misurarle (`valuta-feed.ts`).
  */
-export async function proponi(): Promise<Giro | null> {
+export async function proponi(quadri: readonly quadro.Quadro[] = [], dalQuadro: string[] = []): Promise<Giro | null> {
   // ottocento e non centosessanta: i post di X e le chat, che sono tanti e
   // datati oggi, si mangiavano da soli la finestra dei più recenti e la
   // posta e i file di due settimane fa restavano fuori. I tetti per fonte
@@ -625,6 +626,8 @@ export async function proponi(): Promise<Giro | null> {
         (morti.size ? `\nMorti, secondo lui: ${perNome(morti).join(', ')}.` : '') +
         (bloccati.size ? `\nBloccati, secondo lui: ${perNome(bloccati).join(', ')}.` : '')
       : `\nNon ha ancora scritto a che punto è ogni progetto. Dove non sei sicuro che una cosa sia ancora viva, non tirare a indovinare: mettila fra le domande.`,
+    quadri.length ? `\nIL QUADRO DEI PROGETTI, scritto leggendo a fondo tutto quello che appartiene a ognuno (cartelle, sessioni, posta, memoria). Fidati di questo per sapere dove sta un progetto: le mosse per avvicinare i traguardi le propone già il quadro, quindi qui cerca soprattutto chi aspetta lui (una mail, una richiesta), le scadenze, le letture che cambiano un progetto, e quello che lega due progetti.\n${quadro.perLePriorita(quadri)}` : '',
+    dalQuadro.length ? `\nDal quadro sono appena nate queste carte. Non riproporle, nemmeno con altre parole:\n${dalQuadro.map(t => `— ${t}`).join('\n')}` : '',
     lista.length ? `\nQuesto è GIÀ nella sua lista. Non riproporlo, nemmeno con altre parole:\n${lista.map(r => `— ${r}`).join('\n')}` : '',
     aperteVoci.length ? `\nQueste sono già sul suo feed (id, e quando sono nate). Non riscriverle. Se una non vale più — l'ha fatta (lo dicono le sessioni, i commit o la lista), è superata da una più recente, la sua data è passata, o riguarda un lavoro che ha lasciato — mettila in «superate» con l'id:\n${aperteVoci.map(v => `— [${v.id}] «${v.titolo}»${v.testo ? ` — ${unaRiga(v.testo, 140)}` : ''} (nata il ${v.quando.slice(0, 10)})`).join('\n')}` : '',
     gia.length ? `\nA queste ha già risposto o le ha scartate. Non riproporgliele:\n${gia.map(v => `— «${v.titolo}» → ${v.stato}${v.motivo ? `: ${v.motivo}` : ''}`).join('\n')}` : '',
@@ -661,7 +664,7 @@ Scrivi in ${nellaLingua()}.`)
   })
   if (!out) return null
   const ids = new Set(docs.map(d => d.id))
-  const giaDette = [...lista, ...aperte, ...gia.map(v => v.titolo)]
+  const giaDette = [...lista, ...aperte, ...gia.map(v => v.titolo), ...dalQuadro]
   // dove si cercano le prove: il documento com'è stato mostrato, la memoria
   // del progetto, il riferimento con i nomi di ogni progetto
   const docPerId = new Map(docs.map(d => [d.id, d]))
@@ -803,21 +806,62 @@ export async function forse(forza = false): Promise<number> {
   const conto = cartella()
   inCorso.add(conto)
   try {
-    const esito = await proponi()
-    scriviArchivio({ ultimo: new Date().toISOString(), proposte: esito?.voci.length ?? 0 })
-    if (!esito) return 0
+    /*
+     * Prima il quadro di ogni progetto, poi le priorità.
+     *
+     * Il quadro legge a fondo quello che appartiene a un progetto e propone le
+     * mosse che avvicinano il suo traguardo (`quadro.ts`); qui se ne prende la
+     * più forte per progetto, passa dalla stessa rifinitura delle altre carte,
+     * e va sul feed. Le priorità vengono dopo, con il quadro davanti: chi
+     * aspetta lui, le scadenze, le letture, senza ripetere le mosse.
+     */
+    const dalQuadro = await carteDalQuadro()
+    const esito = await proponi(dalQuadro.quadri, dalQuadro.titoli)
+    scriviArchivio({ ultimo: new Date().toISOString(), proposte: (esito?.voci.length ?? 0) + dalQuadro.salvate })
+    if (!esito) return dalQuadro.salvate
     // superata dal giro, non lasciata passare da lui: la ragione lo dice
     for (const x of esito.superate) store.cambiaStatoFeed(x.id, 'scaduto', x.motivo, 'superata')
     if (esito.superate.length) console.log(`myynd · priorità · ${esito.superate.length} superate: ${esito.superate.map(x => x.motivo).join('; ')}`)
     const domande = salvaDomande(esito.domande)
     if (domande) console.log(`myynd · priorità · ${domande} domande sulla prima pagina`)
-    if (!esito.voci.length) return 0
+    if (!esito.voci.length) return dalQuadro.salvate
     const nuove = store.salvaFeed(esito.voci.map(voceDelFeed))
     if (nuove) console.log(`myynd · priorità · ${nuove} messe sul feed`)
-    return nuove
+    return nuove + dalQuadro.salvate
   } finally {
     inCorso.delete(conto)
   }
+}
+
+/**
+ * Il quadro dei progetti, e le carte che ne nascono: la mossa più forte di
+ * ogni progetto, rifinita come le altre (progetto, chiarezza, peso) e messa sul
+ * feed. Torna i quadri, per le priorità che vengono dopo, e i titoli messi.
+ */
+async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: string[]; salvate: number }> {
+  const quadri = await quadro.aggiorna()
+  if (!quadri.length) return { quadri, titoli: [], salvate: 0 }
+  const gia = [
+    ...store.elencoCompiti().map(c => c.testo),
+    ...store.feedAperto(40).map(v => v.titolo),
+    ...store.feedGiaVisto(40).map(v => v.titolo)
+  ]
+  const alti = new Set(progetti.elenco('attivo').filter(p => p.priorita === 'alta').map(p => p.id))
+  const scelte = quadro.scegli(quadri, gia, alti)
+  if (!scelte.length) return { quadri, titoli: [], salvate: 0 }
+  const adessoIso = new Date().toISOString()
+  const voci: Priorita[] = scelte.map(m => ({
+    genere: 'priorita', titolo: m.titolo, testo: m.testo, perche: m.perche, progetto: m.progetto,
+    doc: m.doc && store.documento(m.doc) ? m.doc : null, offerta: m.offerta, quando: '', prova: m.prova,
+    origine: m.doc && store.documento(m.doc) ? 'doc' : m.origine === 'riferimento' ? 'riferimento' : 'memoria'
+  }))
+  const rifinite = await rifinisci(voci.map(p => ({
+    ...p, tipo: TIPO[p.genere], urgenza: p.quando, nata: (p.doc && store.documento(p.doc)?.quando) || adessoIso
+  })), { progetti: progetti.elenco('attivo'), registro: 'quadro' })
+  const tenute: Priorita[] = rifinite.map(({ tipo: _tipo, urgenza, nata: _nata, ...p }) => ({ ...p, quando: urgenza ?? '' }))
+  const salvate = tenute.length ? store.salvaFeed(tenute.map(voceDelFeed)) : 0
+  if (salvate) console.log(`myynd · quadro · ${salvate} carte sul feed: ${tenute.map(t => t.titolo).join(' · ')}`)
+  return { quadri, titoli: tenute.map(t => t.titolo), salvate }
 }
 
 /** Serve ai test: il conto ricomincia da zero. */
