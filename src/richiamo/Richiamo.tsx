@@ -10,6 +10,11 @@
 // `window.myynd.richiamo` dice alla finestra quanto è alta e quando
 // sparire; nel browser si disegna lo stesso, da sola in mezzo alla pagina,
 // e «apri l'app» porta alla radice. Niente qui scorre di lato.
+//
+// Aperta con un clic sul mostriciattolo è il suo fumetto (`accanto`): lì si
+// parla con Myynd, quindi Invio chiede invece di segnare (un «/» scelto dal
+// menù torna a segnare), e la domanda dopo continua la stessa chat finché il
+// fumetto resta aperto. Dettare va da sé: è una casella con il fuoco.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { api, apiP10, alloScadere, sessione } from '../api'
@@ -59,6 +64,8 @@ export function Richiamo() {
   const [risposta, setRisposta] = useState('')
   const [chat, setChat] = useState<string | null>(null)
   const [pensando, setPensando] = useState(false)
+  // aperta come fumetto, accanto al mostriciattolo: si parla
+  const [accanto, setAccanto] = useState(false)
 
   const campo = useRef<HTMLTextAreaElement>(null)
   const radice = useRef<HTMLDivElement>(null)
@@ -113,9 +120,10 @@ export function Richiamo() {
    */
   useEffect(() => {
     if (!ponte?.mostrato) return
-    return ponte.mostrato(() => {
+    return ponte.mostrato(come => {
       campo.current?.focus()
       if (sessione.token()) setSenzaSessione(false)
+      setAccanto(come?.accanto === true)
       if (pensando) return
       setDomanda(''); setRisposta(''); setChat(null); setGuaio(''); setConferma('')
     })
@@ -158,11 +166,11 @@ export function Richiamo() {
 
   const daCapo = () => { setTesto(''); setDove('oggi'); setModo(null); setVistaScelta(false) }
 
-  /** Una domanda: una chat nuova, e la risposta qui sotto. */
+  /** Una domanda: una chat nuova (nel fumetto, la stessa di prima), e la risposta qui sotto. */
   const chiedi = async (cosa: string) => {
     const pulita = cosa.trim()
     if (!pulita || pensando) return
-    const id = `th${Date.now()}`
+    const id = accanto && chat ? chat : `th${Date.now()}`
     setChat(id); setDomanda(pulita); setRisposta(''); setGuaio(''); setPensando(true)
     daCapo()
     try {
@@ -214,7 +222,8 @@ export function Richiamo() {
       if (e.key === 'Escape') { e.preventDefault(); setTesto(testo.replace(/(?:^|\s)\/\S*$/, '')); return }
     }
     // ⇧Invio va a capo: è così che si scrive un elenco a mano
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); manda(e.metaKey || e.ctrlKey); return }
+    // nel fumetto Invio chiede, a meno che un «/» abbia scelto dove segnarlo
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); manda(e.metaKey || e.ctrlKey || (accanto && !modo && !vistaScelta)); return }
     if (e.key === 'Escape') { e.preventDefault(); chiudi() }
   }
 
@@ -244,8 +253,8 @@ export function Richiamo() {
           value={testo}
           onChange={e => setTesto(e.target.value)}
           onKeyDown={tasti}
-          aria-label={t('Segna una cosa, o chiedi con «?»')}
-          placeholder={t('Segna una cosa, o chiedi con «?»')}
+          aria-label={accanto ? t('Scrivi a Myynd') : t('Segna una cosa, o chiedi con «?»')}
+          placeholder={accanto ? t('Scrivi a Myynd') : t('Segna una cosa, o chiedi con «?»')}
           style={{
             flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none',
             fontFamily: 'inherit', fontSize: '15px', lineHeight: '22px', color: INCHIOSTRO, padding: '9px 0',

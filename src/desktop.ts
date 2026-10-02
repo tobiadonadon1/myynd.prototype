@@ -79,10 +79,12 @@ export type Desktop = {
     misura(altezza: number): void
     /**
      * Il guscio l'ha appena mostrata: il fuoco torna nella casella, e la
-     * risposta dell'altra volta se ne va. Torna la funzione per smettere.
-     * Manca nei gusci vecchi.
+     * risposta dell'altra volta se ne va. `accanto` vuol dire aperta come
+     * fumetto, con un clic sul mostriciattolo: lì si parla, Invio chiede.
+     * Torna la funzione per smettere. Manca nei gusci vecchi; `accanto` nei
+     * gusci di prima del mostriciattolo in 3D.
      */
-    mostrato?(cb: () => void): () => void
+    mostrato?(cb: (come?: { accanto?: boolean }) => void): () => void
   }
   /** L'osservatore del Mac: il permesso per i titoli delle finestre (P1). Manca nei gusci vecchi. */
   osservatore?: { permessoTitoli(): Promise<boolean>; chiediPermessoTitoli(): Promise<boolean>; apriImpostazioniTitoli(): Promise<void> }

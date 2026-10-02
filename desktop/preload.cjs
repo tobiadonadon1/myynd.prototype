@@ -71,8 +71,9 @@ contextBridge.exposeInMainWorld('myynd', {
     chiudi: () => ipcRenderer.send('myynd:richiamo-chiudi'),
     apri: dove => ipcRenderer.send('myynd:richiamo-apri', dove),
     misura: altezza => ipcRenderer.send('myynd:richiamo-misura', Number(altezza)),
-    // il guscio l'ha appena mostrata: la pagina rimette il fuoco nella casella
-    mostrato: cb => ascolta('myynd:richiamo-mostrato', () => cb())
+    // il guscio l'ha appena mostrata: la pagina rimette il fuoco nella casella.
+    // `accanto`: si è aperta come fumetto, accanto al mostriciattolo
+    mostrato: cb => ascolta('myynd:richiamo-mostrato', m => cb({ accanto: m?.accanto === true }))
   },
   // — l'osservatore del Mac: il permesso per i titoli delle finestre. Chiederlo
   //   è il solo modo in cui compare la richiesta di sistema, una volta per versione —

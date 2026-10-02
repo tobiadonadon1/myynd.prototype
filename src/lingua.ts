@@ -2143,6 +2143,8 @@ const EN: Record<string, string> = {
   'Risponde nel filo del suo messaggio.': 'Replies in the thread of their message.',
   // — il richiamo: la barra della scorciatoia, e gli avvisi di sistema —
   'Segna una cosa, o chiedi con «?»': 'Note something, or ask with “?”',
+  // il fumetto del mostriciattolo: lo stesso richiamo, accanto a lui
+  'Scrivi a Myynd': 'Talk to Myynd',
   'Continua nell’app': 'Continue in the app',
   'Apri Myynd per entrare': 'Open Myynd to sign in',
   'Apri Myynd': 'Open Myynd',

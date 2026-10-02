@@ -27,8 +27,13 @@ export type Impostazioni = {
    * una nuova e da lì in poi è quella.
    */
   porta?: number
-  /** Il mostriciattolo sullo schermo: spento finché non lo si accende. Posizione in punti dello schermo. */
+  /** Il mostriciattolo sullo schermo: acceso finché non lo si toglie. Posizione in punti dello schermo. */
   compagno?: { acceso: boolean; x?: number; y?: number }
+  /**
+   * Il mostriciattolo in 3D è arrivato: chi l'aveva spento quando era spento
+   * di serie l'ha ritrovato acceso, una volta sola (`compagno.ts`).
+   */
+  compagno3d?: boolean
   /** La versione dell'app per cui si è già chiesto il permesso di Accessibilità: una volta sola per versione. */
   accessibilitaChiesta?: string
 }

@@ -21,10 +21,18 @@
 //
 // Si nasconde quando perde il fuoco o quando la pagina chiede di chiudere
 // (Esc): una barra che resta a mezz'aria sopra un'altra app è una cosa rotta.
+//
+// La stessa barra è il fumetto del mostriciattolo (`compagno.ts`): un clic su
+// di lui la apre accanto a lui invece che in mezzo allo schermo
+// (`mostraAccanto`, `posizioneFumetto`), e la pagina lo sa dal messaggio
+// `myynd:richiamo-mostrato` con `accanto`: lì Invio chiede a Myynd invece di
+// segnare. È lo stesso pannello che prende la tastiera senza attivare
+// l'app, quindi ci si scrive, e ci si detta (fn due volte), senza che
+// Myynd venga avanti e senza cambiare Space.
 
 import { app, BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
-import { ALTEZZA_MINIMA, doveSiApre, posizioneRichiamo } from './posizione.ts'
+import { ALTEZZA_MINIMA, doveSiApre, posizioneFumetto, posizioneRichiamo, type Area } from './posizione.ts'
 import { scriviRegistro } from './server.ts'
 import * as finestra from './finestra.ts'
 
@@ -66,6 +74,16 @@ if (MAC) {
 }
 /** Myynd era l'app attiva quando la barra è comparsa: è a lei che si torna. */
 let attivaAllApertura = false
+/** Aperta come fumetto: il riquadro del mostriciattolo accanto a cui sta. Null: la barra in mezzo. */
+let accanto: Area | null = null
+/**
+ * Quando l'ha nascosta un `blur`. Un clic sul mostriciattolo col fumetto
+ * aperto è un «chiudi»; se macOS ha già tolto il fuoco al fumetto per quel
+ * clic, il fumetto è sparito un attimo prima, e riaprirlo sarebbe il
+ * contrario di quello che si voleva.
+ */
+let nascostaDalBlurAlle = 0
+const APPENA = 400
 
 /** Il server c'è: la barra nasce adesso, nascosta, e da qui in poi si può aprire. */
 export function prepara(urlApp: string, argomentiPreload: string[]) {
@@ -121,13 +139,14 @@ function crea(): BrowserWindow {
   w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   w.webContents.once('did-finish-load', () => {
     caricata = true
-    if (daMostrare) { daMostrare = false; mostra() }
+    if (daMostrare) { daMostrare = false; apri() }
   })
   w.on('blur', () => {
     // nascondersi manda un `blur` a finestra già sparita: non c'è niente da fare
     if (!w.isVisible() || w.webContents.isDevToolsFocused()) return
     if (Date.now() - mostrataAlle < GRAZIA) { w.focus(); return }
     scriviRegistro('guscio · il richiamo perde il fuoco: si nasconde')
+    nascostaDalBlurAlle = Date.now()
     via(false)
   })
   // ⌘Q con la barra davanti: chi lo preme crede di essere nell'app da cui
@@ -163,6 +182,28 @@ export function visibile(): boolean {
  * funziona» detto da un Mac con due schermi non si può capire altrimenti.
  */
 export function mostra(): boolean {
+  accanto = null
+  return apri()
+}
+
+/** Il fumetto: la stessa barra, accanto al mostriciattolo che sta in `compagno`. */
+export function mostraAccanto(compagno: Area): boolean {
+  accanto = compagno
+  return apri()
+}
+
+/** Dove va: accanto al mostriciattolo, se è il fumetto; altrimenti sullo schermo del cursore. */
+function dove(alta: number) {
+  if (accanto) {
+    const schermo = screen.getDisplayMatching(accanto)
+    const f = posizioneFumetto(schermo.workArea, accanto, alta)
+    return { schermo, riquadro: { x: f.x, y: f.y, width: f.width, height: f.height } }
+  }
+  const schermo = schermoDelCursore()
+  return { schermo, riquadro: posizioneRichiamo(schermo.workArea, alta) }
+}
+
+function apri(): boolean {
   if (!url) return false
   const w = attuale() ?? crea()
   if (!caricata) {
@@ -170,16 +211,15 @@ export function mostra(): boolean {
     scriviRegistro('guscio · il richiamo aspetta la pagina')
     return true
   }
-  const schermo = schermoDelCursore()
-  const riquadro = posizioneRichiamo(schermo.workArea, altezza)
+  const { schermo, riquadro } = dove(altezza)
   w.setBounds(riquadro)
   mostrataAlle = Date.now()
   attivaAllApertura = appAttiva
   w.show()
   w.focus()
   // la pagina rimette il fuoco nella casella e toglie la risposta di prima
-  w.webContents.send('myynd:richiamo-mostrato')
-  scriviRegistro(`guscio · il richiamo si apre su ${doveSiApre(schermo, riquadro)}`)
+  w.webContents.send('myynd:richiamo-mostrato', { accanto: !!accanto })
+  scriviRegistro(`guscio · ${accanto ? 'il fumetto' : 'il richiamo'} si apre su ${doveSiApre(schermo, riquadro)}`)
   return true
 }
 
@@ -223,9 +263,38 @@ export function alterna(): boolean {
   return mostra()
 }
 
+/**
+ * Il clic sul mostriciattolo: il fumetto si apre accanto a lui, o si chiude
+ * se era aperto. Se era aperta la barra in mezzo, la barra gli va accanto.
+ * Falso se il server non c'è ancora.
+ */
+export function alternaAccanto(compagno: Area): boolean {
+  if (visibile() && accanto) { nascondi(); return true }
+  if (!visibile() && accanto && Date.now() - nascostaDalBlurAlle < APPENA) return true
+  return mostraAccanto(compagno)
+}
+
+/** Il mostriciattolo si è spostato: il fumetto aperto lo segue. */
+export function segui(compagno: Area) {
+  const w = attuale()
+  if (!accanto || !w || !w.isVisible()) return
+  accanto = compagno
+  w.setBounds(dove(w.getBounds().height).riquadro)
+}
+
 /** La pagina ha misurato il suo contenuto: la finestra si adatta. */
 export function ridimensiona(contenuto: number) {
   const w = attuale()
+  if (accanto) {
+    // il fumetto cresce dalla parte libera: in su se lui sta in basso
+    const { riquadro } = dove(contenuto)
+    altezza = riquadro.height
+    if (!w || !w.isVisible()) return
+    const adesso = w.getBounds()
+    if (adesso.height === riquadro.height && adesso.y === riquadro.y && adesso.x === riquadro.x) return
+    w.setBounds(riquadro)
+    return
+  }
   const nuova = posizioneRichiamo(w ? screen.getDisplayMatching(w.getBounds()).workArea : schermoDelCursore().workArea, contenuto)
   altezza = nuova.height
   if (!w || !w.isVisible()) return

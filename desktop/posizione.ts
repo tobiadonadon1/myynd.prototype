@@ -42,8 +42,12 @@ export function doveSiApre(schermo: Schermo, r: Area): string {
 
 /* ------------------------------------------------------------ il mostriciattolo */
 
-/** Il riquadro del mostriciattolo sullo schermo, in punti. */
-export const LATO_COMPAGNO = 64
+/**
+ * Il riquadro del mostriciattolo sullo schermo, in punti. È in 3D, e il
+ * quadrato tiene anche le antenne, i piedi e il salto: il corpo ne occupa
+ * più o meno la metà in mezzo, il resto è trasparente.
+ */
+export const LATO_COMPAGNO = 144
 /** Quanto sta lontano dai bordi quando nessuno l'ha spostato. */
 export const MARGINE_COMPAGNO = 24
 
@@ -90,4 +94,73 @@ export function trascinaCompagno(aree: Area[], origine: Punto, dx: number, dy: n
   const p = { x: origine.x + dx, y: origine.y + dy }
   const a = areaDelCentro(aree, p)
   return a ? dentro(a, p) : { x: adesso.x, y: adesso.y }
+}
+
+/* ------------------------------------------------------------ lo sguardo */
+
+/** A questa distanza in punti lo sguardo è a metà strada. */
+const DISTANZA_SGUARDO = 260
+
+/**
+ * Dove guarda il mostriciattolo: il cursore rispetto ai suoi occhi, in due
+ * numeri fra -1 e 1 (x a destra, y in giù). Vicino conta molto, lontano
+ * sempre meno: il cursore all'altro capo dello schermo non gli torce la
+ * testa più di quello a mezzo schermo. Arrotondato al centesimo, così un
+ * cursore fermo non manda niente di nuovo.
+ */
+export function sguardoVerso(compagno: Area, cursore: Punto): Punto {
+  const cx = compagno.x + compagno.width / 2
+  // gli occhi stanno in alto nel quadrato, non nel mezzo
+  const cy = compagno.y + compagno.height * 0.38
+  const dx = cursore.x - cx
+  const dy = cursore.y - cy
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return { x: 0, y: 0 }
+  const morbido = (d: number) => Math.round((d / (Math.abs(d) + DISTANZA_SGUARDO)) * 100) / 100 || 0
+  return { x: morbido(dx), y: morbido(dy) }
+}
+
+/* ------------------------------------------------------------ il fumetto */
+
+/** La larghezza del fumetto: il richiamo aperto accanto al mostriciattolo. */
+export const LARGHEZZA_FUMETTO = 360
+/** Più alto di così la risposta scorre dentro: accanto a lui non deve coprire mezzo schermo. */
+export const ALTEZZA_MASSIMA_FUMETTO = 440
+/**
+ * Quanto il fumetto entra nel quadrato del mostriciattolo, in frazione del
+ * lato: il quadrato è per lo più trasparente, e un fumetto staccato di mezzo
+ * quadrato dal corpo non sembra suo.
+ */
+const RIENTRO = 0.2
+
+export type Fumetto = Area & { lato: 'sinistra' | 'destra'; ancora: 'sotto' | 'sopra' }
+
+/**
+ * Dove si apre il fumetto accanto al mostriciattolo `compagno`, nell'area
+ * utile del suo schermo. Di fianco: a sinistra se ci sta (lui di solito è in
+ * basso a destra), altrimenti a destra se ci sta, altrimenti dalla parte più
+ * larga e spinto dentro. In altezza: se lui sta nella metà bassa dello
+ * schermo il fondo del fumetto resta all'altezza della sua bocca e la
+ * risposta cresce verso l'alto; nella metà alta il contrario. Mai fuori
+ * dall'area.
+ */
+export function posizioneFumetto(area: Area, compagno: Area, altezza: number, larghezza = LARGHEZZA_FUMETTO): Fumetto {
+  const width = Math.max(MARGINE * 2, Math.min(larghezza, area.width - MARGINE * 2))
+  const voluta = Number.isFinite(altezza) ? altezza : ALTEZZA_MINIMA
+  const height = Math.max(ALTEZZA_MINIMA, Math.min(Math.ceil(voluta), ALTEZZA_MASSIMA_FUMETTO, area.height - MARGINE * 2))
+  const rientro = Math.round(compagno.width * RIENTRO)
+  const sinistra = compagno.x + rientro - width
+  const destra = compagno.x + compagno.width - rientro
+  const staSinistra = sinistra >= area.x + MARGINE
+  const staDestra = destra + width <= area.x + area.width - MARGINE
+  const piuLargaASinistra = compagno.x - area.x >= area.x + area.width - (compagno.x + compagno.width)
+  const lato = staSinistra || (!staDestra && piuLargaASinistra) ? 'sinistra' : 'destra'
+  const xMin = area.x + MARGINE
+  const xMax = area.x + area.width - MARGINE - width
+  const x = Math.round(Math.min(Math.max(lato === 'sinistra' ? sinistra : destra, xMin), xMax))
+  const ancora = compagno.y + compagno.height / 2 >= area.y + area.height / 2 ? 'sotto' : 'sopra'
+  const voluto = ancora === 'sotto' ? compagno.y + compagno.height * 0.62 - height : compagno.y + compagno.height * 0.22
+  const yMin = area.y + MARGINE
+  const yMax = area.y + area.height - MARGINE - height
+  const y = Math.round(Math.min(Math.max(voluto, yMin), yMax))
+  return { x, y, width, height, lato, ancora }
 }
