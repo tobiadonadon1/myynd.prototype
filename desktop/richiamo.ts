@@ -20,24 +20,36 @@
 // quella, e la barra si vedeva sfilare il fuoco prima ancora di comparire.
 //
 // Si nasconde quando perde il fuoco o quando la pagina chiede di chiudere
-// (Esc): una barra che resta a mezz'aria sopra un'altra app è una cosa rotta.
+// (Esc, la ×): una barra che resta a mezz'aria sopra un'altra app è una cosa
+// rotta.
 //
-// La stessa barra è il fumetto del mostriciattolo (`compagno.ts`): un clic su
-// di lui la apre accanto a lui invece che in mezzo allo schermo
-// (`mostraAccanto`, `posizioneFumetto`), e la pagina lo sa dal messaggio
+// La stessa barra è la casella del mostriciattolo (`compagno.ts`): un clic su
+// di lui la apre attaccata sotto di lui (o sopra la testa, se sotto non c'è
+// posto) invece che in mezzo allo schermo (`alternaSotto`,
+// `posizioneScatola`), e la pagina lo sa dal messaggio
 // `myynd:richiamo-mostrato` con `accanto`: lì Invio chiede a Myynd invece di
-// segnare. È lo stesso pannello che prende la tastiera senza attivare
-// l'app, quindi ci si scrive, e ci si detta (fn due volte), senza che
-// Myynd venga avanti e senza cambiare Space.
+// segnare, e la risposta fa crescere la casella. La casella si tira dal bordo
+// e la misura resta (`impostazioni.casella`). Lo stesso posto, con
+// `pannello: 'impostazioni'`, tiene le impostazioni del mostriciattolo. È lo
+// stesso pannello che prende la tastiera senza attivare l'app: niente Space
+// che cambia, niente finestra grande che viene avanti.
 
-import { app, BrowserWindow, Menu, screen } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
-import { ALTEZZA_MINIMA, doveSiApre, posizioneFumetto, posizioneRichiamo, type Area } from './posizione.ts'
+import * as impostazioni from './impostazioni.ts'
+import {
+  ALTEZZA_MINIMA, ALTEZZA_SCATOLA_MAX, LARGHEZZA_SCATOLA_MAX, LARGHEZZA_SCATOLA_MIN, doveSiApre, posizioneRichiamo,
+  posizioneScatola, type Area
+} from './posizione.ts'
 import { scriviRegistro } from './server.ts'
 import * as finestra from './finestra.ts'
 
 const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url))
 const MAC = process.platform === 'darwin'
+/** Le impostazioni del mostriciattolo: un pannellino stretto, che non si tira. */
+const LARGHEZZA_IMPOSTAZIONI = 280
+
+export type Pannello = 'scrivi' | 'impostazioni'
 
 let barra: BrowserWindow | null = null
 let url = ''
@@ -74,16 +86,22 @@ if (MAC) {
 }
 /** Myynd era l'app attiva quando la barra è comparsa: è a lei che si torna. */
 let attivaAllApertura = false
-/** Aperta come fumetto: il riquadro del mostriciattolo accanto a cui sta. Null: la barra in mezzo. */
-let accanto: Area | null = null
-/** Aperto dal bottone «parla»: la casella dice come dettare, e la dettatura si chiede al Mac. */
-let detta = false
-/** Quanto si aspetta prima di chiedere la dettatura: il tempo che il fuoco arrivi nella casella. */
-const ATTESA_DETTATURA = 320
+/** Aperta sotto il mostriciattolo: il suo quadrato. Null: la barra in mezzo allo schermo. */
+let sotto: Area | null = null
+/** Sotto di lui: la casella per scrivergli, o le sue impostazioni. */
+let pannello: Pannello = 'scrivi'
+/*
+ * La persona sta tirando il bordo della casella, o l'ha tirato da quando è
+ * aperta: allora la misura è la sua, e la pagina che misura il contenuto non
+ * la rimpicciolisce. Alla prossima apertura si riparte compatti, e si cresce
+ * fino al tetto che lei ha tirato.
+ */
+let tirando = false
+let tirata = false
 /**
- * Quando l'ha nascosta un `blur`. Un clic sul mostriciattolo col fumetto
- * aperto è un «chiudi»; se macOS ha già tolto il fuoco al fumetto per quel
- * clic, il fumetto è sparito un attimo prima, e riaprirlo sarebbe il
+ * Quando l'ha nascosta un `blur`. Un clic sul mostriciattolo con la casella
+ * aperta è un «chiudi»; se macOS ha già tolto il fuoco alla casella per quel
+ * clic, la casella è sparita un attimo prima, e riaprirla sarebbe il
  * contrario di quello che si voleva.
  */
 let nascostaDalBlurAlle = 0
@@ -153,6 +171,16 @@ function crea(): BrowserWindow {
     nascostaDalBlurAlle = Date.now()
     via(false)
   })
+  // la casella tirata dal bordo: solo i gesti della persona, non i nostri setBounds
+  w.on('will-resize', () => { if (sotto && pannello === 'scrivi') tirando = true })
+  w.on('resized', () => {
+    if (!tirando) return
+    tirando = false
+    tirata = true
+    const b = w.getBounds()
+    impostazioni.scrivi({ casella: { larghezza: b.width, altezza: b.height } })
+    scriviRegistro(`guscio · la casella tirata a ${b.width}×${b.height}`)
+  })
   // ⌘Q con la barra davanti: chi lo preme crede di essere nell'app da cui
   // ha chiamato il richiamo, e chiudere Myynd al suo posto è un guasto. La
   // barra si toglie e basta; per uscire c'è la finestra grande, e il tray
@@ -186,55 +214,41 @@ export function visibile(): boolean {
  * funziona» detto da un Mac con due schermi non si può capire altrimenti.
  */
 export function mostra(): boolean {
-  accanto = null
-  detta = false
+  sotto = null
   return apri()
 }
 
-/** Il fumetto: la stessa barra, accanto al mostriciattolo che sta in `compagno`. */
-export function mostraAccanto(compagno: Area): boolean {
-  accanto = compagno
-  detta = false
+/** Sotto il mostriciattolo che sta in `compagno`: la casella per scrivergli, o le sue impostazioni. */
+export function mostraSotto(compagno: Area, quale: Pannello = 'scrivi'): boolean {
+  sotto = compagno
+  pannello = quale
   return apri()
 }
 
-/**
- * Il fumetto, e la dettatura del Mac: il bottone «parla» del mostriciattolo.
- *
- * La dettatura parte da sola chiedendola al primo che risponde nella finestra
- * chiave (`startDictation:`, la stessa azione della voce «Avvia dettatura» del
- * menu Modifica): dopo un attimo, quando il fumetto ha il fuoco e la pagina
- * l'ha messo nella casella. Se il Mac non la fa partire (dettatura spenta
- * nelle Impostazioni, o l'azione non arriva) resta il fumetto aperto con la
- * casella pronta, e la casella dice di premere fn due volte.
- */
-export function dettaAccanto(compagno: Area): boolean {
-  accanto = compagno
-  detta = true
-  const aperto = apri()
-  if (aperto && MAC) {
-    setTimeout(() => {
-      const w = attuale()
-      if (!w || !w.isVisible() || !w.isFocused()) {
-        scriviRegistro('guscio · la dettatura non parte: il fumetto non ha il fuoco')
-        return
-      }
-      Menu.sendActionToFirstResponder('startDictation:')
-      scriviRegistro('guscio · il fumetto chiede la dettatura')
-    }, ATTESA_DETTATURA)
-  }
-  return aperto
-}
-
-/** Dove va: accanto al mostriciattolo, se è il fumetto; altrimenti sullo schermo del cursore. */
+/** Dove va: sotto il mostriciattolo, se è la sua casella; altrimenti sullo schermo del cursore. */
 function dove(alta: number) {
-  if (accanto) {
-    const schermo = screen.getDisplayMatching(accanto)
-    const f = posizioneFumetto(schermo.workArea, accanto, alta)
-    return { schermo, riquadro: { x: f.x, y: f.y, width: f.width, height: f.height } }
+  if (sotto) {
+    const schermo = screen.getDisplayMatching(sotto)
+    const voluta = pannello === 'scrivi' ? impostazioni.leggi().casella ?? {} : { larghezza: LARGHEZZA_IMPOSTAZIONI, altezza: ALTEZZA_SCATOLA_MAX }
+    const s = posizioneScatola(schermo.workArea, sotto, alta, voluta)
+    return { schermo, riquadro: { x: s.x, y: s.y, width: s.width, height: s.height } }
   }
   const schermo = schermoDelCursore()
   return { schermo, riquadro: posizioneRichiamo(schermo.workArea, alta) }
+}
+
+/** Solo la casella per scrivergli si tira dal bordo; la barra e le impostazioni no. */
+function tirabile(w: BrowserWindow) {
+  const si = !!sotto && pannello === 'scrivi'
+  w.setResizable(si)
+  if (si) {
+    w.setMinimumSize(LARGHEZZA_SCATOLA_MIN, ALTEZZA_MINIMA)
+    w.setMaximumSize(LARGHEZZA_SCATOLA_MAX, ALTEZZA_SCATOLA_MAX)
+  } else {
+    // 0 vuol dire nessun limite: la barra in mezzo è larga 680
+    w.setMinimumSize(0, 0)
+    w.setMaximumSize(0, 0)
+  }
 }
 
 function apri(): boolean {
@@ -245,17 +259,19 @@ function apri(): boolean {
     scriviRegistro('guscio · il richiamo aspetta la pagina')
     return true
   }
-  // già aperto accanto a lui: si rimette il fuoco nella casella e basta, la risposta resta
-  const ancora = !!accanto && w.isVisible()
-  const { schermo, riquadro } = dove(ancora ? w.getBounds().height : altezza)
+  // già aperta sotto di lui: si rimette il fuoco nella casella e basta, la risposta resta
+  const ancora = !!sotto && w.isVisible()
+  if (!ancora) tirata = false
+  tirabile(w)
+  const { schermo, riquadro } = dove(ancora ? w.getBounds().height : ALTEZZA_MINIMA)
   w.setBounds(riquadro)
   mostrataAlle = Date.now()
   attivaAllApertura = appAttiva
   w.show()
   w.focus()
   // la pagina rimette il fuoco nella casella e toglie la risposta di prima
-  w.webContents.send('myynd:richiamo-mostrato', { accanto: !!accanto, detta, ancora })
-  scriviRegistro(`guscio · ${accanto ? 'il fumetto' : 'il richiamo'} si apre su ${doveSiApre(schermo, riquadro)}`)
+  w.webContents.send('myynd:richiamo-mostrato', { accanto: !!sotto, pannello, ancora })
+  scriviRegistro(`guscio · ${sotto ? (pannello === 'scrivi' ? 'la casella' : 'le impostazioni') : 'il richiamo'} si apre su ${doveSiApre(schermo, riquadro)}`)
   return true
 }
 
@@ -280,6 +296,7 @@ export function nascondi() {
 
 function via(ridaiIlFuoco: boolean) {
   daMostrare = false
+  tirando = false
   const w = attuale()
   if (!w || !w.isVisible()) return
   w.hide()
@@ -300,34 +317,44 @@ export function alterna(): boolean {
 }
 
 /**
- * Il clic sul mostriciattolo: il fumetto si apre accanto a lui, o si chiude
- * se era aperto. Se era aperta la barra in mezzo, la barra gli va accanto.
+ * Il clic sul mostriciattolo (o un bottone della sua pastiglia): la casella
+ * `quale` si apre sotto di lui, o si chiude se era già aperta quella. Se era
+ * aperta l'altra, o la barra in mezzo, diventa questa e va sotto di lui.
  * Falso se il server non c'è ancora.
  */
-export function alternaAccanto(compagno: Area): boolean {
-  if (visibile() && accanto) { nascondi(); return true }
-  if (!visibile() && accanto && Date.now() - nascostaDalBlurAlle < APPENA) return true
-  return mostraAccanto(compagno)
+export function alternaSotto(compagno: Area, quale: Pannello = 'scrivi'): boolean {
+  if (visibile() && sotto && pannello === quale) { nascondi(); return true }
+  if (!visibile() && sotto && pannello === quale && Date.now() - nascostaDalBlurAlle < APPENA) return true
+  if (visibile() && sotto && pannello !== quale) {
+    // dall'una all'altra: si riparte compatti, non è più la stessa cosa
+    pannello = quale
+    sotto = compagno
+    const w = attuale()
+    if (w) w.hide()
+  }
+  return mostraSotto(compagno, quale)
 }
 
-/** Il mostriciattolo si è spostato: il fumetto aperto lo segue. */
+/** Il mostriciattolo si è spostato o ha cambiato taglia: la casella aperta lo segue. */
 export function segui(compagno: Area) {
   const w = attuale()
-  if (!accanto || !w || !w.isVisible()) return
-  accanto = compagno
+  if (!sotto || !w || !w.isVisible()) return
+  sotto = compagno
   w.setBounds(dove(w.getBounds().height).riquadro)
 }
 
 /** La pagina ha misurato il suo contenuto: la finestra si adatta. */
 export function ridimensiona(contenuto: number) {
   const w = attuale()
-  if (accanto) {
-    // il fumetto cresce dalla parte libera: in su se lui sta in basso
+  if (sotto) {
+    // tirata dalla persona: la misura è sua, finché la casella resta aperta
+    if (tirando || tirata) return
+    // la casella cresce dalla parte libera: in giù sotto di lui, in su sopra la testa
     const { riquadro } = dove(contenuto)
     altezza = riquadro.height
     if (!w || !w.isVisible()) return
     const adesso = w.getBounds()
-    if (adesso.height === riquadro.height && adesso.y === riquadro.y && adesso.x === riquadro.x) return
+    if (adesso.height === riquadro.height && adesso.y === riquadro.y && adesso.x === riquadro.x && adesso.width === riquadro.width) return
     w.setBounds(riquadro)
     return
   }

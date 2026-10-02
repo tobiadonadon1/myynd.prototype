@@ -19,11 +19,13 @@ export function iconaPer(s: { guarda: boolean; attesa: boolean; piattaforma: str
   return `${nome}.${s.piattaforma === 'win32' ? 'ico' : 'png'}`
 }
 
-export type Voce = 'pausa' | 'riprendi' | 'apri' | 'nuova-chat' | 'preferenze' | 'esci' | 'togli' | 'ferma-turno' | '-'
+export type Voce = 'pausa' | 'riprendi' | 'apri' | 'nuova-chat' | 'preferenze' | 'mostra-compagno' | 'esci' | 'togli' | 'ferma-turno' | '-'
 
 type Osservatore = { disponibile: boolean; acceso: boolean; pausaFino: string | null; adesso: number
   /** F9 · il turno ha una carta al lavoro, o una notte che aspetta: si può fermare da qui. */
-  turno?: boolean }
+  turno?: boolean
+  /** Il mostriciattolo è stato tolto dalla scrivania: dalla barra lo si rimette. */
+  compagnoTolto?: boolean }
 
 /** Pausa o riprendi, se c'è un osservatore acceso su questo Mac; niente altrimenti. */
 function primaVoce(s: Osservatore): Voce[] {
@@ -35,7 +37,8 @@ function primaVoce(s: Osservatore): Voce[] {
 export function vociMenu(s: Osservatore): Voce[] {
   // F9 · «Ferma il turno» per primo quando c'è qualcosa da fermare: è la voce che si cerca di notte
   const prima: Voce[] = [...(s.turno ? ['ferma-turno' as const] : []), ...primaVoce(s)]
-  return [...prima, ...(prima.length ? ['-' as const] : []), 'apri', 'nuova-chat', 'preferenze', '-', 'esci']
+  const compagno: Voce[] = s.compagnoTolto ? ['mostra-compagno'] : []
+  return [...prima, ...(prima.length ? ['-' as const] : []), 'apri', 'nuova-chat', 'preferenze', ...compagno, '-', 'esci']
 }
 
 /** Il menu del tasto destro sul mostriciattolo. */

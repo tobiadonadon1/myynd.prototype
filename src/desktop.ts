@@ -80,13 +80,13 @@ export type Desktop = {
     /**
      * Il guscio l'ha appena mostrata: il fuoco torna nella casella, e la
      * risposta dell'altra volta se ne va. `accanto` vuol dire aperta come
-     * fumetto, con un clic sul mostriciattolo: lì si parla, Invio chiede.
-     * `detta`: dal bottone «parla», la dettatura del Mac. `ancora`: era già
-     * aperta, e la risposta di prima resta.
+     * casella sotto il mostriciattolo, con un clic su di lui: lì si parla,
+     * Invio chiede. `pannello`: la casella per scrivergli, o le sue
+     * impostazioni. `ancora`: era già aperta, e la risposta di prima resta.
      * Torna la funzione per smettere. Manca nei gusci vecchi; `accanto` nei
      * gusci di prima del mostriciattolo in 3D.
      */
-    mostrato?(cb: (come?: { accanto?: boolean; detta?: boolean; ancora?: boolean }) => void): () => void
+    mostrato?(cb: (come?: { accanto?: boolean; pannello?: 'scrivi' | 'impostazioni'; ancora?: boolean }) => void): () => void
   }
   /** L'osservatore del Mac: il permesso per i titoli delle finestre (P1). Manca nei gusci vecchi. */
   osservatore?: { permessoTitoli(): Promise<boolean>; chiediPermessoTitoli(): Promise<boolean>; apriImpostazioniTitoli(): Promise<void> }
@@ -95,8 +95,13 @@ export type Desktop = {
    * dice acceso o spento ogni volta che cambia, anche da «Togli dallo
    * schermo» sul mostriciattolo; torna la funzione per smettere.
    */
-  compagno?: { acceso(): Promise<boolean>; accendi(on: boolean): Promise<void>; suCambio?(cb: (on: boolean) => void): () => void }
+  compagno?: { acceso(): Promise<boolean>; accendi(on: boolean): Promise<void>; suCambio?(cb: (on: boolean) => void): () => void;
+    /** Le sue impostazioni, dal pannellino sotto di lui. Mancano nei gusci di prima. */
+    scelte?(): Promise<SceltaCompagno>; scegli?(p: Partial<SceltaCompagno>): Promise<SceltaCompagno> }
 }
+
+/** La taglia del mostriciattolo sullo schermo, e se segue il cursore con lo sguardo. */
+export type SceltaCompagno = { taglia: 'piccolo' | 'medio' | 'grande'; segue: boolean }
 
 declare global {
   interface Window { myynd?: Desktop }

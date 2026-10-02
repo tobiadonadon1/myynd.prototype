@@ -15,7 +15,7 @@
 //
 // Poi i gesti, dentro la finestra nascosta e solo lì: il cursore sul corpo
 // dice «sopra» e fa comparire la pastiglia, sulla pastiglia resta, fuori se
-// ne va dopo 400 ms; i due bottoni chiamano scrivi e detta; un clic sul corpo
+// ne va dopo 400 ms; i due bottoni chiamano scrivi e impostazioni; un clic sul corpo
 // è premuto, un trascinamento sposta e non apre, il tasto destro è il menu.
 //
 // E il costo: la stessa pagina senza pose, lasciata girare come sul Mac, per
@@ -62,14 +62,14 @@ window.addEventListener('DOMContentLoaded', () => {
 contextBridge.exposeInMainWorld('compagno', {
   premuto: () => ipcRenderer.send('prova:gesto', 'premuto'),
   scrivi: () => ipcRenderer.send('prova:gesto', 'scrivi'),
-  detta: () => ipcRenderer.send('prova:gesto', 'detta'),
+  impostazioni: () => ipcRenderer.send('prova:gesto', 'impostazioni'),
   menu: () => ipcRenderer.send('prova:gesto', 'menu'),
   afferra: () => ipcRenderer.send('prova:gesto', 'afferra'),
   trascina: (dx, dy) => ipcRenderer.send('prova:gesto', 'trascina', dx, dy),
   lascia: () => ipcRenderer.send('prova:gesto', 'lascia'),
   pronto: () => ipcRenderer.send('prova:gesto', 'pronto'),
   sopra: on => ipcRenderer.send('prova:gesto', 'sopra', on),
-  stato: cb => cb({ guarda: stato !== 'smorto', attesa: stato === 'attesa', testi: { scrivi: 'Write to Myynd', parla: 'Talk to Myynd' } }),
+  stato: cb => cb({ guarda: stato !== 'smorto', attesa: stato === 'attesa', testi: { scrivi: 'Write to Myynd', impostazioni: 'Settings' } }),
   sguardo: () => {}
 })`)
 
@@ -157,15 +157,15 @@ app.whenReady().then(async () => {
   // le coordinate della finestra sono in punti della pagina per lo zoom
   const cx = Math.round(zona.cx * SCALA), cy = Math.round(zona.cy * SCALA)
   const topo = (type, x, y, button = 'left', extra = {}) => w.webContents.sendInputEvent({ type, x, y, globalX: 500 + x, globalY: 300 + y, button, clickCount: 1, ...extra })
-  const pastiglia = () => w.webContents.executeJavaScript(`(() => { const r = document.getElementById('pastiglia').getBoundingClientRect(); const s = document.getElementById('scrivi').getBoundingClientRect(); const p = document.getElementById('parla').getBoundingClientRect()
-    return { vista: document.body.classList.contains('sopra'), opacita: getComputedStyle(document.getElementById('pastiglia')).opacity, basso: r.bottom, scrivi: [s.left + s.width / 2, s.top + s.height / 2], parla: [p.left + p.width / 2, p.top + p.height / 2], titoli: [document.getElementById('scrivi').title, document.getElementById('parla').title] } })()`)
+  const pastiglia = () => w.webContents.executeJavaScript(`(() => { const r = document.getElementById('pastiglia').getBoundingClientRect(); const s = document.getElementById('scrivi').getBoundingClientRect(); const p = document.getElementById('impostazioni').getBoundingClientRect()
+    return { vista: document.body.classList.contains('sopra'), opacita: getComputedStyle(document.getElementById('pastiglia')).opacity, basso: r.bottom, scrivi: [s.left + s.width / 2, s.top + s.height / 2], impostazioni: [p.left + p.width / 2, p.top + p.height / 2], titoli: [document.getElementById('scrivi').title, document.getElementById('impostazioni').title] } })()`)
   gesti.length = 0
   topo('mouseMove', 4, 4); await pausa(60)
   verifica(!(await pastiglia()).vista, 'nell’angolo vuoto niente pastiglia')
   topo('mouseMove', cx, cy); await pausa(300)
   const p1 = await pastiglia()
   verifica(p1.vista && Number(p1.opacita) > 0.9 && p1.basso <= ALTO, `sopra di lui la pastiglia compare dentro la finestra (${JSON.stringify(p1)})`)
-  verifica(p1.titoli[0] === 'Write to Myynd' && p1.titoli[1] === 'Talk to Myynd', `i bottoni dicono cosa fanno (${p1.titoli})`)
+  verifica(p1.titoli[0] === 'Write to Myynd' && p1.titoli[1] === 'Settings', `i bottoni dicono cosa fanno (${p1.titoli})`)
   // dal corpo alla pastiglia: passa per il vuoto in mezzo e resta
   const [sx, sy] = p1.scrivi.map(v => Math.round(v * SCALA))
   topo('mouseMove', sx, sy); await pausa(120)
@@ -173,11 +173,11 @@ app.whenReady().then(async () => {
   gesti.length = 0
   topo('mouseDown', sx, sy); topo('mouseUp', sx, sy); await pausa(120)
   verifica(gesti.some(g => g[0] === 'scrivi') && !gesti.some(g => g[0] === 'premuto' || g[0] === 'afferra'), `«scrivi» chiama scrivi, non è un clic su di lui (${JSON.stringify(gesti)})`)
-  const [px, py] = p1.parla.map(v => Math.round(v * SCALA))
+  const [px, py] = p1.impostazioni.map(v => Math.round(v * SCALA))
   gesti.length = 0
   topo('mouseMove', px, py); await pausa(60)
   topo('mouseDown', px, py); topo('mouseUp', px, py); await pausa(120)
-  verifica(gesti.some(g => g[0] === 'detta'), `«parla» chiama detta (${JSON.stringify(gesti)})`)
+  verifica(gesti.some(g => g[0] === 'impostazioni'), `l’ingranaggio chiama impostazioni (${JSON.stringify(gesti)})`)
   gesti.length = 0
   topo('mouseMove', 4, 4); await pausa(150)
   verifica((await pastiglia()).vista && gesti.at(-1)?.[0] === 'sopra' && gesti.at(-1)?.[1] === false, `uscendo il mouse passa subito, la pastiglia aspetta (${JSON.stringify(gesti)})`)
@@ -221,7 +221,7 @@ app.whenReady().then(async () => {
     else await w.loadURL('about:blank')
     if (durante) await w.webContents.executeJavaScript(durante)
     // i primi secondi si assesta (il sonno arriva piano): non si contano
-    await pausa(2500)
+    await pausa(4000)
     const processi = app.getAppMetrics()
     const pid = w.webContents.getOSProcessId()
     const quali = { renderer: pid, gpu: processi.find(m => m.type === 'GPU')?.pid, principale: process.pid }

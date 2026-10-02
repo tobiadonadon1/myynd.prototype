@@ -1,12 +1,14 @@
 // Il mostriciattolo in 3D: il corpo, la faccia, la luce e come si muove.
 //
-// Un giocattolo, non un peluche: superfici lisce di vinile morbido con un
-// velo di velluto (MeshPhysicalMaterial, `sheen` e un filo di `clearcoat`),
-// arancio pulito e saturo, la pancia color panna ritagliata netta, gli occhi
-// neri lucidi con due punti di luce, il sorriso largo con i dentini, due
-// antenne lisce con un ciuffo in cima, braccia e piedi corti. La forma è
-// quella di `public/mascotte.png`; il pelo a gusci della prima versione si
-// leggeva come rumore a 110 punti, e se n'è andato.
+// Un peluche di quelli belli, come `public/mascotte.png`: arancio pulito e
+// saturo, mai marrone, con una peluria fitta e corta (`pelliccia`: gusci
+// istanziati, peli sottili quasi dello stesso colore, le punte che prendono
+// il contorno freddo), la pancia panna col suo pelo più chiaro, gli occhi
+// neri lucidi con due punti di luce cuciti sopra, il sorriso largo coi
+// dentini, due antenne lisce con un ciuffo in cima, braccia e piedi corti.
+// La prima pelliccia (0.2.35) aveva peli grossi e contrastati e a 110 punti
+// era grana; il vinile liscio (0.2.36) era pulito ma di plastica. Questa sta
+// in mezzo: morbida, e si legge a 1x e a 2x.
 //
 // La profondità è luce: un ambiente da studio fatto qui (pannelli luminosi in
 // una stanza, passati da PMREMGenerator), una luce calda davanti a sinistra,
@@ -189,6 +191,105 @@ function vinile({ colore = ARANCIO, ruvido = 0.48, velluto = 0.7, lucido = 0.12,
   return m
 }
 
+/*
+ * La pelliccia: la stessa superficie disegnata `STRATI` volte in un disegno
+ * solo (istanze), ogni strato un po' più fuori lungo la normale; in ogni
+ * strato restano solo i punti dove passa un pelo abbastanza lungo. Peli
+ * fitti e sottili, quasi dello stesso colore fra loro: da lontano è una
+ * peluria morbida, non una grana. La luce è quella vera della scena
+ * (MeshStandardMaterial), e le punte prendono il contorno freddo da dietro.
+ * Intorno a occhi e bocca il pelo si abbassa fino a sparire: sono cuciti
+ * sopra, come su un peluche.
+ */
+const STRATI = 26
+/** Quanto è largo un pelo, in unità della scena: un punto o poco più sullo schermo. */
+const PASSO_PELO = 0.013
+
+/** Dove il pelo si abbassa sul viso: occhi e bocca, sul davanti del corpo. */
+const VISO = /* glsl */ `
+  if (vPosO.z > 0.0) {
+    float occhioS = length(vec2(vPosO.x + 0.29, (vPosO.y - 1.6) * 0.9)) / 0.135;
+    float occhioD = length(vec2(vPosO.x - 0.29, (vPosO.y - 1.6) * 0.9)) / 0.135;
+    float labbra = length(vec2(vPosO.x / 0.47, (vPosO.y - 1.415) / 0.105));
+    float vicino = min(min(occhioS, occhioD), labbra);
+    tetto = min(tetto, smoothstep(0.75, 1.25, vicino));
+  }
+`
+
+function pelliccia({ colore = ARANCIO, parte = 'liscio', lungo = 0.062, scalaUv = [200, 140], gravita = [0, -0.4, 0.06], viso = false } = {}) {
+  const m = new THREE.MeshStandardMaterial({ color: colore, roughness: 0.88, envMapIntensity: 0.7 })
+  const propri = {
+    uLungo: { value: lungo },
+    uStrati: { value: STRATI },
+    uGravita: { value: new THREE.Vector3(...gravita) },
+    uScalaUv: { value: new THREE.Vector2(...scalaUv) },
+    uPunte: { value: new THREE.Color('#BFDCFF') }
+  }
+  m.onBeforeCompile = s => {
+    Object.assign(s.uniforms, condivisi, propri)
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', `#include <common>
+        uniform float uLungo; uniform float uStrati; uniform vec3 uGravita;
+        varying vec3 vPosO; varying vec2 vUvP; varying float vH;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float h = float(gl_InstanceID) / (uStrati - 1.0);
+        vH = h; vPosO = position; vUvP = uv;
+        transformed += objectNormal * uLungo * h + uGravita * uLungo * h * h;`)
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vPosO; varying vec2 vUvP; varying float vH;
+        uniform float uSonno; uniform vec3 uPanna; uniform vec3 uGuance; uniform vec2 uScalaUv; uniform vec3 uPunte;
+        float casoP(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 cella = vUvP * uScalaUv;
+        cella.x += casoP(vec2(floor(cella.y), 9.1));
+        vec2 id = floor(cella);
+        float r = casoP(id);
+        if (vH > 0.0) {
+          // ogni pelo ha la sua lunghezza, il suo posto nella cella, e si assottiglia in punta
+          float tetto = mix(0.55, 1.0, r);
+          ${viso ? VISO : ''}
+          vec2 centro = (vec2(casoP(id + 3.1), casoP(id + 7.7)) - 0.5) * 0.4;
+          float raggio = 0.58 * pow(max(1.0 - vH / tetto, 0.0), 0.6);
+          if (vH > tetto || length(fract(cella) - 0.5 - centro) > raggio) discard;
+        }
+        ${PITTURA[parte]}
+        // alla radice un poco più scuro, in punta un poco più chiaro: poca differenza fra un pelo e l'altro
+        diffuseColor.rgb *= mix(0.74, 1.0, smoothstep(0.0, 0.85, vH)) * (0.97 + 0.06 * r);
+        diffuseColor.rgb = mix(diffuseColor.rgb, min(diffuseColor.rgb * 1.18 + 0.015, vec3(1.0)), vH * vH);
+        float grigio = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(grigio), 0.1 * uSonno);`)
+      // le punte dei peli prendono la luce di contorno: più fuori sono, più brillano di taglio
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float taglio = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.5);
+        totalEmissiveRadiance += uPunte * taglio * vH * 0.35;`)
+  }
+  m.customProgramCacheKey = () => `pelliccia-${parte}-${viso}`
+  return m
+}
+
+/** Una parte pelosa: la geometria disegnata `STRATI` volte, in un disegno solo. */
+function pelosa(geometria, materiale) {
+  const g = new THREE.InstancedBufferGeometry()
+  g.index = geometria.index
+  for (const [nome, attr] of Object.entries(geometria.attributes)) g.setAttribute(nome, attr)
+  g.instanceCount = STRATI
+  if (!geometria.boundingSphere) geometria.computeBoundingSphere()
+  g.boundingSphere = geometria.boundingSphere.clone()
+  g.boundingSphere.radius += 0.1
+  const m = new THREE.Mesh(g, materiale)
+  m.frustumCulled = false
+  return m
+}
+
+/** Quante celle di pelo lungo il giro e lungo il profilo, perché i peli siano quasi tondi. */
+function scalaPer(fitti, passo) {
+  let lungo = 0, largo = 0
+  for (let i = 1; i < fitti.length; i++) lungo += fitti[i].distanceTo(fitti[i - 1])
+  for (const p of fitti) largo = Math.max(largo, p.x)
+  return [Math.round((2 * Math.PI * largo) / passo), Math.round(lungo / passo)]
+}
+
 /** Uno studio fotografico in piccolo: la luce che si riflette sul vinile e negli occhi. */
 function studio(renderer) {
   const s = new THREE.Scene()
@@ -304,7 +405,7 @@ function antenna(lato, materiale) {
   ciuffo.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
   ciuffo.updateMatrix()
   const pezzi = [{ geometria: new THREE.TubeGeometry(curva, 24, 0.024, 12, false), matrice: new THREE.Matrix4() }]
-  for (const [ang, s] of [[0, 1.3], [0.6, 0.95], [-0.6, 0.95]]) {
+  for (const [ang, s] of [[0, 1.05], [0.6, 0.8], [-0.6, 0.8]]) {
     const m = matrice(new THREE.Vector3(), new THREE.Euler(0, ang * 0.6, ang), new THREE.Vector3(s, s, s))
     pezzi.push({ geometria: goccia, matrice: ciuffo.matrix.clone().multiply(m) })
   }
@@ -316,7 +417,7 @@ function braccio(lato, materiale, geometria) {
   // appeso alla spalla: il perno è in cima, così oscilla come un braccio
   const perno = new THREE.Group()
   perno.position.set(lato * 0.73, 1.2, -0.02)
-  const m = new THREE.Mesh(geometria, materiale)
+  const m = pelosa(geometria, materiale)
   m.position.set(lato * 0.06, -0.52, 0)
   m.scale.set(1, 1, 0.92)
   perno.add(m)
@@ -338,7 +439,7 @@ export function costruisciMostriciattolo() {
   radice.add(salto)
   salto.add(corpo)
 
-  const tronco = new THREE.Mesh(gCorpo, vinile({ parte: 'corpo' }))
+  const tronco = pelosa(gCorpo, pelliccia({ parte: 'corpo', viso: true, scalaUv: scalaPer(fitti, PASSO_PELO) }))
   tronco.scale.z = PROFONDITA
   const sopra = new THREE.Group()
   sopra.position.y = SOLLEVATO
@@ -359,15 +460,15 @@ export function costruisciMostriciattolo() {
     sopra.add(a)
   }
 
-  const { geometria: gBraccio } = tornio([[0, -0.2], [0.085, -0.185], [0.135, -0.12], [0.15, 0.02], [0.14, 0.22], [0.115, 0.4], [0.07, 0.52], [0, 0.55]], 28, 32)
-  const matBraccio = vinile({ parte: 'braccio' })
+  const { geometria: gBraccio, fitti: fBraccio } = tornio([[0, -0.2], [0.085, -0.185], [0.135, -0.12], [0.15, 0.02], [0.14, 0.22], [0.115, 0.4], [0.07, 0.52], [0, 0.55]], 28, 32)
+  const matBraccio = pelliccia({ parte: 'braccio', lungo: 0.045, scalaUv: scalaPer(fBraccio, PASSO_PELO) })
   const braccia = [braccio(-1, matBraccio, gBraccio), braccio(1, matBraccio, gBraccio)]
   sopra.add(...braccia)
 
-  const { geometria: gPiede } = tornio([[0, 0], [0.1, 0], [0.17, 0.012], [0.19, 0.06], [0.175, 0.12], [0.11, 0.16], [0, 0.17]], 16, 32)
-  const matPiede = vinile({ colore: ARANCIO_PIEDI, parte: 'piede' })
+  const { geometria: gPiede, fitti: fPiede } = tornio([[0, 0], [0.1, 0], [0.17, 0.012], [0.19, 0.06], [0.175, 0.12], [0.11, 0.16], [0, 0.17]], 16, 32)
+  const matPiede = pelliccia({ colore: ARANCIO_PIEDI, parte: 'piede', lungo: 0.035, scalaUv: scalaPer(fPiede, PASSO_PELO), gravita: [0, -0.15, 0.04] })
   // i due piedi in un disegno solo: stanno fermi l'uno rispetto all'altro
-  const piedi = [new THREE.Mesh(unisci([-1, 1].map(lato => ({
+  const piedi = [pelosa(unisci([-1, 1].map(lato => ({
     geometria: gPiede,
     matrice: matrice(new THREE.Vector3(lato * 0.31, -0.02, 0.07), new THREE.Euler(), new THREE.Vector3(1.05, 1, 1.2))
   }))), matPiede)]
@@ -434,14 +535,25 @@ const smorza = (da, a, velocita, dt) => a + (da - a) * Math.exp(-velocita * dt)
 export async function creaScena(canvas, { glb = '', prova = false } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power', premultipliedAlpha: true })
   renderer.setClearColor(0x000000, 0)
-  // nitido: alla densità vera dello schermo, e almeno al doppio anche su uno
-  // schermo esterno a 1x, dove il doppio rimpicciolito fa da antialias in più
-  renderer.setPixelRatio(Math.min(Math.max(window.devicePixelRatio || 1, 2), 3))
+  // nitido: una volta e mezza la densità vera dello schermo, e almeno il
+  // doppio: rimpicciolita, la tela in più fa da antialias ai peli sottili
+  const densita = () => Math.min(Math.max((window.devicePixelRatio || 1) * 1.5, 2), 3)
+  renderer.setPixelRatio(densita())
   renderer.toneMapping = THREE.NeutralToneMapping
   renderer.toneMappingExposure = 1.05
   const largo = () => canvas.clientWidth || canvas.width
   const alto = () => canvas.clientHeight || canvas.height
   renderer.setSize(largo(), alto(), false)
+  // la taglia cambia lo zoom della pagina, cioè la densità: la tela la segue
+  const seguiDensita = () => {
+    window.matchMedia?.(`(resolution: ${window.devicePixelRatio}dppx)`)?.addEventListener?.('change', () => {
+      renderer.setPixelRatio(densita())
+      renderer.setSize(largo(), alto(), false)
+      sveglia()
+      seguiDensita()
+    }, { once: true })
+  }
+  seguiDensita()
 
   const scena = new THREE.Scene()
   scena.environment = studio(renderer)

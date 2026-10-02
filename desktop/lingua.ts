@@ -74,7 +74,9 @@ const EN: Record<string, string> = {
   'Togli dallo schermo': 'Remove from screen',
   // i due bottoni della pastiglia sotto il mostriciattolo
   'Scrivi a Myynd': 'Write to Myynd',
-  'Parla con Myynd': 'Talk to Myynd'
+  'Impostazioni': 'Settings',
+  // nella barra dei menu, quando l'ha tolto dalla scrivania
+  'Mostra Myynd sullo schermo': 'Show Myynd on the desktop'
 }
 
 /** Quale lingua parla il guscio adesso. */

@@ -27,8 +27,14 @@ export type Impostazioni = {
    * una nuova e da lì in poi è quella.
    */
   porta?: number
-  /** Il mostriciattolo sullo schermo: acceso finché non lo si toglie. Posizione in punti dello schermo. */
-  compagno?: { acceso: boolean; x?: number; y?: number }
+  /**
+   * Il mostriciattolo sullo schermo: acceso finché non lo si toglie.
+   * Posizione in punti dello schermo; la taglia e se segue il cursore si
+   * scelgono nelle sue impostazioni (l'ingranaggio sotto di lui).
+   */
+  compagno?: { acceso: boolean; x?: number; y?: number; taglia?: 'piccolo' | 'medio' | 'grande'; segue?: boolean }
+  /** La casella sotto il mostriciattolo, come la persona l'ha tirata col bordo. */
+  casella?: { larghezza?: number; altezza?: number }
   /**
    * Il mostriciattolo in 3D è arrivato: chi l'aveva spento quando era spento
    * di serie l'ha ritrovato acceso, una volta sola (`compagno.ts`).

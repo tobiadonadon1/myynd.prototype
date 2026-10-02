@@ -11,10 +11,14 @@
 // sparire; nel browser si disegna lo stesso, da sola in mezzo alla pagina,
 // e «apri l'app» porta alla radice. Niente qui scorre di lato.
 //
-// Aperta con un clic sul mostriciattolo è il suo fumetto (`accanto`): lì si
-// parla con Myynd, quindi Invio chiede invece di segnare (un «/» scelto dal
-// menù torna a segnare), e la domanda dopo continua la stessa chat finché il
-// fumetto resta aperto. Dettare va da sé: è una casella con il fuoco.
+// Aperta con un clic sul mostriciattolo è la sua casella (`accanto`), attaccata
+// sotto di lui: lì si parla con Myynd, quindi Invio chiede invece di segnare
+// (un «/» scelto dal menù torna a segnare), la domanda dopo continua la
+// stessa chat finché la casella resta aperta, e la risposta la fa crescere
+// fino al tetto che la persona ha tirato col bordo; oltre, scorre. Si chiude
+// con Esc, con la ×, con un altro clic su di lui o andando altrove. Con
+// `pannello: 'impostazioni'` lo stesso posto tiene le sue impostazioni
+// (`ImpostazioniCompagno.tsx`).
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { api, apiP10, alloScadere, sessione } from '../api'
@@ -25,6 +29,7 @@ import { righeDaTesto } from '../oggi/righe'
 import { senzaTrattiniFuoriCodice } from '../../server/testo.ts'
 import { nuovoId, type Secchio } from '../oggi/useCompiti'
 import { Hov } from '../ui'
+import { Chiudi, ImpostazioniCompagno } from './ImpostazioniCompagno'
 
 const INCHIOSTRO = '#22271F'
 const RIGA = 'rgba(34,39,31,.1)'
@@ -64,13 +69,14 @@ export function Richiamo() {
   const [risposta, setRisposta] = useState('')
   const [chat, setChat] = useState<string | null>(null)
   const [pensando, setPensando] = useState(false)
-  // aperta come fumetto, accanto al mostriciattolo: si parla
+  // aperta sotto il mostriciattolo: si parla, o si sistemano le sue impostazioni
   const [accanto, setAccanto] = useState(false)
-  // aperta dal bottone «parla»: la casella dice come dettare
-  const [detta, setDetta] = useState(false)
+  const [pannello, setPannello] = useState<'scrivi' | 'impostazioni'>('scrivi')
+  const [aperture, setAperture] = useState(0)
 
   const campo = useRef<HTMLTextAreaElement>(null)
   const radice = useRef<HTMLDivElement>(null)
+  const contenuto = useRef<HTMLDivElement>(null)
   const orologi = useRef<ReturnType<typeof setTimeout>[]>([])
 
   // il menù è aperto finché la parola dopo «/» è ancora in scrittura
@@ -86,13 +92,15 @@ export function Richiamo() {
   /*
    * L'altezza la decide il contenuto, e la finestra la segue.
    *
-   * Si misura la radice, non la pagina: `html` e `body` sono alti quanto la
-   * finestra, che è alta quanto l'ultima misura — si inseguirebbero.
+   * Si misura il contenuto, non la pagina: `html` e `body` sono alti quanto
+   * la finestra, che è alta quanto l'ultima misura — si inseguirebbero. Sotto
+   * il mostriciattolo la scheda è alta quanto la finestra e scorre, e il
+   * contenuto dentro dice quanto vorrebbe essere (più i due bordi).
    */
   useLayoutEffect(() => {
-    const el = radice.current
+    const el = contenuto.current
     if (!el || !ponte) return
-    const misura = () => ponte.misura(Math.ceil(el.getBoundingClientRect().height))
+    const misura = () => ponte.misura(Math.ceil(el.getBoundingClientRect().height) + 2)
     misura()
     const oss = new ResizeObserver(misura)
     oss.observe(el)
@@ -126,11 +134,20 @@ export function Richiamo() {
       campo.current?.focus()
       if (sessione.token()) setSenzaSessione(false)
       setAccanto(come?.accanto === true)
-      setDetta(come?.detta === true)
+      setPannello(come?.pannello === 'impostazioni' ? 'impostazioni' : 'scrivi')
+      setAperture(n => n + 1)
       if (pensando || come?.ancora) return
       setDomanda(''); setRisposta(''); setChat(null); setGuaio(''); setConferma('')
     })
   }, [ponte, pensando])
+
+  // le impostazioni non hanno una casella che senta Esc: lo sente la pagina
+  useEffect(() => {
+    if (!accanto || pannello !== 'impostazioni') return
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); ponte?.chiudi() } }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [accanto, pannello, ponte])
 
   // il server ha detto che la sessione non vale più
   useEffect(() => { alloScadere(() => setSenzaSessione(true)) }, [])
@@ -243,23 +260,33 @@ export function Richiamo() {
     backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
     border: '1px solid rgba(255,255,255,.9)',
     boxShadow: dentro ? 'none' : '0 20px 46px rgba(60,44,30,.18)',
-    color: INCHIOSTRO, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif"
+    color: INCHIOSTRO, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+    // sotto il mostriciattolo la scheda è la finestra intera, tirabile dal bordo: scorre lei
+    ...(accanto && dentro ? { height: '100vh', overflowY: 'auto' as const, overflowX: 'hidden' as const } : {})
   }
+  // la riga per scrivere resta in cima mentre la risposta scorre
+  const cima: CSSProperties = accanto
+    ? { position: 'sticky', top: 0, zIndex: 1, background: 'rgba(255,253,249,.96)' }
+    : {}
 
   const dentroLaScheda = (
     <div ref={radice} style={scheda}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px 7px 17px' }}>
+     <div ref={contenuto}>
+     {accanto && pannello === 'impostazioni' ? <ImpostazioniCompagno versione={aperture} chiudi={chiudi} /> : <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: accanto ? '5px 6px 5px 15px' : '7px 9px 7px 17px', ...cima }}>
         <textarea
           ref={campo}
+          className="richiamo-campo"
           rows={1}
           autoFocus
           value={testo}
           onChange={e => setTesto(e.target.value)}
           onKeyDown={tasti}
           aria-label={accanto ? t('Scrivi a Myynd') : t('Segna una cosa, o chiedi con «?»')}
-          placeholder={accanto ? (detta ? t('Premi fn due volte per parlare') : t('Scrivi a Myynd')) : t('Segna una cosa, o chiedi con «?»')}
+          placeholder={accanto ? t('Scrivi a Myynd') : t('Segna una cosa, o chiedi con «?»')}
           style={{
-            flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none',
+            // border-box: l'altezza che si misura (scrollHeight) contiene già il padding
+            boxSizing: 'border-box', flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none',
             fontFamily: 'inherit', fontSize: '15px', lineHeight: '22px', color: INCHIOSTRO, padding: '9px 0',
             overflowY: 'auto', overflowX: 'hidden', overflowWrap: 'anywhere'
           }} />
@@ -275,12 +302,13 @@ export function Richiamo() {
             {modo === 'bozza' ? t('lavoro') : modo === 'prompt' ? t('prompt') : t('Myynd')}
           </span>
         )}
-        {!testo && (
+        {!testo && !accanto && (
           <span style={{
             flex: 'none', fontSize: '11px', color: 'rgba(34,39,31,.3)',
             border: '1px solid rgba(34,39,31,.12)', borderRadius: 5, padding: '2px 6px'
           }}>/</span>
         )}
+        {accanto && <Chiudi chiudi={chiudi} />}
       </div>
 
       {aperto && (
@@ -319,8 +347,9 @@ export function Richiamo() {
 
       {domanda && (
         <div style={{
-          borderTop: `1px solid ${RIGA}`, padding: '12px 17px 13px', maxHeight: 260,
-          overflowY: 'auto', overflowX: 'hidden', overflowWrap: 'anywhere', fontSize: '14px', lineHeight: 1.5
+          borderTop: `1px solid ${RIGA}`, padding: '12px 17px 13px', overflowX: 'hidden', overflowWrap: 'anywhere', fontSize: '14px', lineHeight: 1.5,
+          // nella barra la risposta scorre dentro; sotto di lui scorre la casella intera, tirata dal bordo
+          ...(accanto ? {} : { maxHeight: 260, overflowY: 'auto' as const })
         }}>
           <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginBottom: 6 }}>{domanda}</div>
           {pensando && !risposta && <div style={{ color: 'rgba(34,39,31,.55)' }}>{t('Ci penso…')}</div>}
@@ -334,6 +363,8 @@ export function Richiamo() {
           )}
         </div>
       )}
+     </>}
+     </div>
     </div>
   )
 

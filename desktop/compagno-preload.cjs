@@ -9,9 +9,9 @@ const numero = v => (Number.isFinite(Number(v)) ? Number(v) : 0)
 
 contextBridge.exposeInMainWorld('compagno', {
   premuto: () => ipcRenderer.send('compagno:premuto'),
-  /** I due bottoni della pastiglia: il fumetto con la casella pronta, o con la dettatura. */
+  /** I due bottoni della pastiglia: la casella per scrivergli, le sue impostazioni. */
   scrivi: () => ipcRenderer.send('compagno:scrivi'),
-  detta: () => ipcRenderer.send('compagno:detta'),
+  impostazioni: () => ipcRenderer.send('compagno:impostazioni'),
   menu: () => ipcRenderer.send('compagno:menu'),
   afferra: () => ipcRenderer.send('compagno:afferra'),
   trascina: (dx, dy) => ipcRenderer.send('compagno:trascina', Number(dx), Number(dy)),
@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('compagno', {
     ipcRenderer.on('compagno:stato', (_e, s) => cb({
       guarda: s?.guarda === true,
       attesa: s?.attesa === true,
-      testi: { scrivi: String(s?.testi?.scrivi ?? ''), parla: String(s?.testi?.parla ?? '') }
+      testi: { scrivi: String(s?.testi?.scrivi ?? ''), impostazioni: String(s?.testi?.impostazioni ?? '') }
     }))
   },
   /** Dove sta il cursore rispetto a lui, fra -1 e 1: il guscio lo manda finché lo si vede. */

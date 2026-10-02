@@ -46,6 +46,12 @@ test('vociMenu: acceso e non in pausa, pausa per prima', () => {
     'una pausa scaduta non è una pausa')
 })
 
+test('vociMenu: col mostriciattolo tolto dalla scrivania, la barra lo rimette', () => {
+  assert.deepEqual(vociMenu({ disponibile: false, acceso: false, pausaFino: null, adesso: ADESSO, compagnoTolto: true }),
+    ['apri', 'nuova-chat', 'preferenze', 'mostra-compagno', '-', 'esci'])
+  assert.ok(!vociMenu({ disponibile: false, acceso: false, pausaFino: null, adesso: ADESSO }).includes('mostra-compagno'))
+})
+
 test('vociMenu: in pausa, riprendi per prima', () => {
   assert.deepEqual(vociMenu({ disponibile: true, acceso: true, pausaFino: FRA_UN_ORA, adesso: ADESSO }),
     ['riprendi', '-', 'apri', 'nuova-chat', 'preferenze', '-', 'esci'])

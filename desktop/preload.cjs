@@ -72,9 +72,13 @@ contextBridge.exposeInMainWorld('myynd', {
     apri: dove => ipcRenderer.send('myynd:richiamo-apri', dove),
     misura: altezza => ipcRenderer.send('myynd:richiamo-misura', Number(altezza)),
     // il guscio l'ha appena mostrata: la pagina rimette il fuoco nella casella.
-    // `accanto`: si è aperta come fumetto, accanto al mostriciattolo; `detta`: dal
-    // bottone «parla»; `ancora`: era già aperta, la risposta resta
-    mostrato: cb => ascolta('myynd:richiamo-mostrato', m => cb({ accanto: m?.accanto === true, detta: m?.detta === true, ancora: m?.ancora === true }))
+    // `accanto`: si è aperta sotto il mostriciattolo; `pannello`: la casella per
+    // scrivergli o le sue impostazioni; `ancora`: era già aperta, la risposta resta
+    mostrato: cb => ascolta('myynd:richiamo-mostrato', m => cb({
+      accanto: m?.accanto === true,
+      pannello: m?.pannello === 'impostazioni' ? 'impostazioni' : 'scrivi',
+      ancora: m?.ancora === true
+    }))
   },
   // — l'osservatore del Mac: il permesso per i titoli delle finestre. Chiederlo
   //   è il solo modo in cui compare la richiesta di sistema, una volta per versione —
@@ -87,6 +91,12 @@ contextBridge.exposeInMainWorld('myynd', {
   compagno: {
     acceso: () => chiedi('myynd:compagno-acceso'),
     accendi: on => chiedi('myynd:compagno-accendi', on === true),
-    suCambio: cb => ascolta('myynd:compagno-cambiato', on => cb(on === true))
+    suCambio: cb => ascolta('myynd:compagno-cambiato', on => cb(on === true)),
+    // le sue impostazioni (il pannellino sotto di lui): la taglia e se segue il cursore
+    scelte: () => chiedi('myynd:compagno-scelte'),
+    scegli: patch => chiedi('myynd:compagno-scegli', {
+      ...(['piccolo', 'medio', 'grande'].includes(patch?.taglia) ? { taglia: patch.taglia } : {}),
+      ...(typeof patch?.segue === 'boolean' ? { segue: patch.segue } : {})
+    })
   }
 })

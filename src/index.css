@@ -264,6 +264,9 @@ button,input,textarea,select{font-family:inherit}
 input,textarea{color:inherit}
 input::placeholder,textarea::placeholder{color:rgba(var(--inchiostro-rgb),.45);opacity:1}
 .scuro::placeholder{color:rgba(var(--avorio-rgb),.58)}
+/* La casella del richiamo ha la sua carta chiara anche di notte: il
+   placeholder segue la carta, non il tema, o di notte sparisce. */
+.richiamo-campo::placeholder{color:rgba(34,39,31,.45)}
 /* Un campo spento dice comunque qualcosa di importante — «Collega Claude per
    fare domande» è un'istruzione, non decorazione: il browser lo sbiadirebbe
    fino a renderlo illeggibile. */
