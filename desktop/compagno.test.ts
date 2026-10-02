@@ -50,7 +50,7 @@ test('acceso di serie, una volta riacceso per chi l’aveva spento, e il suo int
 })
 
 test('un clic apre il fumetto accanto a lui, e spostandolo il fumetto lo segue', () => {
-  assert.match(guscio, /ipcMain\.on\('compagno:premuto', e => \{ const w = suo\(e\); if \(w\) azioni\?\.parla\(w\.getBounds\(\)\) \}\)/)
+  assert.match(guscio, /ipcMain\.on\('compagno:premuto', e => \{ const w = suo\(e\); if \(w\) azioni\?\.parla\(corpoDelCompagno\(w\.getBounds\(\)\)\) \}\)/)
   assert.match(main, /parla: r => \{ if \(!richiamo\.alternaAccanto\(r\)\) finestra\.alterna\(\) \}/)
   assert.match(main, /mosso: r => richiamo\.segui\(r\)/)
 })
@@ -71,4 +71,33 @@ test('costa poco: sguardo al massimo 15 volte al secondo e solo visibile, fotogr
   assert.ok(numeri.length && Math.max(...numeri) <= 30, `fotogrammi al secondo: ${passo}`)
   assert.match(scena, /if \(!prova && document\.hidden\) return/)
   assert.match(scena, /prefers-reduced-motion: reduce/)
+})
+
+test('la pastiglia: due bottoni, scrivi apre il fumetto e parla chiede anche la dettatura', () => {
+  const richiamo = leggi('./richiamo.ts')
+  for (const c of ['compagno:scrivi', 'compagno:detta']) {
+    assert.ok(preload.includes(`'${c}'`), `preload: ${c}`)
+    assert.ok(guscio.includes(`ipcMain.on('${c}'`), `guscio: ${c}`)
+  }
+  assert.match(main, /scrivi: r => \{ if \(!richiamo\.mostraAccanto\(r\)\) finestra\.alterna\(\) \}/)
+  assert.match(main, /detta: r => \{ if \(!richiamo\.dettaAccanto\(r\)\) finestra\.alterna\(\) \}/)
+  const detta = richiamo.slice(richiamo.indexOf('export function dettaAccanto('), richiamo.indexOf('/** Dove va:'))
+  // la dettatura si chiede solo al fumetto che ha davvero il fuoco
+  assert.match(detta, /w\.isFocused\(\)[\s\S]*Menu\.sendActionToFirstResponder\('startDictation:'\)/)
+  // i bottoni hanno le parole, nella lingua dell'app
+  for (const id of ['scrivi', 'parla']) assert.match(pagina, new RegExp(`<button id="${id}" type="button" title="[^"]+" aria-label="[^"]+">`))
+  assert.match(guscio, /testi: \{ scrivi: t\('Scrivi a Myynd'\), parla: t\('Parla con Myynd'\) \}/)
+  const lingua = leggi('./lingua.ts')
+  assert.match(lingua, /'Scrivi a Myynd': 'Write to Myynd'/)
+  assert.match(lingua, /'Parla con Myynd': 'Talk to Myynd'/)
+  // e la pastiglia sta dentro la finestra, che è cresciuta per tenerla
+  assert.match(guscio, /width: LATO_COMPAGNO, height: ALTO_COMPAGNO/)
+  const cima = Number(/#pastiglia \{[\s\S]*?top: (\d+)px/.exec(pagina)?.[1])
+  assert.ok(cima + 36 <= 188, `la pastiglia finisce dentro la finestra (${cima})`)
+})
+
+test('dormendo non diventa grigio, e la tela è nitida anche a 1x', () => {
+  assert.doesNotMatch(pagina, /\.spenta[^{]*\{[^}]*(opacity|filter)/)
+  assert.match(scena, /mix\(diffuseColor\.rgb, vec3\(grigio\), 0\.1 \* uSonno\)/)
+  assert.match(scena, /setPixelRatio\(Math\.min\(Math\.max\(window\.devicePixelRatio \|\| 1, 2\), 3\)\)/)
 })

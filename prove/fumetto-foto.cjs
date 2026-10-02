@@ -53,7 +53,7 @@ contextBridge.exposeInMainWorld('myynd', {
     mostrato: cb => { alMostrato = cb; return () => {} }
   }
 })
-contextBridge.exposeInMainWorld('prova', { mostra: () => alMostrato && alMostrato({ accanto: true }) })
+contextBridge.exposeInMainWorld('prova', { mostra: () => alMostrato && alMostrato({ accanto: true, detta: ${process.env.MODO === 'detta'} }) })
 `)
 
 let altezza = 60
@@ -98,17 +98,19 @@ app.whenReady().then(async () => {
 const { contextBridge } = require('electron')
 contextBridge.exposeInMainWorld('compagno', { premuto() {}, menu() {}, afferra() {}, trascina() {}, lascia() {}, pronto() {}, sopra() {},
   stato: cb => cb({ guarda: true, attesa: false }), sguardo: () => {} })`)
-  const m = new BrowserWindow({ show: false, width: 144, height: 144, frame: false, transparent: true, useContentSize: true,
+  const m = new BrowserWindow({ show: false, width: 144, height: 188, frame: false, transparent: true, useContentSize: true,
     webPreferences: { preload: PRE2, sandbox: true, contextIsolation: true } })
   await m.loadFile(PAGINA, { query: { prova: '1' } })
   for (let i = 0; i < 100 && !(await m.webContents.executeJavaScript('!!window.scena')); i++) await pausa(50)
-  await m.webContents.executeJavaScript('window.scena.posa({ guarda: [-0.7, -0.15], sveglio: true, tempo: 0.2 }); 1')
+  await m.webContents.executeJavaScript("document.body.classList.add('sopra'); window.scena.posa({ guarda: [-0.7, -0.15], sveglio: true, attento: true, tempo: 0.2 }); 1")
+  await pausa(250)
   await pausa(100)
   const lui = await m.webContents.capturePage()
 
   // la scrivania finta: 760×520 punti, lui in basso a destra a 24 punti dai bordi
   const AREA = { x: 0, y: 0, width: 760, height: 520 }
-  const L = { x: AREA.width - 144 - 24, y: AREA.height - 144 - 24, width: 144, height: 144 }
+  // la finestra è 144 × 188 (sotto c'è la pastiglia); il fumetto si misura dal quadrato in alto
+  const L = { x: AREA.width - 144 - 24, y: AREA.height - 188 - 8, width: 144, height: 144 }
   const h = Math.ceil(altezza)
   // la stessa aritmetica di posizioneFumetto: a sinistra, il fondo all'altezza della bocca
   const fx = L.x + Math.round(144 * 0.2) - LARGO
@@ -118,15 +120,15 @@ contextBridge.exposeInMainWorld('compagno', { premuto() {}, menu() {}, afferra()
     <div style="position:absolute;left:40px;top:40px;width:330px;height:220px;border-radius:10px;background:#F7F5F0;box-shadow:0 18px 40px rgba(0,0,0,.25)">
       <div style="height:28px;border-bottom:1px solid #e3ded4;border-radius:10px 10px 0 0;background:#EDEAE3"></div></div>
     <img src="data:image/png;base64,${fumetto.toPNG().toString('base64')}" style="position:absolute;left:${fx}px;top:${fy}px;width:${LARGO}px;height:${h}px;filter:drop-shadow(0 12px 24px rgba(40,30,20,.28))">
-    <img src="data:image/png;base64,${lui.toPNG().toString('base64')}" style="position:absolute;left:${L.x}px;top:${L.y}px;width:144px;height:144px">
+    <img src="data:image/png;base64,${lui.toPNG().toString('base64')}" style="position:absolute;left:${L.x}px;top:${L.y}px;width:144px;height:188px">
   </body></html>`
   const foglio = path.join(DATI, 'scrivania.html')
   fs.writeFileSync(foglio, html)
   const s = new BrowserWindow({ show: false, width: AREA.width, height: AREA.height, frame: false, useContentSize: true, webPreferences: { zoomFactor: 1 } })
   await s.loadFile(foglio)
   await pausa(300)
-  fs.writeFileSync(path.join(OUT, 'compagno-fumetto.png'), (await s.webContents.capturePage()).toPNG())
-  const ok = /Right here/.test(testo) && /Talk to Myynd|Scrivi a Myynd/.test(segnaposto ?? '')
+  fs.writeFileSync(path.join(OUT, process.env.MODO === 'detta' ? 'compagno-fumetto-parla.png' : 'compagno-fumetto.png'), (await s.webContents.capturePage()).toPNG())
+  const ok = /Right here/.test(testo) && (process.env.MODO === 'detta' ? /Press fn twice to talk/ : /Write to Myynd/).test(segnaposto ?? '')
   console.log(ok ? 'ok' : 'guasto: il fumetto non ha la risposta o la casella non dice «Scrivi a Myynd»')
   esci(ok ? 0 : 1)
 }).catch(e => { console.error(e); esci(1) })

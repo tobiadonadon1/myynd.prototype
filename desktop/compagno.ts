@@ -10,15 +10,18 @@
 // non guarda. Smorto quando non guarda, col puntino quando qualcosa
 // aspetta: le stesse regole della barra dei menu.
 //
-// Un clic apre il fumetto: il richiamo, accanto a lui invece che in mezzo
-// allo schermo, dove si scrive (o si detta: fn due volte, è una casella come
-// le altre) e la risposta di Myynd arriva lì. Un altro clic lo chiude, come
-// Esc. Trascinarlo lo sposta e il posto resta (e il fumetto aperto lo
+// Il cursore che gli passa sopra lo sveglia (si drizza, apre gli occhi, lo
+// guarda) e fa comparire sotto di lui una pastiglia scura con due bottoni:
+// scrivi e parla. Tutti e due aprono il fumetto: il richiamo, accanto a lui
+// invece che in mezzo allo schermo, dove la risposta di Myynd arriva lì.
+// «Parla» in più fa partire la dettatura del Mac (`richiamo.dettaAccanto`).
+// Anche un clic su di lui apre il fumetto; un altro clic lo chiude, come Esc. Trascinarlo lo sposta e il posto resta (e il fumetto aperto lo
 // segue), il tasto destro dà pausa o ripresa (se l'osservatore è acceso),
 // «Apri Myynd» e «Togli dallo schermo».
 //
-// Il quadrato è quasi tutto trasparente: il mouse ci passa attraverso finché
-// la pagina non dice che il cursore è sopra il corpo (`compagno:sopra`).
+// La finestra è quasi tutta trasparente: il mouse ci passa attraverso finché
+// la pagina non dice che il cursore è sopra il corpo o sopra la pastiglia
+// (`compagno:sopra`).
 // Dove sta il cursore, per lo sguardo, lo chiede il guscio al sistema dodici
 // volte al secondo, solo mentre lui si vede e solo se il cursore si è mosso.
 //
@@ -38,7 +41,7 @@ import * as impostazioni from './impostazioni.ts'
 import { vociCompagno, type Voce } from './icona-barra.ts'
 import { t } from './lingua.ts'
 import type { StatoLocale } from './osservatore.ts'
-import { LATO_COMPAGNO, posizioneCompagno, sguardoVerso, trascinaCompagno, type Area } from './posizione.ts'
+import { ALTO_COMPAGNO, LATO_COMPAGNO, corpoDelCompagno, posizioneCompagno, sguardoVerso, trascinaCompagno, type Area } from './posizione.ts'
 import { scriviRegistro } from './server.ts'
 
 const PAGINA = fileURLToPath(new URL('./compagno.html', import.meta.url))
@@ -54,6 +57,10 @@ const OGNI_SGUARDO = 80
 export type Azioni = {
   /** Il clic: apre o chiude il fumetto accanto a lui, che sta in `riquadro`. */
   parla(riquadro: Area): void
+  /** Il bottone «scrivi» della pastiglia: il fumetto aperto, con la casella pronta. */
+  scrivi(riquadro: Area): void
+  /** Il bottone «parla»: il fumetto aperto, e la dettatura del Mac. */
+  detta(riquadro: Area): void
   /** Si è spostato: il fumetto aperto lo segue. */
   mosso?(riquadro: Area): void
   apri(): void; pausa(): void; riprendi(): void
@@ -105,7 +112,17 @@ function suo(e: IpcMainEvent): BrowserWindow | null {
 function mandaStato() {
   const w = attuale()
   if (!w) return
-  w.webContents.send('compagno:stato', { guarda: osservatore.guarda, attesa: inAttesa > 0 })
+  w.webContents.send('compagno:stato', {
+    guarda: osservatore.guarda,
+    attesa: inAttesa > 0,
+    // le parole dei bottoni della pastiglia, nella lingua dell'app
+    testi: { scrivi: t('Scrivi a Myynd'), parla: t('Parla con Myynd') }
+  })
+}
+
+/** La lingua è cambiata: i bottoni della pastiglia la seguono. */
+export function rinfresca(): void {
+  mandaStato()
 }
 
 function riposiziona() {
@@ -114,7 +131,7 @@ function riposiziona() {
   const [x, y] = w.getPosition()
   const p = posizioneCompagno(aree(), { x, y }, screen.getPrimaryDisplay().workArea)
   if (p.x !== x || p.y !== y) w.setPosition(p.x, p.y)
-  azioni?.mosso?.(w.getBounds())
+  azioni?.mosso?.(corpoDelCompagno(w.getBounds()))
 }
 
 /**
@@ -128,7 +145,7 @@ function guardaIlCursore() {
   const c = screen.getCursorScreenPoint()
   if (c.x === ultimoCursore.x && c.y === ultimoCursore.y) return
   ultimoCursore = c
-  const s = sguardoVerso(w.getBounds(), c)
+  const s = sguardoVerso(corpoDelCompagno(w.getBounds()), c)
   const chiave = `${s.x},${s.y}`
   if (chiave === ultimoSguardo) return
   ultimoSguardo = chiave
@@ -166,7 +183,9 @@ function menu(w: BrowserWindow) {
 function ascolta() {
   if (ascolti) return
   ascolti = true
-  ipcMain.on('compagno:premuto', e => { const w = suo(e); if (w) azioni?.parla(w.getBounds()) })
+  ipcMain.on('compagno:premuto', e => { const w = suo(e); if (w) azioni?.parla(corpoDelCompagno(w.getBounds())) })
+  ipcMain.on('compagno:scrivi', e => { const w = suo(e); if (w) azioni?.scrivi(corpoDelCompagno(w.getBounds())) })
+  ipcMain.on('compagno:detta', e => { const w = suo(e); if (w) azioni?.detta(corpoDelCompagno(w.getBounds())) })
   // il cursore sopra il corpo: la finestra prende i clic; altrove passano a chi sta sotto
   ipcMain.on('compagno:sopra', (e, on: unknown) => {
     const w = suo(e)
@@ -189,7 +208,7 @@ function ascolta() {
     const p = trascinaCompagno(aree(), presa, Math.round(dx), Math.round(dy), { x, y })
     if (p.x !== x || p.y !== y) {
       w.setPosition(p.x, p.y)
-      azioni?.mosso?.(w.getBounds())
+      azioni?.mosso?.(corpoDelCompagno(w.getBounds()))
     }
   })
   ipcMain.on('compagno:lascia', e => {
@@ -208,7 +227,7 @@ function ascolta() {
 function crea(): BrowserWindow {
   const p = posizioneCompagno(aree(), salvata(), screen.getPrimaryDisplay().workArea)
   const w = new BrowserWindow({
-    width: LATO_COMPAGNO, height: LATO_COMPAGNO, x: p.x, y: p.y,
+    width: LATO_COMPAGNO, height: ALTO_COMPAGNO, x: p.x, y: p.y,
     show: false,
     frame: false,
     transparent: true,

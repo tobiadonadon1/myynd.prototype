@@ -2144,7 +2144,8 @@ const EN: Record<string, string> = {
   // — il richiamo: la barra della scorciatoia, e gli avvisi di sistema —
   'Segna una cosa, o chiedi con «?»': 'Note something, or ask with “?”',
   // il fumetto del mostriciattolo: lo stesso richiamo, accanto a lui
-  'Scrivi a Myynd': 'Talk to Myynd',
+  'Scrivi a Myynd': 'Write to Myynd',
+  'Premi fn due volte per parlare': 'Press fn twice to talk',
   'Continua nell’app': 'Continue in the app',
   'Apri Myynd per entrare': 'Open Myynd to sign in',
   'Apri Myynd': 'Open Myynd',

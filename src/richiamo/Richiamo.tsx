@@ -66,6 +66,8 @@ export function Richiamo() {
   const [pensando, setPensando] = useState(false)
   // aperta come fumetto, accanto al mostriciattolo: si parla
   const [accanto, setAccanto] = useState(false)
+  // aperta dal bottone «parla»: la casella dice come dettare
+  const [detta, setDetta] = useState(false)
 
   const campo = useRef<HTMLTextAreaElement>(null)
   const radice = useRef<HTMLDivElement>(null)
@@ -124,7 +126,8 @@ export function Richiamo() {
       campo.current?.focus()
       if (sessione.token()) setSenzaSessione(false)
       setAccanto(come?.accanto === true)
-      if (pensando) return
+      setDetta(come?.detta === true)
+      if (pensando || come?.ancora) return
       setDomanda(''); setRisposta(''); setChat(null); setGuaio(''); setConferma('')
     })
   }, [ponte, pensando])
@@ -254,7 +257,7 @@ export function Richiamo() {
           onChange={e => setTesto(e.target.value)}
           onKeyDown={tasti}
           aria-label={accanto ? t('Scrivi a Myynd') : t('Segna una cosa, o chiedi con «?»')}
-          placeholder={accanto ? t('Scrivi a Myynd') : t('Segna una cosa, o chiedi con «?»')}
+          placeholder={accanto ? (detta ? t('Premi fn due volte per parlare') : t('Scrivi a Myynd')) : t('Segna una cosa, o chiedi con «?»')}
           style={{
             flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none',
             fontFamily: 'inherit', fontSize: '15px', lineHeight: '22px', color: INCHIOSTRO, padding: '9px 0',

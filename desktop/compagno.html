@@ -1,10 +1,12 @@
 <!doctype html>
 <!--
-  Il mostriciattolo sullo schermo, in 3D: una tela WebGL trasparente e un puntino.
-  La scena è in compagno-scena.js (three.js, dai node_modules dell'app), i gesti
-  e lo stato del guscio in compagno.js. La mappa degli import dice dove sta three:
-  è uno script in riga, e la CSP lo lascia passare solo con la sua impronta
-  (sha256): cambiarne anche uno spazio vuol dire rifare l'impronta, e
+  Il mostriciattolo sullo schermo, in 3D: una tela WebGL trasparente in alto,
+  sotto la pastiglia scura con i due bottoni (scrivi, parla) che compare quando
+  il cursore gli passa sopra, e il puntino. La scena è in compagno-scena.js
+  (three.js, dai node_modules dell'app), i gesti e lo stato del guscio in
+  compagno.js. La mappa degli import dice dove sta three: è uno script in
+  riga, e la CSP lo lascia passare solo con la sua impronta (sha256):
+  cambiarne anche uno spazio vuol dire rifare l'impronta, e
   desktop/compagno.test.ts lo controlla.
 -->
 <html lang="it">
@@ -15,16 +17,45 @@
 <script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
 <style>
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; -webkit-user-select: none; cursor: default }
-  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block }
-  body.animata canvas { transition: opacity .6s }
-  body.spenta canvas { opacity: .78 }
-  #punto { position: absolute; right: 24%; top: 17%; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #22271F; box-shadow: 0 0 0 2px #F2E9DC; display: none }
+  #tela { position: absolute; left: 0; top: 0; width: 144px; height: 144px; display: block }
+  #punto { position: absolute; left: 100px; top: 22px; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #F0702F; box-shadow: 0 0 0 2px #FFF8EE, 0 1px 4px rgba(0,0,0,.3); display: none }
   body.attesa #punto { display: block }
+  /* la pastiglia: scura, due bottoni con una riga in mezzo, scende appena sotto di lui */
+  #pastiglia {
+    position: absolute; left: 50%; top: 148px; display: flex; align-items: center; gap: 2px; padding: 3px;
+    border-radius: 18px; background: rgba(28,28,30,.92); box-shadow: 0 0 0 0.5px rgba(255,255,255,.14) inset, 0 6px 18px rgba(0,0,0,.28);
+    opacity: 0; transform: translate(-50%, -6px) scale(.96); pointer-events: none;
+    transition: opacity .16s ease, transform .2s cubic-bezier(.2,.9,.3,1.2)
+  }
+  body.sopra #pastiglia { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto }
+  #pastiglia button {
+    width: 38px; height: 30px; display: grid; place-items: center; border: 0; padding: 0; margin: 0;
+    border-radius: 15px; background: transparent; color: #ECECEC; cursor: default
+  }
+  #pastiglia button:hover { background: rgba(255,255,255,.1) }
+  #pastiglia button:active { background: rgba(255,255,255,.16) }
+  #pastiglia svg { width: 17px; height: 17px; display: block }
+  #pastiglia .riga { width: 1px; height: 16px; background: rgba(255,255,255,.18) }
+  @media (prefers-reduced-motion: reduce) { #pastiglia { transition: opacity .12s } }
 </style>
 </head>
-<body class="spenta">
+<body>
 <canvas id="tela"></canvas>
 <div id="punto"></div>
+<div id="pastiglia" role="toolbar">
+  <button id="scrivi" type="button" title="Write to Myynd" aria-label="Write to Myynd">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9.5 3.5H5.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-4"/>
+      <path d="M14.6 2.9a1.6 1.6 0 0 1 2.3 2.3L10.5 11.6 7.8 12.2l.6-2.7z"/>
+    </svg>
+  </button>
+  <div class="riga"></div>
+  <button id="parla" type="button" title="Talk to Myynd" aria-label="Talk to Myynd">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+      <path d="M3.5 8.5v3M7 6v8M10.5 3.5v13M14 6.5v7M17.5 8.5v3"/>
+    </svg>
+  </button>
+</div>
 <script type="module" src="compagno.js"></script>
 </body>
 </html>

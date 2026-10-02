@@ -81,10 +81,12 @@ export type Desktop = {
      * Il guscio l'ha appena mostrata: il fuoco torna nella casella, e la
      * risposta dell'altra volta se ne va. `accanto` vuol dire aperta come
      * fumetto, con un clic sul mostriciattolo: lì si parla, Invio chiede.
+     * `detta`: dal bottone «parla», la dettatura del Mac. `ancora`: era già
+     * aperta, e la risposta di prima resta.
      * Torna la funzione per smettere. Manca nei gusci vecchi; `accanto` nei
      * gusci di prima del mostriciattolo in 3D.
      */
-    mostrato?(cb: (come?: { accanto?: boolean }) => void): () => void
+    mostrato?(cb: (come?: { accanto?: boolean; detta?: boolean; ancora?: boolean }) => void): () => void
   }
   /** L'osservatore del Mac: il permesso per i titoli delle finestre (P1). Manca nei gusci vecchi. */
   osservatore?: { permessoTitoli(): Promise<boolean>; chiediPermessoTitoli(): Promise<boolean>; apriImpostazioniTitoli(): Promise<void> }
