@@ -5,8 +5,9 @@ import { frasi, t } from '../lingua'
 import { Cestino } from '../ui'
 import { Casella } from '../components/forme'
 import type { Lista } from './useCompiti'
-import { giornoCompito, giornoLocale, secchioDelGiorno, spostaGiorno } from './giorni'
-import { oraDi, oraValida } from '../agenda-ore'
+import { giornoCompito, giornoLocale, spostaGiorno } from './giorni'
+import { oraDi } from '../agenda-ore'
+import { cambiDelDettaglio } from './cambi-dettaglio'
 import './calendario.css'
 
 /** Native modal semantics provide focus containment, Escape and focus restoration. */
@@ -46,15 +47,15 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
   const salva = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!testo.trim() || salvando) return
-    setSalvando(true); setErrore(false)
     const criterioCambiato = conFatto && criterio.trim() !== (c.contratto?.criterio ?? '').trim()
-    const fatto = await l.cambia(c.id, { testo: testo.trim(), nota: nota.trim() || null, giorno: giorno || null, progetto: progetto || null,
-      ...(criterioCambiato ? { criterio: criterio.trim() || null } : {}),
-      // solo se è cambiata: una modifica che non la tocca non deve riscriverla
-      ...(priorita !== (c.priorita ?? null) ? { priorita } : {}),
-      // senza un giorno l'ora non sta da nessuna parte, e il server la rifiuta
-      ora: giorno && oraValida(ora) ? ora : null,
-      quando: giorno ? secchioDelGiorno(giorno) : (c.quando === 'settimana' ? 'settimana' : 'poi') })
+    // solo quello che ha toccato (`cambi-dettaglio.ts`): niente di cambiato, niente da mandare
+    const cambi = {
+      ...cambiDelDettaglio(c, { testo, nota, giorno, ora, progetto, priorita }, oggi),
+      ...(criterioCambiato ? { criterio: criterio.trim() || null } : {})
+    }
+    if (!Object.keys(cambi).length) { chiudi(); return }
+    setSalvando(true); setErrore(false)
+    const fatto = await l.cambia(c.id, cambi)
     setSalvando(false)
     if (fatto) chiudi(); else setErrore(true)
   }
@@ -176,6 +177,8 @@ export function fraseDiario(v: VoceDiario): string {
     case 'scaduto': return t('Finito il tempo che aveva')
     case 'fermato': return d === 'stop' ? t('Fermata con «Ferma adesso»: torna in coda')
       : d === 'budget' ? t('Finito il budget della notte: torna in coda')
+      : d === 'modificata' ? t('Fermata perché l’hai cambiata: adesso è tua')
+      : d === 'riavvio' ? t('Interrotta da un riavvio: torna in coda')
       : d.startsWith('disfatto') ? t('Disfatta') : t('Ripresa da te')
     case 'turno': return d === 'notte' ? t('Partita di notte, col turno') : d === 'via' ? t('Partita col turno, mentre non c’eri') : t('Partita col turno')
     case 'file': return frasi.fileScritto(d)

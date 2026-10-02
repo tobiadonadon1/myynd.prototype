@@ -1342,6 +1342,10 @@ export const api = {
   eliminaCompito: (id: string) =>
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  /** «Annulla» sotto il cestino: la riga tolta torna in lista. */
+  rimettiCompito: (id: string) =>
+    json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/rimetti`, { method: 'POST' }),
+
   /**
    * Il filo dei compiti affidati. Torna come chiuderlo.
    *

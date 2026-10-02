@@ -82,6 +82,6 @@ export function disfaLavoro(id: string, adesso = new Date()): Disfatto {
     store.sbozzaCompito(id)
     store.riprendiCompito(id)
     compiti.annunciaCambio()
-  } else compiti.richiama(id)
+  } else compiti.richiama(id, null)
   return { file, bozzaResta, ...(noteRestano ? { noteRestano: true as const } : {}) }
 }

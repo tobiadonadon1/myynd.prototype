@@ -527,16 +527,38 @@ export function useCompiti(
     catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a salvarlo.')); return false }
   }, [mostraToast])
 
-  /** Ci ho ripensato: il compito torna mio. */
+  /**
+   * Ridare a Myynd una riga che aveva in mano, com'era: al lavoro se ci stava
+   * lavorando, in coda se aspettava il suo turno. È l'«Annulla» di un richiamo
+   * e di un cestino premuti su una riga di Myynd.
+   */
+  const ridaiAMyynd = useCallback((c: Compito) => {
+    if (c.stato === 'delegato') void delega(c.id, c.modo && c.modo !== 'io' ? c.modo : 'tutto')
+    else void mettiInCoda(c.id)
+  }, [delega, mettiInCoda])
+
+  /**
+   * Ci ho ripensato: il compito torna mio.
+   *
+   * E lo si dice, con «Annulla». Il primo ottobre una riga affidata dal feed
+   * è tornata sua tredici secondi dopo, a metà lavoro, senza una parola: «the
+   * task disappeared, and I don't know where the thing went». Un richiamo su
+   * una riga che Myynd aveva in mano (al lavoro o in coda) si annulla
+   * ridandogliela; su una pronta no, il lavoro buttato non si rifà da qui.
+   */
   const richiama = useCallback(async (id: string) => {
     const prima = compitiRef.current
+    const comEra = prima.find(c => c.id === id)
+    const inMano = !!comEra && (comEra.stato === 'delegato' || (comEra.stato === 'aperto' && !!comEra.modo && comEra.modo !== 'io'))
     setCompiti(cs => cs.map(c => (c.id === id ? { ...c, stato: 'aperto', modo: 'io', guaio: null, risultato: null } : c)))
     scorda(id)
     try {
       const r = await api.richiamaCompito(id)
       setCompiti(r.compiti)
+      if (comEra && inMano) mostraToast(t('Ripresa da Myynd: adesso è tua.'), () => ridaiAMyynd(comEra))
+      else if (comEra && comEra.modo && comEra.modo !== 'io') mostraToast(t('Ripresa da Myynd: adesso è tua.'))
     } catch { indietro(prima, id, t('Non sono riuscito a richiamarlo.')) }
-  }, [indietro, mostraToast])
+  }, [indietro, mostraToast, ridaiAMyynd])
 
   /** Rispondi a quello che ti ha chiesto, e il lavoro riparte da lì. */
   const rispondi = useCallback(async (id: string, testo: string) => {
@@ -660,13 +682,33 @@ export function useCompiti(
 
   const elimina = useCallback(async (id: string) => {
     const prima = compitiRef.current
+    const comEra = prima.find(c => c.id === id)
     setCompiti(cs => cs.filter(x => x.id !== id))
     scorda(id)
     try {
       const r = await api.eliminaCompito(id)
       setCompiti(r.compiti)
+      /*
+       * Una riga che Myynd aveva in mano non sparisce in silenzio.
+       *
+       * Sul quaderno il punto verde di una riga al lavoro, sotto la mano,
+       * lascia il posto ai gesti, e l'ultimo è il cestino: si va a vedere cosa
+       * vuol dire il punto e si toglie la riga. Le altre si tolgono e basta,
+       * come prima; questa lo dice, e «Annulla» la rimette e gliela ridà.
+       */
+      if (comEra && (comEra.stato === 'delegato' || (comEra.stato === 'aperto' && !!comEra.modo && comEra.modo !== 'io'))) {
+        mostraToast(t('Tolta: era nelle mani di Myynd.'), () => {
+          void (async () => {
+            try {
+              const r2 = await api.rimettiCompito(id)
+              setCompiti(r2.compiti)
+              ridaiAMyynd(comEra)
+            } catch { mostraToast(t('Non sono riuscito a rimetterla.')) }
+          })()
+        })
+      }
     } catch { indietro(prima, id, t('Non sono riuscito a toglierlo.')) }
-  }, [indietro, mostraToast])
+  }, [indietro, mostraToast, ridaiAMyynd])
 
   /**
    * Mandarla davvero.

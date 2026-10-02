@@ -4400,15 +4400,28 @@ export function rimettiInCodaGliAppesi(massimo: number, guaio: string): { inCoda
     const tentativi = t?.tentativi ?? 0
     if (tentativi >= massimo) {
       db.prepare(`UPDATE compiti SET stato = 'aperto', guaio = ?, chiesto = NULL, aggiornato = ?, versione = versione + 1 WHERE id = ?`).run(guaio, ora, a.id)
+      segnaNelDiario(a.id, { tipo: 'guaio', dettaglio: guaio })
       ferme++
       continue
     }
     const turno: TurnoCompito = { da: t?.da ?? 'tu', quando: 'presto', dal: t?.dal ?? ora, tentativi, ultimo: t?.ultimo ?? null, notte: t?.notte ?? false }
     db.prepare(`UPDATE compiti SET stato = 'aperto', modo = ?, guaio = NULL, chiesto = NULL, turno = ?, aggiornato = ?, versione = versione + 1 WHERE id = ?`)
       .run(a.modo && a.modo !== 'io' ? a.modo : 'tutto', JSON.stringify(turno), ora, a.id)
+    // il lavoro di prima è morto col processo: il diario lo dice, la carta non sparisce in silenzio
+    segnaNelDiario(a.id, { tipo: 'fermato', dettaglio: 'riavvio' })
     inCoda++
   }
   return { inCoda, ferme }
+}
+
+/**
+ * Una riga tolta torna in lista: «Annulla» sotto il cestino. Solo se era
+ * davvero tolta; torna vero se l'ha rimessa.
+ */
+export function rimettiCompitoTolto(id: string): boolean {
+  const ora = new Date().toISOString()
+  const r = db.prepare('UPDATE compiti SET sparito = NULL, aggiornato = ?, versione = versione + 1 WHERE id = ? AND sparito IS NOT NULL').run(ora, id)
+  return Number(r.changes) > 0
 }
 
 /**
