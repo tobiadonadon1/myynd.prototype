@@ -6,7 +6,8 @@
 // lui) e impostazioni (taglia, sguardo, togli). La pastiglia resta finché il
 // cursore è su di lui o su di lei, e se ne va 400 ms dopo.
 //
-// Un clic su di lui apre o chiude la casella; oltre tre punti con il tasto
+// Un clic su di lui apre o chiude la casella, un doppio clic gli fa fare una
+// giravolta; oltre tre punti con il tasto
 // giù è un trascinamento, e allora al rilascio non si apre niente e il posto
 // si salva. Al guscio parte, una volta per fotogramma, tutto lo spostamento
 // dal momento della presa (non il pezzo dall'ultimo passo): il guscio mette
@@ -37,6 +38,14 @@ let trascina = false
 let dalla = null
 let fotogramma = 0
 let vaVia = 0
+/**
+ * Il clic aspetta un attimo prima di aprire la casella: se arriva il
+ * secondo, era un doppio clic, e il doppio clic è una giravolta.
+ */
+let clicInAttesa = 0
+const DOPPIO = 280
+/** Giocoso: i salti e le giravolte da solo. Lo dice il guscio, dalle sue impostazioni. */
+let giocosoOra = true
 
 /** Il guscio prende i clic solo quando il cursore è su di lui o sulla pastiglia. */
 const dillo = s => {
@@ -127,7 +136,13 @@ if (c) {
       if (fotogramma) { cancelAnimationFrame(fotogramma); manda() }
       c.lascia()
     } else {
-      c.premuto()
+      if (clicInAttesa) {
+        clearTimeout(clicInAttesa)
+        clicInAttesa = 0
+        scena?.gesto('giravolta')
+      } else {
+        clicInAttesa = setTimeout(() => { clicInAttesa = 0; c.premuto() }, DOPPIO)
+      }
     }
     trascina = false
     dove(e.clientX, e.clientY)
@@ -146,14 +161,17 @@ if (c) {
       b.title = testo
       b.setAttribute('aria-label', testo)
     }
-    scena?.stato({ guarda: s?.guarda === true, attesa: s?.attesa === true })
+    giocosoOra = s?.giocoso !== false
+    scena?.stato({ guarda: s?.guarda === true, attesa: s?.attesa === true, giocoso: giocosoOra })
   })
   c.sguardo?.(s => scena?.guarda(s.x, s.y))
+  // i gesti che manda il guscio: la risatina quando gli si scrive
+  c.gesto?.(nome => scena?.gesto(nome))
 }
 
 try {
   scena = await creaScena(tela, { glb: q.get('glb') === '1' ? 'icone/compagno.glb' : '', prova: q.get('prova') === '1' })
-  scena.stato({ guarda: !document.body.classList.contains('spenta'), attesa: document.body.classList.contains('attesa') })
+  scena.stato({ guarda: !document.body.classList.contains('spenta'), attesa: document.body.classList.contains('attesa'), giocoso: giocosoOra })
   // le prove lo guidano da qui, e leggono quanto ha disegnato
   if (q.get('prova') === '1' || q.get('misura') === '1') window.scena = scena
 } catch (e) {

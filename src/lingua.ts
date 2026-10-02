@@ -2151,6 +2151,7 @@ const EN: Record<string, string> = {
   'Medio': 'Medium',
   'Grande': 'Large',
   'Segue il mio cursore': 'Follow my pointer',
+  'Giocoso': 'Playful',
   'Togli dalla scrivania': 'Hide from the desktop',
   'Lo rimetti dalle Preferenze o dalla barra dei menu.': 'Bring him back from Preferences or the menu bar.',
   'Continua nell’app': 'Continue in the app',

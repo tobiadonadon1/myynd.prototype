@@ -52,7 +52,7 @@ const PRELOAD = path.join(DATI, 'finto-preload.cjs')
 fs.writeFileSync(PRELOAD, `
 const { contextBridge, ipcRenderer } = require('electron')
 let alMostrato = null
-let scelte = { taglia: 'medio', segue: true }
+let scelte = { taglia: 'medio', segue: true, giocoso: true }
 // il gettone della sessione di prova (il server parte con MYYND_DEV), prima di ogni script della pagina
 try { localStorage.setItem('myynd.token', 'sviluppo-non-in-produzione') } catch { /* pazienza */ }
 contextBridge.exposeInMainWorld('myynd', {
@@ -178,8 +178,8 @@ app.whenReady().then(async () => {
 
   const c = await pannello('impostazioni', { larghezza: 280, altezza: 760 }, '')
   console.log(`casella-foto · le impostazioni ${JSON.stringify(c.r)} dicono ${JSON.stringify(c.info.testo)}`)
-  verifica(/Size/.test(c.info.testo) && /Follow my pointer/.test(c.info.testo) && /Hide from the desktop/.test(c.info.testo) && /Preferences or the menu bar/.test(c.info.testo),
-    'le impostazioni: taglia, segue il cursore, togli, e dove riprenderlo')
+  verifica(/Size/.test(c.info.testo) && /Follow my pointer/.test(c.info.testo) && /Playful/.test(c.info.testo) && /Hide from the desktop/.test(c.info.testo) && /Preferences or the menu bar/.test(c.info.testo),
+    'le impostazioni: taglia, segue il cursore, giocoso, togli, e dove riprenderlo')
   await scrivania('compagno-impostazioni', c.img, c.r, lui)
 
   console.log(guasti.length ? `guasti: ${guasti.length}` : 'ok')

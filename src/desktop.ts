@@ -77,6 +77,8 @@ export type Desktop = {
     apri(dove: Dove): void
     /** L'altezza del contenuto: la finestra si adatta. */
     misura(altezza: number): void
+    /** Una domanda è partita dalla casella del mostriciattolo: lui ridacchia. Manca nei gusci di prima. */
+    inviato?(): void
     /**
      * Il guscio l'ha appena mostrata: il fuoco torna nella casella, e la
      * risposta dell'altra volta se ne va. `accanto` vuol dire aperta come
@@ -101,7 +103,7 @@ export type Desktop = {
 }
 
 /** La taglia del mostriciattolo sullo schermo, e se segue il cursore con lo sguardo. */
-export type SceltaCompagno = { taglia: 'piccolo' | 'medio' | 'grande'; segue: boolean }
+export type SceltaCompagno = { taglia: 'piccolo' | 'medio' | 'grande'; segue: boolean; giocoso: boolean }
 
 declare global {
   interface Window { myynd?: Desktop }

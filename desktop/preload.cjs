@@ -71,6 +71,8 @@ contextBridge.exposeInMainWorld('myynd', {
     chiudi: () => ipcRenderer.send('myynd:richiamo-chiudi'),
     apri: dove => ipcRenderer.send('myynd:richiamo-apri', dove),
     misura: altezza => ipcRenderer.send('myynd:richiamo-misura', Number(altezza)),
+    // una domanda partita dalla casella del mostriciattolo: lui ridacchia
+    inviato: () => ipcRenderer.send('myynd:richiamo-inviato'),
     // il guscio l'ha appena mostrata: la pagina rimette il fuoco nella casella.
     // `accanto`: si è aperta sotto il mostriciattolo; `pannello`: la casella per
     // scrivergli o le sue impostazioni; `ancora`: era già aperta, la risposta resta
@@ -96,7 +98,8 @@ contextBridge.exposeInMainWorld('myynd', {
     scelte: () => chiedi('myynd:compagno-scelte'),
     scegli: patch => chiedi('myynd:compagno-scegli', {
       ...(['piccolo', 'medio', 'grande'].includes(patch?.taglia) ? { taglia: patch.taglia } : {}),
-      ...(typeof patch?.segue === 'boolean' ? { segue: patch.segue } : {})
+      ...(typeof patch?.segue === 'boolean' ? { segue: patch.segue } : {}),
+      ...(typeof patch?.giocoso === 'boolean' ? { giocoso: patch.giocoso } : {})
     })
   }
 })
