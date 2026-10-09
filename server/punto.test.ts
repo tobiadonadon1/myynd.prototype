@@ -83,7 +83,6 @@ const seminaProgetto = () => progetti.scrivi({ nome: 'Myynd', obiettivo: 'Un gem
 const RISPOSTA = {
   progetti: [{ nome: 'Myynd', novita: 'Il punto adesso ha quattro sezioni.', doc: 'posta:INBOX:1' }],
   github: [],
-  daLeggere: [{ titolo: 'Notizia sui modelli', perche: 'C’entra con Myynd.' }],
   risposte: [],
   compiti: []
 }
@@ -359,7 +358,6 @@ test('le lineette non arrivano in pagina: il modello le scrive dappertutto, il p
   fornitoreFinto({
     progetti: [{ nome: 'Myynd', novita: 'Il punto è in lavorazione — quasi pronto.', doc: 'posta:INBOX:1' }],
     github: [{ testo: 'La #12 è stata unita — ieri sera.', doc: 'github:myynd#12' }],
-    daLeggere: [{ titolo: 'I modelli piccoli — la svolta', perche: 'C’entra con Myynd — da leggere oggi.' }],
     risposte: [{ testo: 'Verdi conferma la sede — con le date.', doc: 'posta:INBOX:20' }],
     compiti: []
   })
@@ -371,9 +369,30 @@ test('le lineette non arrivano in pagina: il modello le scrive dappertutto, il p
   // l'inciso non sparisce: diventa una frase sua, con la maiuscola
   assert.equal(e.punto?.progetti[0].novita, 'Il punto è in lavorazione. Quasi pronto.')
   assert.equal(e.punto?.github[0].testo, 'La #12 è stata unita. Ieri sera.')
-  assert.equal(e.punto?.daLeggere[0].titolo, 'I modelli piccoli. La svolta')
-  assert.equal(e.punto?.daLeggere[0].perche, 'C’entra con Myynd. Da leggere oggi.')
   assert.equal(e.punto?.risposte[0].testo, 'Verdi conferma la sede. Con le date.')
+})
+
+/*
+ * Le notizie stanno nella pastiglia «News» in testa alla pagina, e basta.
+ * Erano anche due righe «da leggere» dentro il foglio: la stessa cosa in due
+ * posti. Qui il modello non le riceve, lo schema non le chiede, e se un
+ * fornitore che ignora lo schema le rimanda lo stesso, non passano.
+ */
+test('le notizie non entrano nel punto: né nel materiale, né nello schema, né nel foglio', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.salvaNotizie([{
+    id: 'n9', titolo: 'I modelli piccoli girano su un portatile', riassunto: 'Ci girano.',
+    perche: null, fonte: 'Prova', link: 'https://esempio.test/n9', argomento: 'lavoro',
+    quando: new Date().toISOString()
+  }])
+  const ricevute = fornitoreFinto({ ...RISPOSTA, daLeggere: [{ titolo: 'I modelli piccoli girano su un portatile', perche: 'C’entra.' }] })
+  const e = await punto.punto({}, adesso())
+  assert.ok(e.generatoAdesso)
+  assert.doesNotMatch(testoDi(ricevute[0]), /modelli piccoli|RASSEGNA/, 'la rassegna è arrivata al modello')
+  assert.doesNotMatch(JSON.stringify(ricevute[0].response_format ?? ricevute[0].tools ?? {}), /daLeggere/, 'lo schema chiede ancora le notizie')
+  assert.equal((e.punto as Record<string, unknown> | null)?.daLeggere, undefined, 'una notizia è finita nel foglio')
 })
 
 test('le sezioni sono tagliate corte, e una riga lunga si accorcia a centoventi', async () => {
@@ -444,7 +463,7 @@ test('la stessa cosa detta in due sezioni esce una volta sola', async () => {
   assert.equal(e.punto?.risposte.length, 1, 'una riga che parla d’altro è stata buttata con l’eco')
 })
 
-test('otto righe in tutto: quando il modello riempie tutto, le notizie saltano', async () => {
+test('otto righe in tutto: quando il modello riempie tutto, si toglie dal fondo di GitHub', async () => {
   pulisci()
   progetti.scrivi({ nome: 'H-Farm', obiettivo: 'Chiudere l’audit' })
   progetti.scrivi({ nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea' })
@@ -457,19 +476,6 @@ test('otto righe in tutto: quando il modello riempie tutto, le notizie saltano',
     doc('posta:INBOX:21', 'Re: sede', { autore: 'Verdi <verdi@esempio.it>' }),
     doc('posta:INBOX:22', 'Re: listino', { autore: 'Bianchi <bianchi@esempio.it>' })
   ])
-  store.salvaNotizie([
-    {
-      id: 'n1', titolo: 'I modelli piccoli girano su un portatile', riassunto: 'Ci girano.',
-      perche: null, fonte: 'Prova', link: 'https://esempio.test/n1', argomento: 'lavoro',
-      quando: new Date().toISOString()
-    },
-    {
-      id: 'n2', titolo: 'Le agende condivise cambiano formato', riassunto: 'Cambiano.',
-      perche: null, fonte: 'Prova', link: 'https://esempio.test/n2', argomento: 'lavoro',
-      quando: new Date().toISOString()
-    }
-  ])
-
   fornitoreFinto({
     progetti: [
       { nome: 'H-Farm', novita: 'Quattro domande senza risposta.', doc: 'posta:INBOX:20' },
@@ -481,10 +487,6 @@ test('otto righe in tutto: quando il modello riempie tutto, le notizie saltano',
       { testo: 'La #13 aspetta revisione.', doc: 'github:myynd#13' },
       { testo: 'La #14 ha rotto il deploy.', doc: 'github:myynd#14' }
     ],
-    daLeggere: [
-      { titolo: 'I modelli piccoli girano su un portatile', perche: 'C’entra con Myynd.' },
-      { titolo: 'Le agende condivise cambiano formato', perche: 'Tocca il calendario.' }
-    ],
     risposte: [
       { testo: 'Anna vuole l’unità da misurare.', doc: 'posta:INBOX:20' },
       { testo: 'Verdi conferma il sopralluogo.', doc: 'posta:INBOX:21' },
@@ -494,11 +496,10 @@ test('otto righe in tutto: quando il modello riempie tutto, le notizie saltano',
   })
 
   const p = (await punto.punto({}, adesso())).punto!
-  const righe = p.progetti.length + p.github.length + p.daLeggere.length + p.risposte.length
+  const righe = p.progetti.length + p.github.length + p.risposte.length
   assert.equal(righe, 8, `il punto è lungo ${righe} righe`)
   assert.equal(p.progetti.length, 3)
-  assert.deepEqual(p.daLeggere, [], 'sopra le otto righe le notizie sono le prime a saltare')
-  assert.equal(p.github.length, 2, 'dopo le notizie si toglie dal fondo di GitHub')
+  assert.equal(p.github.length, 2, 'sopra le otto righe si toglie dal fondo di GitHub')
   assert.equal(p.risposte.length, 3, 'le risposte si toccano per ultime: qualcuno aspetta')
 })
 
@@ -692,7 +693,8 @@ test('l’istruzione dice le quattro sezioni, dove finiscono i compiti, e la lin
   const istr = istruzioneDi(ricevute[0])
   const lingua = cfg.nellaLingua()
   assert.match(istr, /Le quattro sezioni, e cosa ci va:/)
-  assert.match(istr, /«progetti»[\s\S]*«github»[\s\S]*«daLeggere»[\s\S]*«risposte»/)
+  assert.match(istr, /«progetti»[\s\S]*«github»[\s\S]*«risposte»/)
+  assert.doesNotMatch(istr, /daLeggere|notizie elencate/, 'le notizie stanno nella pastiglia, non nel punto')
   assert.match(istr, /finiranno nella sua lista, con dentro da\n  dove vengono; non sono righe del punto/)
   // le tre strade della provenienza: senza, le righe nate dal punto non aprono niente
   assert.match(istr, /Da dove viene una cosa da fare: è obbligatorio dirlo[\s\S]*Almeno uno dei tre va riempito/)
@@ -876,7 +878,6 @@ test('aggiornaAlPresente: via i progetti chiusi, e niente altro', () => {
       { id: '', nome: 'Cantina', novita: 'Svuotata a metà.', doc: null }
     ],
     github: [{ testo: 'La #12 è stata unita.', doc: 'github:myynd#12' }],
-    daLeggere: [{ titolo: 'Una notizia', perche: 'C’entra.', link: null }],
     risposte: [{ testo: 'Verdi conferma la sede.', doc: 'posta:INBOX:20' }]
   }
 
@@ -885,7 +886,6 @@ test('aggiornaAlPresente: via i progetti chiusi, e niente altro', () => {
   // il resto non si tocca, e l'originale nemmeno
   assert.equal(dopo.quando, prima.quando)
   assert.deepEqual(dopo.github, prima.github)
-  assert.deepEqual(dopo.daLeggere, prima.daLeggere)
   assert.deepEqual(dopo.risposte, prima.risposte)
   assert.equal(prima.progetti.length, 3, 'ha cambiato il punto che gli è stato dato')
 })
@@ -935,7 +935,7 @@ test('un foglio scritto dalla versione di prima non esplode: resta la data, le s
   assert.deepEqual(letto?.progetti, [], 'un progetto senza novità è stato mostrato lo stesso')
   assert.deepEqual(letto?.github, [])
   assert.deepEqual(letto?.risposte, [])
-  assert.equal(letto?.daLeggere.length, 1, 'la notizia aveva già la forma giusta')
+  assert.equal((letto as Record<string, unknown> | null)?.daLeggere, undefined, 'le notizie di un foglio vecchio non tornano nel punto')
 })
 
 test('«non è un progetto»: si chiude, ed esce dal punto mostrato', async () => {

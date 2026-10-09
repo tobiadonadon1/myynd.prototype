@@ -101,6 +101,7 @@ import { segnaViste, risposteFuori } from './feed-dati.ts'
 import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
 import * as misuraFeed from './misura-feed.ts'
 import * as resoconto from './resoconto.ts'
+import * as mattina from './mattina.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -3408,6 +3409,15 @@ app.post('/api/rassegna/:id/scarta', (req, res) => {
 
 app.get('/api/punto', async (_req, res) => {
   try { res.json(await punto.punto()) } catch (e) { errore(res, e) }
+})
+
+/**
+ * La ricevuta in cima alla prima pagina: cosa è stato fatto, cosa aspetta
+ * lui, e le bozze partite questa settimana (`mattina.ts`). `dal` è quando se
+ * n'è andato, se la finestra lo sa: lo sa solo lei.
+ */
+app.get('/api/mattina', (req, res) => {
+  try { res.json(mattina.mattina(typeof req.query.dal === 'string' ? req.query.dal : null)) } catch (e) { errore(res, e) }
 })
 
 app.post('/api/punto', async (req, res) => {

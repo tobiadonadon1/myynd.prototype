@@ -1,22 +1,22 @@
-// «Mentre dormivi» (F5): cosa ha fatto il turno di notte.
+// Le righe della ricevuta: cosa è stato fatto, cosa aspetta lui.
 //
-// Il turno (F2) lavora la coda di notte. La mattina le carte finite, ognuna
-// con la sua prova e la cosa consegnata, e quelle che aspettano lei, con la
-// domanda; su ognuna, aprirla o disfarla.
+// Stavano in tre posti. «Mentre dormivi» era una carta sua in cima alla prima
+// pagina, poi la prima sezione del foglio del punto («That should be on the
+// briefing. Nothing else.»); la fascia scura «Myynd ti ha scritto» stava
+// sopra tutto. Il 9 ottobre 2026 sono diventate una ricevuta sola, in cima,
+// con le stesse righe sulla carta (le prime tre) e nel foglio (tutte): il
+// server le compone (`server/mattina.ts`), qui si disegnano.
 //
-// Stava in una carta sua, in cima alla prima pagina, sopra il punto. Il giorno
-// stesso: «That should be on the briefing. Nothing else.» Adesso è la prima
-// sezione del foglio del punto (`Punto.tsx`), e sulla carta del punto c'è una
-// riga che dice quante sono. Qui restano le righe e il conto.
-//
-// Non si dice niente di notte (il turno sta ancora lavorando), né se la notte
-// non ha fatto niente: «stanotte niente» è rumore.
+// Una riga è un bersaglio solo: si clicca la riga, e si apre la carta, la
+// chat o la domanda. Nessun bottone per riga, tranne «Disfa» nel foglio, che
+// è un gesto diverso dall'aprire e resta scritto piccolo.
 
-import type { Compito, StatoTurno } from '../api'
+import type { AspettaMattina, Compito, FattaMattina, StatoTurno } from '../api'
 import { frasi, t } from '../lingua'
 import type { Lista } from '../oggi/useCompiti'
-import { carteDiStanotte, consegnata } from '../oggi/bacheca'
+import { carteDiStanotte } from '../oggi/bacheca'
 import { puoDisfare } from '../oggi/Dettaglio'
+import { doveSta } from '../mattina'
 import './stanotte.css'
 
 /**
@@ -33,7 +33,7 @@ export function laNotte(l: Lista | undefined): { fatte: Compito[]; attende: Comp
 }
 
 /** «HH:MM» di un istante ISO. */
-const ora = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+export const ora = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 
 /**
  * F9 · la riga della notte, solo con i pezzi che ci sono: «Last night: 5
@@ -54,49 +54,84 @@ export function rigaDellaNotte(s: StatoTurno | null | undefined, n: { fatte: Com
   return pezzi.join(' · ')
 }
 
-/** Le righe della notte: prima quelle che aspettano lei, poi quelle finite. */
-export function RigheDellaNotte({ l, notte, apri }: {
-  l: Lista; notte: { fatte: Compito[]; attende: Compito[] }; apri: (c: Compito) => void
+/** La carta dietro una riga, se è ancora in lista: senza, la riga si legge e basta. */
+export const cartaDi = (l: Lista | undefined, id: string): Compito | null =>
+  l ? (l.compiti.find(c => c.id === id) ?? l.chiusi.find(c => c.id === id) ?? null) : null
+
+/** Dove sta una cosa fatta, detto in parole: «Saved on your Desktop: Course outline.md», «Draft in your mailbox». */
+export function detto(f: FattaMattina): string {
+  const d = doveSta(f)
+  if (!d) return ''
+  return d.genere === 'casella' ? t('Bozza nella tua casella') : `${frasi.salvatoDove(d.luogo)} ${d.nome}`
+}
+
+/** Il perché sotto una cosa che aspetta lui: la domanda, il blocco, o niente. */
+function perche(a: AspettaMattina): string {
+  if (a.genere === 'carta') return a.perche ? t(a.perche) : a.motivo === 'approva' ? t('Da approvare') : ''
+  if (a.genere === 'lettera') return t('Ha qualche domanda per conoscerti: due minuti.')
+  // la domanda di Myynd e quella su un progetto sono già la riga
+  return ''
+}
+
+/** Le cose fatte. `disfa`: il foglio offre di disfarle, la carta no. */
+export function RigheFatte({ xs, l, apri, disfa = false, inCarta = false }: {
+  xs: readonly FattaMattina[]; l?: Lista; apri: (c: Compito) => void; disfa?: boolean; inCarta?: boolean
 }) {
   return (
-    <>
-    {/* F9 · in testa, la riga della notte: quante, quanto è costata, cosa l'ha fermata */}
-    <p className="stanotte-conto">{rigaDellaNotte(l.turno, notte)}</p>
-    <ul className="stanotte-righe">
-      {notte.attende.map(c => <Riga key={c.id} c={c} l={l} apri={apri} aspetta />)}
-      {notte.fatte.map(c => <Riga key={c.id} c={c} l={l} apri={apri} />)}
+    <ul className={inCarta ? 'stanotte-righe in-carta' : 'stanotte-righe'}>
+      {xs.map(f => {
+        const c = cartaDi(l, f.id)
+        const sotto = detto(f)
+        const dentro = (
+          <>
+            <span className="stanotte-segno" aria-hidden="true">✓</span>
+            <span className="stanotte-testo">
+              <span className="stanotte-titolo">{f.titolo}</span>
+              {sotto && <span className="stanotte-cosa">{sotto}</span>}
+            </span>
+          </>
+        )
+        return (
+          <li key={f.id} className="fatta">
+            {c ? <button type="button" className="ricevuta-apri" onClick={() => apri(c)}>{dentro}</button> : <span className="ricevuta-apri">{dentro}</span>}
+            {/* F9 · una carta chiusa si disfa per sette giorni, anche da qui */}
+            {disfa && c && l && puoDisfare(c) && (
+              <span className="stanotte-gesti">
+                <button type="button" onClick={() => void l.disfa(c.id)}>{t('Disfa')}</button>
+              </span>
+            )}
+          </li>
+        )
+      })}
     </ul>
-    </>
   )
 }
 
-function Riga({ c, l, apri, aspetta = false }: { c: Compito; l: Lista; apri: (c: Compito) => void; aspetta?: boolean }) {
-  const chiusa = c.stato === 'fatto'
-  const cosa = consegnata(c)
-  const detto = aspetta
-    ? (c.chieste?.[0]?.domanda ?? (c.stato === 'chiede' ? c.risultato?.split('\n').find(r => r.trim().endsWith('?')) : null) ?? (c.guaio ? t(c.guaio) : c.prova?.perche) ?? '')
-    : c.prova?.esito === 'pass' ? c.prova.perche : ''
+/** Quello che aspetta lui: la carta si apre, la lettera apre la chat, le domande si mostrano dove si risponde. */
+export function RigheAspettano({ xs, l, apri, apriChat, apriDomande, inCarta = false }: {
+  xs: readonly AspettaMattina[]; l?: Lista; apri: (c: Compito) => void; apriChat: () => void; apriDomande: () => void; inCarta?: boolean
+}) {
   return (
-    <li className={aspetta ? 'aspetta' : chiusa ? 'chiusa' : 'fatta'}>
-      <span className="stanotte-segno" aria-hidden="true">{aspetta ? '?' : '✓'}</span>
-      <div className="stanotte-testo">
-        <span className="stanotte-titolo">{c.testo}</span>
-        {detto && <span className="stanotte-detto">{detto}</span>}
-        {!aspetta && cosa.tipo === 'file' && cosa.nome && <span className="stanotte-cosa">{cosa.nome}</span>}
-        {!aspetta && cosa.tipo === 'casella' && <span className="stanotte-cosa">{t('Bozza nella tua casella')}</span>}
-      </div>
-      {/* F9 · una carta chiusa si disfa per sette giorni, anche da qui */}
-      {chiusa && puoDisfare(c) && (
-        <span className="stanotte-gesti">
-          <button type="button" onClick={() => void l.disfa(c.id)}>{t('Disfa')}</button>
-        </span>
-      )}
-      {!chiusa && (c.stato === 'pronto' || c.stato === 'chiede') && (
-        <span className="stanotte-gesti">
-          <button type="button" className="pieno" onClick={() => apri(c)}>{aspetta ? t('Rispondi') : t('Apri')}</button>
-          <button type="button" onClick={() => void l.disfa(c.id)}>{t('Disfa')}</button>
-        </span>
-      )}
-    </li>
+    <ul className={inCarta ? 'stanotte-righe in-carta' : 'stanotte-righe'}>
+      {xs.map(a => {
+        const c = a.genere === 'carta' ? cartaDi(l, a.id) : null
+        const vai = a.genere === 'carta' ? (c ? () => apri(c) : null) : a.genere === 'lettera' ? apriChat : apriDomande
+        const sotto = perche(a)
+        const dentro = (
+          <>
+            <span className="stanotte-segno" aria-hidden="true">?</span>
+            <span className="stanotte-testo">
+              <span className="stanotte-titolo">{a.titolo}</span>
+              {sotto && <span className="stanotte-detto">{sotto}</span>}
+            </span>
+          </>
+        )
+        return (
+          <li key={`${a.genere}:${a.id}`} className="aspetta">
+            {vai ? <button type="button" className="ricevuta-apri" onClick={vai}>{dentro}</button> : <span className="ricevuta-apri">{dentro}</span>}
+          </li>
+        )
+      })}
+    </ul>
   )
 }

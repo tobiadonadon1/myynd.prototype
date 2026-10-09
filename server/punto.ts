@@ -10,9 +10,13 @@
 // dall'altro, mai se non è successo niente.
 //
 // Le domande a cui risponde sono quattro, e le ha scelte lui: i progetti si
-// sono mossi; su GitHub è successo qualcosa; c'è una notizia che vale la pena
-// leggere; qualcuno ha risposto per email. Quattro sezioni, otto righe in
-// tutto, e niente altro.
+// sono mossi; su GitHub è successo qualcosa; qualcuno ha risposto per email;
+// un pacco, un ordine, un rinnovo. Otto righe in tutto, e niente altro.
+//
+// Le notizie non ci stanno più (9 ottobre 2026). Erano due righe «da leggere»
+// dentro il foglio, e le stesse notizie stavano nella pastiglia «News» in
+// testa alla pagina: la stessa cosa in due posti. Restano nella pastiglia;
+// il foglio è quello che è stato fatto, quello che aspetta lui, e i progetti.
 //
 // Quello che NON è il punto sono le cose da fare. Il modello continua a
 // notarle nel materiale — una mail che chiede un preventivo, un modulo da
@@ -38,7 +42,6 @@ import { classificaAttenzione, validaVoceFeed } from './rilevanza.ts'
 import * as store from './store.ts'
 import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
-import { affinita, gusto } from './gusto.ts'
 import * as automazioni from './automazioni.ts'
 import { giornoIn, parti } from './fuso.ts'
 import * as progetti from './progetti.ts'
@@ -91,7 +94,6 @@ export type Punto = {
   progetti: Progetto[]
   /** Cosa è successo sui repository. Vuoto quando GitHub non è collegato. */
   github: Riga[]
-  daLeggere: { titolo: string; perche: string; link: string | null }[]
   /** Chi ha risposto per email: chi ha scritto, e cosa vuole. */
   risposte: Riga[]
   /** Routine receipts, deliveries and renewals belong here, never in the task feed. */
@@ -176,7 +178,6 @@ function riallinea(p: Punto): Punto {
       .filter(x => !!x && typeof x.novita === 'string' && !!x.id)
       .map(x => ({ id: x.id as string, nome: x.nome ?? '', novita: x.novita as string, doc: x.doc ?? null })),
     github: righe(p.github),
-    daLeggere: Array.isArray(p.daLeggere) ? p.daLeggere : [],
     risposte: righe(p.risposte),
     aggiornamenti: righe(p.aggiornamenti)
   }
@@ -364,7 +365,6 @@ export type Materiale = {
   /** Il lavoro che Myynd ha consegnato da allora: le righe diventate pronte, o che chiedono. */
   preparate: store.Compito[]
   feed: { id: string; titolo: string; doc: string | null; quando: string }[]
-  notizie: store.Notizia[]
   fuoco: string
   carta: string
   convinzioni: store.Convinzione[]
@@ -456,15 +456,6 @@ export function raccogli(dal: string, primo = false, adesso = Date.now()): Mater
   const oggi = `${data.anno}-${String(data.mese).padStart(2, '0')}-${String(data.giorno).padStart(2, '0')}`
   const chiuse = store.compitiChiusi(40).filter(c => daAllora(c.chiuso, dal))
 
-  // le notizie di oggi che non ha ancora aperto, dalla più vicina al suo gusto
-  const g = gusto()
-  const notizie = store.notizie(1)
-    .filter(n => !n.letta)
-    .map(n => ({ n, punti: affinita(g, n.titolo, n.fonte) }))
-    .sort((a, b) => b.punti - a.punti || b.n.presa.localeCompare(a.n.presa))
-    .slice(0, 3)
-    .map(x => x.n)
-
   // quello che è arrivato davvero: niente scarti, niente rumore dal disco, e
   // dal disco al massimo cinque, i più recenti (`appenaArrivati` li dà già in
   // ordine). Quelli che restano fuori non sono «notizie non elencate»: non
@@ -504,7 +495,6 @@ export function raccogli(dal: string, primo = false, adesso = Date.now()): Mater
     chiuse,
     preparate: vive.filter(c => (c.stato === 'pronto' || c.stato === 'chiede') && daAllora(c.aggiornato, dal)),
     feed: store.elencoFeed('aperto').slice(0, 12).map(v => ({ id: v.id, titolo: v.titolo, doc: v.doc ?? null, quando: v.quando })),
-    notizie,
     fuoco: fuoco(),
     carta: carta(),
     convinzioni: store.convinzioni('persona').filter(attendibile).slice(0, 8),
@@ -578,19 +568,6 @@ const schema = (
         description: 'Al massimo tre, e solo dai documenti di GitHub elencati. Senza quelli, vuoto.',
         items: riga(github, 'L’id del documento di GitHub di cui parla la riga. Obbligatorio.')
       },
-      daLeggere: {
-        type: 'array',
-        description: 'Al massimo due, solo fra le notizie elencate, solo se c’entrano con il suo lavoro. Vuoto va benissimo.',
-        items: {
-          type: 'object',
-          properties: {
-            titolo: { type: 'string', description: 'Il titolo della notizia, copiato alla lettera.' },
-            perche: { type: 'string', description: `Perché conta per quello su cui lavora. ${PIANA}` }
-          },
-          required: ['titolo', 'perche'],
-          additionalProperties: false
-        }
-      },
       risposte: {
         type: 'array',
         description: 'Al massimo tre, e solo fra le email elencate come risposte. Vuoto va benissimo.',
@@ -628,7 +605,7 @@ const schema = (
         }
       }
     },
-    required: ['progetti', 'github', 'daLeggere', 'risposte', 'aggiornamenti', 'compiti'],
+    required: ['progetti', 'github', 'risposte', 'aggiornamenti', 'compiti'],
     additionalProperties: false
   }
 }
@@ -722,8 +699,6 @@ Le quattro sezioni, e cosa ci va:
   dice il repository e cosa è successo: unita, aperta, fallita, spinta. L'id
   del documento va sempre in «doc». Senza documenti di GitHub la sezione resta
   vuota.
-— «daLeggere»: al massimo due, solo fra le notizie elencate e solo se
-  c'entrano con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
 — «risposte»: al massimo tre, solo fra le email elencate come risposte. Ogni
   riga dice chi ha scritto e cosa vuole, nella lingua dell'app. L'id della mail
   va sempre in «doc», così si apre con un dito.
@@ -822,10 +797,6 @@ export function materiale(m: Materiale, via: number | null | undefined, adesso: 
       (!m.attendono.length && !m.perOggi.length && !m.chiuse.length ? ' vuota.' : ''),
     m.feed.length
       ? 'SUL FEED, ANCORA APERTE:\n' + m.feed.map(v => `— ${v.titolo}${daAllora(v.quando, m.dal) ? ' (nuova)' : ''}`).join('\n')
-      : '',
-    m.notizie.length
-      ? 'LA RASSEGNA DI OGGI (le più vicine al suo gusto):\n' +
-        m.notizie.map(n => `— ${n.titolo} · ${n.fonte}${n.perche ? `\n  ${n.perche}` : ''}`).join('\n')
       : ''
   ].filter(Boolean).join('\n\n')
 }
@@ -835,7 +806,6 @@ export function materiale(m: Materiale, via: number | null | undefined, adesso: 
 type Grezzo = {
   progetti?: { nome?: string; novita?: string; doc?: string }[]
   github?: Partial<Riga>[]
-  daLeggere?: { titolo?: string; perche?: string }[]
   risposte?: Partial<Riga>[]
   aggiornamenti?: Partial<Riga>[]
   /** Le cose da fare che ha visto: non sono righe del punto, sono righe della lista. */
@@ -852,7 +822,7 @@ function leggiGrezzo(testo: string): Grezzo {
       !!r && typeof r === 'object' && !Array.isArray(r) && Object.values(r).every(v => typeof v === 'string'))
     : []
   return { progetti: righe('progetti'), github: righe('github'), risposte: righe('risposte'),
-    daLeggere: righe('daLeggere'), aggiornamenti: righe('aggiornamenti'), compiti: righe('compiti') }
+    aggiornamenti: righe('aggiornamenti'), compiti: righe('compiti') }
 }
 
 /** Una riga corta resta corta anche se il modello non ha ascoltato. */
@@ -996,15 +966,13 @@ export type Notata = {
 /**
  * Tutto quello che in un punto l'ha scritto il modello, in una stringa sola.
  *
- * I titoli delle notizie no: quelli arrivano dalla rassegna e sono già nella
- * lingua del giornale che li ha pubblicati. Qui c'è solo quello che il modello
- * ha *composto*, che è l'unica cosa che può nascere nella lingua sbagliata.
+ * Qui c'è solo quello che il modello ha *composto*, che è l'unica cosa che
+ * può nascere nella lingua sbagliata.
  */
 export function scrittoDalModello(g: Grezzo): string {
   return [
     ...(g.progetti ?? []).map(p => p.novita ?? ''),
     ...(g.github ?? []).map(x => x.testo ?? ''),
-    ...(g.daLeggere ?? []).map(n => n.perche ?? ''),
     ...(g.risposte ?? []).map(x => x.testo ?? ''),
     ...(g.aggiornamenti ?? []).map(x => x.testo ?? ''),
     ...(g.compiti ?? []).map(x => `${x.testo ?? ''} ${x.nota ?? ''}`)
@@ -1128,20 +1096,6 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
 
   const github = righe(g.github, 3, idGithub, true, nuova)
 
-  const daLeggere: Punto['daLeggere'] = []
-  for (const n of g.daLeggere ?? []) {
-    if (daLeggere.length >= 2) break
-    const titolo = (n.titolo ?? '').trim()
-    if (!titolo) continue
-    const vera = m.notizie.find(x => chiave(x.titolo) === chiave(titolo))
-      ?? m.notizie.find(x => chiave(x.titolo).includes(chiave(titolo)) || chiave(titolo).includes(chiave(x.titolo)))
-    // una notizia che non sta nella rassegna è inventata: non passa
-    if (!vera) continue
-    if (daLeggere.some(x => chiave(x.titolo) === chiave(vera.titolo))) continue
-    if (!nuova(senzaTrattini(vera.titolo))) continue
-    daLeggere.push({ titolo: senzaTrattini(vera.titolo), perche: inLingua(n.perche ?? ''), link: vera.link ?? null })
-  }
-
   const risposte = righe(g.risposte, 3, idRisposte, true, nuova)
   const aggiornamenti: Riga[] = []
   // Service subjects already say what happened. The live model both omitted
@@ -1193,14 +1147,13 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
    *
    * I tetti di sezione sommati fanno undici, ed è più di quello che si legge in
    * dieci secondi. Quando si sfora si toglie per ordine di importanza, che non
-   * è l'ordine in cui si legge: prima le notizie — il mondo torna domani — poi
-   * l'ultima riga di GitHub, poi l'ultimo progetto. Le risposte si toccano per
+   * è l'ordine in cui si legge: prima gli aggiornamenti pratici, poi l'ultima
+   * riga di GitHub, poi l'ultimo progetto. Le risposte si toccano per
    * ultime: qualcuno sta aspettando.
    */
-  const quante = () => fatti.length + github.length + daLeggere.length + risposte.length + aggiornamenti.length
+  const quante = () => fatti.length + github.length + risposte.length + aggiornamenti.length
   while (quante() > RIGHE_MAX) {
     if (aggiornamenti.length) aggiornamenti.pop()
-    else if (daLeggere.length) daLeggere.pop()
     else if (github.length > 1) github.pop()
     else if (fatti.length > 1) fatti.pop()
     else if (risposte.length > 1) risposte.pop()
@@ -1215,7 +1168,6 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
       via: via && via > 0 ? Math.round(via) : null,
       progetti: fatti,
       github,
-      daLeggere,
       risposte,
       aggiornamenti
     },

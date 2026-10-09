@@ -1596,6 +1596,8 @@ export const api = {
   // da sé se chiamare il modello. `via` sono i minuti di assenza, se la
   // pagina li sa: il saluto li dice con le sue parole.
   punto: () => json<EsitoPunto>('/api/punto'),
+  /** La ricevuta della prima pagina; `dal` è quando se n'è andato, se la finestra lo sa. */
+  mattina: (dal: string | null) => json<Mattina>(`/api/mattina${dal ? `?dal=${encodeURIComponent(dal)}` : ''}`),
   rifaiPunto: (forza = false, via: number | null = null) =>
     json<EsitoPunto>('/api/punto', { method: 'POST', body: JSON.stringify({ forza, via }) }),
   tieniAngolo: (nome: string, angolo: string) =>
@@ -2052,8 +2054,9 @@ export type Messaggio = { id: string; role: string; text: string; sources?: { id
 /**
  * Il punto: quello che Myynd dice quando torni.
  *
- * I progetti che si sono mossi, cosa è successo su GitHub, una notizia o due,
- * chi ha risposto per email e gli aggiornamenti pratici. Una riga porta l'id
+ * I progetti che si sono mossi, cosa è successo su GitHub, chi ha risposto
+ * per email e gli aggiornamenti pratici. Le notizie no: stanno nella
+ * pastiglia «News» in testa alla pagina. Una riga porta l'id
  * del documento da cui viene, e cliccarla apre quello — la mail, la pagina,
  * il file. Le cose da fare non stanno qui: quelle il server le mette nella
  * lista, e si aprono dal feed.
@@ -2067,10 +2070,34 @@ export type Punto = {
   via: number | null
   progetti: ProgettoPunto[]
   github: RigaPunto[]
-  daLeggere: { titolo: string; perche: string; link: string | null }[]
   risposte: RigaPunto[]
   /** Deliveries, orders and subscriptions belong in the Brief, without tasks. */
   aggiornamenti?: RigaPunto[]
+}
+/**
+ * La ricevuta in cima alla prima pagina (`server/mattina.ts`): cosa è stato
+ * fatto da allora, cosa aspetta lui (al massimo cinque), e le bozze partite
+ * questa settimana. `mattina` dice il titolo: dopo la notte, o da quando se
+ * n'è andato.
+ */
+export type DoveFatta =
+  | { genere: 'file'; nome: string; percorso: string | null; luogo: string | null }
+  | { genere: 'casella' }
+  | { genere: 'carta' }
+export type FattaMattina = { id: string; titolo: string; dove: DoveFatta; quando: string; notte: boolean }
+export type AspettaMattina =
+  | { genere: 'carta'; id: string; titolo: string; perche: string; motivo: 'domanda' | 'blocco' | 'approva' }
+  | { genere: 'domanda'; id: string; titolo: string }
+  | { genere: 'iniziativa'; id: string; titolo: string; progetto: string }
+  /** Solo dalla pagina: le domande per conoscerlo aspettano in chat. */
+  | { genere: 'lettera'; id: 'lettera'; titolo: string }
+export type Mattina = {
+  mattina: boolean
+  dal: string
+  done: FattaMattina[]
+  needsYou: AspettaMattina[]
+  week: { mandate: number; comeEra: number; ritoccate: number }
+  prossima: { genere: 'notte'; quando: string; carte: number } | { genere: 'coda'; carte: number } | null
 }
 /**
  * `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito.

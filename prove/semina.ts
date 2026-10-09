@@ -26,7 +26,7 @@
 //     "domande":   [{ "tema": "riferimento", "testo": "…", "progetto": "ev" }],
 //     "riferimento": "Evermute: shipping 1.0 this week.",
 //     "punto":     { "progetti": [{ "progetto": "ev", "novita": "…", "doc": "posta:INBOX:1" }],
-//                    "risposte": [{ "testo": "…", "doc": "…" }], "github": [], "daLeggere": [], "aggiornamenti": [] } }
+//                    "risposte": [{ "testo": "…", "doc": "…" }], "github": [], "aggiornamenti": [] } }
 //
 // Senza «punto» il punto di oggi lo chiede il server al modello finto, che col
 // copione di base torna vuoto: la prima pagina direbbe «0 cose» sopra una
@@ -52,7 +52,6 @@ type Scena = {
   punto?: {
     progetti?: { progetto: string; novita: string; doc?: string }[]
     github?: { testo: string; doc?: string }[]
-    daLeggere?: { titolo: string; perche: string; link?: string }[]
     risposte?: { testo: string; doc?: string }[]
     aggiornamenti?: { testo: string; doc?: string }[]
   }
@@ -236,17 +235,19 @@ chi.dentro(conto.id, () => {
 
   // — F9: inizio —
   // Il turno di una scena: il budget, e una notte messa attorno all'ora della
-  // prova («dentro»: cominciata un'ora fa; «fuori»: finita un'ora fa), così la
+  // prova («dentro»: cominciata un'ora fa; «fuori»: finita un'ora fa; «giorno»:
+  // finita dieci ore fa, il pomeriggio della ricevuta), così la
   // scena non dipende da quando gira. Poi le spese delle carte nel registro
   // dell'uso, il diario con i tempi relativi resi veri, e quello che il conto
   // del turno ricorda dell'ultima notte (la fermata, i buchi).
-  const f9 = scena as { turno?: { budget?: number; notte?: 'dentro' | 'fuori' }; uso?: { compito: string; quando?: string; dollari: number; motore?: string }[]; turnoNotte?: { fermata?: 'budget' | 'stop'; buchi?: { da: string; a: string }[] } }
+  const f9 = scena as { turno?: { budget?: number; notte?: 'dentro' | 'fuori' | 'giorno' }; uso?: { compito: string; quando?: string; dollari: number; motore?: string }[]; turnoNotte?: { fermata?: 'budget' | 'stop'; buchi?: { da: string; a: string }[] } }
   const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   let finestra = regoleTurno.NOTTE_DI_SERIE
   if (f9.turno) {
     const adesso = Date.now()
     if (f9.turno.notte === 'dentro') finestra = { da: hhmm(new Date(adesso - 3_600_000)), a: hhmm(new Date(adesso + 6 * 3_600_000)) }
     if (f9.turno.notte === 'fuori') finestra = { da: hhmm(new Date(adesso - 8 * 3_600_000)), a: hhmm(new Date(adesso - 3_600_000)) }
+    if (f9.turno.notte === 'giorno') finestra = { da: hhmm(new Date(adesso - 16 * 3_600_000)), a: hhmm(new Date(adesso - 10 * 3_600_000)) }
     cfg.aggiorna({ turno: { ...(f9.turno.budget !== undefined ? { budget: f9.turno.budget } : {}), ...(f9.turno.notte ? { notteDa: finestra.da, notteA: finestra.a } : {}) } })
   }
   for (const u of f9.uso ?? []) {
@@ -259,6 +260,13 @@ chi.dentro(conto.id, () => {
     store.default.prepare('UPDATE compiti SET diario = ? WHERE id = ?').run(JSON.stringify(diario), c.id)
   }
   // — F9: fine —
+
+  // La ricevuta: le bozze partite questa settimana, come le scrivono «Manda»
+  // e l'osservatore degli invii nelle misure (`via`, `inviato`, `classe`).
+  for (const i of (scena as { invii?: { compito: string; via: string; classe: string; inviato?: string }[] }).invii ?? []) {
+    store.default.prepare('INSERT OR REPLACE INTO misure_compiti (compito, affidato, via, inviato, classe) VALUES (?,?,?,?,?)')
+      .run(i.compito, tempo('-2d'), i.via, tempo(i.inviato ?? '-1h'), i.classe)
+  }
 
   // F2 · quante carte il turno ha già fatto partire oggi (F9: e quello che ricorda dell'ultima notte)
   if (typeof (scena as { turnoAvviate?: unknown }).turnoAvviate === 'number' || f9.turnoNotte) {
@@ -299,7 +307,6 @@ chi.dentro(conto.id, () => {
         return { id, nome, novita: x.novita, doc: x.doc ?? null }
       }),
       github: (p.github ?? []).map(riga),
-      daLeggere: (p.daLeggere ?? []).map(n => ({ titolo: n.titolo, perche: n.perche, link: n.link ?? null })),
       risposte: (p.risposte ?? []).map(riga),
       aggiornamenti: (p.aggiornamenti ?? []).map(riga)
     }

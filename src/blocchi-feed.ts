@@ -310,6 +310,30 @@ export function cheAspettano(o: { domanda: unknown; iniziative: number; lettera:
 }
 
 /**
+ * Il conto del titolo e del menù, con la ricevuta in cima.
+ *
+ * La ricevuta ripete in alto quello che aspetta lui: la carta che chiede sta
+ * anche nel suo blocco, la domanda di Myynd anche nella sua carta. Sommare i
+ * due conti diceva due volte la stessa cosa; ignorare la ricevuta lasciava
+ * fuori una carta che si vede solo lì (oltre il tetto dei blocchi). Qui si
+ * conta per nome: ogni cosa che si vede da qualche parte della pagina, una
+ * volta sola. Il titolo e il menù passano di qui tutti e due.
+ */
+export function contaInPagina(
+  blocchi: readonly { righe: readonly RigaBlocco<{ id: string }, { id: string }>[] }[],
+  aspettano: { domanda: { id: string } | null | undefined; iniziative: readonly { id: string }[]; lettera: boolean },
+  ricevuta: readonly { genere: string; id: string }[] = []
+): number {
+  const viste = new Set<string>()
+  for (const b of blocchi) for (const r of b.righe) viste.add(r.genere === 'voce' ? `voce:${r.voce.id}` : `compito:${r.compito.id}`)
+  if (aspettano.domanda) viste.add(`domanda:${aspettano.domanda.id}`)
+  for (const i of aspettano.iniziative) viste.add(`iniziativa:${i.id}`)
+  if (aspettano.lettera) viste.add('lettera')
+  for (const a of ricevuta) viste.add(a.genere === 'carta' ? `compito:${a.id}` : a.genere === 'lettera' ? 'lettera' : `${a.genere}:${a.id}`)
+  return viste.size
+}
+
+/**
  * Il nome con cui un blocco si riconosce nell'ordine salvato.
  *
  * L'id del progetto, e «resto» per il blocco di quello che non sta in nessun

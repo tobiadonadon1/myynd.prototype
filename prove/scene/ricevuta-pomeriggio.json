@@ -1,0 +1,19 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" },
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Run a two-week AI pilot with the Harbor finance team" }
+  ],
+  "turno": { "budget": 3, "notte": "giorno" },
+  "feed": [
+    { "id": "f1", "tipo": "Priorità", "titolo": "Fix the three Northwind account issues and upload the build", "testo": "Your partner is waiting on it to add the videos and submit.", "fonte": "posta", "progetto": "nw", "quando": "-3h", "peso": 2, "perche": "Unblocks the App Store submission" }
+  ],
+  "compiti": [
+    { "id": "c1", "testo": "Call the accountant about the VAT return", "quando": "oggi" },
+    { "id": "c3", "testo": "Upload build 1.0.4 to TestFlight", "quando": "oggi", "progetto": "nw" },
+    { "id": "c2", "testo": "Summarise the Harbor pilot feedback", "quando": "poi", "progetto": "hb", "modo": "tutto",
+      "turno": { "da": "tu", "quando": "notte", "dal": "-2h", "tentativi": 0 } }
+  ]
+}

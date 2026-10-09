@@ -19,7 +19,9 @@ import { Foglio, Oggi } from './oggi/Oggi'
 import { ListaDiLato } from './oggi/Calendario'
 import { Dettaglio } from './oggi/Dettaglio'
 import { useCompiti } from './oggi/useCompiti'
-import { blocchiFeed, blocchiInPagina, cheAspettano, sulTavolo } from './blocchi-feed'
+import { blocchiFeed, blocchiInPagina, contaInPagina } from './blocchi-feed'
+import { useMattina } from './useMattina'
+import { conLettera } from './mattina'
 import { Preferenze } from './screens/Preferenze'
 import { Memoria } from './screens/Memoria'
 import { PaginaProgetto } from './screens/PaginaProgetto'
@@ -363,9 +365,19 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
    * I 64 sono le due imbottiture della colonna centrale, i 36 lo spazio fra.
    */
   const conLista = larghezza - colonna - 64 >= 760 + 36 + 340
+  /*
+   * La ricevuta in cima alla prima pagina: cosa è stato fatto, cosa aspetta
+   * lui. Sta qui e non nella pagina perché il numero nel menù la conta, e
+   * deve contarla com'è in pagina. Si richiede quando cambiano le carte o le
+   * domande di Myynd; la lettera (le domande per conoscerlo) la aggiunge la
+   * pagina, che è l'unica a saperla.
+   */
+  const firmaMattina = `${lista.compiti.map(c => `${c.id}:${c.stato}:${c.versione}`).join('|')}#${v.domanda?.id ?? ''}#${v.iniziative.map(i => i.id).join('|')}`
+  const mattina = useMattina(firmaMattina)
+  const ricevuta = conLettera(mattina?.needsYou ?? [], v.chatDaLeggere ? t('Myynd ti ha scritto.') : null)
   // il menù conta quello che la pagina mostra: con la lista a destra le righe sue stanno là,
-  // non nel feed; più le domande nella loro carta. Lo stesso conto del titolo
-  const sulTavoloAdesso = sulTavolo(blocchiInPagina(blocchi, conLista, v.progettiNuovi ?? []), cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
+  // non nel feed; più le domande nella loro carta e la ricevuta, ognuna una volta. Lo stesso conto del titolo
+  const sulTavoloAdesso = contaInPagina(blocchiInPagina(blocchi, conLista, v.progettiNuovi ?? []), { domanda: v.domanda, iniziative: v.iniziative, lettera: v.chatDaLeggere }, ricevuta)
   /*
    * Dove comincia la lista: all'altezza della prima carta del feed, non in
    * cima alla pagina. «I told you already it has to start from where the
@@ -648,11 +660,11 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             '--lato-sopra': `${(rail ? 16 : 22) + striscia}px`, '--lato-sotto': `${rail ? 24 : 30}px`,
             '--lato-scarto': `${scartoLato}px`
           } as CSSProperties}>
-            <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato apriLavoro={apriLavoroCasa} />
+            <Myynd v={v} lista={lista} blocchi={blocchi} listaDiLato apriLavoro={apriLavoroCasa} mattina={mattina} ricevuta={ricevuta} />
             <ListaDiLato l={lista} lingua={stato.config.lingua ?? 'en'} giorni={v.giorniLato} vaiALista={() => v.goOggi()}
               apri={apriLavoroCasa} modifica={c => setDettaglioCasa(c.id)} />
           </div>
-        ) : <Myynd v={v} lista={lista} blocchi={blocchi} apriLavoro={apriLavoroCasa} />)}
+        ) : <Myynd v={v} lista={lista} blocchi={blocchi} apriLavoro={apriLavoroCasa} mattina={mattina} ricevuta={ricevuta} />)}
         {v.isMyynd && foglioCasa && (() => {
           const c = lista.compiti.find(x => x.id === foglioCasa)
           if (!c) return null

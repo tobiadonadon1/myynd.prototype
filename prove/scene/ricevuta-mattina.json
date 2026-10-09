@@ -1,0 +1,56 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" },
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Run a two-week AI pilot with the Harbor finance team" },
+    { "chiave": "ls", "nome": "Lumen Studio", "obiettivo": "Sell the first course on lumenstudio.example" }
+  ],
+  "turno": { "budget": 3, "notte": "fuori" },
+  "documenti": [
+    { "id": "posta:INBOX:202", "fonte": "posta", "tipo": "email", "titolo": "Pilot scope for the finance team", "corpo": "Hi Alex, can we agree the pilot scope by Thursday? Two engineers, supplier invoices first. Best, Nora", "autore": "Nora Vance <nora@harbor.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-12h", "messageId": "nv202@harbor.example" }
+  ],
+  "feed": [
+    { "id": "f1", "tipo": "Priorità", "titolo": "Fix the three Northwind account issues and upload the build", "testo": "Your partner is waiting on it to add the videos and submit.", "fonte": "posta", "progetto": "nw", "quando": "-3h", "peso": 2, "perche": "Unblocks the App Store submission" }
+  ],
+  "compiti": [
+    { "id": "n1", "testo": "Write the first course outline", "quando": "oggi", "progetto": "ls", "stato": "fatto", "modo": "tutto",
+      "risultato": "Done: I saved Course outline.md to your Desktop.",
+      "consegna": { "app": "File", "titolo": "Course outline.md", "percorso": "/tmp/myynd-scena-finta/Desktop/Course outline.md", "dove": "scrivania" },
+      "prova": { "esito": "pass", "perche": "Five modules, each with a goal and one exercise.", "controlli": [], "quando": "-3h" },
+      "turno": { "da": "tu", "quando": "notte", "dal": "-9h", "tentativi": 1, "ultimo": "-7h", "notte": true }, "chiuso": "-2h" },
+    { "id": "n2", "testo": "Reply to Nora about the pilot scope", "quando": "oggi", "progetto": "hb", "stato": "pronto", "modo": "tutto",
+      "doc": "posta:INBOX:202",
+      "risultato": "Hi Nora, Thursday works. Two engineers, supplier invoices first. Alex",
+      "email": { "a": "nora@harbor.example", "oggetto": "Re: Pilot scope for the finance team", "corpo": "Hi Nora, Thursday works. Two engineers, supplier invoices first. Alex", "casella": { "stato": "salvata" } },
+      "prova": { "esito": "pass", "perche": "The reply confirms Thursday and the two engineers.", "controlli": [], "quando": "-4h" },
+      "turno": { "da": "tu", "quando": "notte", "dal": "-9h", "tentativi": 1, "ultimo": "-6h", "notte": true } },
+    { "id": "n6", "testo": "Put together the Northwind 1.0.4 release checklist", "quando": "oggi", "progetto": "nw", "stato": "pronto", "modo": "tutto",
+      "risultato": "Done: I saved Northwind 1.0.4 checklist.md in your Documents.",
+      "consegna": { "app": "File", "titolo": "Northwind 1.0.4 checklist.md", "percorso": "/tmp/myynd-scena-finta/Documents/Northwind 1.0.4 checklist.md", "dove": "documenti" },
+      "prova": { "esito": "pass", "perche": "Twelve steps, from the build number to the review video.", "controlli": [], "quando": "-4h" },
+      "turno": { "da": "myynd", "quando": "notte", "dal": "-9h", "tentativi": 1, "ultimo": "-5.5h", "notte": true } },
+    { "id": "n7", "testo": "Draft the Harbor kickoff agenda", "quando": "oggi", "progetto": "hb", "stato": "pronto", "modo": "tutto",
+      "risultato": "Done: I saved Harbor kickoff agenda.md to your Desktop.",
+      "consegna": { "app": "File", "titolo": "Harbor kickoff agenda.md", "percorso": "/tmp/myynd-scena-finta/Desktop/Harbor kickoff agenda.md", "dove": "scrivania" },
+      "prova": { "esito": "pass", "perche": "Forty minutes, four points, owners named.", "controlli": [], "quando": "-4h" },
+      "turno": { "da": "tu", "quando": "notte", "dal": "-9h", "tentativi": 1, "ultimo": "-5h", "notte": true } },
+    { "id": "n3", "testo": "Draft the release notes for 1.0.4", "quando": "oggi", "progetto": "nw", "stato": "chiede", "modo": "tutto",
+      "risultato": "Which build number goes in the notes?",
+      "chieste": [{ "domanda": "Which build number goes in the notes?", "opzioni": ["1.0.4", "1.0.5"], "multipla": false }],
+      "turno": { "da": "tu", "quando": "notte", "dal": "-9h", "tentativi": 1, "ultimo": "-4.5h", "notte": true } },
+    { "id": "c9", "testo": "Renew the domain before the 30th", "quando": "settimana" }
+  ],
+  "invii": [
+    { "compito": "w1", "via": "smtp", "classe": "identico", "inviato": "-1d" },
+    { "compito": "w2", "via": "casella", "classe": "identico", "inviato": "-20h" },
+    { "compito": "w3", "via": "casella", "classe": "identico", "inviato": "-2h" },
+    { "compito": "w4", "via": "smtp", "classe": "ritocco", "inviato": "-1h" }
+  ],
+  "punto": {
+    "progetti": [
+      { "progetto": "hb", "novita": "Nora wants the pilot scope agreed by Thursday.", "doc": "posta:INBOX:202" }
+    ]
+  }
+}
