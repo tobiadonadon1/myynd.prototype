@@ -3,7 +3,7 @@
   "nome": "Scambi finiti, da archiviare",
   "spiega": "Una volta al mese propone di archiviare le conversazioni che si sono chiuse da sole.",
   "quando": {
-    "ogni": "settimana",
+    "ogni": "mese",
     "giorno": 1,
     "ora": 18
   },

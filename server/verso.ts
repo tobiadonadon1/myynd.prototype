@@ -3,17 +3,15 @@
 // `faiInterna` e `faiPerDocumento` in automazioni.ts non scrivono più da sé:
 // chiamano un `Verso`, negli stessi punti e nello stesso ordine di prima.
 // `VERSO_LISTA` fa le chiamate di sempre (la lista, le bozze, gli annunci).
-// `VERSO_VASSOIO` scrive nel vassoio di prova: le righe restano risultati in
-// attesa, finché lui non le mette in lista. La prova sul passato ne ha un terzo,
-// in collaudo.ts, che non scrive niente.
+// La prova sul passato ne ha un secondo, qui sotto, che non scrive niente.
+// Il vassoio di prova, che ne aveva un terzo, non c'è più: un ordine fisso
+// acceso gira dal vivo da subito, e i risultati rimasti nel vassoio da prima
+// si svuotano a mano (vassoio.ts).
 
 import * as store from './store.ts'
 import * as compiti from './compiti.ts'
 import * as giudizi from './giudizi.ts'
 import { giornoIn } from './fuso.ts'
-
-/** I giorni di vassoio di un'automazione appena accesa. */
-export const VASSOIO_GIORNI = 14
 
 export type RigaNuova = Parameters<typeof store.scriviCompito>[0]
 
@@ -21,6 +19,8 @@ export type Verso = {
   stato(id: string): store.StatoAutomazione | null
   vivo(id: string): boolean
   bozzeOggi(s: store.StatoAutomazione | null, adesso?: Date): number
+  /** Le bozze fatte partire oggi da tutte le automazioni insieme: il budget si conta su queste. */
+  bozzeDiOggi(adesso?: Date): number
   segnaBozza(id: string, giorno: string): number
   arrivati(dal: string, limite: number): store.Documento[]
   docsConRiga(ids: string[], origine: string): Set<string>
@@ -29,7 +29,7 @@ export type Verso = {
   riga(c: RigaNuova, docs: string[]): void
   affida(id: string, modo: string): void
   proponi(id: string, p: store.Proposta, riassunto: string): void
-  girata(id: string, esito: string, guaio?: string, quanti?: number, risultato?: string): void
+  girata(id: string, esito: string, guaio?: string, quanti?: number, risultato?: string, ricevuta?: { fatti?: number; perche?: store.PercheNiente }): void
   rimandata(id: string): void
   saltata(id: string): void
   azione(a: Parameters<typeof store.registraAzione>[0]): void
@@ -45,7 +45,7 @@ function bozzeOggi(s: store.StatoAutomazione | null, adesso = new Date()): numbe
 
 const idDa = (origine: string) => origine.startsWith('auto:') ? origine.slice('auto:'.length) : origine
 
-/** Le righe già fatte, più i documenti che aspettano nel vassoio di quella automazione. */
+/** Le righe già fatte, più i documenti rimasti ad aspettare nel vecchio vassoio di quella automazione. */
 function giaFatti(ids: string[], origine: string): Set<string> {
   const fuori = store.docsConRiga(ids, origine)
   for (const d of store.docsNelVassoio(ids, idDa(origine))) fuori.add(d)
@@ -56,6 +56,7 @@ export const VERSO_LISTA: Verso = {
   stato: id => store.statoAutomazione(id),
   vivo: id => store.compitoVivoDa(id),
   bozzeOggi,
+  bozzeDiOggi: adesso => Object.values(store.statiAutomazioni()).reduce((n, s) => n + bozzeOggi(s, adesso), 0),
   segnaBozza: (id, giorno) => store.segnaBozza(id, giorno),
   arrivati: (dal, limite) => store.appenaArrivati(dal, limite),
   // dopo il vassoio un documento che aspetta ancora là non si rifà in lista
@@ -64,40 +65,11 @@ export const VERSO_LISTA: Verso = {
   riga: c => store.scriviCompito(c),
   affida: (id, modo) => compiti.affida(id, modo, false),
   proponi: (id, p, r) => { store.proponi(id, p, r); compiti.annunciaPronto(id) },
-  girata: (id, esito, guaio, quanti, risultato) => store.automazioneGirata(id, esito, guaio, quanti, risultato),
+  girata: (id, esito, guaio, quanti, risultato, ricevuta) => store.automazioneGirata(id, esito, guaio, quanti, risultato, ricevuta),
   rimandata: id => store.automazioneRimandata(id),
   saltata: id => store.automazioneSaltata(id),
   azione: a => store.registraAzione(a),
   annuncia: () => compiti.annunciaCambio()
-}
-
-/** La prova del vassoio di un'automazione: una sola, creata la prima volta, sempre «in corso». */
-export function provaDelVassoio(automazione: string): string {
-  const gia = store.proveDi(automazione, 'vassoio', 1)[0]
-  if (gia) return gia.id
-  const id = `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-  store.nuovaProva({ id, automazione, tipo: 'vassoio', stato: 'in corso', origine: 'vassoio' })
-  return id
-}
-
-export const VERSO_VASSOIO: Verso = {
-  ...VERSO_LISTA,
-  vivo: id => store.esitoVivoDa(id),
-  docsConRiga: giaFatti,
-  riga: (c, docs) => {
-    const automazione = idDa(c.origine ?? '')
-    store.scriviEsito({
-      id: c.id, prova: provaDelVassoio(automazione), automazione, tipo: 'riga', stato: 'senza bozza',
-      quando: new Date().toISOString(), testo: c.testo, nota: c.nota ?? null, doc: c.doc ?? null,
-      docs: JSON.stringify({ ids: docs, nuovi: docs, anche: [] }), inLista: c.quando ?? null,
-      attrezzi: c.attrezzi ? JSON.stringify(c.attrezzi) : null
-    })
-  },
-  affida: (id, modo) => store.aggiornaEsito(id, { stato: 'da scrivere', modo }),
-  proponi: (id, p, r) => store.aggiornaEsito(id, { tipo: 'proposta', proposta: JSON.stringify({ proposta: p, riassunto: r }) }),
-  // un giro del vassoio non è una cosa fatta: niente azioni, niente annunci
-  azione: () => {},
-  annuncia: () => {}
 }
 
 /**
@@ -137,6 +109,7 @@ export function versoCheRegistra(r: Registro): Verso {
     // come se la riga di prima fosse stata chiusa: si vede tutto quello che avrebbe fatto
     vivo: () => false,
     bozzeOggi: () => 0,
+    bozzeDiOggi: () => 0,
     segnaBozza: () => 0,
     arrivati: (dal, limite) => r.arrivati(dal, limite),
     docsConRiga: (ids, origine) => r.giaFatti(ids, origine),

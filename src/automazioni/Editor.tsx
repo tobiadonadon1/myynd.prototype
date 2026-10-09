@@ -24,7 +24,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Costruttore, fraseDi } from './Costruttore'
-import { api, apiP6, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type ProvaVista, type Raccolta, type RicettaComposta } from '../api'
+import { api, apiP6, type Attrezzo, type Automazione, type MesePrima as MeseDati, type Proponi, type ProvaVista, type Raccolta, type RicettaComposta } from '../api'
 import { Prova } from './Prova'
 import { frasiProva } from '../prova'
 import { interpreta } from './interpreta'
@@ -33,7 +33,8 @@ import { Cestino, Hov, LABEL, useFocoDialogo } from '../ui'
 import { Glifo } from '../components/Stato'
 import { IconCroce, IconGiro } from '../icons'
 import { Casella, RIGO } from './Chiocciola'
-import { quandoData, quandoGira } from './Scheda'
+import { consegnaPossibile, mesePrima, quandoData, quandoGira, ricettaDaCarta, ricevuta } from './quando'
+import { eOspitato } from '../tempi'
 
 const PIENO: React.CSSProperties = {
   padding: '10px 19px', borderRadius: 99, border: 'none',
@@ -88,119 +89,52 @@ function Linguette({ dove, vai, conProva }: { dove: Dove; vai: (d: Dove) => void
 }
 
 /**
- * Cosa troverebbe adesso.
+ * Il mese prima: «il mese scorso avrebbe fatto fino a N cose, da questi documenti».
  *
- * È il pezzo che mancava di più a chi ne scrive una, e mancava esattamente dove
- * fa più male: **le parole della ricerca.** Si scrivono in una casella di
- * testo, non tornano niente, e l'unico modo di sapere se erano giuste era
- * accendere l'automazione e aspettare qualche giorno per vedere se compariva
- * una riga in lista. Se non compariva, non si sapeva nemmeno quale delle
- * quattro cose fosse sbagliata: le parole, gli attrezzi, l'ora, o il fatto che
- * davvero non c'era niente.
+ * Ha preso il posto di due cose. Dei quattordici giorni di vassoio, che
+ * tenevano lontano dalla lista tutto quello che un'automazione faceva, e su
+ * quattordici create non ne girava nessuna; e di «Cosa troverebbe adesso», che
+ * guardava un istante solo e quasi sempre diceva niente. Qui si guarda un mese
+ * intero dell'indice, volta per volta, con la stessa funzione del motore.
  *
- * Questo lo dice in mezzo secondo, e lo dice **con i titoli veri**: leggere
- * «Fattura 2026/114 — Bianchi srl» accanto alle proprie parole è la differenza
- * fra credere che funzioni e vedere che funziona.
- *
- * Non chiama nessun modello e non scrive niente: si preme mentre si scrive,
- * quante volte si vuole. Per questo è un bottone piccolo accanto al campo e non
- * un gesto in fondo alla scheda — è una cosa che si fa dieci volte, non una.
+ * Non chiama nessun modello e non scrive niente, quindi si carica da sé: una
+ * ricetta salvata la mostra appena aperta, una nuova mentre la si compone.
  */
-function Anteprima({ id, catalogo, chiave }: {
-  id: string
-  catalogo: Attrezzo[]
-  /** Cambia quando salvi: quello che c'è a schermo si riferisce alla ricetta salvata. */
-  chiave: number
+export function Mese({ dati, guardo, guaio, catalogo }: {
+  dati: MeseDati | null; guardo: boolean; guaio: string; catalogo: Attrezzo[]
 }) {
-  const [dati, setDati] = useState<AnteprimaDati | null>(null)
-  const [guardo, setGuardo] = useState(false)
-  const [guaio, setGuaio] = useState('')
-
-  // quello che si vede vale per la ricetta com'era salvata: appena salvi, si
-  // butta via invece di restare lì a raccontare una cosa vecchia
-  useEffect(() => { setDati(null); setGuaio('') }, [chiave])
-
-  const guarda = async () => {
-    setGuardo(true); setGuaio('')
-    try { setDati(await api.anteprimaAutomazione(id)) }
-    catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    setGuardo(false)
-  }
-
-  const nomeAttrezzo = (n: string) => catalogo.find(x => x.nome === n)?.etichetta ?? n
-
+  const nome = (n: string) => catalogo.find(x => x.nome === n)?.etichetta ?? n
+  if (guaio) return <div className="auto-mese"><div className="auto-mese-testa guaio">{t(guaio)}</div></div>
+  if (!dati) return guardo ? <div className="auto-mese"><div className="auto-mese-testa">{t('Guardo il mese scorso…')}</div></div> : null
   return (
-    <div style={{ marginBottom: 14 }}>
-      <Hov as="button" type="button" onClick={guarda} disabled={guardo}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px',
-          borderRadius: 99, cursor: guardo ? 'default' : 'pointer', fontFamily: 'inherit',
-          fontSize: '12px', border: '1px solid rgba(var(--inchiostro-rgb),.18)',
-          background: 'rgba(var(--luce-rgb),.6)', color: 'rgba(var(--inchiostro-rgb),.75)'
-        }}
-        hover={guardo ? {} : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
-        {guardo && <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />}
-        {guardo ? t('Guardo…') : t('Cosa troverebbe adesso')}
-      </Hov>
-
-      {guaio && <div style={{ fontSize: '11.5px', color: 'var(--rame-testo)', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
-
-      {dati && (
-        <div style={{
-          marginTop: 10, padding: '11px 13px', borderRadius: 14,
-          border: '1px solid rgba(var(--inchiostro-rgb),.1)', background: 'rgba(var(--luce-rgb),.5)'
-        }}>
-          <div style={{
-            fontSize: '12px', fontWeight: 500,
-            color: dati.docs.length ? 'var(--verde-cupo)' : 'var(--rame-testo)'
-          }}>
-            {dati.docs.length ? frasi.neGuarderebbe(dati.docs.length) : t('Adesso non troverebbe niente.')}
-          </div>
-
-          {/*
-            Il perché di un vuoto, che è la metà che serve davvero.
-            «Non trova niente» da solo lascia esattamente dov'eri; «non trova
-            niente, e Slack non è collegato» è una cosa da andare a fare.
-          */}
-          {!!dati.staccati.length && (
-            <div style={{ fontSize: '11.5px', color: 'var(--rame-testo)', marginTop: 6, lineHeight: 1.5 }}>
-              {t('Non è collegato:')} {dati.staccati.map(nomeAttrezzo).join(', ')}
-            </div>
-          )}
-          {!dati.docs.length && !dati.staccati.length && (
-            <div style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.55)', marginTop: 6, lineHeight: 1.5, textWrap: 'pretty' }}>
-              {dati.soloNuovi
-                ? t('Guarda solo quello che è arrivato dall’ultima volta: se non è arrivato niente, è normale.')
-                : t('Prova a cambiare le parole: vanno scritte come le userebbe chi ha scritto quei documenti, nella loro lingua.')}
-            </div>
-          )}
-
-          {!!dati.docs.length && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {dati.docs.slice(0, 6).map(d => (
-                <div key={d.id} style={{
-                  display: 'flex', gap: 8, alignItems: 'baseline',
-                  fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.7)'
-                }}>
-                  <span style={{
-                    flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                  }}>{d.titolo}</span>
-                  <span style={{ flex: 'none', fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.38)' }}>
-                    {d.quando ? new Date(d.quando).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }) : ''}
-                  </span>
-                </div>
-              ))}
-              {dati.docs.length > 6 && (
-                <div style={{ fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.38)' }}>
-                  {`+${dati.docs.length - 6}`}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+    <div className="auto-mese" aria-live="polite">
+      <div className={`auto-mese-testa${dati.cose ? ' piena' : ''}`}>{mesePrima(dati.cose, dati.documenti)}</div>
+      {!!dati.staccati.length && <div className="auto-mese-staccati">{t('Non è collegato:')} {dati.staccati.map(nome).join(', ')}</div>}
+      {!!dati.docs.length && <ul>
+        {dati.docs.slice(0, 5).map(d => (
+          <li key={d.id}><span>{d.titolo}</span>
+            <time>{d.quando ? new Date(d.quando).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }) : ''}</time></li>
+        ))}
+        {dati.documenti > 5 && <li className="auto-mese-altri">{`+${dati.documenti - 5}`}</li>}
+      </ul>}
     </div>
   )
+}
+
+/** Il mese prima di una ricetta salvata: si ricarica a ogni salvataggio. */
+function MeseDi({ id, catalogo, chiave }: { id: string; catalogo: Attrezzo[]; chiave: number }) {
+  const [dati, setDati] = useState<MeseDati | null>(null)
+  const [guardo, setGuardo] = useState(true)
+  const [guaio, setGuaio] = useState('')
+  useEffect(() => {
+    let vivo = true
+    setDati(null); setGuaio(''); setGuardo(true)
+    api.meseDi(id).then(r => { if (vivo) setDati(r) })
+      .catch(e => { if (vivo) setGuaio(e instanceof Error ? e.message : String(e)) })
+      .finally(() => { if (vivo) setGuardo(false) })
+    return () => { vivo = false }
+  }, [id, chiave])
+  return <Mese dati={dati} guardo={guardo} guaio={guaio} catalogo={catalogo} />
 }
 
 const IN_CORSO = new Set(['in coda', 'in corso'])
@@ -234,10 +168,6 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     apiP6.ultimaProva(a.id).then(r => { if (vivo && r.prova) setVista(r.prova) }).catch(() => {})
     return () => { vivo = false }
   }, [a.id, a.prova?.id])
-  /** «Termina la prova» premuto: la riga sotto il nome cambia subito, e torna se il server dice di no. */
-  const [dalVivoOra, setDalVivoOra] = useState(false)
-  const nelVassoio = !dalVivoOra && !!a.accesa && !!a.vassoio && a.vassoio > new Date().toISOString()
-  const dalVivo = !!a.dalVivo || (dalVivoOra && a.accesa)
 
   const [confermaChiusura, setConfermaChiusura] = useState(false)
   const chiediChiusura = () => { if (modificata) setConfermaChiusura(true); else chiudi() }
@@ -253,8 +183,11 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   const [perDocumento, setPerDocumento] = useState(!!a.metti.perDocumento)
   const [suoi, setSuoi] = useState<string[]>(a.attrezzi)
   const [cartella, setCartella] = useState(a.cartella ?? '')
+  /** Cosa consegna oltre a una riga (E): niente = una riga in lista. */
+  const [proponi, setProponi] = useState<Proponi | null>(a.proponi ?? null)
+  const [ogniVolta, setOgniVolta] = useState(!!a.guarda.ogniVolta)
   /** La ricetta com'è adesso, con le modifiche non salvate: la leggono i binari e la frase a parole. */
-  const ricetta = { nome, spiega, quando, guarda: { ...a.guarda, cerca }, fai, passi, metti: { inLista, modo, ...(perDocumento ? { perDocumento: true as const } : {}) }, attrezzi: suoi, cartella }
+  const ricetta = { nome, spiega, quando, guarda: { ...a.guarda, cerca, ogniVolta: ogniVolta || undefined }, fai, passi, metti: { inLista, modo, ...(perDocumento ? { perDocumento: true as const } : {}) }, attrezzi: suoi, cartella, ...(proponi ? { proponi } : {}) }
 
   const [richiesta, setRichiesta] = useState('')
   /**
@@ -285,17 +218,17 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     setPassi(n.passi ?? []); setNome(n.nome); setSpiega(n.spiega); setFai(n.fai)
     setCerca(n.guarda.cerca ?? ''); setQuando(n.quando)
     setInLista(n.metti.inLista); setModo(n.metti.modo ?? 'io'); setPerDocumento(!!n.metti.perDocumento)
-    setSuoi(n.attrezzi); setCartella(n.cartella ?? '')
+    setSuoi(n.attrezzi); setCartella(n.cartella ?? ''); setProponi(n.proponi ?? null); setOgniVolta(!!n.guarda.ogniVolta)
     setProvata(x => x + 1)
   }
 
   const patch = { nome, spiega, fai, cerca, quando,
     metti: { inLista, modo, ...(perDocumento ? { perDocumento: true } : {}) },
-    attrezzi: suoi, cartella: vuoleCartella ? cartella : '', passi }
+    attrezzi: suoi, cartella: vuoleCartella ? cartella : '', passi, proponi, ogniVolta }
   const modificata = JSON.stringify(patch) !== JSON.stringify({
     nome: a.nome, spiega: a.spiega, fai: a.fai, cerca: a.guarda.cerca ?? '', quando: a.quando,
     metti: { inLista: a.metti.inLista, modo: a.metti.modo ?? 'io', ...(a.metti.perDocumento ? { perDocumento: true } : {}) },
-    attrezzi: a.attrezzi, cartella: a.attrezzi.includes('claude.lavora') ? a.cartella ?? '' : '', passi: a.passi ?? []
+    attrezzi: a.attrezzi, cartella: a.attrezzi.includes('claude.lavora') ? a.cartella ?? '' : '', passi: a.passi ?? [], proponi: a.proponi ?? null, ogniVolta: !!a.guarda.ogniVolta
   })
   const salva = async (): Promise<boolean> => {
     setSalvo(true); setGuaio(''); setDetto('')
@@ -352,12 +285,6 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     setGira(false)
   }
 
-  const terminaLaProva = async () => {
-    setDalVivoOra(true); setGuaio('')
-    try { cambiata((await apiP6.dalVivo(a.id)).automazioni) }
-    catch (e) { setDalVivoOra(false); setGuaio(e instanceof Error ? e.message : String(e)) }
-  }
-
   const adesso = async () => {
     if (salvo || gira || penso) return
     setGira(true); setDetto(''); setGuaio('')
@@ -365,9 +292,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     try {
       const r = await api.automazioneAdesso(a.id)
       cambiata(r.automazioni)
-      setDetto(r.esito === 'fatta' ? t('Fatto: guarda in lista.')
-        : r.esito === 'gia' ? t('Ce n’è già una in lista da questa.')
-        : t('Ha guardato, e non c’era niente.'))
+      // la ricevuta del giro appena fatto: quanti documenti, quante cose, o perché niente
+      const nuova = r.automazioni.find(x => x.id === a.id)
+      setDetto(r.esito === 'gia' ? t('Ce n’è già una in lista da questa.') : ricevuta(nuova?.ricevuta, nuova?.riprova))
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setGira(false)
   }
@@ -423,10 +350,10 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
               fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 2,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
             }}>
-              {nelVassoio
-                ? <>{frasiProva.inProvaFino(a.vassoio!)} · <button type="button" className="auto-link editor-sub-link" onClick={terminaLaProva}>{t('Termina la prova')}</button></>
+              {a.riprova
+                ? ricevuta(a.ricevuta, a.riprova)
                 : a.accesa
-                  ? (a.prossima ? frasi.giraDaSolaProssima(quandoData(a.prossima)) : quandoGira(a))
+                  ? (a.prossima ? frasi.giraDaSolaProssima(quandoData(a.prossima)) : quandoGira(a.quando))
                   : t('In pausa')}
               {a.prova && dove !== 'prova' && FINITE.has(a.prova.stato) && <> · <button type="button" className="auto-link editor-sub-link" onClick={() => setDove('prova')}>
                 {a.prova.giudicati >= 5 ? frasiProva.contoEditor(a.prova.giusti, a.prova.giudicati) : frasiProva.poche(a.prova.giudicati)}
@@ -520,9 +447,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                 cambia={n => {
                   setQuando(n.quando); setCerca(n.guarda.cerca ?? ''); setFai(n.fai); setPassi(n.passi ?? [])
                   setInLista(n.metti.inLista); setModo(n.metti.modo ?? 'io'); setPerDocumento(!!n.metti.perDocumento)
-                  setSuoi(n.attrezzi ?? []); setCartella(n.cartella ?? '')
+                  setSuoi(n.attrezzi ?? []); setCartella(n.cartella ?? ''); setProponi(n.proponi ?? null); setOgniVolta(!!n.guarda.ogniVolta)
                 }}
-                coda={modificata ? <p className="auto-muted">{t('Salva le modifiche per vedere quali documenti leggerà.')}</p> : <Anteprima id={a.id} catalogo={catalogo} chiave={provata} />} />
+                coda={modificata ? <p className="auto-muted">{t('Salva le modifiche per vedere quali documenti leggerà.')}</p> : <MeseDi id={a.id} catalogo={catalogo} chiave={provata} />} />
               <div className="auto-editor-settings" ref={campiRef}>
               <Campo etichetta={t('Come si chiama')}>
                 <input aria-label={t('Come si chiama')} value={nome} onChange={e => setNome(e.target.value)} style={RIGO} />
@@ -532,7 +459,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
               </Campo>
               </div>
               <details className="auto-history"><summary>{t('Cronologia esecuzioni')}</summary>
-                {a.storia.length ? <ol>{[...a.storia].reverse().map((r, i) => <li key={i}><time>{new Date(r.quando).toLocaleString(loc())}</time><span>{r.esito === 'fatta' ? t('Risultato preparato') : r.esito === 'niente' ? t('Niente da fare') : r.esito === 'guaio' ? t('Da controllare') : t('Rimandata')} · {r.quanti} {t('documenti')}</span>{r.risultato && <details className="auto-run-result"><summary>{t('Risultato')}</summary><p>{r.risultato}</p></details>}</li>)}</ol> : <p className="auto-muted">{t('Non è ancora girata.')}</p>}
+                {a.storia.length ? <ol>{[...a.storia].reverse().map((r, i) => <li key={i}><time>{new Date(r.quando).toLocaleString(loc())}</time><span>{ricevuta(r)}</span>{r.risultato && <details className="auto-run-result"><summary>{t('Risultato')}</summary><p>{r.risultato}</p></details>}</li>)}</ol> : <p className="auto-muted">{t('Non è ancora girata.')}</p>}
               </details>
             </div>
           )}
@@ -550,16 +477,15 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
           )}
 
           {/*
-            Un bottone solo (P6). Dal vivo, fuori dal vassoio, la fa girare
-            adesso; altrimenti la prova sugli ultimi 30 giorni, che non scrive.
+            Dal vivo, subito (E): non c'è più un vassoio che lo tenga lontano
+            dalla lista, e il mese prima si legge nel tratto «Legge».
           */}
-          <Hov as="button" onClick={dalVivo ? adesso : prova} disabled={gira || occupato}
+          <Hov as="button" onClick={adesso} disabled={gira || occupato}
             style={{ ...VUOTO, display: 'inline-flex', alignItems: 'center', gap: 7, cursor: gira ? 'default' : 'pointer' }}
             hover={gira ? {} : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
             {gira && <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />}
-            {dalVivo
-              ? (gira ? t('La faccio girare…') : t('Falla girare adesso'))
-              : gira ? t('La provo…') : modificata ? t('Salva e prova') : t('Provala adesso')}
+            {/* con modifiche aperte gira quello che si vede: prima le salva, e lo dice */}
+            {gira ? t('La faccio girare…') : modificata ? t('Salva e falla girare') : t('Falla girare adesso')}
           </Hov>
 
           <div style={{ flex: 1, minWidth: 20 }} />
@@ -621,19 +547,17 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
           </div>
         )}
 
-        {(detto || guaio || a.guaio) && (
+        {(detto || guaio || a.guaio || a.ricevuta?.quando) && (
           <div style={{
             flex: 'none', padding: '9px 18px 11px', fontSize: '11.5px', lineHeight: 1.55,
             borderTop: '1px solid rgba(var(--inchiostro-rgb),.06)', background: 'rgba(var(--luce-rgb),.4)'
           }}>
             {detto && <div style={{ color: 'var(--verde-cupo)' }}>{detto}</div>}
-            {(guaio || a.guaio) && <div style={{ color: 'var(--rame-testo)' }}>{t(guaio || a.guaio || '')}</div>}
-            {!detto && !guaio && !a.guaio && a.quante > 0 && (
+            {(guaio || a.guaio) && <div style={{ color: 'var(--rame-testo)', overflowWrap: 'anywhere' }}>{t(guaio || a.guaio || '')}</div>}
+            {!detto && !guaio && !a.guaio && a.ricevuta && (
               <div style={{ color: 'rgba(var(--inchiostro-rgb),.42)' }}>
-                {frasi.girataVolte(a.quante)}
-                {a.ultima ? ` · ${t('l’ultima')} ${new Date(a.ultima).toLocaleString(loc(), {
-                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                })}` : ''}
+                {new Date(a.ricevuta.quando).toLocaleString(loc(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {` · ${ricevuta(a.ricevuta, a.riprova)}`}
               </div>
             )}
           </div>
@@ -658,11 +582,17 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
  *
  * Le fonti si trascinano, o si toccano. Non c'è più una «@» da sapere.
  */
-export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
+export function Nuova({ catalogo, cartelle, chiudi, fatta, daCarta = null }: {
   catalogo: Attrezzo[]
   cartelle: string[]
   chiudi: () => void
   fatta: (tutte: Automazione[], id: string) => void
+  /**
+   * Da una carta (E): la frase con cui parte, «Ogni lunedì mattina: …», e il
+   * testo della carta, che diventa la cosa da fare. È un promemoria: torna in
+   * lista ogni volta, anche senza niente da leggere, e si crea con un dito.
+   */
+  daCarta?: { frase: string; testo: string } | null
 }) {
   const [frase, setFrase] = useState('')
   const [r, setR] = useState<RicettaComposta>({ nome: '', spiega: '', quando: { quandoArriva: true }, guarda: {}, fai: '', passi: [], metti: { inLista: 'oggi', modo: 'io' }, attrezzi: [] })
@@ -674,23 +604,37 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
   const occupato = compongo || creo
   useFocoDialogo(finestra, () => { if (!occupato) chiudi() })
 
-  /** La frase letta subito: quando e dove, senza modello. */
+  /** La frase letta subito: quando, dove e cosa consegna, senza modello. */
   const scrivi = (testo: string) => {
     setFrase(testo)
     const letta = interpreta(testo, catalogo)
     setR(x => ({
       ...x,
       ...(letta.quando ? { quando: letta.quando } : {}),
+      ...(letta.proponi && consegnaPossibile(letta.proponi, eOspitato()) ? { proponi: letta.proponi } : {}),
       attrezzi: [...new Set([...(x.attrezzi ?? []), ...letta.attrezzi])]
     }))
   }
+  /*
+   * Da una carta: la ricetta si scrive qui, non si rilegge dalla frase. Il
+   * testo di una carta dice di tutto («il report mensile», «in agenda»), e
+   * passato dal lettore della frase diventava un ordine al mese o un evento
+   * invece del promemoria del lunedì che il gesto promette.
+   */
+  useEffect(() => {
+    if (!daCarta) return
+    setFrase(daCarta.frase)
+    setR(x => ({ ...x, ...ricettaDaCarta(daCarta.testo) }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daCarta])
 
   const componi = async () => {
     if (occupato || frase.trim().length < 8) return
     setCompongo(true); setGuaio(''); setDetto('')
     try {
       const { ricetta } = await api.componiAutomazione(frase, r.attrezzi?.length ? r.attrezzi : undefined)
-      setR({ nome: ricetta.nome, spiega: ricetta.spiega, quando: ricetta.quando, guarda: ricetta.guarda, fai: ricetta.fai, passi: ricetta.passi ?? [], metti: ricetta.metti, attrezzi: ricetta.attrezzi ?? [], ...(ricetta.cartella ? { cartella: ricetta.cartella } : {}) })
+      // cosa consegna resta quello letto dalla frase: il modello compone una riga
+      setR(x => ({ nome: ricetta.nome, spiega: ricetta.spiega, quando: ricetta.quando, guarda: ricetta.guarda, fai: ricetta.fai, passi: ricetta.passi ?? [], metti: ricetta.metti, attrezzi: ricetta.attrezzi ?? [], ...(ricetta.cartella ? { cartella: ricetta.cartella } : {}), ...(x.proponi ? { proponi: x.proponi } : {}) }))
       setDetto(t('Composta. Guarda i binari: se dicono quello che volevi, creala.'))
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setCompongo(false)
@@ -700,14 +644,36 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
   const nomeProposto = r.nome.trim() || frase.trim().split(/[.\n]/)[0].slice(0, 60).trim()
   const pronta = nomeProposto.length >= 3 && r.fai.trim().length >= 8
 
+  const campi = {
+    nome: nomeProposto, spiega: r.spiega, fai: r.fai, cerca: r.guarda.cerca ?? '', quando: r.quando,
+    metti: r.metti, attrezzi: r.attrezzi ?? [], cartella: r.cartella ?? '', passi: r.passi ?? [], proponi: r.proponi ?? null,
+    ogniVolta: !!r.guarda.ogniVolta
+  }
+  const chiave = JSON.stringify(campi)
+
+  /*
+   * Il mese prima, mentre la si compone (E): «il mese scorso avrebbe fatto
+   * fino a N cose». Sola lettura, nessun modello: si ricalcola da sé mezzo
+   * secondo dopo l'ultimo tocco, e si crea guardandolo. Da lì gira dal vivo.
+   */
+  const [mese, setMese] = useState<MeseDati | null>(null)
+  const [guardoMese, setGuardoMese] = useState(false)
+  useEffect(() => {
+    if (!pronta) { setMese(null); return }
+    let vivo = true
+    setGuardoMese(true)
+    const tempo = setTimeout(() => {
+      api.mesePrima(JSON.parse(chiave)).then(x => { if (vivo) setMese(x) }).catch(() => { if (vivo) setMese(null) })
+        .finally(() => { if (vivo) setGuardoMese(false) })
+    }, 500)
+    return () => { vivo = false; clearTimeout(tempo) }
+  }, [chiave, pronta])
+
   const crea = async () => {
     if (occupato || !pronta) return
     setCreo(true); setGuaio('')
     try {
-      const esito = await api.nuovaAutomazione({
-        nome: nomeProposto, spiega: r.spiega, fai: r.fai, cerca: r.guarda.cerca ?? '', quando: r.quando,
-        metti: r.metti, attrezzi: r.attrezzi ?? [], cartella: r.cartella ?? '', passi: r.passi ?? []
-      })
+      const esito = await api.nuovaAutomazione(campi)
       fatta(esito.automazioni, esito.id)
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setCreo(false)
@@ -737,8 +703,7 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
           borderBottom: '1px solid rgba(var(--inchiostro-rgb),.08)'
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div id="nuova-titolo" style={{ fontSize: '17px', fontWeight: 500, color: 'var(--inchiostro)', letterSpacing: '-.01em' }}>{t('Nuova automazione')}</div>
-            <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.55)', marginTop: 2 }}>{t('Dilla in una frase, o componila sui binari. Nasce in pausa.')}</div>
+            <div id="nuova-titolo" style={{ fontSize: '17px', fontWeight: 500, color: 'var(--inchiostro)', letterSpacing: '-.01em' }}>{t('Nuovo ordine fisso')}</div>
           </div>
           <Hov as="button" onClick={() => { if (!occupato) chiudi() }} title={t('Chiudi')} aria-label={t('Chiudi')}
             style={{ display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0, borderRadius: 10, border: 'none', background: 'rgba(var(--inchiostro-rgb),.06)', color: 'rgba(var(--inchiostro-rgb),.5)', cursor: 'pointer' }}
@@ -769,6 +734,7 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
           </label>
 
           <Costruttore r={r} cambia={setR} catalogo={catalogo} cartelle={cartelle} />
+          {pronta && <Mese dati={mese} guardo={guardoMese} guaio="" catalogo={catalogo} />}
         </div>
 
         <div style={{
@@ -778,9 +744,9 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
           <button onClick={crea} disabled={occupato || !pronta}
             style={{ ...PIENO, display: 'inline-flex', alignItems: 'center', gap: 7, opacity: occupato || !pronta ? 0.5 : 1, cursor: occupato || !pronta ? 'default' : 'pointer' }}>
             {creo && <Glifo tipo="penso" dim={11} colore="var(--avorio)" />}
-            {creo ? t('La creo…') : t('Creala')}
+            {creo ? t('La creo…') : t('Crea e accendi')}
           </button>
-          <span className="auto-muted">{pronta ? t('Nasce in pausa: la accendi dalla sua scheda.') : t('Le manca cosa deve fare: scrivilo nel tratto «Fa», o componila con Myynd.')}</span>
+          {!pronta && <span className="auto-muted">{t('Le manca cosa deve fare: scrivilo nel tratto «Fa», o componila con Myynd.')}</span>}
           {guaio && <span style={{ fontSize: '12px', color: 'var(--rame-testo)', textWrap: 'pretty' }}>{t(guaio)}</span>}
         </div>
       </div>

@@ -10,7 +10,7 @@
 // È volutamente povera: due lingue, poche forme, e in dubbio non tocca niente.
 // Un'ora sbagliata scritta al posto di quella detta sarebbe peggio di nessuna.
 
-import type { Attrezzo, RicettaComposta } from '../api'
+import type { Attrezzo, Proponi, RicettaComposta } from '../api'
 
 type Quando = RicettaComposta['quando']
 
@@ -48,11 +48,32 @@ export function quandoDetto(frase: string): Quando | null {
     return { quandoArriva: true }
   }
   const h = ora(frase)
-  const giorno = GIORNI.find(([re]) => re.test(frase))
-  if (giorno && /\b(?:ogni|every|on|each|tutti i|all)\b/i.test(frase)) return { ogni: 'settimana', giorno: giorno[1], ora: h ?? 8 }
-  if (/\b(?:ogni (?:giorno|mattina|sera|pomeriggio)|every (?:day|morning|evening|afternoon)|daily|tutti i giorni|ogni sera)\b/i.test(frase)) {
+  // dal lunedì al venerdì: prima dei giorni, perché «dal lunedì» nomina un giorno
+  if (/\b(?:giorni (?:feriali|lavorativi)|nei feriali|weekdays?|working days?|every workday|monday (?:to|through) friday)\b|\bdal luned[iì] al venerd[iì](?![\p{L}])/iu.test(frase)) {
+    return { ogni: 'feriali', ora: h ?? 8 }
+  }
+  /*
+   * Un ritmo detto per esteso vince su un «mese» nominato di passaggio: «Ogni
+   * lunedì: paga l'affitto mensile», «every Friday, what is due by the end of
+   * the month», «abbonamenti da 20 euro al mese» sono settimanali, e leggerli
+   * al mese era il guaio di «Fallo ogni settimana» su ogni carta che diceva
+   * «mensile». Prima «ogni <giorno>» e «ogni giorno», attaccati; poi il mese.
+   */
+  const detto = GIORNI.find(([re]) => new RegExp(`(?<![\\p{L}])(?:ogni|every|each|tutti i|on)\\s+${re.source}`, 'iu').test(frase))
+  if (detto) return { ogni: 'settimana', giorno: detto[1], ora: h ?? 8 }
+  if (/\b(?:ogni (?:giorno|mattina|sera|pomeriggio)|every (?:day|morning|evening|afternoon)|daily|tutti i giorni)\b/i.test(frase)) {
     return { ogni: 'giorno', ora: h ?? 8 }
   }
+  // una volta al mese: il giorno detto («il 15 di ogni mese», «on the 1st of the month»), o il primo.
+  // «al mese» e «mensile» da soli no: sono quasi sempre un prezzo o un aggettivo.
+  const giornoDelMese = frase.match(/\b(?:il|on the|the)\s+(\d{1,2})(?:st|nd|rd|th)?\s+(?:di ogni mese|del mese|of (?:the|each|every) month)\b/i)
+  if (giornoDelMese || /\b(?:ogni mese|una volta al mese|tutti i mesi|every month|monthly|once a month|each month|mensilmente)\b/i.test(frase)) {
+    const g = giornoDelMese ?? frase.match(/\b(?:il|on the|the)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i)
+    const giorno = g ? Number(g[1]) : 1
+    return { ogni: 'mese', giorno: giorno >= 1 && giorno <= 31 ? giorno : 1, ora: h ?? 8 }
+  }
+  const giorno = GIORNI.find(([re]) => re.test(frase))
+  if (giorno && /\b(?:ogni|every|on|each|tutti i|all)\b/i.test(frase)) return { ogni: 'settimana', giorno: giorno[1], ora: h ?? 8 }
   if (/\b(?:ogni settimana|every week|weekly|una volta a settimana|once a week)\b/i.test(frase)) return { ogni: 'settimana', giorno: 1, ora: h ?? 8 }
   return null
 }
@@ -87,6 +108,21 @@ export function fontiDette(frase: string, catalogo: Pick<Attrezzo, 'nome' | 'eti
   return trovate
 }
 
-export function interpreta(frase: string, catalogo: Pick<Attrezzo, 'nome' | 'etichetta'>[]): { quando: Quando | null; attrezzi: string[] } {
-  return { quando: quandoDetto(frase), attrezzi: fontiDette(frase, catalogo) }
+/**
+ * Cosa consegna, se la frase lo dice: le bozze nella casella, l'agenda, una
+ * nota, un file. Niente = una riga in lista, come sempre. Mai «manda»: la
+ * frase «mandagli la risposta» resta una riga con la bozza, e partire resta
+ * un gesto suo.
+ */
+export function consegnaDetta(frase: string): Proponi | null {
+  if (/\b(?:fra le bozze|nelle bozze|nella casella|(?:in|into|to) (?:my )?drafts?|as drafts?|draft repl(?:y|ies))\b/i.test(frase)) return 'posta.bozza'
+  if (/\b(?:in agenda|nel calendario|in calendario|(?:to|on|in|into) (?:my )?calendar)\b/i.test(frase)) return 'agenda.aggiungi'
+  // «in Note» da solo può voler dire da dove legge: serve che sia una nota da scrivere
+  if (/\b(?:in una nota|come nota|una nota in note|scrivi una nota|as a note|into a note|a note in notes|write a note)\b/i.test(frase)) return 'nota.crea'
+  if (/\b(?:in un file|come file|in un documento|as a file|into a file|as a document)\b|\b(?:salva\w*|metti\w*|save|put)\b[^.]{0,30}\b(?:sulla scrivania|on (?:my|the) desktop)\b/i.test(frase)) return 'file.crea'
+  return null
+}
+
+export function interpreta(frase: string, catalogo: Pick<Attrezzo, 'nome' | 'etichetta'>[]): { quando: Quando | null; attrezzi: string[]; proponi: Proponi | null } {
+  return { quando: quandoDetto(frase), attrezzi: fontiDette(frase, catalogo), proponi: consegnaDetta(frase) }
 }

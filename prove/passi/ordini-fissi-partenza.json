@@ -1,0 +1,13 @@
+[
+ { "aspetta": 2500 },
+ { "scatta": "partenza-casa" },
+ { "testo": "partenza-casa" },
+ { "js": "(() => { const a = [...document.querySelectorAll('a,button')].find(x => x.textContent.trim() === 'Go to standing orders'); if (!a) return 'niente link'; a.click(); return 'cliccato' })()" },
+ { "aspetta": 1500 },
+ { "scatta": "partenza-pagina" },
+ { "testo": "partenza-pagina" },
+ { "js": "(() => { const b = [...document.querySelectorAll('.auto-card-open')].find(x => (x.querySelector('h3') || {}).textContent === 'Replies to give'); if (!b) return 'scheda non trovata'; b.click(); return 'aperta' })()" },
+ { "aspetta": 1200 },
+ { "scatta": "partenza-ordine" },
+ { "testo": "partenza-ordine" }
+]

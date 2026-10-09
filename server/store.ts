@@ -1542,7 +1542,14 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   },
   // 70 → 71 · il titolo corto di una riga, scritto dal modello: la riga sta su una linea sola,
   //   il testo intero si legge aprendola. Null: la riga è già corta, o il titolo non c'è ancora.
-  d => colonna(d, 'compiti', 'titolo', 'TEXT')
+  d => colonna(d, 'compiti', 'titolo', 'TEXT'),
+  // 71 → 72 · E · gli ordini fissi dal vivo da subito: quando riprova un giro andato
+  //   storto, la ricevuta dell'ultimo giro, e i vassoi di prova ancora aperti si chiudono.
+  d => {
+    colonna(d, 'automazioni', 'riprova', 'TEXT')
+    colonna(d, 'automazioni', 'ricevuta', 'TEXT')
+    d.prepare('UPDATE automazioni SET vassoio = ? WHERE vassoio > ?').run(new Date().toISOString(), new Date().toISOString())
+  }
 ]
 
 /**
@@ -1626,7 +1633,7 @@ const COLONNE: Record<string, [string, string][]> = {
   automazioni: [
     ['tolta', 'TEXT'], ['raccolta', 'TEXT'], ['dal', 'TEXT'], ['storia', 'TEXT'],
     ['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0'], ['vista', 'TEXT'],
-    ['vassoio', 'TEXT']
+    ['vassoio', 'TEXT'], ['riprova', 'TEXT'], ['ricevuta', 'TEXT']
   ],
   convinzioni: [['confermata', 'TEXT']],
   compiti: [
@@ -3848,6 +3855,25 @@ export type Proposta =
       azione: 'agenda.aggiungi'
       eventi: { titolo: string; inizio: string; minuti?: number; dove?: string; perche: string }[]
     }
+  | {
+      /**
+       * Risposte da mettere fra le bozze della sua casella (E). Mai mandate:
+       * il bottone le salva come bozze, e partire resta un gesto suo, dalla
+       * sua posta. `a` viene dal documento, non dal modello.
+       */
+      azione: 'posta.bozza'
+      bozze: { doc: string; titolo: string; a: string; oggetto: string; corpo: string; perche: string }[]
+    }
+  | {
+      /** Una nota da salvare in Note (E). */
+      azione: 'nota.crea'
+      note: { titolo: string; testo: string; perche: string }[]
+    }
+  | {
+      /** Un file da salvare nel posto in cui gli piace trovarli (E). */
+      azione: 'file.crea'
+      file: { titolo: string; testo: string; perche: string }[]
+    }
 
 /**
  * Dove porta questa riga *fuori* da Myynd: la mail, il file, la pagina.
@@ -4975,8 +5001,12 @@ export type StatoAutomazione = {
   bozze?: number | null
   /** Fin dove ha guardato il materiale: si muove solo con un giro riuscito. */
   vista?: string | null
-  /** Fino a quando è nel vassoio di prova (P6). Nel passato: già finito. */
+  /** Fino a quando era nel vassoio di prova (P6). Non si apre più: resta per i database di prima. */
   vassoio?: string | null
+  /** Dopo un giro andato storto: quando riprova da sola. Null quando è andata bene. */
+  riprova?: string | null
+  /** La ricevuta dell'ultimo giro, anche di quelli che non hanno guardato niente. Si legge con `ricevutaDi`. */
+  ricevuta?: string | null
 }
 
 /**
@@ -4995,8 +5025,52 @@ export function segnaBozza(id: string, giorno: string): number {
   return quante
 }
 
-/** Un giro, com'è andato. */
-export type Giro = { quando: string; esito: string; quanti: number; risultato?: string }
+/**
+ * Perché un giro non ha fatto niente, in una parola:
+ *   · `vuoto` — non c'era niente da guardare;
+ *   · `niente` — ha guardato, e niente meritava una riga;
+ *   · `condizione` — un passo «solo se» l'ha fermata;
+ *   · `gia` — c'è ancora una sua riga aperta in lista;
+ *   · `tetto` — il budget di oggi per le automazioni è finito;
+ *   · `guaio` — è andata storta (il perché sta in `guaio`).
+ */
+export type PercheNiente = 'vuoto' | 'niente' | 'condizione' | 'gia' | 'tetto' | 'guaio'
+
+/** Un giro, com'è andato: quanti documenti ha guardato, quante cose ha fatto, o perché niente. */
+export type Giro = { quando: string; esito: string; quanti: number; fatti?: number; perche?: PercheNiente; risultato?: string }
+
+/** Dopo quanto riprova da sola un giro andato storto: entro l'ora, non al turno dopo. */
+export const RIPROVA_DOPO = 30 * 60_000
+
+/** Il tetto dell'attesa fra un guaio e l'altro: quattro tentativi al giorno, non novanta. */
+export const RIPROVA_AL_PIU = 6 * 60 * 60_000
+
+/**
+ * Quanto aspettare dopo un guaio, contati quelli di fila prima di lui.
+ *
+ * Il primo riprova entro l'ora; poi l'attesa raddoppia (un'ora, due, quattro)
+ * fino a sei ore. Un guasto che si ripete uguale — una risposta troncata, un
+ * fornitore che rifiuta — costava una chiamata al modello ogni mezz'ora per
+ * sempre; così costa quattro al giorno, e il primo guaio di passaggio
+ * riprova presto come prima.
+ */
+export function attesaDopoGuai(storia: Giro[]): number {
+  let diFila = 0
+  for (let i = storia.length - 1; i >= 0 && storia[i].esito === 'guaio'; i--) diFila++
+  return Math.min(RIPROVA_DOPO * 2 ** diFila, RIPROVA_AL_PIU)
+}
+
+/** La ricevuta dell'ultimo giro; senza, l'ultimo della storia. */
+export function ricevutaDi(s: StatoAutomazione | null | undefined): Giro | null {
+  if (s?.ricevuta) {
+    try {
+      const x = JSON.parse(s.ricevuta)
+      if (x && typeof x === 'object' && typeof x.quando === 'string') return x as Giro
+    } catch { /* si ripiega sulla storia */ }
+  }
+  const storia = storiaDi(s)
+  return storia[storia.length - 1] ?? null
+}
 
 /** Quanti giri si tengono. Venti: bastano a vedere un'abitudine, non un anno. */
 const GIRI = 20
@@ -5143,23 +5217,34 @@ export function statoAutomazione(id: string): StatoAutomazione | null {
  * una che non trova niente perché sta cercando parole che nei documenti non
  * compaiono. Le due si scrivono uguali nell'esito, e sono problemi opposti.
  */
-export function automazioneGirata(id: string, esito: string, guaio?: string, quanti = 0, risultato?: string) {
-  const ora = new Date().toISOString()
+export function automazioneGirata(id: string, esito: string, guaio?: string, quanti = 0, risultato?: string, ricevuta: { fatti?: number; perche?: PercheNiente } = {}) {
+  const adesso = new Date()
+  const ora = adesso.toISOString()
   const prima = storiaDi(statoAutomazione(id))
-  const storia = JSON.stringify([...prima, { quando: ora, esito, quanti, ...(risultato ? { risultato: risultato.slice(0, 24000) } : {}) }].slice(-GIRI))
-  // un guaio muove l'orologio (`ultima`) ma non il paletto (`vista`): quello
-  // che è arrivato mentre falliva dev'essere ancora lì al prossimo giro
-  const vista = esito === 'guaio' ? null : ora
+  const perche: PercheNiente | undefined = esito === 'guaio' ? 'guaio' : esito === 'fatta' ? undefined : ricevuta.perche ?? (quanti ? 'niente' : 'vuoto')
+  const giro: Giro = { quando: ora, esito, quanti, ...(esito === 'fatta' ? { fatti: ricevuta.fatti ?? 1 } : {}), ...(perche ? { perche } : {}) }
+  const storia = JSON.stringify([...prima, { ...giro, ...(risultato ? { risultato: risultato.slice(0, 24000) } : {}) }].slice(-GIRI))
+  /*
+   * Un guaio non muove niente: né l'orologio (`ultima`) né il paletto
+   * (`vista`). Prima `ultima` si spostava, e un giro fallito alle nove
+   * aspettava le nove del giorno dopo: un giorno intero perso in silenzio.
+   * Adesso resta scaduta, e `riprova` dice quando riprovare: entro l'ora.
+   */
+  const fallita = esito === 'guaio'
+  const vista = fallita ? null : ora
+  const riprova = fallita ? new Date(adesso.getTime() + attesaDopoGuai(prima)).toISOString() : null
   db.prepare(`
-    INSERT INTO automazioni (id, ultima, vista, quante, esito, guaio, storia) VALUES (?,?,?,1,?,?,?)
+    INSERT INTO automazioni (id, ultima, vista, quante, esito, guaio, storia, riprova, ricevuta) VALUES (?,?,?,1,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
-      ultima = excluded.ultima,
+      ultima = CASE WHEN excluded.esito = 'guaio' THEN automazioni.ultima ELSE excluded.ultima END,
       vista  = COALESCE(excluded.vista, automazioni.vista),
       quante = automazioni.quante + 1,
       esito  = excluded.esito,
       guaio  = excluded.guaio,
-      storia = excluded.storia
-  `).run(id, ora, vista, esito, guaio ?? null, storia)
+      storia = excluded.storia,
+      riprova = excluded.riprova,
+      ricevuta = excluded.ricevuta
+  `).run(id, fallita ? null : ora, vista, esito, guaio ?? null, storia, riprova, JSON.stringify(giro))
 }
 
 /**
@@ -5178,10 +5263,11 @@ export function automazioneGirata(id: string, esito: string, guaio?: string, qua
  * quella riga viene chiusa, la successiva compare da sé.
  */
 export function automazioneRimandata(id: string) {
+  const ricevuta = JSON.stringify({ quando: new Date().toISOString(), esito: 'gia', quanti: 0, perche: 'gia' } satisfies Giro)
   db.prepare(`
-    INSERT INTO automazioni (id, esito) VALUES (?, 'gia')
-    ON CONFLICT(id) DO UPDATE SET esito = 'gia'
-  `).run(id)
+    INSERT INTO automazioni (id, esito, ricevuta) VALUES (?, 'gia', ?)
+    ON CONFLICT(id) DO UPDATE SET esito = 'gia', ricevuta = excluded.ricevuta
+  `).run(id, ricevuta)
 }
 
 /**
@@ -5193,10 +5279,11 @@ export function automazioneRimandata(id: string) {
  * tetto raggiunto non è un guasto — è la ricetta che funziona fin troppo.
  */
 export function automazioneSaltata(id: string) {
+  const ricevuta = JSON.stringify({ quando: new Date().toISOString(), esito: 'saltata', quanti: 0, perche: 'tetto' } satisfies Giro)
   db.prepare(`
-    INSERT INTO automazioni (id, esito) VALUES (?, 'saltata')
-    ON CONFLICT(id) DO UPDATE SET esito = 'saltata'
-  `).run(id)
+    INSERT INTO automazioni (id, esito, ricevuta) VALUES (?, 'saltata', ?)
+    ON CONFLICT(id) DO UPDATE SET esito = 'saltata', ricevuta = excluded.ricevuta
+  `).run(id, ricevuta)
 }
 
 /**
@@ -5660,17 +5747,6 @@ export function prendiEsito(id: string, compito: string): boolean {
 
 const IN_ATTESA = "('senza bozza','da scrivere','scritta')"
 
-/** C'è un risultato del vassoio ancora in attesa, nato da questa automazione? La guardia della riga sola. */
-export function esitoVivoDa(automazione: string): boolean {
-  return !!db.prepare(`SELECT 1 FROM esiti e JOIN prove p ON p.id = e.prova
-    WHERE p.tipo = 'vassoio' AND e.automazione = ? AND e.stato IN ${IN_ATTESA} LIMIT 1`).get(automazione)
-}
-
-export function nelVassoio(id: string, adesso: Date = new Date()): boolean {
-  const r = db.prepare('SELECT vassoio FROM automazioni WHERE id = ?').get(id) as { vassoio: string | null } | undefined
-  return !!r?.vassoio && r.vassoio > adesso.toISOString()
-}
-
 /** I documenti che hanno un risultato nel vassoio (in qualunque stato ma non superato). */
 export function docsNelVassoio(ids: string[], automazione?: string): Set<string> {
   const dentro = new Set<string>()
@@ -5701,20 +5777,6 @@ export function vassoioInAttesa(): RigaEsito[] {
 export function daScrivereNelVassoio(): RigaEsito | null {
   return (db.prepare(`SELECT e.* FROM esiti e JOIN prove p ON p.id = e.prova
     WHERE p.tipo = 'vassoio' AND e.stato = 'da scrivere' ORDER BY e.creato ASC, e.rowid ASC LIMIT 1`).get() as unknown as RigaEsito) ?? null
-}
-
-export function apriVassoio(id: string, fino: string) {
-  vediAutomazione(id)
-  db.prepare('UPDATE automazioni SET vassoio = ? WHERE id = ? AND vassoio IS NULL').run(fino, id)
-}
-
-export function chiudiVassoio(id: string) {
-  db.prepare('UPDATE automazioni SET vassoio = ? WHERE id = ?').run(new Date().toISOString(), id)
-}
-
-/** Un'automazione già accesa prima del vassoio non ci entra mai. */
-export function nonnoVassoio(id: string) {
-  db.prepare("UPDATE automazioni SET vassoio = '1970-01-01T00:00:00.000Z' WHERE id = ? AND vassoio IS NULL").run(id)
 }
 
 export function togliProveDi(automazione: string) {

@@ -148,6 +148,7 @@ import * as abitudini from './abitudini.ts'
 import * as gradino from './gradino.ts'
 import * as memoriaNuove from './memoria-nuove.ts'
 import * as oauth from './connettori/oauth.ts'
+import * as proposte from './proposte.ts'
 import { riflua, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
 import * as diagnosi from './diagnosi.ts'
 
@@ -857,6 +858,8 @@ app.get('/api/stato', async (_req, res) => {
     suggerimentiNuovi: scoperte.nuovi().length && scoperte.nuoviInVetrina().length,
     // i risultati nuovi del vassoio di prova (P6): accendono lo stesso punto
     vassoioNuovi: vassoio.nonVisti(),
+    // gli ordini fissi accesi il cui ultimo giro è andato storto (E): la riga fissa del motore li dice
+    automazioniInGuaio: (() => { try { return automazioni.inGuaio() } catch { return [] } })(),
     // le cose da guardare nate dopo l'ultima visita alla Memoria: il punto nel menù (P5)
     memoriaNuove: (() => { try { return memoriaNuove.nuove(cfg.leggi().memoriaVista ?? null) } catch { return { quante: 0, dove: null } } })(),
     // la scheda delle conversazioni offre l'interruttore di Claude Code solo se
@@ -4118,6 +4121,16 @@ app.post('/api/compiti/:id/esegui', async (req, res) => {
   if (!p) return res.status(400).json({ errore: 'Non c\'è niente da eseguire.' })
   const conf = cfg.leggi()
 
+  // — le bozze nella casella, una nota, un file: le proposte degli ordini fissi (E) —
+  if (proposte.eQui(p)) {
+    try {
+      const fatto = await proposte.esegui(c, p)
+      res.json({ ok: true, ...fatto, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
+      compiti.annunciaCambio()
+    } catch (e) { errore(res, e) }
+    return
+  }
+
   // — in agenda —
   //
   // Passa da Calendario del Mac, che è già collegato agli account di chi lo usa
@@ -4669,8 +4682,8 @@ app.post('/api/automazioni/aggiorna', async (_req, res) => {
  *
  * È la rotta che risponde a «ma queste posso farmele io?»: una frase, e dopo
  * qualche secondo c'è un'automazione tua nell'elenco, uguale in tutto a quelle
- * arrivate con l'azienda. Nasce spenta di proposito — vedi il commento nel
- * client: prima la si guarda e la si prova, poi la si accende.
+ * arrivate con l'azienda. Nasce accesa (E): il mese prima l'ha già fatta
+ * vedere prima di crearla, e da lì gira dal vivo.
  */
 /** La frase diventa una ricetta da guardare, non ancora un file: il costruttore la mostra sui binari. */
 app.post('/api/automazioni/componi', async (req, res) => {
@@ -4680,11 +4693,14 @@ app.post('/api/automazioni/componi', async (req, res) => {
   } catch (e) { errore(res, e, 400) }
 })
 
-/** Una ricetta composta sui binari, a mano o dopo la frase: nasce in pausa, come le altre. */
+/**
+ * Una ricetta composta sui binari, a mano o dopo la frase: nasce accesa, dal
+ * vivo. L'anteprima del mese prima l'ha già vista prima di crearla (`mese`).
+ */
 app.post('/api/automazioni/nuova', (req, res) => {
   try {
     const a = automazioni.daCampi(req.body ?? {})
-    store.accendiAutomazione(a.id, false)
+    automazioni.accendi(a.id, true)
     res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
   } catch (e) { errore(res, e, 400) }
 })
@@ -4692,8 +4708,42 @@ app.post('/api/automazioni/nuova', (req, res) => {
 app.post('/api/automazioni', async (req, res) => {
   try {
     const a = await automazioni.daUnaFrase(String(req.body?.descrizione ?? ''), req.body?.attrezzi)
-    store.accendiAutomazione(a.id, false)
+    automazioni.accendi(a.id, true)
     res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
+  } catch (e) { errore(res, e, 400) }
+})
+
+/**
+ * L'anteprima del mese prima, per una ricetta non ancora scritta: «il mese
+ * scorso avrebbe fatto queste N cose». Sola lettura, nessun modello.
+ */
+app.post('/api/automazioni/mese', (req, res) => {
+  try { res.json({ ok: true, ...automazioni.mese(automazioni.daProvare(req.body?.ricetta ?? {})) }) }
+  catch (e) { errore(res, e, 400) }
+})
+
+/** La stessa anteprima, per una che c'è già. */
+app.get('/api/automazioni/:id/mese', (req, res) => {
+  const a = automazioni.ricette().find(x => x.id === req.params.id)
+  if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
+  try { res.json({ ok: true, ...automazioni.mese(a) }) } catch (e) { errore(res, e) }
+})
+
+/** Le quattro di partenza, con il loro interruttore (E). */
+app.get('/api/automazioni/pacchetto', (_req, res) => {
+  try { res.json({ pacchetto: automazioni.pacchetto(), offerta: automazioni.offertaPacchetto() }) } catch (e) { errore(res, e) }
+})
+
+/** «Non ora» sulla prima pagina: le quattro non si offrono più lì. */
+app.post('/api/automazioni/pacchetto-visto', (_req, res) => {
+  cfg.aggiorna({ pacchettoOfferto: true })
+  res.json({ ok: true })
+})
+
+app.post('/api/automazioni/pacchetto/:id', (req, res) => {
+  try {
+    automazioni.dalPacchetto(req.params.id, req.body?.accesa !== false)
+    res.json({ ok: true, pacchetto: automazioni.pacchetto(), offerta: automazioni.offertaPacchetto(), automazioni: automazioni.elenco() })
   } catch (e) { errore(res, e, 400) }
 })
 
@@ -4725,10 +4775,8 @@ app.post('/api/automazioni/:id/accendi', (req, res) => {
 app.post('/api/automazioni/:id/adesso', async (req, res) => {
   const a = automazioni.ricette().find(x => x.id === req.params.id)
   if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
-  // dal vivo a mano solo quando è già dal vivo (P6): altrimenti si prova sul passato
-  const st = store.statoAutomazione(a.id)
-  if (a.spenta || st?.spenta) return res.status(409).json({ errore: 'È in pausa: provala sugli ultimi 30 giorni.' })
-  if (store.nelVassoio(a.id)) return res.status(409).json({ errore: 'È ancora in prova: provala sugli ultimi 30 giorni.' })
+  // dal vivo, subito: anche in pausa un dito che preme è il suo consenso, e
+  // non c'è più un vassoio di prova che lo tenga lontano dalla lista
   try {
     // a mano: un dito che preme non è la spesa ricorrente che il tetto del
     // giorno tiene a bada, e «ha guardato e non c'era niente» sarebbe una bugia
@@ -5585,11 +5633,6 @@ app.post('/api/vassoio/:id/lista', async (req, res) => {
 
 app.delete('/api/vassoio/:id', (req, res) => {
   try { vassoio.scarta(req.params.id); res.json({ vassoio: vassoio.elenco() }) } catch (e) { errore(res, e) }
-})
-
-app.post('/api/automazioni/:id/dalvivo', (req, res) => {
-  if (!automazioni.ricette().some(a => a.id === req.params.id)) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
-  try { vassoio.dalVivo(req.params.id); res.json({ automazioni: automazioni.elenco() }) } catch (e) { errore(res, e) }
 })
 
 app.get('/api/collaudo/misura', (_req, res) => {

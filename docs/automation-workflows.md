@@ -1,32 +1,57 @@
-# Automation workflows
+# Standing orders (automations)
 
-The automations page provides a compact library, evidence-based suggestions, a workflow editor and run history. Suggestions are discovered when the page loads or is refreshed; they are not a background activity monitor.
+In the UI an automation is a **standing order** ("Ordini fissi" in Italian). Internally the names stay the same: `server/automazioni.ts`, the `/api/automazioni` routes, the `automazioni` table. A standing order is a recipe (data, not code) run by one engine. It prepares; it never sends.
 
-## Discovery
+## Recipe
 
-`server/scoperte.ts` examines titles from the latest 200 indexed documents. At least two matching titles from connected sources are required. Rules cover invoices, proposals and meeting notes in English and Italian. Three indexed emails can also suggest inbox priorities; five indexed work files can suggest project updates. At most three suggestions are shown. Evidence and the source permissions are shown before adoption. Adoption persists an editable, paused recipe; stable IDs prevent duplicate adoption. Dismissals use the existing account-scoped hidden-automation state. Discovery does not call an AI provider.
+A recipe is a validated JSON file (`valida()` in `server/automazioni.ts`), in the account's `automazioni` folder or in the package (`automazioni/_comuni`, loaded only with `config.diSerie`). Every recipe carries both languages (`en`).
 
-## Execution
+- `quando` — when it runs:
+  - `{ ogni: 'giorno', ora }` every day;
+  - `{ ogni: 'feriali', ora }` Monday to Friday;
+  - `{ ogni: 'settimana', giorno: 0-6, ora }` one day a week (0 is Sunday);
+  - `{ ogni: 'mese', giorno: 1-31, ora }` once a month; a month without that day runs on its last day;
+  - `{ quandoArriva: true }` after a source sync that brought something new.
+  The turn is counted from the last successful run, so a computer that was off catches up once, not once per missed day. Hours are in the user's time zone (`config.fuso`).
+- `guarda` — what it reads: `cerca` (index search words, in the documents' language), `soloNuovi` (only what arrived since the last successful run), `ogniVolta` (a reminder: it runs even with nothing to read), `limite`.
+- `fai` — the instruction. `passi` — up to six ordered steps (`condizione` stops the run, `trasforma` passes its output on).
+- `metti` — `inLista` (oggi, settimana, poi), `modo` (io: a line; bozza: the line is drafted; prompt: a prompt to use elsewhere; `tutto` is still accepted and behaves like `bozza`, the builder no longer offers it), `perDocumento` (one line per document).
+- `proponi` — instead of a line, something to approve with one tap:
+  - `posta.cestina`, `posta.archivia`: chosen messages to move (never deleted);
+  - `posta.bozza`: replies saved as drafts in the mailbox (`mailbox-drafts.ts`), recipient taken from the document, never sent;
+  - `agenda.aggiungi`: calendar events, only with a date and time written in the document;
+  - `nota.crea`: one note in Apple Notes;
+  - `file.crea`: one Word document in the user's delivery place (`mani.luogoPreferito`).
+  Each lands as a ready row with the proposal; its single button says "Approve" or "Approve all (N)" and executes exactly what the row shows (`/api/compiti/:id/esegui`, `server/proposte.ts` for the last three). The home page marks it "to approve". If the mailbox takes only some drafts, the row stays with the ones still missing; a failure before anything reached the mailbox (no connection, original not found, recipient mismatch) frees the journal reservation so Approve can be tried again, while a failure during the write stays "uncertain" and is never retried blindly.
+  On a hosted workspace `agenda.aggiungi`, `nota.crea` and `file.crea` are not offered (they are approved through Calendar, Notes and the Desktop of a Mac): the builder hides them, `daCampi` rejects them, and a recipe written on a Mac that asks for one runs on a server as a plain line, without spending tokens on a proposal nobody can approve.
+- `attrezzi` — closed vocabulary of sources it may open (`attrezzi.ts`); an unknown name rejects the recipe.
 
-Recipes can include up to six ordered `passi`, each with a unique `id`, a `tipo` and an instruction in `testo`:
+## Lifecycle
 
-- `trasforma`: processes the previous output and passes its result forward.
-- `condizione`: evaluates the current material; false stops the workflow without creating a task. True preserves the input.
+- **Create.** From a sentence (`/api/automazioni/componi`, the builder fills while typing: cadence, sources and what it hands back are read without a model; an explicit "every Monday" or "every day" wins over a month mentioned in passing, and "per month" or "monthly report" alone is not a cadence), by hand on the builder, or from any task or feed card: "Do this every week" opens a new standing order already written (`ricettaDaCarta`: Monday 08:00, a reminder line with the card's text, `ogniVolta`, no sources or proposal read from the card), created with one tap.
+- **Preview, then live.** Before creating it the builder shows **last month**: the recipe's material selection replayed over the last 30 days of the local index, one occurrence at a time, read-only and without any model (`mese()`, `POST /api/automazioni/mese`, `GET /api/automazioni/:id/mese`). It is an upper bound ("up to N items"). Created standing orders are on and live immediately; "Run it now" works right away, paused or not. The 14-day practice tray is gone: results left in it from before can still be moved to the list or dismissed (`vassoio.ts`), nothing new enters it.
+- **Suggestions** (`scoperte.ts`) keep their gate: a suggested recipe is replayed on the past (`collaudo.ts`) and only shown if it passes.
+- **Starter pack.** Four with one switch each: replies owed, quotes to chase, renewals, changed bank details (`pacchetto()`, `/api/automazioni/pacchetto`). Turning one on copies it into the account's own recipes, where it is an ordinary card (receipt, "Run it now", failure line, editor); the pack keeps offering only the ones not taken yet, while all of the account's standing orders come from it. On first run the first page offers the same four (`CartaPacchetto`) while none is on and the account has none of its own (`offerta`), until "Dismiss" (`config.pacchettoOfferto`, `POST /api/automazioni/pacchetto-visto`). If `config.pubblico` is `persona` replies and renewals come first, if `azienda` quotes and bank details.
 
-The initial input is bounded to eight source documents, with up to 3,000 body characters each. Steps use the configured AI provider and run sequentially. Results become context for the existing task/draft engine. Existing schedules, source permissions, per-document output and daily limits remain in effect. A workflow run with steps counts toward the daily AI budget. Concurrent executions of the same recipe within one account are guarded to prevent duplicate tasks.
+## Every run leaves a receipt
 
-Manual runs save edited fields first. Invalid edits prevent execution. Preview remains tied to saved settings. Manual failures are recorded in run history. Completed AI workflow output is retained with the last twenty runs (up to 24,000 characters each) and can be expanded in the editor. Closing a changed editor offers keep-editing or discard actions.
+`store.automazioneGirata` writes the run into the history and into `ricevuta`: documents looked at, items made, or why nothing (`vuoto` nothing to look at, `niente` nothing qualified, `condizione` a step stopped it, `gia` its previous line is still open, `tetto` today's budget is spent, `guaio` it failed). The card and the editor show it in one line.
+
+- **Failures** do not move `ultima` or the `vista` marker; `riprova` is set 30 minutes ahead after the first failure, then doubles for each further failure in a row up to 6 hours (`attesaDopoGuai`), and the engine retries then (also for "when it arrives" recipes, which do not retry on every sync before that). A failing standing order shows on its card, in its editor, and in the fixed engine row on the first page with a link to the page.
+- **Health** (`salute`): `scollegata` (a declared source is not connected), `guaio`, `ferma` (its line is still open), `muta` (four empty runs in a row). `muta` only applies to clock recipes with their own search words: a "when it arrives" or "only new" recipe that finds nothing is normal.
+
+## Budget
+
+Drafting is the only spend that repeats on its own, so automatic drafts (and prepared proposals) are capped by budget, not by a fixed count: standing orders may use half of the day's token cap (`config.tetto`, or `BUDGET_SENZA_TETTO` without one), at an estimated `STIMA_BOZZA` tokens per draft, minus drafts already started today by all standing orders; with a cap, they also stop when what was actually spent today (chat and everything else included) leaves less than one draft under the whole cap (`bozzeRimaste`). Without a cap the rest of the day's spending does not stop them. Over the budget a per-document recipe still writes its lines, without drafts; others skip the run with receipt `tetto`. Manual runs are not capped.
 
 ## Scope
 
-This is a linear workflow engine with conditional stops, not a general graph runner. It uses the existing source/tool registry. It does not introduce browser automation, arbitrary shell execution, local file writes, new third-party connector actions, webhooks, branching/merging, or n8n connector compatibility. Source synchronization must populate the local index before discovery and source selection can use it. Scheduled execution requires the local service to be running.
-
-## Desktop packaging
-
-The local macOS arm64 app is version 0.2.1. Platform-specific packaging retains the shared file allowlist; the post-pack hook rejects development files, private environment configuration and nested builds. This is checked even when the output directory is outside the repository. The local bundle uses an ad-hoc signature; this is not a notarized public release.
+A linear engine with conditional stops. No browser automation, shell, webhooks or sending: the only outward actions are the six proposals above, each executed by a person's tap. Scheduled runs need the local service (or the hosted workspace) to be running.
 
 ## Verification
 
-`server/flusso.test.ts` checks ordering, short-circuiting and invalid responses. Automation integration tests check result propagation, immutability and concurrent-run suppression. `server/scoperte.test.ts` checks evidence, connection restrictions, persistence, paused adoption and dismissal. Browser verification uses isolated data under `/tmp`. The packaged Electron application is also tested with its configured provider. A live creation check caught an unsupported `maxItems` schema keyword; the request schema now describes that limit in prose while the server continues to enforce it. Provider errors propagate to the editor instead of being replaced with a misleading request to rephrase.
-
-The final build passes type checking and the full suite: 754 passed, 18 skipped, zero failures. Native Electron verification covered provider-backed creation, adding an AI step, save-and-run, task creation, paused state and persistence after restart.
+- `server/ordini-fissi.test.ts`: weekdays and monthly turns, impossible days rejected, monthly copy matches the schedule, failed runs do not move the clock and retry within the hour, receipts for every outcome, health by trigger type, the read-only month preview, the four proposal kinds (closed ids, recipient from the document, no dashes, never sent, row kept if the mailbox refuses), budget for proposals, reminders from a card, the starter pack and its ordering.
+- `server/automazioni-rotte.test.ts`: on a real server, a new standing order is live, "Run now" answers 200 right away and when paused, the month preview does not write, the starter pack switches.
+- `server/automazioni.test.ts`, `server/perDocumento.test.ts`: the budget replaces the fixed cap; `server/vassoio.test.ts`: nothing new enters the tray, old results still work.
+- `src/ordini-fissi.test.ts`: the sentences in both languages (schedules, receipts, month preview, approve buttons, the card phrase, the engine row).
+- Scenes: `OUT=<dir> PORTA=18880 prove/ordini-fissi.sh` (light and dark, 1100 and 1500).

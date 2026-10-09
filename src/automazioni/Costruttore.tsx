@@ -15,19 +15,35 @@
 // è collegata, grigio se no — e nient'altro è colorato.
 
 import { useEffect, useRef, useState, type DragEvent } from 'react'
-import type { Attrezzo, Passo, RicettaComposta } from '../api'
+import type { Attrezzo, Passo, Proponi, RicettaComposta } from '../api'
 import { t } from '../lingua'
 import { ConnectorIcon, connectorPerAttrezzo } from '../components/ConnectorIcon'
+import { consegnaPossibile, GIORNI, quandoGira } from './quando'
+import { eOspitato } from '../tempi'
 
-const GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato']
 const ORE = Array.from({ length: 24 }, (_, i) => i)
+const DEL_MESE = Array.from({ length: 31 }, (_, i) => i + 1)
 const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
 
 /** Quando parte, detto in una frase corta. */
-export function quandoFrase(q: RicettaComposta['quando']): string {
-  if ('quandoArriva' in q) return t('quando arriva qualcosa di nuovo')
-  if (q.ogni === 'giorno') return `${t('ogni giorno alle')} ${hh(q.ora)}`
-  return `${t('ogni')} ${t(GIORNI[q.giorno] ?? 'lunedì')} ${t('alle')} ${hh(q.ora)}`
+export const quandoFrase = (q: RicettaComposta['quando']) => quandoGira(q)
+
+/**
+ * Cosa consegna, oltre a una riga in lista (E). Le due che mettono via dei
+ * messaggi non si scelgono da qui: arrivano già scritte in una ricetta.
+ */
+const CONSEGNE: [Proponi | '', string][] = [
+  ['', 'Una riga in lista'], ['posta.bozza', 'Bozze nella casella'], ['agenda.aggiungi', 'In agenda'],
+  ['nota.crea', 'Una nota'], ['file.crea', 'Un file']
+]
+/** Come lo dice la frase in cima, una consegna per una. */
+const CONSEGNA_FRASE: Record<Proponi, string> = {
+  'posta.bozza': 'prepara le risposte fra le bozze, da approvare',
+  'agenda.aggiungi': 'prepara gli eventi da mettere in agenda, da approvare',
+  'nota.crea': 'prepara una nota, da approvare',
+  'file.crea': 'prepara un file, da approvare',
+  'posta.archivia': 'propone cosa archiviare',
+  'posta.cestina': 'propone cosa mettere nel cestino'
 }
 
 /**
@@ -39,13 +55,16 @@ export function quandoFrase(q: RicettaComposta['quando']): string {
  */
 export function fraseDi(r: RicettaComposta, catalogo: Attrezzo[]): string {
   const fonti = (r.attrezzi ?? []).map(n => catalogo.find(a => a.nome === n)?.etichetta ?? n)
-  const legge = fonti.length ? `${t('legge')} ${fonti.join(', ')}` : t('guarda quello che ha già letto')
+  // un promemoria senza fonti e senza parole non legge niente: la frase non lo dice
+  const promemoria = !!r.guarda.ogniVolta && !fonti.length && !r.guarda.cerca?.trim()
+  const legge = promemoria ? '' : fonti.length ? `${t('legge')} ${fonti.join(', ')}` : t('guarda quello che ha già letto')
   const cerca = r.guarda.cerca?.trim() ? ` ${t('cercando')} «${r.guarda.cerca.trim()}»` : ''
   const passi = r.passi?.length ? `, ${r.passi.length === 1 ? t('un passaggio in mezzo') : `${r.passi.length} ${t('passaggi in mezzo')}`}` : ''
-  const modo = r.metti.modo === 'bozza' ? t('prepara anche il lavoro') : r.metti.modo === 'tutto' ? t('fa tutto il lavoro') : r.metti.modo === 'prompt' ? t('prepara il prompt') : t('mette una riga in lista')
+  const modo = r.proponi ? t(CONSEGNA_FRASE[r.proponi]) : r.metti.modo === 'bozza' || r.metti.modo === 'tutto' ? t('prepara anche il lavoro') : r.metti.modo === 'prompt' ? t('prepara il prompt') : t('mette una riga in lista')
   const dove = r.metti.inLista === 'oggi' ? t('in Oggi') : r.metti.inLista === 'settimana' ? t('in Questa settimana') : t('in Prima o poi')
-  const per = r.metti.perDocumento ? `, ${t('una per documento')}` : ''
+  const per = r.metti.perDocumento && !r.proponi ? `, ${t('una per documento')}` : ''
   const q = quandoFrase(r.quando)
+  if (promemoria) return `${q.charAt(0).toUpperCase()}${q.slice(1)}${passi}, ${modo} ${dove}${per}.`
   return `${q.charAt(0).toUpperCase()}${q.slice(1)}, ${legge}${cerca}${passi}, ${t('e')} ${modo} ${dove}${per}.`
 }
 
@@ -136,10 +155,19 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
   const cadenza = 'quandoArriva' in q ? 'arrivo' : q.ogni
   const ora = 'quandoArriva' in q ? 8 : q.ora
   const giorno = 'quandoArriva' in q || q.ogni !== 'settimana' ? 1 : q.giorno
+  const delMese = 'quandoArriva' in q || q.ogni !== 'mese' ? 1 : q.giorno
+  /** Il turno con un pezzo cambiato: la cadenza, il giorno o l'ora. */
+  const turno = (c: typeof cadenza, x: { giorno?: number; delMese?: number; ora?: number } = {}): RicettaComposta['quando'] => {
+    const h = x.ora ?? ora
+    if (c === 'arrivo') return { quandoArriva: true }
+    if (c === 'giorno' || c === 'feriali') return { ogni: c, ora: h }
+    if (c === 'mese') return { ogni: 'mese', giorno: x.delMese ?? delMese, ora: h }
+    return { ogni: 'settimana', giorno: x.giorno ?? giorno, ora: h }
+  }
 
   const aggiungi = (nome: string) => { if (!suoi.includes(nome) && catalogo.some(a => a.nome === nome)) cambia({ ...r, attrezzi: [...suoi, nome] }) }
   const togli = (nome: string) => cambia({ ...r, attrezzi: suoi.filter(x => x !== nome) })
-  const cadenzaScelta = (c: 'arrivo' | 'giorno' | 'settimana') => cambia({ ...r, quando: c === 'arrivo' ? { quandoArriva: true } : c === 'giorno' ? { ogni: 'giorno', ora } : { ogni: 'settimana', giorno, ora } })
+  const cadenzaScelta = (c: typeof cadenza) => cambia({ ...r, quando: turno(c) })
   const passiCambia = (p: Passo[]) => cambia({ ...r, passi: p })
   const nuovoPasso = (tipo: Passo['tipo']) => { const id = crypto.randomUUID(); passiCambia([...passi, { id, tipo, testo: '' }]); setAperto(id); apri(id)() }
   const sposta = (id: string, primaDi: string | null) => {
@@ -159,17 +187,24 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
       <Tratto eyebrow={t('Quando')} aperto={espansi.has('quando')} alterna={alterna('quando')}
         riassunto={(q => q.charAt(0).toUpperCase() + q.slice(1))(quandoFrase(q))}>
         <Pillole etichetta={t('Quando gira')} valore={cadenza} scegli={cadenzaScelta} voci={[
-          ['arrivo', t('Quando arriva qualcosa')], ['giorno', t('Ogni giorno')], ['settimana', t('Ogni settimana')]
+          ['arrivo', t('Quando arriva qualcosa')], ['giorno', t('Ogni giorno')], ['feriali', t('Dal lunedì al venerdì')],
+          ['settimana', t('Ogni settimana')], ['mese', t('Ogni mese')]
         ]} />
         {cadenza !== 'arrivo' && (
           <div className="auto-orario">
             {cadenza === 'settimana' && (
-              <select aria-label={t('Che giorno')} value={giorno} onChange={e => cambia({ ...r, quando: { ogni: 'settimana', giorno: Number(e.target.value), ora } })}>
+              <select aria-label={t('Che giorno')} value={giorno} onChange={e => cambia({ ...r, quando: turno(cadenza, { giorno: Number(e.target.value) }) })}>
                 {[1, 2, 3, 4, 5, 6, 0].map(g => <option key={g} value={g}>{t(GIORNI[g])}</option>)}
               </select>
             )}
+            {cadenza === 'mese' && <>
+              <span>{t('il giorno')}</span>
+              <select aria-label={t('Che giorno del mese')} value={delMese} onChange={e => cambia({ ...r, quando: turno(cadenza, { delMese: Number(e.target.value) }) })}>
+                {DEL_MESE.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </>}
             <span>{t('alle')}</span>
-            <select aria-label={t('A che ora')} value={ora} onChange={e => cambia({ ...r, quando: cadenza === 'giorno' ? { ogni: 'giorno', ora: Number(e.target.value) } : { ogni: 'settimana', giorno, ora: Number(e.target.value) } })}>
+            <select aria-label={t('A che ora')} value={ora} onChange={e => cambia({ ...r, quando: turno(cadenza, { ora: Number(e.target.value) }) })}>
               {ORE.map(h => <option key={h} value={h}>{hh(h)}</option>)}
             </select>
           </div>
@@ -189,7 +224,7 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
           leggere prima di sapere cosa si vuole. */}
       <Tratto eyebrow={t('Legge')} attivo={sopra || cercaFonte} aperto={espansi.has('legge')} alterna={alterna('legge')} quandoSopra={apri('legge')}
         riassunto={riga([
-          suoi.length ? suoi.map(n => catalogo.find(a => a.nome === n)?.etichetta ?? n).join(', ') : t('Quello che ha già letto'),
+          suoi.length ? suoi.map(n => catalogo.find(a => a.nome === n)?.etichetta ?? n).join(', ') : r.guarda.ogniVolta && !r.guarda.cerca?.trim() ? t('Ogni volta, anche senza niente da leggere') : t('Quello che ha già letto'),
           r.guarda.cerca?.trim() ? `«${r.guarda.cerca.trim()}»` : ''
         ].filter(Boolean).join(' · '))}>
         <MenzioneFonti catalogo={catalogo} scelte={suoi} aggiungi={aggiungi} togli={togli}
@@ -202,6 +237,11 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
             placeholder={t('preventivo, offerta, in attesa…')} />
           <small>{t('Le parole di chi ha scritto quei documenti, nella loro lingua. Vuoto: solo quello che è arrivato dall’ultima volta.')}</small>
         </label>
+        {/* un promemoria: torna in lista ogni volta, anche quando non c'è niente da leggere */}
+        {!r.proponi && <label className="auto-spunta">
+          <input type="checkbox" checked={!!r.guarda.ogniVolta} onChange={e => cambia({ ...r, guarda: { ...r.guarda, ogniVolta: e.target.checked || undefined } })} />
+          <span>{t('Ogni volta, anche senza niente da leggere')}</span>
+        </label>}
         {vuoleCartella && (
           <label className="auto-campo">
             <span>{t('In che cartella lavora Claude Code')}</span>
@@ -250,21 +290,26 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
         <textarea className="auto-fai" rows={4} aria-label={t('Cosa deve farne')} value={r.fai} maxLength={4000}
           placeholder={t('Dimmi quali preventivi sono ancora senza risposta: chi, cosa, da quanto. Se non ce n’è, dillo e basta.')}
           onChange={e => cambia({ ...r, fai: e.target.value })} />
-        <Pillole etichetta={t('Quanto fa')} valore={r.metti.modo ?? 'io'} scegli={m => cambia({ ...r, metti: { ...r.metti, modo: m } })} voci={[
-          ['io', t('Mette una riga')], ['bozza', t('Prepara anche il lavoro')], ['tutto', t('Fa tutto il lavoro')], ['prompt', t('Prepara il prompt')]
-        ]} />
+        {/* cosa ti consegna: una riga, o una cosa pronta da approvare con un dito. Mai mandata. */}
+        <Pillole etichetta={t('Cosa ti consegna')} valore={r.proponi ?? ''} scegli={p => cambia({ ...r, proponi: p || undefined, metti: { ...r.metti, ...(p ? { perDocumento: undefined } : {}) } })}
+          voci={[...CONSEGNE.filter(([v]) => v === (r.proponi ?? '') || consegnaPossibile(v, eOspitato())).map(([v, testo]) => [v, t(testo)] as [Proponi | '', string]),
+            ...(r.proponi === 'posta.archivia' || r.proponi === 'posta.cestina' ? [[r.proponi, r.proponi === 'posta.archivia' ? t('Da archiviare') : t('Da mettere nel cestino')] as [Proponi, string]] : [])]} />
+        {/* «Fa tutto il lavoro» diceva la stessa cosa di «Prepara anche il lavoro»: il motore le tratta uguali, e ne resta una */}
+        {!r.proponi && <Pillole etichetta={t('Quanto fa')} valore={r.metti.modo === 'tutto' ? 'bozza' : r.metti.modo ?? 'io'} scegli={m => cambia({ ...r, metti: { ...r.metti, modo: m } })} voci={[
+          ['io', t('Mette una riga')], ['bozza', t('Prepara anche il lavoro')], ['prompt', t('Prepara il prompt')]
+        ]} />}
       </Tratto>
 
       <Tratto eyebrow={t('Mette')} aperto={espansi.has('mette')} alterna={alterna('mette')}
         riassunto={[r.metti.inLista === 'oggi' ? t('Oggi') : r.metti.inLista === 'settimana' ? t('Questa settimana') : t('Prima o poi'),
-          r.metti.perDocumento ? t('una per documento') : ''].filter(Boolean).join(' · ')}>
+          r.metti.perDocumento && !r.proponi ? t('una per documento') : ''].filter(Boolean).join(' · ')}>
         <Pillole etichetta={t('In che lista')} valore={r.metti.inLista} scegli={l => cambia({ ...r, metti: { ...r.metti, inLista: l } })} voci={[
           ['oggi', t('Oggi')], ['settimana', t('Questa settimana')], ['poi', t('Prima o poi')]
         ]} />
-        <label className="auto-spunta">
+        {!r.proponi && <label className="auto-spunta">
           <input type="checkbox" checked={!!r.metti.perDocumento} onChange={e => cambia({ ...r, metti: { ...r.metti, perDocumento: e.target.checked || undefined } })} />
           <span>{t('Una riga per ogni documento, non una riga con l’elenco')}</span>
-        </label>
+        </label>}
       </Tratto>
     </div>
   )

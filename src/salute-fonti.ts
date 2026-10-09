@@ -25,6 +25,8 @@ export type Controllo =
   | { tipo: 'accedi-claude' }
   | { tipo: 'fonti'; id: string | null }
   | { tipo: 'preferenze' }
+  /** Un ordine fisso andato storto (E): porta alla sua pagina, dove dice quando riprova. */
+  | { tipo: 'automazioni' }
 
 /** Sostituisce `{chiave}` con i valori, dopo la traduzione della frase intera. */
 export function riempi(testo: string, v: Record<string, string | number>): string {
@@ -199,6 +201,8 @@ export function rigaFonti(o: {
   puoRiavviare: boolean
   /** Il guscio sa aprire la schermata dell'Accessibilità (un guscio vecchio no). */
   puoAprireTitoli?: boolean
+  /** Gli ordini fissi accesi il cui ultimo giro è andato storto (E). */
+  automazioni?: { nome: string; riprova: string | null }[]
   adesso?: Date
 }): { frase: string; controllo: Controllo } | null {
   const adesso = o.adesso ?? new Date()
@@ -238,6 +242,18 @@ export function rigaFonti(o: {
   if (o.titoliNegati) {
     frasi.push(t('Non vedo i titoli delle finestre: manca il permesso di Accessibilità.'))
     primo(o.puoAprire && o.puoAprireTitoli ? { tipo: 'accessibilita' } : { tipo: 'fonti', id: null })
+  }
+
+  // 4. gli ordini fissi andati storti (E): non sono una fonte, ma sono il motore che non ha fatto il suo giro
+  const storti = o.automazioni ?? []
+  if (storti.length) {
+    const prossima = storti.map(x => x.riprova).filter((x): x is string => !!x).sort()[0]
+    const ora = prossima ? new Date(prossima) : null
+    const quando = ora && !Number.isNaN(ora.getTime()) ? `${ora.getHours()}:${due(ora.getMinutes())}` : ''
+    frasi.push(storti.length === 1
+      ? riempi(quando ? t('«{nome}» non è riuscito: riprovo alle {ora}.') : t('«{nome}» non è riuscito.'), { nome: storti[0].nome, ora: quando })
+      : riempi(quando ? t('{n} ordini fissi non sono riusciti: riprovo alle {ora}.') : t('{n} ordini fissi non sono riusciti.'), { n: storti.length, ora: quando }))
+    primo({ tipo: 'automazioni' })
   }
 
   if (!frasi.length || !controllo) return null

@@ -205,7 +205,7 @@ test('col limite sopra 8, la riga porta tutti i documenti guardati: non solo gli
   const a = auto.scrivi(oltre)
   const catturati: { c: Parameters<import('./verso.ts').Verso['riga']>[0]; docs: string[] }[] = []
   const verso: import('./verso.ts').Verso = {
-    stato: () => null, vivo: () => false, bozzeOggi: () => 0, segnaBozza: () => 0,
+    stato: () => null, vivo: () => false, bozzeOggi: () => 0, bozzeDiOggi: () => 0, segnaBozza: () => 0,
     arrivati: () => [], docsConRiga: () => new Set(), attenzione: async () => new Map(),
     riga: (c, docs) => { catturati.push({ c, docs }) },
     affida: () => {}, proponi: () => {}, girata: () => {}, rimandata: () => {}, saltata: () => {},

@@ -1,0 +1,17 @@
+[
+ { "aspetta": 2500 },
+ { "scatta": "casa-pacchetto" },
+ { "testo": "casa-pacchetto" },
+ { "js": "(() => { const s = document.querySelector('.auto-pacchetto.casa [role=switch]'); if (!s) return 'niente interruttore in casa'; s.click(); return s.getAttribute('aria-label') })()" },
+ { "aspetta": 1200 },
+ { "scatta": "casa-pacchetto-acceso" },
+ { "vai": "Standing orders" },
+ { "aspetta": 1500 },
+ { "scatta": "pacchetto" },
+ { "testo": "pacchetto" },
+ { "js": "(() => { const s = document.querySelector('.auto-pacchetto [role=switch]'); if (!s) return 'niente interruttore'; s.click(); return s.getAttribute('aria-label') })()" },
+ { "aspetta": 1500 },
+ { "scatta": "pacchetto-acceso" },
+ { "testo": "pacchetto-acceso" },
+ { "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const a = await (await fetch('/api/automazioni', { headers: h })).json(); return a.automazioni.map(x => x.id + ':' + x.accesa).join(', ') })()" }
+]

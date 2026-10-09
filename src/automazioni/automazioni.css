@@ -196,7 +196,7 @@
    dentro i binari spegneva l'inchiostro, il rame e l'avorio — la frase in cima
    restava senza il suo fondo, il pallino acceso senza il suo rame */
 .auto-binari{--rame-cupo:var(--rame-testo);--bordo:rgba(var(--inchiostro-rgb),.16);color:var(--inchiostro)}
-.auto-frase{margin:0 0 18px;padding:14px 16px;border-radius:14px;background:var(--inchiostro);color:var(--avorio);font-size:14.5px;line-height:1.55;letter-spacing:-.1px;text-wrap:pretty}
+.auto-frase{margin:0 0 18px;padding:14px 16px;border-radius:14px;background:var(--pieno);color:var(--su-pieno);font-size:14.5px;line-height:1.55;letter-spacing:-.1px;text-wrap:pretty}
 .auto-tratto{position:relative;padding:0 0 18px 26px}
 .auto-tratto:before{content:'';position:absolute;left:7px;top:6px;bottom:-6px;width:2px;background:rgba(var(--inchiostro-rgb),.22)}
 .auto-tratto:last-of-type:before{bottom:auto;height:8px}
@@ -217,7 +217,7 @@
 .auto-pillole{display:flex;flex-wrap:wrap;gap:6px}
 .auto-pillola{padding:7px 13px;border-radius:99px;border:1px solid rgba(var(--inchiostro-rgb),.22);background:var(--carta-piena);color:var(--inchiostro);font:inherit;font-size:12.5px;cursor:pointer}
 .auto-pillola:hover{border-color:var(--inchiostro)}
-.auto-pillola.on{background:var(--inchiostro);border-color:var(--inchiostro);color:var(--avorio);font-weight:500}
+.auto-pillola.on{background:var(--pieno);border-color:var(--pieno);color:var(--su-pieno);font-weight:500}
 .auto-orario{display:flex;align-items:center;gap:8px;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.7)}
 .auto-orario select,.auto-campo select,.auto-campo input{font:inherit;font-size:13px;color:var(--inchiostro);padding:8px 11px;border:1px solid rgba(var(--inchiostro-rgb),.22);border-radius:10px;background:var(--carta-piena)}
 .auto-tessera{display:inline-flex;align-items:center;gap:7px;padding:6px 10px 6px 8px;border-radius:99px;border:1px solid var(--bordo);background:rgba(var(--luce-rgb),.7);color:var(--inchiostro);font:inherit;font-size:12.5px;cursor:grab;user-select:none}
@@ -352,3 +352,33 @@
 .vassoio-no{flex:none;width:26px;height:26px;padding:0;border-radius:99px;border:0;background:transparent;color:var(--inchiostro-3);font:inherit;font-size:15px;cursor:pointer;visibility:hidden}
 .vassoio-voce:hover .vassoio-no,.vassoio-voce:focus-within .vassoio-no{visibility:visible}
 .vassoio-no:hover{color:var(--rame-testo)}
+
+/* — E: le quattro di partenza, un interruttore ciascuna —
+   Righe e non schede: sono quattro cose da accendere, non da leggere. Il
+   titolo è la gerarchia, la riga sotto dice cosa fa, e l'interruttore è
+   l'unico comando. */
+.auto-pacchetto{margin:0 0 22px;min-width:0}
+.auto-pacchetto h2{margin:0 0 10px;font-size:15px;font-weight:500;color:var(--inchiostro)}
+.auto-pacchetto ul{list-style:none;margin:0;padding:0;border:1px solid var(--filo);border-radius:14px;overflow:hidden;background:rgba(var(--carta-rgb),.55)}
+.auto-pacchetto li{display:flex;align-items:center;gap:16px;padding:14px 16px;min-width:0;border-top:1px solid rgba(var(--inchiostro-rgb),.06)}
+.auto-pacchetto li:first-child{border-top:0}
+.auto-pacchetto-testo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.auto-pacchetto-testo b{font-size:14px;font-weight:500;color:var(--inchiostro);overflow-wrap:anywhere}
+.auto-pacchetto-testo span{font-size:12.5px;line-height:1.5;color:var(--inchiostro-2);overflow-wrap:anywhere}
+.auto-pacchetto-testo small{font-size:11.5px;color:var(--inchiostro-3);overflow-wrap:anywhere}
+/* sulla prima pagina, al primo avvio: la stessa lista, col titolo e «Non ora» su una riga */
+.auto-pacchetto.casa{margin:0 0 14px}
+.auto-pacchetto-testa{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 10px;padding:0 4px;min-width:0}
+.auto-pacchetto-testa h2{margin:0;min-width:0;overflow-wrap:anywhere}
+
+/* — E: il mese prima, in fondo al tratto «Legge» e sotto i binari di una nuova — */
+.auto-mese{margin:4px 0 14px;padding:11px 13px;border-radius:14px;border:1px solid rgba(var(--inchiostro-rgb),.1);background:rgba(var(--luce-rgb),.5);min-width:0}
+.auto-mese-testa{font-size:12.5px;font-weight:500;color:var(--inchiostro-2);overflow-wrap:anywhere}
+.auto-mese-testa.piena{color:var(--inchiostro)}
+.auto-mese-testa.guaio,.auto-mese-staccati{color:var(--rame-testo)}
+.auto-mese-staccati{font-size:11.5px;margin-top:5px;overflow-wrap:anywhere}
+.auto-mese ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.auto-mese li{display:flex;gap:8px;align-items:baseline;min-width:0;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.7)}
+.auto-mese li span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.auto-mese li time{flex:none;font-size:10.5px;color:var(--inchiostro-3)}
+.auto-mese li.auto-mese-altri{font-size:10.5px;color:var(--inchiostro-3)}

@@ -1,16 +1,18 @@
 import { Bottone } from '../components/forme'
 import { SenderRules } from '../components/SenderRules'
 import { useCallback, useEffect, useState } from 'react'
-import { api, apiP6, type Attrezzo, type Automazione, type GruppoVassoio, type Raccolta, type SuggerimentoAutomazione } from '../api'
+import { api, apiP6, type Attrezzo, type Automazione, type DelPacchetto, type GruppoVassoio, type Raccolta, type SuggerimentoAutomazione } from '../api'
 import { Vassoio } from '../automazioni/Vassoio'
 import { frasiProva } from '../prova'
 import { loc, t } from '../lingua'
 import { Editor, Nuova } from '../automazioni/Editor'
-import { quandoGira } from '../automazioni/Scheda'
+import { quandoGira, ricevuta } from '../automazioni/quando'
+import { daOffrire } from '../automazioni/offerte'
+import { RighePacchetto } from '../automazioni/Pacchetto'
 import { Cestino } from '../ui'
 import { IconPiu, IconAvanti } from '../icons'
 import { ConnectorIcon, connectorPerAttrezzo } from '../components/ConnectorIcon'
-import type { Vals } from '../vals'
+import type { DaCarta, Vals } from '../vals'
 import '../automazioni/automazioni.css'
 
 /*
@@ -54,6 +56,15 @@ export function Automazioni({ v }: { v: Vals }) {
   const [vassoio, setVassoio] = useState<GruppoVassoio[]>([])
   const [inProva, setInProva] = useState(0)
   const [inizio, setInizio] = useState<'prova' | undefined>(undefined)
+  // le quattro di partenza (E): si offrono finché non ce n'è una sua
+  const [pacchetto, setPacchetto] = useState<DelPacchetto[]>([])
+  // da una carta: «Fallo ogni settimana» apre la scheda nuova già scritta
+  const [daCarta, setDaCarta] = useState<DaCarta | null>(null)
+  const { ordineDaCarta, scordaOrdineDaCarta } = v
+  useEffect(() => {
+    if (!ordineDaCarta) return
+    setDaCarta(ordineDaCarta); setAperto(''); scordaOrdineDaCarta()
+  }, [ordineDaCarta, scordaOrdineDaCarta])
   const segnaVassoio = v.segnaVassoioVisto
   const connessioni = v.connAttivi.map(c => c.id).sort().join(',')
   const segnaVisti = v.segnaSuggerimentiVisti
@@ -82,6 +93,7 @@ export function Automazioni({ v }: { v: Vals }) {
     void caricaSuggerimenti()
     // aprire la pagina segna visto il vassoio: il punto in colonna si spegne
     apiP6.vassoio().then(x => { setVassoio(x.gruppi); segnaVassoio().catch(() => {}) }).catch(() => {})
+    api.pacchetto().then(x => setPacchetto(x.pacchetto)).catch(() => {})
     const risultati = await Promise.allSettled([api.automazioni(), api.attrezzi(), api.raccolte(), api.iniziativa()])
     const [a, c, r, i] = risultati
     if (a.status === 'fulfilled') { setTutte(a.value.automazioni); setRepo(!!a.value.ricette.repo) }
@@ -114,6 +126,18 @@ export function Automazioni({ v }: { v: Vals }) {
     metà delle sue cose e nessun comando per dirle di smettere: qui il filtro
     torna a «tutte» insieme alla barra che lo governa.
   */
+  /*
+    Le quattro di partenza, finché tutte le sue vengono da lì: un interruttore
+    ciascuna, nell'ordine di chi la usa. Accenderne una la porta fra le sue
+    come una scheda qualunque (`daOffrire`): con la ricevuta, «Falla girare
+    adesso» e la riga se non riesce. Dalla prima che si scrive da sé, il
+    pacchetto si fa da parte.
+  */
+  const offerte = daOffrire(pacchetto, tutte)
+  const prendi = (id: string) => azione(id, async () => {
+    const r = await api.dalPacchetto(id, true)
+    setPacchetto(r.pacchetto); setTutte(r.automazioni)
+  })
   const semplice = tutte.length < SOGLIA
   const filtroVero = semplice ? 'tutte' : filtro
   const cercaVera = semplice ? '' : cerca
@@ -166,9 +190,8 @@ export function Automazioni({ v }: { v: Vals }) {
   const schedaSuggerita = (s: SuggerimentoAutomazione) => <article className="auto-card suggestion" key={s.id}>
     <div className="auto-card-top"><span className="auto-status suggested">{t('Suggerita')}</span></div>
     <div className="auto-card-open"><h3>{s.nome}</h3><p>{s.spiega}</p>{fonti(s.attrezzi)}</div>
-    <div className="auto-card-footer"><span>{quandoGira({ quando: s.quando } as Automazione)}</span></div>
+    <div className="auto-card-footer"><span>{quandoGira(s.quando)}</span></div>
     {s.prova && <div className="auto-card-prova">{frasiProva.contoIdea(s.prova.giusti, s.prova.giudicati)}</div>}
-    <div className="auto-card-line">{t('Non manda e non cancella. Le bozze ti aspettano.')}</div>
     <div className="auto-card-actions">
       {/* accendere è il gesto intero: la scrive, la accende, e la scheda resta dov'è */}
       <button className="auto-button" disabled={!!occupato} onClick={() => azione(s.id, async () => {
@@ -197,9 +220,9 @@ export function Automazioni({ v }: { v: Vals }) {
     la seconda metà semplicemente non c'è invece di lasciare un vuoto.
   */
   const ritmo = (a: Automazione) => {
-    const q = quandoGira(a)
-    if (!a.ultima) return q
-    const data = new Date(a.ultima).toLocaleString(loc(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const q = quandoGira(a.quando)
+    if (!a.ricevuta?.quando) return q
+    const data = new Date(a.ricevuta.quando).toLocaleString(loc(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     return `${q} · ${t('ultima corsa')} ${data}`
   }
   /*
@@ -213,15 +236,13 @@ export function Automazioni({ v }: { v: Vals }) {
     <div className="auto-card-top">
       <button className="auto-switch" role="switch" aria-checked={a.accesa} aria-label={`${a.accesa ? t('Mettila in pausa') : t('Accendila')}: ${a.nome}`} disabled={!!occupato}
         onClick={() => azione(a.id, async () => { setTutte((await api.accendiAutomazione(a.id, !a.accesa)).automazioni) })}><span /></button>
-      {/* nei primi quattordici giorni l'interruttore resta acceso, e la parola dice fino a quando (P6) */}
-      {a.accesa && a.vassoio && a.vassoio > new Date().toISOString()
-        ? <span className="auto-switch-word prova" aria-hidden="true">{frasiProva.inProvaFino(a.vassoio)}</span>
-        : <span className={`auto-switch-word ${a.accesa ? 'on' : ''}`} aria-hidden="true">{a.accesa ? t('Attiva') : t('In pausa')}</span>}
+      <span className={`auto-switch-word ${a.accesa ? 'on' : ''}`} aria-hidden="true">{a.accesa ? t('Attiva') : t('In pausa')}</span>
     </div>
     <button className="auto-card-open" onClick={() => { setInizio(undefined); setAperto(a.id) }}><h3>{a.nome}</h3><p>{a.spiega}</p>{fonti(a.attrezzi)}</button>
     <div className="auto-card-footer"><span>{ritmo(a)}{a.prova && ['in coda', 'in corso'].includes(a.prova.stato) ? ` · ${t('La provo…')}` : ''}</span></div>
-    <div className="auto-card-line">{t('Non manda e non cancella. Le bozze ti aspettano.')}</div>
-    {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una fonte') : a.salute.stato === 'guaio' ? t('l’ultima volta è andata storta') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
+    {/* la ricevuta dell'ultimo giro: quanti documenti, quante cose, o perché niente */}
+    {a.ricevuta?.quando && a.salute.stato !== 'guaio' && <div className="auto-card-line" title={ricevuta(a.ricevuta, a.riprova)}>{ricevuta(a.ricevuta, a.riprova)}</div>}
+    {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una fonte') : a.salute.stato === 'guaio' ? ricevuta(a.ricevuta, a.riprova) : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
       const mancante = a.attrezzi.map(n => catalogo.find(c => c.nome === n)).find(c => c && !c.collegato)
       v.apriConnessioni(mancante?.serve === 'agenda' ? 'calendario' : mancante?.serve === 'sharepoint' ? 'microsoft' : mancante?.serve ?? '')
     }}>{t('Collega')} <IconAvanti size={11} /></button>}</div>}
@@ -234,10 +255,10 @@ export function Automazioni({ v }: { v: Vals }) {
       Adesso è quello che è — un collegamento con il suo conto.
     */}
     <header className="auto-header">
-      <h1 id="auto-library-title">{t('Le tue automazioni')}</h1>
+      <h1 id="auto-library-title">{t('I tuoi ordini fissi')}</h1>
       <div className="auto-header-actions">
         <button className="auto-link" onClick={() => v.apriConnessioni()}>{t('Fonti')}<span className="auto-link-count">{v.connAttivi.length}</span></button>
-        <button className="auto-button primary" onClick={() => setAperto('')}><IconPiu size={14} />{t('Crea automazione')}</button>
+        <button className="auto-button primary" onClick={() => { setDaCarta(null); setAperto('') }}><IconPiu size={14} />{t('Nuovo ordine fisso')}</button>
       </div>
     </header>
     {/*
@@ -326,9 +347,14 @@ export function Automazioni({ v }: { v: Vals }) {
               {occupato === 'suggerimenti' ? t('Guardo…') : inProva > 0 ? frasiProva.neProvo(inProva) : t('Aggiorna i suggerimenti')}</button>
           </div>}
         </section>)}
-      {!carico && !viste.length && !suggeriti.length && <div className="auto-empty">
-        <p>{tutte.length ? t('Nessun risultato') : t('Nessuna automazione ancora. Descrivine una, o accendi un suggerimento quando compare.')}</p>
-        <button className={`auto-button ${tutte.length ? '' : 'primary'}`} onClick={() => { if (tutte.length) { setFiltro('tutte'); setCerca(''); setRaccolta('') } else setAperto('') }}>{tutte.length ? t('Mostra tutte') : t('Crea automazione')}</button>
+      {/* le quattro di partenza ancora da prendere: un interruttore ciascuna, finché le sue vengono tutte da qui */}
+      {!carico && !!offerte.length && <section className="auto-pacchetto" aria-labelledby="auto-pacchetto-titolo">
+        <h2 id="auto-pacchetto-titolo">{t('Per cominciare')}</h2>
+        <RighePacchetto righe={offerte} occupato={!!occupato} prendi={prendi} />
+      </section>}
+      {!carico && !viste.length && !suggeriti.length && !offerte.length && <div className="auto-empty">
+        <p>{tutte.length ? t('Nessun risultato') : t('Nessun ordine fisso ancora.')}</p>
+        <button className={`auto-button ${tutte.length ? '' : 'primary'}`} onClick={() => { if (tutte.length) { setFiltro('tutte'); setCerca(''); setRaccolta('') } else { setDaCarta(null); setAperto('') } }}>{tutte.length ? t('Mostra tutte') : t('Nuovo ordine fisso')}</button>
       </div>}
       {/*
         Le proposte stanno arrivando: una riga, non un vuoto. Solo quando non
@@ -338,11 +364,11 @@ export function Automazioni({ v }: { v: Vals }) {
         <p role="status" style={{ fontSize: 13, color: 'var(--inchiostro-2)', margin: '14px 2px 0' }}>{t('Guardo cosa si ripete nel tuo lavoro…')}</p>}
     </section>
     <footer className="auto-page-footer">
-      <span>{v.ospitato ? t('Le automazioni girano nel tuo spazio.') : t('Le automazioni girano mentre Myynd è aperto su questo computer.')}</span>
+      <span>{v.ospitato ? t('Gli ordini fissi girano nel tuo spazio.') : t('Gli ordini fissi girano mentre Myynd è aperto su questo computer.')}</span>
       {repo && <button className="auto-link" disabled={!!occupato} onClick={() => azione('recipes', async () => { const r = await api.aggiornaRicette(); setTutte(r.automazioni) })}>{t('Cerca automazioni nuove')}</button>}
     </footer>
     {scelta && <Editor key={scelta.id} a={scelta} catalogo={catalogo} cartelle={cartelle} raccolte={raccolte} cambiata={setTutte} chiudi={() => setAperto(null)} spostata={sposta}
       inizio={inizio} vaiAlleFonti={() => v.apriConnessioni()} />}
-    {aperto === '' && <Nuova catalogo={catalogo} cartelle={cartelle} chiudi={() => setAperto(null)} fatta={(a, id) => { setTutte(a); setAperto(id) }} />}
+    {aperto === '' && <Nuova key={daCarta?.frase ?? ''} daCarta={daCarta} catalogo={catalogo} cartelle={cartelle} chiudi={() => { setAperto(null); setDaCarta(null) }} fatta={(a, id) => { setTutte(a); setAperto(id); setDaCarta(null) }} />}
   </main>
 }

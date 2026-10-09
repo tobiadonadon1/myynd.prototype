@@ -49,25 +49,43 @@ export function indirizzo(s: string): string { return (s.match(/[A-Z0-9.!#$%&'*+
 export function destinatarioVerificato(atteso: string, header: string) {
   if (!indirizzo(atteso) || indirizzo(atteso) !== atteso.trim().toLowerCase() || indirizzo(atteso) !== indirizzo(header)) throw new Error('The draft recipient does not match the original email. Review it before saving.')
 }
+/*
+ * Un errore arrivato prima di toccare la casella (E): la connessione non si è
+ * aperta, il messaggio originale non c'è, il destinatario non torna. Niente è
+ * stato scritto, e allora la prenotazione si libera: prima ogni errore la
+ * lasciava lì, e «Approva tutto» dopo un «Cannot locate the original email»
+ * rispondeva per sempre «a previous save is uncertain», con un bottone che
+ * non poteva più riuscire. Solo chi lo marca libera: un errore qualunque resta
+ * incerto, come deve, perché la scrittura potrebbe essere passata.
+ */
+const PRIMA = Symbol('primaDiScrivere')
+export function primaDiScrivere(err: unknown): Error {
+  const e = err instanceof Error ? err : new Error(String(err))
+  ;(e as Error & { [PRIMA]?: true })[PRIMA] = true
+  return e
+}
+export function eraPrimaDiScrivere(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  // due segni per la stessa cosa: questo, e quello che mette Mail del Mac (`bozza-mail-mac.ts`)
+  return (err as { [PRIMA]?: true })[PRIMA] === true || (err as { primaDelSalvataggio?: unknown }).primaDelSalvataggio === true
+}
 const occupati = new Map<string, Promise<BozzaCasella>>()
 /** Un salvataggio interrotto a metà: la bozza potrebbe esserci, e non se ne fa un doppione. */
 const INCERTO = 'Un salvataggio precedente nella posta è rimasto in dubbio. Guarda nelle Bozze prima di riprovare: Myynd non ne crea un doppione.'
 /** L'errore di chi non ha mandato niente alla casella: si può riprovare senza rischiare un doppione. */
-export function primaDelSalvataggio(e: unknown): boolean {
-  return !!e && typeof e === 'object' && (e as { primaDelSalvataggio?: unknown }).primaDelSalvataggio === true
-}
+export const primaDelSalvataggio = eraPrimaDiScrivere
 type Crea = (source: string, email: EmailPronta, messageId: string) => Promise<{ id: string; url: string }>
 async function crea(source: string, e: EmailPronta, messageId: string) {
   if (source.startsWith('google:')) return google.salvaBozza(source.slice(7), e, messageId)
   if (source.startsWith('posta:')) {
     const c = cfg.leggi().posta
-    if (!c) throw new Error('Reconnect your email account to save drafts.')
+    if (!c) throw primaDiScrivere(new Error('Reconnect your email account to save drafts.'))
     return posta.salvaBozza(c, source, e, messageId)
   }
   // Mail del Mac: la bozza nelle Bozze di Mail, dal conto a cui era arrivata se si riconosce
   if (source.startsWith('postamac:')) return mailDelMac.salva(e, (documento(source)?.destinatari ?? '').split(','))
-  if (source.startsWith('microsoft:')) throw new Error('Your Outlook connection is read-only. Saving mailbox drafts needs Mail.ReadWrite; this connection cannot save drafts yet.')
-  throw new Error('This email source cannot save mailbox drafts yet.')
+  if (source.startsWith('microsoft:')) throw primaDiScrivere(new Error('Your Outlook connection is read-only. Saving mailbox drafts needs Mail.ReadWrite; this connection cannot save drafts yet.'))
+  throw primaDiScrivere(new Error('This email source cannot save mailbox drafts yet.'))
 }
 export async function salvaBozzaCasella(task: string, source: string, e: EmailPronta, create: Crea = crea, profile = cfg.cartella()): Promise<BozzaCasella> {
   vietato('mailbox-drafts.salvaBozzaCasella')
@@ -89,9 +107,9 @@ export async function salvaBozzaCasella(task: string, source: string, e: EmailPr
       return result
     } catch (err) {
       // un no sicuro, detto prima che la casella abbia ricevuto qualcosa (il permesso
-      // di Automazione negato la prima notte): la prenotazione si toglie, e il giro
-      // dopo, col permesso dato, ci riprova invece di restare «incerto» per sempre
-      if (primaDelSalvataggio(err)) rmSync(path, { force: true })
+      // di Automazione negato la prima notte, una fonte che non sa scrivere): la
+      // prenotazione si toglie, e il giro dopo ci riprova invece di restare «incerto»
+      if (eraPrimaDiScrivere(err)) rmSync(path, { force: true })
       return { stato: 'errore', errore: err instanceof Error ? err.message : String(err) }
     }
   })()

@@ -1,9 +1,9 @@
 {
   "id": "sollecito-preventivi",
   "nome": "Solleciti sui preventivi fermi",
-  "spiega": "Ogni giorno guarda i preventivi mandati e non ancora chiusi, e prepara un sollecito da rileggere.",
+  "spiega": "Ogni giorno lavorativo guarda i preventivi mandati e non ancora chiusi, e prepara un sollecito da rileggere.",
   "quando": {
-    "ogni": "giorno",
+    "ogni": "feriali",
     "ora": 9
   },
   "guarda": {
@@ -21,7 +21,7 @@
   ],
   "en": {
     "nome": "Chasing quotes that went quiet",
-    "spiega": "Every day, looks at quotes you sent and never closed, and prepares a nudge for you to read over.",
+    "spiega": "Every working day, looks at quotes you sent and never closed, and prepares a nudge for you to read over.",
     "cerca": "quote proposal sent offer",
     "fai": "Look at these quotes. If one went out more than ten days ago with no reply, write a short, courteous nudge: recall the figure and the date, ask whether anything needs clarifying, do not apologise for writing. If they are all recent or already closed, say so in one line and stop."
   }

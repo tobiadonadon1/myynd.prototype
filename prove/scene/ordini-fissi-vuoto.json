@@ -1,0 +1,11 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "documenti": [
+  { "id": "posta:a-1", "fonte": "posta", "tipo": "email", "titolo": "Quote for the office fit-out", "corpo": "Hi Alex, could you quote the office fit-out? Sam", "autore": "Sam Ito <sam@fabrikam.example>", "quando": "-9d", "filo": "f-a-1" },
+  { "id": "posta:a-2", "fonte": "posta", "tipo": "email", "titolo": "New bank details for invoice 2026/114", "corpo": "Please note our new IBAN for invoice 2026/114.", "autore": "Accounts <accounts@supplier.example>", "quando": "-3d", "filo": "f-a-2" }
+ ],
+ "p6": {
+  "config": { "pubblico": "azienda", "posta": { "host": "127.0.0.1", "porta": 9, "utente": "alex@northwind.example", "password": "finta" } }
+ }
+}

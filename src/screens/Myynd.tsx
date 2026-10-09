@@ -7,7 +7,9 @@ import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
 import { CartaSettimana } from '../components/Resoconto'
-import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
+import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaAllOrdineFisso, portaInChat, primoParagrafo, siPuoFareOgniSettimana, siPuoParlarne, taglia, type Vals } from '../vals'
+import { fraseOgniSettimana } from '../automazioni/quando'
+import { CartaPacchetto } from '../automazioni/Pacchetto'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
@@ -294,6 +296,8 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
             <>
               {proposta && lista ? <>{affidalo}{fatto}</> : <>{fatto}{affidalo}</>}
               <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>
+              {/* una cosa che torna diventa un ordine fisso, già scritto (E) */}
+              {siPuoFareOgniSettimana() && <Hov as="button" type="button" onClick={fermo(() => portaAllOrdineFisso({ frase: fraseOgniSettimana(carta.titolo), testo: carta.titolo }))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Ogni settimana')}</Hov>}
               <Hov as="button" type="button" ref={nonUtile} onClick={fermo(chiedi)} title={t('Toglila dal feed')} aria-label={`${t('Non utile')}: ${carta.titolo}`} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non utile')}</Hov>
             </>
           )} />
@@ -724,6 +728,8 @@ function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
 function attesaDi(c: Compito): string {
   // F1 · un lavoro consegnato che non ha passato il suo «fatto» non è «fatto»
   if (c.stato === 'pronto' && c.prova?.esito === 'fail') return t('da finire')
+  // E · una proposta di un ordine fisso non è fatta: aspetta il suo «Approva»
+  if (c.stato === 'pronto' && c.proposta) return t('da approvare')
   return c.stato === 'pronto' ? t('fatto') : c.stato === 'chiede' ? t('ti chiede') : ''
 }
 
@@ -1375,6 +1381,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
         </div>
       )}
 
+      {/* E · le quattro di partenza: sotto la ricevuta, perché la risposta alla domanda con cui si torna viene prima */}
+      {v.feedCaricato && <CartaPacchetto v={v} />}
       <CartaSettimana v={v} />
 
       {/*
@@ -1471,7 +1479,8 @@ function Avviso({ v }: { v: Vals }) {
     puoAprire: !!d,
     puoRiavviare: !!d?.riavvia,
     // senza la schermata dell'Accessibilità nel ponte «Aspetto il permesso…» aspetterebbe un'apertura mai avvenuta
-    puoAprireTitoli: !!osservatore()?.apriImpostazioniTitoli
+    puoAprireTitoli: !!osservatore()?.apriImpostazioniTitoli,
+    automazioni: v.automazioniInGuaio
   })
   if (!riga) return null
   return (
