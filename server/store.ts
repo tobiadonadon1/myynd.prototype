@@ -3703,7 +3703,7 @@ export type Compito = {
    * (le regole sul tono, le convinzioni tenute da un documento corretto),
    * per la riga «Learned: … · Undo».
    */
-  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[]; regole?: RegolaSeguita[] } | null
+  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[]; regole?: RegolaSeguita[]; primaVolta?: string } | null
   /**
    * La bozza è partita dalla sua posta (P9): quale messaggio, quando, con che
    * certezza e quanto l'ha ritoccata. Si scrive una volta e non si riscrive.

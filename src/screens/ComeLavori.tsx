@@ -37,8 +37,10 @@ type Prova = { riga: string; esempi: AbitudineVista['esempi'] }
  * Una riga di «Come lavori»: la frase, l'evidenza, il perché; sotto mano,
  * Correggi e il cestino. Le proprietà sono quelle che P5 sposterà altrove.
  */
-export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuori, correggi, tieni, scorda }: {
+export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuori, correggi, tieni, scorda, ritira }: {
   testo: string; prova: Prova; inAttesa: boolean; superata?: boolean; fino?: string | null
+  /** Un gesto con il suo nome, sempre visibile, al posto del cestino: «Take it back» su una persona salita di un gradino. */
+  ritira?: string
   /** Un guaio nato fuori dalla scheda (un «togli» non riuscito): si mostra qui, sotto la riga premuta. */
   guaioFuori?: string
   /** Senza, niente «Correggi»: un filtro del feed fa quello che dice la sua chiave, non le parole. */
@@ -113,7 +115,9 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuo
         {!superata && !modifico && (
           <div className="cl-gesti">
             {correggi && <button type="button" className="cl-correggi" onClick={() => setModifico(true)}>{t('Correggi')}</button>}
-            <Cestino fai={scordala} titolo={t('Toglila')} visibile={attiva} subito />
+            {ritira
+              ? <button type="button" className="cl-ritira" onClick={() => void scordala()}>{ritira}</button>
+              : <Cestino fai={scordala} titolo={t('Toglila')} visibile={attiva} subito />}
           </div>
         )}
       </div>
@@ -315,7 +319,7 @@ export function ComeLavori() {
           <div className="cl-griglia">
             {guadagnati.map(x => (
               <RigaAbitudine key={x.indirizzo} testo={frasi.rispondoIo(x.nome)} prova={{ riga: frasi.provaGradino(x.su, x.leggere), esempi: [] }}
-                inAttesa={false} scorda={ritira(x.indirizzo)} />
+                inAttesa={false} scorda={ritira(x.indirizzo)} ritira={t('Riprenditela')} />
             ))}
           </div>
         </div>

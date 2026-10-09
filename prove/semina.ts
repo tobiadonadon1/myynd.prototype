@@ -715,7 +715,7 @@ if (sd.gradini || sd.imparate) {
       const id = store.ricorda({ enunciato: k.enunciato, ambito: k.ambito ?? 'persona', genere: 'indotta', fiducia: 0.6, origine: 'correzione' })
       store.confermaConvinzione(id)
       const c = store.compito(k.compito)
-      const regole = [...(c?.voceScritta?.regole ?? []), { chiave: id, genere: 'convinzione', casi: 1, testo: k.enunciato }]
+      const regole = [...(c?.voceScritta?.regole ?? []), { chiave: id, genere: 'convinzione', casi: 0, testo: k.enunciato }]
       store.default.prepare('UPDATE compiti SET voceScritta = ? WHERE id = ?').run(JSON.stringify({ ...(c?.voceScritta ?? {}), regole }), k.compito)
     }
   })

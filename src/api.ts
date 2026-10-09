@@ -684,7 +684,7 @@ export type Compito = {
   /** Nata dal primo gradino: a chi risponde, finché la persona resta su («Earned: …»). */
   guadagnato?: { indirizzo: string; nome: string } | null
   /** Come scrive a chi riceve la bozza, dalle mail che gli ha mandato; e quello che ha imparato e che questa bozza segue. */
-  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[]; regole?: RegolaSeguita[] } | null
+  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[]; regole?: RegolaSeguita[]; primaVolta?: string } | null
   /** La bozza è partita dalla sua posta: quale messaggio, quando, e quanto l'ha ritoccata. */
   mandata?: { doc: string; quando: string; certezza: 'id' | 'filo'; ritocco: number } | null
   /** F1 · cosa vuol dire «fatto», con che mani e in quanto tempo. Se l'ha scritto lei, resta suo. */

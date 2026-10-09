@@ -1084,7 +1084,8 @@ export function regoleSeguite(v: voce.Voce | null, messaggio: boolean): store.Re
   }
   let tenute: store.Convinzione[] = []
   try { tenute = ferri.imparateDaCorrezioni() } catch { tenute = [] }
-  return tenute.map(k => ({ chiave: k.id, genere: 'convinzione' as const, casi: 1, testo: k.enunciato }))
+  // una convinzione tenuta non ha un conto di correzioni: 0, e la riga non scrive un numero
+  return tenute.map(k => ({ chiave: k.id, genere: 'convinzione' as const, casi: 0, testo: k.enunciato }))
 }
 
 const USATA = 'convinzione.usata:'
@@ -1097,8 +1098,6 @@ const USATA = 'convinzione.usata:'
 function scriviLeRegole(id: string, v: voce.Voce | null, messaggio: boolean) {
   try {
     const regole = regoleSeguite(v, messaggio)
-    const scritta = v?.scritta || regole.length ? { ...(v?.scritta ?? {}), ...(regole.length ? { regole } : {}) } : null
-    lavoroDati.scriviVoceScritta(id, scritta)
     const nuove = new Set(abitudini.segnaUsate(regole.filter(r => r.genere === 'bozza.tono').map(r => r.chiave)).map(r => r.chiave))
     for (const r of regole) {
       if (r.genere !== 'convinzione' || store.cursore(USATA + r.chiave)) continue
@@ -1106,6 +1105,10 @@ function scriviLeRegole(id: string, v: voce.Voce | null, messaggio: boolean) {
       nuove.add(r.chiave)
     }
     const prima = regole.find(r => nuove.has(r.chiave))
+    // la prima volta resta scritta sulla riga: una bozza fatta di notte non ha
+    // nessuno in ascolto, e l'avviso sul filo andrebbe perso per sempre
+    const scritta = v?.scritta || regole.length ? { ...(v?.scritta ?? {}), ...(regole.length ? { regole } : {}), ...(prima ? { primaVolta: prima.chiave } : {}) } : null
+    lavoroDati.scriviVoceScritta(id, scritta)
     if (prima) annuncia({ fase: 'usata', id, regola: prima })
   } catch (e) {
     console.warn(`myynd · regole · ${id}:`, e instanceof Error ? e.message : e)
@@ -1265,6 +1268,22 @@ export function richiama(id: string, perche: 'tu' | 'modificata' | null = 'tu') 
   }
   store.riprendiCompito(id)
   annuncia({ fase: 'richiamato', id })
+}
+
+/**
+ * «Take it back»: le risposte già in coda per quella persona si ritirano
+ * adesso, non al prossimo giro del turno. Una bozza già pronta resta: è
+ * lavoro fatto, e la decide lei; quelle che aspettano o girano si fermano.
+ */
+export function ritiraGuadagnate(indirizzo: string): string[] {
+  const a = indirizzo.trim().toLowerCase()
+  const via = store.elencoCompiti().filter(c => c.origine === gradino.ORIGINE && gradino.mittenteDi(c) === a &&
+    (c.stato === 'delegato' || (c.stato === 'aperto' && !!c.modo && c.modo !== 'io')))
+  for (const c of via) {
+    richiama(c.id, null)
+    store.cambiaStatoCompito(c.id, 'ritirato', 'Taken back')
+  }
+  return via.map(c => c.id)
 }
 
 /** I campi di una riga che si cambiano dal dettaglio (`PATCH /api/compiti/:id`). */

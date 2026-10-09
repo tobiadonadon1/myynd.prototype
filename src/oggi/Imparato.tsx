@@ -45,7 +45,7 @@ export function RigaImparato({ c, l }: { c: Compito; l: Lista }) {
   return (
     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }} onClick={e => e.stopPropagation()}>
       {righe.map((x, i) => {
-        const frase = frasi.imparatoSotto(fraseSeguita(x), x.casi)
+        const frase = i === 0 && r.nuova ? frasi.imparatoPrimaVolta(fraseSeguita(x), x.casi) : frasi.imparatoSotto(fraseSeguita(x), x.casi)
         return (
           <div key={x.chiave} style={QUIETA}>
             <span style={FRASE} title={frase}>{frase}</span>

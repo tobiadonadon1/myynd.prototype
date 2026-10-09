@@ -59,12 +59,24 @@ export function rigaDellaVoce(c: Pick<Compito, 'voceScritta'>): { n: number; nom
  * Solo su una riga pronta: sotto una domanda o un lavoro in corso non c'è
  * ancora niente che l'abbia seguita. Le regole senza una frase si saltano.
  */
-export function imparatoDellaBozza(c: Pick<Compito, 'stato' | 'voceScritta'>, frase: (r: RegolaSeguita) => string): { regola: RegolaSeguita; frase: string; altre: RegolaSeguita[] } | null {
+export function imparatoDellaBozza(c: Pick<Compito, 'stato' | 'voceScritta'>, frase: (r: RegolaSeguita) => string): { regola: RegolaSeguita; frase: string; altre: RegolaSeguita[]; nuova: boolean } | null {
   if (c.stato !== 'pronto') return null
   const regole = (c.voceScritta?.regole ?? []).filter(r => !!frase(r).trim())
   if (!regole.length) return null
-  const [prima, ...altre] = regole.slice().sort((a, b) => b.casi - a.casi)
-  return { regola: prima, frase: frase(prima), altre }
+  // quella usata per la prima volta da questa bozza va in testa: è la notizia
+  const nuovaChiave = c.voceScritta?.primaVolta
+  const [prima, ...altre] = regole.slice().sort((a, b) => Number(b.chiave === nuovaChiave) - Number(a.chiave === nuovaChiave) || b.casi - a.casi)
+  return { regola: prima, frase: frase(prima), altre, nuova: prima.chiave === nuovaChiave }
+}
+
+/**
+ * Le righe che Myynd si è preparato da solo (le proposte, il primo giorno, le
+ * risposte guadagnate): la nota è il compito per chi lavora, in inglese e in
+ * maiuscolo («PROACTIVE PREPARATION TYPE…»), non una riga per lei.
+ */
+const DA_SOLO = new Set(['iniziativa', 'primo-giorno', 'guadagnata'])
+export function notaPerLei(c: Pick<Compito, 'origine' | 'nota'>): string {
+  return c.origine && DA_SOLO.has(c.origine) ? '' : c.nota || ''
 }
 
 /** La riga è ferma su una fonte che manca: il guaio è una delle quattro frasi fisse. */

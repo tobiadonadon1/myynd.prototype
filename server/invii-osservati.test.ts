@@ -15,6 +15,7 @@ const store = await import('./store.ts')
 const invii = await import('./invii-osservati.ts')
 const lavoroDati = await import('./lavoro-dati.ts')
 const voce = await import('./voce.ts')
+const gradino = await import('./gradino.ts')
 
 const imparate: [string, string][] = []
 before(() => { store.azzeraTutto(); invii.perProva({ impara: async (b, i) => { imparate.push([b, i]); return 1 } }) })
@@ -273,4 +274,57 @@ test('F7 · la coppia va alle regole sul tono con chi riceve: la seconda correzi
     smetti()
     invii.perProva({ impara: async (b, i) => { imparate.push([b, i]); return 1 } })
   }
+})
+
+// — il primo gradino, dalla posta inviata —
+
+/** Una mail di Leo per ogni riga (il suo filo), e la riga pronta con la bozza salvata. */
+function rigaDiLeo(n: number) {
+  const doc = `posta:INBOX:7${n}`
+  store.salvaDocumenti([{ id: doc, fonte: 'posta', tipo: 'email', titolo: `Logo files ${n}`, corpo: 'Can you send me the logo files?', autore: 'Leo Marsh <leo@studio.example>', quando: oreFa(3), filo: `f-g${n}`, messageId: `g${n}@studio.example` }])
+  const id = `g${n}`
+  store.scriviCompito({ id, testo: 'Reply to Leo about the logo files', ordine: id, doc })
+  const email = { casella: { stato: 'salvata', id: `d${n}`, url: 'https://mail.example/d' }, a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: BOZZA, conosciuto: true, rispondeA: { messageId: `g${n}@studio.example` } }
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, email = ? WHERE id = ?").run(oreFa(2.5), `Done: the reply to Leo.\n\n${BOZZA}`, JSON.stringify(email), id)
+  lavoroDati.registraAffido(store.compito(id)!, true)
+  lavoroDati.registraEsito(id, { mossa: 'produci', tipo: 'risposta', consegnato: oreFa(2) })
+  return id
+}
+/** La sua risposta a Leo per la riga `n`, vista nella posta inviata. */
+function partitaA(n: number, corpo: string, o: { quando?: string; destinatari?: string; risponde?: boolean } = {}) {
+  store.salvaDocumenti([{ id: `posta:Sent:7${n}`, fonte: 'posta', tipo: 'email', titolo: 'Re: Logo files', inviato: true, quando: o.quando ?? oreFa(1), autore: 'Alex <alex@harbor.example>',
+    corpo, risponde: o.risponde === false ? null : `g${n}@studio.example`, filo: `f-g${n}`, messageId: `sg${n}-${(o.quando ?? '').length}@harbor.example`, destinatari: o.destinatari ?? 'Leo Marsh <leo@studio.example>' }])
+}
+const RISCRITTA = 'Leo, sorry, the logo files are still with the designer: I will send them on Monday together with the brand guide and the icon set. Alex'
+
+test('gradino · quattro bozze a Leo partite intatte dalla posta lo fanno salire; due riscritte da capo lo fanno scendere', async () => {
+  for (let n = 1; n <= 4; n++) { rigaDiLeo(n); partitaA(n, BOZZA) }
+  await invii.osserva()
+  const su = gradino.acceso('leo@studio.example')
+  assert.ok(su, 'quattro intatte su quattro')
+  assert.equal(su.su, 4)
+  // riscritte da capo, viste solo dal filo: la via «propria», che prima non contava
+  for (let n = 5; n <= 6; n++) { rigaDiLeo(n); partitaA(n, RISCRITTA, { risponde: false }) }
+  const viste = await Promise.all([5, 6].map(n => invii.osservaUno(store.compito(`g${n}`)!)))
+  assert.deepEqual(viste, [{ mandata: false, via: 'propria' }, { mandata: false, via: 'propria' }])
+  assert.equal(gradino.acceso('leo@studio.example'), null, 'due riscritte da capo di fila: scende')
+})
+
+test('gradino · una riga sua vista prima cede il posto alla bozza partita dopo; una risposta andata a un altro non conta', async () => {
+  for (let n = 1; n <= 3; n++) { rigaDiLeo(n); partitaA(n, BOZZA) }
+  await invii.osserva()
+  // la quarta: prima una riga sua corta nel filo («propria»), poi la bozza vera
+  rigaDiLeo(4)
+  partitaA(4, RISCRITTA, { risponde: false, quando: oreFa(1.5) })
+  assert.deepEqual(await invii.osservaUno(store.compito('g4')!), { mandata: false, via: 'propria' })
+  assert.equal(gradino.acceso('leo@studio.example'), null)
+  store.salvaDocumenti([{ id: 'posta:Sent:74b', fonte: 'posta', tipo: 'email', titolo: 'Re: Logo files', inviato: true, quando: oreFa(1), autore: 'Alex <alex@harbor.example>',
+    corpo: BOZZA, risponde: 'g4@studio.example', filo: 'f-g4', messageId: 'sg4b@harbor.example', destinatari: 'leo@studio.example' }])
+  assert.ok((await invii.osservaUno(store.compito('g4')!))?.mandata)
+  assert.ok(gradino.acceso('leo@studio.example'), 'la bozza vera conta come intatta, non la riga di prima')
+  // una risposta andata a Sara non dice niente della voce con Leo
+  rigaDiLeo(5); partitaA(5, RISCRITTA, { destinatari: 'sara@studio.example' })
+  rigaDiLeo(6); partitaA(6, RISCRITTA, { destinatari: 'sara@studio.example' })
+  await invii.osserva()
+  assert.ok(gradino.acceso('leo@studio.example'))
 })

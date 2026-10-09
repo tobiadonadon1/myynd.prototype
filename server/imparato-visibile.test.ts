@@ -110,6 +110,9 @@ test('una bozza a Leo che segue una regola sul tono lo dice sulla riga, e la pri
   const ancora = await affidaEAspetta('c-leo-2', `Reply to ${LEO} about the invoice`)
   assert.equal(store.compito('c-leo-2')!.voceScritta?.regole?.length, 1)
   assert.equal(ancora.filter(e => e.fase === 'usata').length, 0)
+  // la prima volta resta scritta sulla riga, per chi non era in ascolto (una bozza fatta di notte); sulla seconda no
+  assert.equal(store.compito('c-leo-1')!.voceScritta?.primaVolta, 'bozza.tono:saluto-via')
+  assert.equal(store.compito('c-leo-2')!.voceScritta?.primaVolta, undefined)
   // un caso in più non cancella la prima volta
   ab.aggiungiCaso({ chiave: 'bozza.tono:saluto-via', genere: 'bozza.tono', dati: { tratto: 'saluto-via' }, esempio: { quando: new Date().toISOString(), testo: 'x', doc: null } })
   assert.ok(ab.riga('bozza.tono:saluto-via')!.prova.usata)
@@ -211,4 +214,46 @@ test('il controllo del soggetto, senza modello', () => {
   assert.equal(memoria.parlaDiUnAltro('Checks the margin first', { soggetto: 'Lei' }), false)
   assert.equal(memoria.parlaDiUnAltro('Checks the margin first', { soggetto: 'Marco' }), true)
   assert.equal(memoria.parlaDiUnAltro('Claude Code is the main tool for the app', { scambio: 'with Claude Code' }), false)
+})
+
+test('la maiuscola in testa non basta: un attrezzo, un giorno, la sua azienda, un cliente con il suo ambito restano', () => {
+  const scambio = 'Lui: I use Notion for tasks and I keep my deep work on Friday. I check Slack twice a day. Send it by Monday. I talked with Nick about the audit.\n\nMyynd: Noted, Notion and Slack it is.'
+  const lei = { soggetto: 'lei', scambio, nomeSuo: 'Tobia Donadon' }
+  for (const f of ['Notion is where all his tasks live', 'Friday is his deep-work day, no meetings', 'Slack gets checked twice a day, never more', 'Monday is the deadline for every client delivery']) {
+    assert.equal(memoria.parlaDiUnAltro(f, lei), false, f)
+  }
+  // Nick resta un altro, anche quando il modello dice «lei»
+  assert.equal(memoria.parlaDiUnAltro("Nick's team reviews the audit every Friday", lei), true)
+  assert.equal(memoria.parlaDiUnAltro('Nick evaluates every lever by margin impact', lei), true)
+  // la sua azienda per nome, in ambito azienda: è sua
+  assert.equal(memoria.parlaDiUnAltro('Harbor Labs pays suppliers in thirty days', { soggetto: 'Harbor Labs', ambito: 'azienda', scambio }), false)
+  // un cliente nel suo ambito: è lì apposta
+  assert.equal(memoria.parlaDiUnAltro('Acme pays invoices at sixty days', { soggetto: 'Acme', ambito: 'cliente:Acme', scambio }), false)
+  assert.equal(memoria.parlaDiUnAltro('Acme pays invoices at sixty days', { soggetto: 'lei', ambito: 'cliente:Acme Srl', scambio }), false)
+  // ma un'altra persona nominata dal modello, fuori dal suo ambito, no
+  assert.equal(memoria.parlaDiUnAltro('Prefers calls to email', { soggetto: 'Nick', ambito: 'cliente:Acme', scambio }), true)
+  assert.equal(memoria.parlaDiUnAltro('Prefers calls to email', { soggetto: 'Nick', ambito: 'azienda', scambio }), true, 'Nick è una persona nello scambio')
+  // chi scrive e basta (una notifica) non è un corrispondente: nomiNoti lo filtra; qui un nome noto conta
+  assert.equal(memoria.parlaDiUnAltro('Slack gets checked twice a day', { soggetto: 'lei', noti: new Set(['priya']) }), false)
+})
+
+test('un corrispondente è chi le scrive e a cui risponde: una notifica di Slack non fa di Slack un altro', async () => {
+  compiti.perProva(null)
+  cfg.scrivi({ lingua: 'en', nome: 'Tobia', motore: 'compatibile', compatibile: { url: 'https://memoria.test/v1', modello: 'test' } })
+  const segnali = await import('./segnali.ts')
+  const quando = new Date().toISOString()
+  segnali.scrivi({ id: 'a1', genere: 'posta.arrivata', quando, chi: 'no-reply@slack.example', ref: 'm1', dati: { messageId: null, filo: null, nome: 'Slack', titolo: 'New messages', richiesta: false } })
+  segnali.scrivi({ id: 'a2', genere: 'posta.arrivata', quando, chi: 'priya@board.example', ref: 'm2', dati: { messageId: null, filo: null, nome: 'Priya Shah', titolo: 'Board', richiesta: true } })
+  segnali.scrivi({ id: 'i1', genere: 'posta.inviata', quando, chi: null, ref: 'm3', dati: { messageId: null, risponde: null, filo: null, destinatari: ['priya@board.example'] } })
+  const c = (enunciato: string) => ({ enunciato, ambito: 'persona', genere: 'indotta', fiducia: 0.5, premesse: [], citazione: '', sostituisce: '', soggetto: 'lei' })
+  compatibile.usaRete((async () => Response.json({
+    choices: [{ message: { role: 'assistant', content: JSON.stringify({ progetti: [], convinzioni: [
+      c('Slack gets checked twice a day, never more'),
+      c('Priya wants the numbers before every board meeting')
+    ] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 }
+  })) as typeof fetch)
+  const n = await memoria.distilla([{ ruolo: 'u', testo: 'I check Slack twice a day. The board wants numbers first.' }, { ruolo: 'a', testo: 'Noted.' }])
+  assert.equal(n, 1)
+  assert.deepEqual(store.convinzioni().map(k => k.enunciato), ['Slack gets checked twice a day, never more'])
+  compatibile.usaRete(null)
 })

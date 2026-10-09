@@ -457,33 +457,71 @@ export function ricordaProgetti(candidati: ProgettoDaConversazione[], scambio: {
  * prompt. Il modello lo dice in `soggetto` (un nome che non è il suo vuol dire
  * un altro); e qui lo si controlla anche senza fidarsi: la prima parola è un
  * nome proprio (con o senza «'s») che è un suo corrispondente, o che nello
- * scambio compare con la maiuscola a metà frase. «Con Nick parte dai numeri»
- * resta: il soggetto è lui. Pura.
+ * scambio compare come una persona («met Nick», «Nick said», «Nick's»).
+ * «Con Nick parte dai numeri» resta: il soggetto è lui.
+ *
+ * La maiuscola da sola non basta: «Notion is where all his tasks live»,
+ * «Friday is his deep-work day», la sua azienda, sono lui. E una convinzione
+ * con un ambito (`cliente:Acme`, `progetto:Atlas`, `azienda`) può avere per
+ * soggetto il cliente, il progetto o l'azienda: è lì apposta. Pura.
  */
-export function parlaDiUnAltro(enunciato: string, o: { soggetto?: unknown; nomeSuo?: string | null; scambio?: string; noti?: Set<string> } = {}): boolean {
+export function parlaDiUnAltro(enunciato: string, o: { soggetto?: unknown; nomeSuo?: string | null; scambio?: string; noti?: Set<string>; ambito?: string | null } = {}): boolean {
   const suo = (o.nomeSuo ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? ''
   const detto = typeof o.soggetto === 'string' ? o.soggetto.trim().replace(/[.«»"“”]/g, '').trim() : ''
-  if (detto && !SE_STESSO.test(detto) && !(suo && detto.toLowerCase().split(/\s+/).includes(suo)) && /^\p{Lu}/u.test(detto)) return true
+  const ambito = (o.ambito ?? '').trim()
+  // il nome dentro l'ambito: «cliente:Harbor Labs» vuol dire che Harbor Labs può essere il soggetto
+  const dentro = /^(?:cliente|progetto)\s*:\s*(.+)$/i.exec(ambito)?.[1]?.trim().toLowerCase() ?? ''
+  const nelSuoAmbito = (x: string) => !!dentro && (dentro.includes(x.toLowerCase()) || x.toLowerCase().includes(dentro))
+  const persona = (x: string) => !!o.noti?.has(x.toLowerCase().split(/\s+/)[0] ?? '') || (!!o.scambio && comeUnaPersona(x.split(/\s+/)[0] ?? '', o.scambio))
+  if (detto && !SE_STESSO.test(detto) && !(suo && detto.toLowerCase().split(/\s+/).includes(suo)) && /^\p{Lu}/u.test(detto)) {
+    if (nelSuoAmbito(detto)) return false
+    // l'azienda per nome, in ambito azienda: è sua, a meno che quel nome sia una persona che conosce
+    if (ambito === 'azienda' && !persona(detto)) return false
+    return true
+  }
   const prima = /^[«"“']?(\p{Lu}[\p{Ll}'’-]+)(?:['’]s)?\b/u.exec(enunciato.trim())?.[1]
   if (!prima) return false
   const p = prima.replace(/['’]s$/, '')
-  if (p.toLowerCase() === suo || APERTURE.has(p.toLowerCase())) return false
-  if (o.noti?.has(p.toLowerCase())) return true
-  // un nome proprio si riconosce dalla maiuscola a metà frase, nello scambio da cui viene
-  const esc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return !!o.scambio && new RegExp(`[\\p{Ll},;:]\\s+${esc}\\b`, 'u').test(o.scambio)
+  if (p.toLowerCase() === suo || APERTURE.has(p.toLowerCase()) || CALENDARIO.has(p.toLowerCase()) || nelSuoAmbito(p)) return false
+  return persona(p)
+}
+/**
+ * Un nome nello scambio usato come una persona: dopo un verbo che si fa con
+ * qualcuno («met», «talked with», «ho sentito»), prima di uno che fa qualcuno
+ * («said», «wants», «mi ha detto»), o con il genitivo («Nick's»). «I use
+ * Notion», «on Friday», «check Slack» non lo sono.
+ */
+function comeUnaPersona(nome: string, scambio: string): boolean {
+  if (!nome) return false
+  const n = nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const prima = new RegExp(`\\b(?:met|meet|meeting|told|tell|asked|ask|called|call|emailed|pinged|thanked|hired|introduced|talked\\s+(?:to|with)|spoke\\s+(?:to|with)|speaking\\s+(?:to|with)|met\\s+with|lunch\\s+with|call\\s+with|working\\s+with|email\\s+from|mail\\s+from|message\\s+from|incontrato|sentito|chiamato|ringraziato|assunto|parlato\\s+con|detto\\s+a|chiesto\\s+a|scritto\\s+a|riunione\\s+con|call\\s+con|pranzo\\s+con|mail\\s+di|messaggio\\s+di)\\s+${n}\\b`, 'iu')
+  const dopo = new RegExp(`\\b${n}(?:['’]s\\s+(?:team|boss|wife|husband|partner|manager|assistant|squadra|capo|moglie|marito|socio)\\b|\\s+(?:said|says|told|tells|asked|asks|wants|thinks|replied|wrote|mentioned|evaluates|decided|ha\\s+detto|dice|vuole|pensa|mi\\s+ha|ha\\s+scritto|ha\\s+chiesto|ha\\s+deciso|valuta)\\b)`, 'u')
+  return prima.test(scambio) || dopo.test(scambio)
 }
 /** Il soggetto che è lui, detto dal modello. */
 const SE_STESSO = /^(?:lei|lui|lei stess[ao]|lui stesso|la persona|persona|l['’]utente|utente|user|the user|he|she|they|him|her|io|me|azienda|la sua azienda|sua azienda|company|the company|his company|her company|their company)$/i
 /** Le parole che aprono una frase senza essere un nome. */
 const APERTURE = new Set(['il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'una', 'uno', 'quando', 'se', 'per', 'con', 'prima', 'dopo', 'sempre', 'mai', 'di', 'da', 'in', 'su', 'non', 'ogni', 'tutto', 'tutti',
   'the', 'a', 'an', 'when', 'if', 'for', 'with', 'before', 'after', 'always', 'never', 'in', 'on', 'every', 'all', 'myynd', 'claude', 'chatgpt'])
+/** I giorni e i mesi: con la maiuscola in testa, ma non sono nessuno. */
+const CALENDARIO = new Set(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+  'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'])
 
-/** I nomi delle persone che le scrivono: i primi nomi, dalle mail arrivate. */
+/**
+ * I nomi delle persone con cui scrive: i primi nomi di chi le ha scritto e a
+ * cui ha risposto. Chi le scrive e basta (Slack, Notion, una newsletter) non
+ * è un corrispondente, e il suo nome in testa a una frase non è un altro.
+ */
 function nomiNoti(): Set<string> {
   try {
-    const righe = store.default.prepare("SELECT DISTINCT json_extract(dati, '$.nome') AS n FROM segnali WHERE genere = 'posta.arrivata' ORDER BY quando DESC LIMIT 800").all() as { n: string | null }[]
-    return new Set(righe.map(r => String(r.n ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '').filter(n => n.length >= 2 && !APERTURE.has(n)))
+    const arrivate = store.default.prepare("SELECT chi, json_extract(dati, '$.nome') AS n FROM segnali WHERE genere = 'posta.arrivata' ORDER BY quando DESC LIMIT 800").all() as { chi: string | null; n: string | null }[]
+    const inviate = store.default.prepare("SELECT json_extract(dati, '$.destinatari') AS d FROM segnali WHERE genere = 'posta.inviata' ORDER BY quando DESC LIMIT 800").all() as { d: string | null }[]
+    const risposti = new Set<string>()
+    for (const r of inviate) {
+      try { for (const a of JSON.parse(r.d ?? '[]') as string[]) risposti.add(String(a).trim().toLowerCase()) } catch { /* una riga storta non conta */ }
+    }
+    return new Set(arrivate.filter(r => risposti.has(String(r.chi ?? '').trim().toLowerCase()))
+      .map(r => String(r.n ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '').filter(n => n.length >= 2 && !APERTURE.has(n)))
   } catch { return new Set() }
 }
 
@@ -539,7 +577,7 @@ export async function distilla(
     if (c.enunciato.trim().split(/\s+/).length < 3) continue
     // la memoria è su di lui: una frase su un altro, per nome, non si scrive
     noti ??= nomiNoti()
-    if (parlaDiUnAltro(c.enunciato, { soggetto: c.soggetto, nomeSuo, scambio: conversazione, noti })) {
+    if (parlaDiUnAltro(c.enunciato, { soggetto: c.soggetto, nomeSuo, scambio: conversazione, noti, ambito: c.ambito })) {
       console.info(`myynd · memoria · lasciata fuori una frase su un'altra persona (${origine})`)
       continue
     }

@@ -3944,12 +3944,26 @@ export const frasi = {
   ragioneDelCompito: (r: 'vecchia' | 'fatta' | 'non_mia' | 'non_chiara') => corrente === 'en'
     ? ({ vecchia: 'Old: it no longer matters.', fatta: 'Already done, I handled it.', non_mia: 'Not mine: not my job.', non_chiara: 'Unclear: I can\'t tell what it asks.' })[r]
     : ({ vecchia: 'Vecchia: ormai non conta più.', fatta: 'Già fatta, ci ho pensato io.', non_mia: 'Non è mia: non tocca a me.', non_chiara: 'Non si capisce cosa chiede.' })[r],
-  /** Sotto una bozza: quello che ha imparato e che segue, con quante correzioni l'hanno insegnato. */
+  /**
+   * Sotto una bozza: quello che ha imparato e che segue, con quante correzioni
+   * l'hanno insegnato. Senza un conto vero (una convinzione tenuta) il numero
+   * non si scrive: «(1 edit)» su tutte sarebbe inventato.
+   */
   imparatoSotto: (frase: string, casi: number) => {
     const f = frase.trim().replace(/[.!?…]+$/, '')
+    if (!(casi >= 1)) return corrente === 'en' ? `Learned: ${f}` : `Imparato: ${f}`
     return corrente === 'en'
       ? `Learned: ${f} (${casi} ${casi === 1 ? 'edit' : 'edits'})`
       : `Imparato: ${f} (${casi} ${casi === 1 ? 'correzione' : 'correzioni'})`
+  },
+  /**
+   * La stessa riga, sulla bozza che segue una regola per la prima volta: resta
+   * scritta, perché una bozza fatta di notte non ha visto l'avviso.
+   */
+  imparatoPrimaVolta: (frase: string, casi: number) => {
+    const f = frase.trim().replace(/[.!?…]+$/, '')
+    const conto = casi >= 1 ? (corrente === 'en' ? ` (${casi} ${casi === 1 ? 'edit' : 'edits'})` : ` (${casi} ${casi === 1 ? 'correzione' : 'correzioni'})`) : ''
+    return corrente === 'en' ? `Learned, first time used: ${f}${conto}` : `Imparato, usato per la prima volta: ${f}${conto}`
   },
   /** Quante altre cose imparate segue la stessa bozza: «+2». */
   altreImparate: (n: number) => corrente === 'en' ? `${n} more` : `altre ${n}`,

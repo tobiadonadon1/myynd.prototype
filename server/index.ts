@@ -4055,7 +4055,7 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
   const r = ritocco(bozza, d.m.corpo)
   lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: new Date().toISOString(), distanza: r, parole: paroleDi(d.m.corpo).length, classe: classeRitocco(r) })
   // il primo gradino: una risposta a chi aveva scritto, partita com'era o quasi, è una prova di fiducia
-  try { if (gradino.mittenteDi(c) === a) gradino.registraInvio({ compito: c.id, indirizzo: a, nome: dest?.nome, distanza: r }) } catch { /* la fiducia è un di più */ }
+  try { gradino.dopoManda(c, a, dest?.nome, r) } catch { /* la fiducia è un di più */ }
 })
 
 /**
@@ -5212,7 +5212,7 @@ app.post('/api/compiti/:id/lascia', (req, res) => {
 app.post('/api/gradino/ritira', (req, res) => {
   const indirizzo = String(req.body?.indirizzo ?? '').trim()
   if (!indirizzo.includes('@')) return res.status(400).json({ errore: 'Non conosco questa persona.' })
-  try { gradino.ritira(indirizzo) } catch (e) { return errore(res, e) }
+  try { gradino.ritira(indirizzo); compiti.ritiraGuadagnate(indirizzo) } catch (e) { return errore(res, e) }
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })

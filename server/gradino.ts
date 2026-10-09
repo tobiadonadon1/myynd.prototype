@@ -50,12 +50,34 @@ const leggera = (distanza: number) => { const c = classe(distanza); return c ===
  * Una bozza di risposta partita verso la persona a cui rispondeva. Una per
  * riga: la stessa mail vista da «Manda» e poi nella posta inviata non conta
  * due volte.
+ *
+ * `propria`: dalla sua posta è partita, nel filo, una risposta riscritta da
+ * capo. È il rifiuto più forte della bozza, e conta come una riscritta; ma
+ * con il solo filo come prova può essere una riga sua scritta prima («arrivo,
+ * te li mando»), e allora cede il posto alla bozza vista partire dopo.
  */
-export function registraInvio(o: { compito: string; indirizzo: string; nome?: string | null; distanza: number; quando?: string }): boolean {
+export function registraInvio(o: { compito: string; indirizzo: string; nome?: string | null; distanza: number; quando?: string; propria?: boolean }): boolean {
   const indirizzo = pulito(o.indirizzo)
   if (!indirizzo.includes('@') || !Number.isFinite(o.distanza)) return false
   const quando = o.quando ?? new Date().toISOString()
-  return segnali.scrivi({ id: `${INVIO}|${o.compito}`, genere: INVIO, quando, ref: indirizzo, valore: o.distanza, dati: { compito: o.compito, nome: o.nome ?? '' } })
+  const id = `${INVIO}|${o.compito}`
+  if (!o.propria) {
+    const prima = db.prepare('SELECT dati FROM segnali WHERE id = ?').get(id) as { dati: string | null } | undefined
+    let sua = false
+    try { sua = !!prima && !!(JSON.parse(prima.dati ?? '{}') as { propria?: boolean }).propria } catch { /* una riga storta resta */ }
+    if (sua) db.prepare('DELETE FROM segnali WHERE id = ?').run(id)
+  }
+  return segnali.scrivi({ id, genere: INVIO, quando, ref: indirizzo, valore: o.distanza, dati: { compito: o.compito, nome: o.nome ?? '', ...(o.propria ? { propria: true } : {}) } })
+}
+
+/**
+ * «Manda» su una riga: conta se la mail va a chi aveva scritto. Una risposta
+ * girata a un altro («inoltro a Sara») non dice niente della voce con lui.
+ */
+export function dopoManda(c: Pick<store.Compito, 'id' | 'doc'>, a: string, nome: string | null | undefined, distanza: number, quando?: string): boolean {
+  const m = mittenteDi(c)
+  if (!m || pulito(m) !== pulito(store.indirizzoDi(a) ?? a)) return false
+  return registraInvio({ compito: c.id, indirizzo: m, nome, distanza, quando })
 }
 
 /** «Take it back»: scende adesso, e per risalire servono bozze nuove. */

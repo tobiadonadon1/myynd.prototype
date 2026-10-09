@@ -33,7 +33,7 @@ import { CAMPO, Scatola } from '../oggi/Scatola'
 import { RigaIpotesi } from '../oggi/RigaIpotesi'
 import { LasciaConRagione, RigaGuadagnata, RigaImparato } from '../oggi/Imparato'
 import { Testo } from '../Testo'
-import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
+import { bloccoDi, mandataValida, notaPerLei, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
 export { CAMPO, Scatola }
 
 /** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
@@ -631,8 +631,7 @@ function corpo(c: Compito): string {
   const revisione = presentazioneRevisione(c, lingua() === 'en')
   if (revisione) return revisione.descrizione
   // F6 · lo stesso per una carta che Myynd si è preparato da solo: la nota è per chi lavora, non per lei
-  if (c.origine === 'iniziativa' || c.origine === 'primo-giorno') return ''
-  return c.nota || ''
+  return notaPerLei(c)
 }
 
 /**

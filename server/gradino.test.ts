@@ -19,6 +19,7 @@ const gradino = await import('./gradino.ts')
 const iniziativa = await import('./iniziativa.ts')
 const attenzione = await import('./attenzione.ts')
 const gemello = await import('./gemello.ts')
+const compiti = await import('./compiti.ts')
 
 beforeEach(() => { store.azzeraTutto(); rmSync(join(dir, 'iniziativa.json'), { force: true }); cfg.scrivi({ lingua: 'en', autonomia: 'preparare' }) })
 after(() => { store.chiudiIndici(); rmSync(dir, { recursive: true, force: true }) })
@@ -108,4 +109,40 @@ test('«Come lavori» elenca chi è salito', () => {
   for (let i = 0; i < 4; i++) parte(0)
   const v = gemello.vista()
   assert.deepEqual(v.guadagnati.map(g => [g.indirizzo, g.nome, g.su, g.leggere]), [[NORA, 'Nora', 4, 4]])
+})
+
+test('«Manda»: conta la risposta a chi aveva scritto, con l\'indirizzo scritto come capita; una girata a un altro no', () => {
+  store.salvaDocumenti([mail('m1', `Nora <${NORA}>`)])
+  for (let i = 0; i < 4; i++) {
+    store.scriviCompito({ id: `manda${i}`, testo: 'Reply to Nora', ordine: `m${i}`, doc: 'm1' })
+    assert.equal(gradino.dopoManda(store.compito(`manda${i}`)!, i % 2 ? 'Nora <NORA@Harbor.example>' : NORA, 'Nora', 0), true)
+  }
+  assert.ok(gradino.acceso(NORA))
+  store.scriviCompito({ id: 'girata', testo: 'Forward to Sara', ordine: 'g', doc: 'm1' })
+  assert.equal(gradino.dopoManda(store.compito('girata')!, 'sara@harbor.example', 'Sara', 0.9), false)
+  assert.equal(gradino.acceso('sara@harbor.example'), null)
+  // una riga senza la mail di partenza non è una risposta
+  store.scriviCompito({ id: 'senza', testo: 'Write to Nora', ordine: 's' })
+  assert.equal(gradino.dopoManda(store.compito('senza')!, NORA, 'Nora', 0), false)
+})
+
+test('«Take it back» ritira subito le risposte in coda per quella persona; una bozza già pronta resta, e Leo non c\'entra', () => {
+  store.salvaDocumenti([mail('a', `Nora <${NORA}>`), mail('b', `Nora <${NORA}>`, { messageId: 'b@harbor.example' }), mail('c', `Nora <${NORA}>`, { messageId: 'c@harbor.example' }), mail('l', 'Leo <leo@studio.example>', { messageId: 'l@studio.example' })])
+  for (let i = 0; i < 4; i++) parte(0)
+  for (let i = 0; i < 4; i++) gradino.registraInvio({ compito: `leo${i}`, indirizzo: 'leo@studio.example', distanza: 0 })
+  const nate = iniziativa.guadagnate(ORA, () => {}, () => true)
+  assert.equal(nate.length, 4)
+  const di = (doc: string) => nate.find(id => store.compito(id)!.doc === doc)!
+  // una in coda per il turno, una al lavoro, una già pronta
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', modo = 'bozza' WHERE id = ?").run(di('a'))
+  store.default.prepare("UPDATE compiti SET stato = 'delegato', modo = 'bozza' WHERE id = ?").run(di('b'))
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', modo = 'bozza', risultato = 'Hi Nora' WHERE id = ?").run(di('c'))
+  store.default.prepare("UPDATE compiti SET stato = 'delegato', modo = 'bozza' WHERE id = ?").run(di('l'))
+  gradino.ritira(NORA)
+  assert.deepEqual(compiti.ritiraGuadagnate(NORA).sort(), [di('a'), di('b')].sort())
+  assert.equal(store.compito(di('a'))!.stato, 'ritirato')
+  assert.equal(store.compito(di('b'))!.stato, 'ritirato')
+  assert.equal(store.compito(di('c'))!.stato, 'pronto', 'la bozza fatta resta sua')
+  assert.equal(store.compito(di('l'))!.stato, 'delegato', 'Leo non è stato ripreso')
+  assert.ok(!store.elencoCompiti().some(c => c.id === di('a') || c.id === di('b')))
 })
