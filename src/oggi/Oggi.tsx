@@ -1236,8 +1236,8 @@ function Manda(p: { c: Compito; l: Lista; testo: string } & Pannello) {
   if (casella && mandataValida(p.c)) return <div style={{ marginTop: 12, fontSize: 13 }}><p>{t('Mandata dalla tua posta.')}</p></div>
   if (casella) return <div style={{ marginTop: 12, fontSize: 13 }}>
     <DaAllegare c={p.c} />
-    {casella.stato === 'salvata' ? <><p>{p.c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p><a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a></>
-      : <p role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {casella.errore}</p>}
+    {casella.stato === 'salvata' ? <><p>{p.c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p>{/* le Bozze di Mail del Mac non hanno un indirizzo da aprire */}{casella.url && <a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a>}</>
+      : <p role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {t(casella.errore ?? '')}</p>}
   </div>
   // un segnaposto nel corpo (P3): non si manda, la riga dell'ipotesi dice
   // cosa manca; il file da allegare resta scritto, come in prima pagina

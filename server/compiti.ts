@@ -35,6 +35,8 @@ import { nominaAmbito } from './ambiti-memoria.ts'
 import { projectMemoryContext } from './project-memory.ts'
 import { fonteValida } from './iniziativa.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
+import * as mailDelMac from './bozza-mail-mac.ts'
+import { eChiusa } from './prova-chiusa.ts'
 import { tutteLeDomande } from './testo.ts'
 import { giudica, prossimoPasso, simili } from './revisione-lavoro.ts'
 import * as mani from './mani.ts'
@@ -363,6 +365,8 @@ type Ferri = {
   /** Se c'è una casella da cui mandare: senza, non si prepara niente. */
   salvaBozzaCasella: typeof salvaBozzaCasella
   postaCollegata: () => boolean
+  /** Mail del Mac collegata, sul Mac: la risposta a una sua mail va nelle Bozze di Mail. */
+  bozzeInMail: () => boolean
   /** Il motore che lavora ha la chiave respinta (P8): riprendere una riga ferma adesso la manderebbe a sbattere. */
   motoreRifiutato: () => boolean
   /** C'è un motore che può lavorare: all'avvio, senza, una riga ferma ripresa morirebbe e il guaio del motore coprirebbe «la riprendo da qui». */
@@ -399,6 +403,7 @@ const VERI: Ferri = {
     const c = cfg.leggi()
     return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
   },
+  bozzeInMail: () => mailDelMac.disponibile(),
   motoreRifiutato: () => {
     const t = testaAlLavoro()
     return (t === 'claude' || t === 'openai') && !!rifiutata(t)
@@ -1127,6 +1132,8 @@ async function proponiIlSeguito(c: store.Compito, risultato: string, progetto: p
  * stata chiusa o richiamata nel frattempo: si scrive solo se è ancora lì.
  */
 async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Fonte[], o?: { consegna?: 'it' | 'en'; candidati?: { id: string; label: string }[] }) {
+  // fuori dal try: se il salvataggio nella casella cade, l'email c'è e la carta lo deve dire
+  let email: store.EmailPronta | null = null
   try {
     // Un prompt non è una email, anche quando dentro c'è scritto «scrivi a
     // Rossi» con tanto di saluto: è la richiesta di scriverla, da incollare
@@ -1134,15 +1141,16 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
     // in pieno — e la riga si accenderebbe con un «Manda a Rossi» sotto un
     // testo che comincia con «Sei un assistente».
     if (c.modo === 'prompt') return
-    if (!ferri.postaCollegata()) return
-    // una mail di Mail del Mac non ha una casella dove mettere la bozza: il testo resta nella riga (P4)
-    if (c.doc?.startsWith('postamac:')) return
+    // una mail di Mail del Mac ha la sua casella, le Bozze di Mail: ci va se Mail del Mac è
+    // collegata qui sul Mac; altrimenti il testo resta nella riga, com'era (P4)
+    const dalMac = !!c.doc?.startsWith('postamac:')
+    if (dalMac ? !ferri.bozzeInMail() : !ferri.postaCollegata()) return
     if (!invio.sembraUnMessaggio(c.testo, bozza, [c.doc, ...fonti.map(f => f.id)])) return
     const e = await ferri.preparaEmail(c.testo, bozza, fonti, c.doc, o)
     if (!e || richiamati.has(chiave(c.id))) return
     if (store.compito(c.id)?.stato !== 'pronto') return
     // la cornice non arriva mai a chi riceve, qualunque cosa abbia capito il modello
-    const email: store.EmailPronta = { ...e, corpo: corpoPerChiRiceve(e.corpo), conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false }
+    email = { ...e, corpo: corpoPerChiRiceve(e.corpo), conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false }
     if (c.doc && (c.origine !== 'iniziativa' || fonteValida(c.doc))) {
       const source = store.documento(c.doc)
       if (source?.messageId) email.rispondeA = { messageId: source.messageId }
@@ -1162,6 +1170,19 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
       return
     }
     console.warn(`myynd · compito ${c.id}: la bozza è pronta, l'email no —`, message)
+    /*
+     * La bozza non è finita nella casella: lo dice la carta, non solo il
+     * registro. Prima restava un `console.warn` e la carta pronta, muta: chi
+     * la apriva la mattina cercava la bozza nella posta e non la trovava.
+     * Solo se la carta è ancora pronta, e non è stata richiamata.
+     */
+    try {
+      // dentro una prova (P6) la casella è chiusa apposta: non è un guasto da mostrare
+      if (email && !eChiusa(e) && !richiamati.has(chiave(c.id)) && store.compito(c.id)?.stato === 'pronto') {
+        store.scriviEmailCompito(c.id, { ...email, casella: { stato: 'errore', errore: message } })
+        annunciaCambio()
+      }
+    } catch { /* la riga resta pronta con il suo testo */ }
   }
 }
 

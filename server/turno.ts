@@ -432,7 +432,7 @@ export function ferma(adesso = new Date()): string[] {
 export const VEGLIA_PRIMA = 60 * 60_000
 
 export type Veglia = {
-  /** Il Mac non deve addormentarsi: è notte (o manca meno di un'ora), e c'è lavoro con budget. */
+  /** Il Mac non deve addormentarsi: è notte (o manca meno di un'ora), c'è lavoro con budget, ed è attaccato alla corrente. */
   sveglio: boolean
   /** C'è una notte che aspetta: il turno acceso e non fermo, carte in coda, budget. Uscire la salterebbe. */
   inAttesa: boolean
@@ -461,7 +461,9 @@ export function veglia(adesso = new Date()): Veglia {
     const inAttesa = inCoda && conBudget && !imp.pausaFino
     const prossima = regole.prossimaNotte(adesso, imp.notte)
     const vicina = regole.inNotte(adesso, imp.notte) || (!!prossima && prossima.getTime() - adesso.getTime() <= VEGLIA_PRIMA)
-    return { sveglio: inAttesa && vicina, inAttesa, lavora, fermo: false }
+    // solo attaccato alla corrente: a batteria il permesso non si chiede, e quello di
+    // prima scade da solo (il guscio lo tiene 45 secondi); la carta al lavoro tiene il suo
+    return { sveglio: inAttesa && vicina && !presenza.aBatteria(), inAttesa, lavora, fermo: false }
   } catch {
     return { sveglio: false, inAttesa: false, lavora: false, fermo: false }
   }

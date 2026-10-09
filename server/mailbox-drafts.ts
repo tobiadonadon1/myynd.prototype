@@ -9,6 +9,8 @@ import * as posta from './connettori/posta.ts'
 import type { EmailPronta } from './store.ts'
 import type { Compito } from './store.ts'
 import { vietato } from './prova-chiusa.ts'
+import { documento } from './store.ts'
+import * as mailDelMac from './bozza-mail-mac.ts'
 
 export type BozzaCasella = { stato: 'salvata' | 'errore'; id?: string; url?: string; errore?: string }
 export type BozzaAttuale = {stato:'presente'|'sparita';source:string;id:string;corpo?:string;oggetto?:string;a?:string;messageId?:string;uidValidity?:string;impronta?:string}
@@ -56,6 +58,8 @@ async function crea(source: string, e: EmailPronta, messageId: string) {
     if (!c) throw new Error('Reconnect your email account to save drafts.')
     return posta.salvaBozza(c, source, e, messageId)
   }
+  // Mail del Mac: la bozza nelle Bozze di Mail, dal conto a cui era arrivata se si riconosce
+  if (source.startsWith('postamac:')) return mailDelMac.salva(e, (documento(source)?.destinatari ?? '').split(','))
   if (source.startsWith('microsoft:')) throw new Error('Your Outlook connection is read-only. Saving mailbox drafts needs Mail.ReadWrite; this connection cannot save drafts yet.')
   throw new Error('This email source cannot save mailbox drafts yet.')
 }

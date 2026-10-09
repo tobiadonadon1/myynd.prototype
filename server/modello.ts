@@ -911,6 +911,18 @@ export function puoLavorare(): boolean {
   return motoreDelLavoro() !== null
 }
 
+/**
+ * Può leggere: il feed e la prima pagina, che tornano uno schema.
+ *
+ * La lettura chiedeva `motore()`, che l'account non lo conta: sul solo account
+ * Claude la posta nuova non diventava mai una carta, e il registro del suo Mac
+ * non aveva una lettura dal 21 settembre. Lo schema all'account si chiede a
+ * parole (`abbonamento.chiedi`), come per ogni `chiediJSON`: la stessa strada.
+ */
+export function puoLeggere(): boolean {
+  return motore() !== null || soloAbbonamento()
+}
+
 /** L'account Claude, quando è lui a lavorare e non c'è un altro motore scelto. */
 export function soloAbbonamento(): boolean {
   return !chatgpt.scelto() && abbonamento.disponibile() && fornitore() === null && !inclusoInUso()

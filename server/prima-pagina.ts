@@ -8,8 +8,8 @@
 // priorità, una volta, sotto la serratura della lettura: niente di tutto
 // questo scrive nell'avvio, così i passi D ed E non trovano mai un 409.
 //
-// Con il solo account di Claude non c'è un motore per il feed, ma le
-// priorità passano lo stesso: si salta il primo passo e si va avanti.
+// Anche con il solo account di Claude il feed si legge: `generaFeed` passa
+// da `chiedi`, che sa la strada dell'account (`mod.puoLeggere`).
 
 import * as store from './store.ts'
 import * as cfg from './config.ts'
@@ -35,6 +35,7 @@ type Ferri = {
   salvaFeed: typeof store.salvaFeed
   annuncia: () => void
   collegato: () => boolean
+  /** C'è chi legge il feed: una chiave, un fornitore, o l'account Claude. */
   motore: () => unknown
 }
 const VERI: Ferri = {
@@ -44,7 +45,7 @@ const VERI: Ferri = {
   salvaFeed: v => store.salvaFeed(v),
   annuncia: () => compiti.annunciaFeed(),
   collegato: () => mod.collegato(),
-  motore: () => mod.motore()
+  motore: () => mod.puoLeggere()
 }
 let ferri: Ferri = VERI
 /** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */

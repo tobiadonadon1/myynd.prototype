@@ -1,6 +1,6 @@
 // La prima pagina di un conto nuovo (P4): una volta, dalla posta arrivata di
 // recente e non dagli impegni futuri che la lettura ha appena messo dentro;
-// con il solo account di Claude le priorità girano lo stesso; senza modello
+// senza chi legga il feed le priorità girano lo stesso; senza modello
 // la riga non promette niente; e l'avvio non si accorge di niente.
 //
 //   node --test server/prima-pagina.test.ts
@@ -68,7 +68,7 @@ test('con un motore la lettura parte dalla posta arrivata, anche con quattrocent
   assert.ok(store.cursore('prima:pagina'))
 })
 
-test('solo l’account di Claude: niente lettura del feed, ma le priorità sì, e la pagina è pronta', async () => {
+test('nessuno che legga il feed: niente lettura, ma le priorità sì, e la pagina è pronta (l’account legge: feed-account.test.ts)', async () => {
   store.salvaDocumenti([mail(0)])
   let letture = 0, priorita_ = 0, annunci = 0
   pagina.perProva({ collegato: () => true, motore: () => null, generaFeed: async () => { letture++; return [] }, forse: async forza => { assert.equal(forza, true); priorita_++; return 0 }, annuncia: () => { annunci++ } })
