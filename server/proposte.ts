@@ -52,6 +52,7 @@ export async function esegui(c: store.Compito, p: Proposta): Promise<Fatto> {
     if (!p.bozze?.length) throw new Error('Non c\'è niente da eseguire.')
     let salvate = 0
     let ultimo = ''
+    const rimaste: typeof p.bozze = []
     for (const b of p.bozze) {
       const d = store.documento(b.doc)
       const email: store.EmailPronta = {
@@ -60,13 +61,22 @@ export async function esegui(c: store.Compito, p: Proposta): Promise<Fatto> {
       }
       const r = await ferri.salvaBozzaCasella(`${c.id}:${b.doc}`, b.doc, email)
       if (r.stato === 'salvata') salvate++
-      else ultimo = r.errore ?? 'La casella non ha salvato la bozza.'
+      else { ultimo = r.errore ?? 'La casella non ha salvato la bozza.'; rimaste.push(b) }
       store.registraAzione({
         tipo: 'posta.bozza', verso: b.a, cosa: b.oggetto, compito: c.id,
         esito: r.stato === 'salvata' ? 'fatta' : 'fallita', ...(r.stato === 'salvata' ? {} : { dettaglio: ultimo })
       })
     }
     if (!salvate) throw new Error(ultimo || 'La casella non ha salvato le bozze.')
+    /*
+     * Salvate alcune sì e altre no: la riga resta, con la proposta ridotta a
+     * quelle che mancano. Prima si chiudeva lo stesso, e le risposte che la
+     * casella non aveva preso sparivano senza che nessuno lo sapesse.
+     */
+    if (rimaste.length) {
+      store.proponi(c.id, { ...p, bozze: rimaste }, c.risultato ?? '')
+      return { spostati: salvate, dove: 'Bozze' }
+    }
     chiudi(c.id, `${salvate} ${salvate === 1 ? 'bozza' : 'bozze'} nella casella.`)
     return { spostati: salvate, dove: 'Bozze' }
   }

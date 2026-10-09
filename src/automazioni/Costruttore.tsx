@@ -18,7 +18,8 @@ import { useEffect, useRef, useState, type DragEvent } from 'react'
 import type { Attrezzo, Passo, Proponi, RicettaComposta } from '../api'
 import { t } from '../lingua'
 import { ConnectorIcon, connectorPerAttrezzo } from '../components/ConnectorIcon'
-import { GIORNI, quandoGira } from './quando'
+import { consegnaPossibile, GIORNI, quandoGira } from './quando'
+import { eOspitato } from '../tempi'
 
 const ORE = Array.from({ length: 24 }, (_, i) => i)
 const DEL_MESE = Array.from({ length: 31 }, (_, i) => i + 1)
@@ -291,7 +292,7 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
           onChange={e => cambia({ ...r, fai: e.target.value })} />
         {/* cosa ti consegna: una riga, o una cosa pronta da approvare con un dito. Mai mandata. */}
         <Pillole etichetta={t('Cosa ti consegna')} valore={r.proponi ?? ''} scegli={p => cambia({ ...r, proponi: p || undefined, metti: { ...r.metti, ...(p ? { perDocumento: undefined } : {}) } })}
-          voci={[...CONSEGNE.map(([v, testo]) => [v, t(testo)] as [Proponi | '', string]),
+          voci={[...CONSEGNE.filter(([v]) => v === (r.proponi ?? '') || consegnaPossibile(v, eOspitato())).map(([v, testo]) => [v, t(testo)] as [Proponi | '', string]),
             ...(r.proponi === 'posta.archivia' || r.proponi === 'posta.cestina' ? [[r.proponi, r.proponi === 'posta.archivia' ? t('Da archiviare') : t('Da mettere nel cestino')] as [Proponi, string]] : [])]} />
         {/* «Fa tutto il lavoro» diceva la stessa cosa di «Prepara anche il lavoro»: il motore le tratta uguali, e ne resta una */}
         {!r.proponi && <Pillole etichetta={t('Quanto fa')} valore={r.metti.modo === 'tutto' ? 'bozza' : r.metti.modo ?? 'io'} scegli={m => cambia({ ...r, metti: { ...r.metti, modo: m } })} voci={[

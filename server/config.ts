@@ -821,6 +821,11 @@ export type Config = {
    */
   diSerie?: boolean
   /**
+   * Le quattro di partenza offerte dalla prima pagina: «Non ora» le toglie da
+   * lì per sempre (E). Restano nella pagina degli ordini fissi.
+   */
+  pacchettoOfferto?: boolean
+  /**
    * Quando ha messo in ordine da solo, l'ultima volta. Due date, non una.
    *
    * Sono due giri diversi con due ritmi diversi — gli argomenti seguono quello

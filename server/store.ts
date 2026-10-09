@@ -5004,6 +5004,24 @@ export type Giro = { quando: string; esito: string; quanti: number; fatti?: numb
 /** Dopo quanto riprova da sola un giro andato storto: entro l'ora, non al turno dopo. */
 export const RIPROVA_DOPO = 30 * 60_000
 
+/** Il tetto dell'attesa fra un guaio e l'altro: quattro tentativi al giorno, non novanta. */
+export const RIPROVA_AL_PIU = 6 * 60 * 60_000
+
+/**
+ * Quanto aspettare dopo un guaio, contati quelli di fila prima di lui.
+ *
+ * Il primo riprova entro l'ora; poi l'attesa raddoppia (un'ora, due, quattro)
+ * fino a sei ore. Un guasto che si ripete uguale — una risposta troncata, un
+ * fornitore che rifiuta — costava una chiamata al modello ogni mezz'ora per
+ * sempre; così costa quattro al giorno, e il primo guaio di passaggio
+ * riprova presto come prima.
+ */
+export function attesaDopoGuai(storia: Giro[]): number {
+  let diFila = 0
+  for (let i = storia.length - 1; i >= 0 && storia[i].esito === 'guaio'; i--) diFila++
+  return Math.min(RIPROVA_DOPO * 2 ** diFila, RIPROVA_AL_PIU)
+}
+
 /** La ricevuta dell'ultimo giro; senza, l'ultimo della storia. */
 export function ricevutaDi(s: StatoAutomazione | null | undefined): Giro | null {
   if (s?.ricevuta) {
@@ -5176,7 +5194,7 @@ export function automazioneGirata(id: string, esito: string, guaio?: string, qua
    */
   const fallita = esito === 'guaio'
   const vista = fallita ? null : ora
-  const riprova = fallita ? new Date(adesso.getTime() + RIPROVA_DOPO).toISOString() : null
+  const riprova = fallita ? new Date(adesso.getTime() + attesaDopoGuai(prima)).toISOString() : null
   db.prepare(`
     INSERT INTO automazioni (id, ultima, vista, quante, esito, guaio, storia, riprova, ricevuta) VALUES (?,?,?,1,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET

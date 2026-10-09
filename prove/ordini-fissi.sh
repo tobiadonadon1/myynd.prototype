@@ -3,10 +3,11 @@
 #
 #   OUT=<cartella> PORTA=18880 prove/ordini-fissi.sh
 #
-# Due scene: il conto con quattro ordini fissi (le ricevute, uno andato storto,
+# Tre scene: il conto con quattro ordini fissi (le ricevute, uno andato storto,
 # il mese prima, le proposte da approvare, «Fallo ogni settimana» da una riga),
-# e il conto vuoto con le quattro di partenza. I passi del conto vuoto
-# accendono un interruttore: come per P3 e P6 ogni tema e larghezza riparte da
+# il conto vuoto con le quattro di partenza (sulla prima pagina e nella
+# pagina), e uno di partenza acceso che non è riuscito: la riga fissa porta
+# alla sua scheda. I passi del conto vuoto accendono degli interruttori: come per P3 e P6 ogni tema e larghezza riparte da
 # capo, e i registri portano il tema e la larghezza nel nome.
 set -e
 RADICE=$(cd "$(dirname "$0")/.." && pwd)
@@ -17,7 +18,7 @@ mkdir -p "$OUT"
 TEMI=${TEMI:-chiaro scuro}
 LARGHEZZE=${LARGHEZZE:-1100 1500}
 COSTRUISCI=${COSTRUISCI:-auto}
-for scena in ordini-fissi ordini-fissi-vuoto; do
+for scena in ordini-fissi ordini-fissi-vuoto ordini-fissi-partenza; do
   for tema in ${=TEMI}; do
     for larga in ${=LARGHEZZE}; do
       echo "$scena · $tema $larga"

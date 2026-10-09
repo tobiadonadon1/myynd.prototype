@@ -8,6 +8,7 @@
 // «p6» (tutto facoltativo):
 //   config       unita alla configurazione (cfg.aggiorna): la posta finta su 127.0.0.1
 //   ricette      [{ ...ricetta, accesa?: boolean }]: automazioni.scrivi, poi accesa o in pausa
+//   pacchetto    [id]: quelle di partenza accese, come dall'interruttore (automazioni.dalPacchetto)
 //   stati        [{ id, vassoio: "+8d" | "1970" | null, ultima?: "-2h", quante?, esito?, guaio?, riprova?: "+25m",
 //                   ricevuta?: { quando: "-2h", esito, quanti, fatti?, perche? } }]: E, la ricevuta e il giro storto
 //   vassoio      [{ automazione, testo, doc, stato, bozza?, quando }]: risultati nel vassoio
@@ -26,6 +27,7 @@ const scoperte = await import(join(SERVER, 'scoperte.ts'))
 type P6 = {
   config?: Record<string, unknown>
   ricette?: (Record<string, unknown> & { id: string; accesa?: boolean })[]
+  pacchetto?: string[]
   stati?: { id: string; vassoio?: string | null; ultima?: string; quante?: number; esito?: string; guaio?: string; riprova?: string; ricevuta?: Record<string, unknown> & { quando?: string } }[]
   vassoio?: { automazione: string; testo: string; doc: string; stato: string; bozza?: string; quando?: string }[]
   inviati?: string[]
@@ -49,6 +51,7 @@ export function semina(p6: P6, _o: { dati?: string } = {}) {
     auto.scrivi(ricetta)
     store.accendiAutomazione(ricetta.id, !!accesa)
   }
+  for (const id of p6.pacchetto ?? []) auto.dalPacchetto(id, true)
   for (const s of p6.stati ?? []) {
     store.vediAutomazione(s.id)
     store.default.prepare('UPDATE automazioni SET vassoio = ?, ultima = COALESCE(?, ultima), vista = COALESCE(?, vista), quante = COALESCE(?, quante) WHERE id = ?')

@@ -13,6 +13,7 @@ const { impostaLingua } = await import('./lingua.ts')
 const q = await import('./automazioni/quando.ts')
 const { quandoDetto, consegnaDetta, interpreta } = await import('./automazioni/interpreta.ts')
 const sf = await import('./salute-fonti.ts')
+const { daOffrire } = await import('./automazioni/offerte.ts')
 
 function in_<T>(l: 'it' | 'en', f: () => T): T {
   impostaLingua(l)
@@ -41,6 +42,8 @@ test('la ricevuta di ogni giro: quante cose, o perché niente', () => {
   const g = (x: Partial<import('./api.ts').Giro>) => ({ quando: ORA, esito: 'niente', quanti: 0, ...x })
   assert.equal(in_('en', () => q.ricevuta(g({ esito: 'fatta', quanti: 12, fatti: 3 }))), 'Looked at 12 documents and made 3 items.')
   assert.equal(in_('it', () => q.ricevuta(g({ esito: 'fatta', quanti: 1, fatti: 1 }))), 'Ha guardato 1 documento e fatto 1 cosa.')
+  assert.equal(in_('en', () => q.ricevuta(g({ esito: 'fatta', quanti: 0, fatti: 1 }))), 'Put 1 line on your list.', 'un promemoria non ha guardato «0 documenti»')
+  assert.equal(in_('it', () => q.ricevuta(g({ esito: 'fatta', quanti: 0, fatti: 1 }))), 'Ha messo 1 riga in lista.')
   assert.equal(in_('en', () => q.ricevuta(g({ perche: 'vuoto' }))), 'There was nothing new to look at.')
   assert.equal(in_('en', () => q.ricevuta(g({ quanti: 8, perche: 'niente' }))), 'Looked at 8 documents: nothing needed doing.')
   assert.equal(in_('en', () => q.ricevuta(g({ esito: 'gia', perche: 'gia' }))), 'Waiting for you to close its line.')
@@ -93,6 +96,49 @@ test('la frase letta prima del modello: i giorni feriali, il mese, e cosa conseg
   assert.equal(consegnaDetta('Ogni lunedì scrivi il riepilogo in un file'), 'file.crea')
   assert.equal(consegnaDetta('Send the reply to Rossi'), null, 'mandare non è una cosa che si consegna')
   assert.equal(interpreta('Ogni mese, in una nota', []).proponi, 'nota.crea')
+})
+
+test('un ritmo detto per esteso vince su un «mese» nominato di passaggio', () => {
+  const lun = { ogni: 'settimana', giorno: 1, ora: 8 }
+  assert.deepEqual(quandoDetto('Every Monday morning: Pay the monthly rent'), lun)
+  assert.deepEqual(quandoDetto('Every Friday tell me which invoices are due by the end of the month'), { ogni: 'settimana', giorno: 5, ora: 8 })
+  assert.deepEqual(quandoDetto('Ogni lunedì dimmi quali abbonamenti costano più di 20 euro al mese'), lun)
+  assert.deepEqual(quandoDetto('Every day at 9 summarise what changed since the start of the month'), { ogni: 'giorno', ora: 9 })
+  assert.deepEqual(quandoDetto('Ogni lunedì mattina: Mandare il report mensile'), lun)
+  assert.deepEqual(in_('en', () => quandoDetto(q.fraseOgniSettimana('Send the monthly report'))), lun)
+  // un prezzo o un aggettivo da soli non sono un ritmo
+  assert.equal(quandoDetto('Dimmi quali abbonamenti costano 20 euro al mese'), null)
+  // il mese detto davvero resta un mese
+  assert.deepEqual(quandoDetto('Monthly, list the renewals'), { ogni: 'mese', giorno: 1, ora: 8 })
+  assert.deepEqual(quandoDetto('On the 3rd of the month at 10 check the rent'), { ogni: 'mese', giorno: 3, ora: 10 })
+})
+
+test('da una carta la ricetta si scrive per intero, senza rileggere il testo', () => {
+  const r = q.ricettaDaCarta('Send the monthly report  to the calendar team by email')
+  assert.deepEqual(r.quando, { ogni: 'settimana', giorno: 1, ora: 8 })
+  assert.deepEqual(r.attrezzi, [], 'le fonti nominate nel testo non diventano letture')
+  assert.equal(r.proponi, undefined, '«calendar» nel testo non è un evento')
+  assert.equal(r.fai, 'Send the monthly report to the calendar team by email')
+  assert.deepEqual(r.guarda, { ogniVolta: true })
+})
+
+test('il pacchetto offre solo quelle da prendere: una presa è una scheda come le altre', () => {
+  const p = (id: string, accesa = false) => ({ id, nome: id, spiega: '', quando: { ogni: 'giorno' as const, ora: 8 }, attrezzi: [], accesa, staccati: [] })
+  const pacchetto = [p('risposte-da-dare'), p('rinnovi-in-scadenza'), p('sollecito-preventivi'), p('coordinate-cambiate')]
+  assert.equal(daOffrire(pacchetto, []).length, 4, 'un conto nuovo le vede tutte')
+  // presa (accesa o in pausa): esce dal pacchetto, e la pagina la mostra in griglia
+  assert.deepEqual(daOffrire(pacchetto, [{ id: 'risposte-da-dare' }]).map(x => x.id), ['rinnovi-in-scadenza', 'sollecito-preventivi', 'coordinate-cambiate'])
+  assert.deepEqual(daOffrire(pacchetto, pacchetto.map(x => ({ id: x.id }))), [], 'prese tutte: niente da offrire')
+  assert.deepEqual(daOffrire(pacchetto, [{ id: 'risposte-da-dare' }, { id: 'mia-scritta' }]), [], 'dalla prima sua il pacchetto si fa da parte')
+})
+
+test('su un server il costruttore non offre quello che solo il Mac approva', () => {
+  for (const p of ['agenda.aggiungi', 'nota.crea', 'file.crea'] as const) {
+    assert.equal(q.consegnaPossibile(p, true), false)
+    assert.equal(q.consegnaPossibile(p, false), true)
+  }
+  assert.equal(q.consegnaPossibile('posta.bozza', true), true)
+  assert.equal(q.consegnaPossibile('', true), true, 'una riga in lista va sempre')
 })
 
 test('la riga fissa del motore dice l\'ordine fisso che non è riuscito, e porta lì', () => {

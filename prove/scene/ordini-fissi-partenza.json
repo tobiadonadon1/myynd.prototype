@@ -1,0 +1,14 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "documenti": [
+  { "id": "posta:a-1", "fonte": "posta", "tipo": "email", "titolo": "Quote for the office fit-out", "corpo": "Hi Alex, could you quote the office fit-out? Sam", "autore": "Sam Ito <sam@fabrikam.example>", "quando": "-9d", "filo": "f-a-1" }
+ ],
+ "p6": {
+  "config": { "pubblico": "persona", "posta": { "host": "127.0.0.1", "porta": 9, "utente": "alex@northwind.example", "password": "finta" } },
+  "pacchetto": ["risposte-da-dare"],
+  "stati": [
+   { "id": "risposte-da-dare", "ultima": "-1d", "quante": 3, "esito": "guaio", "guaio": "The provider did not answer.", "riprova": "+25m", "ricevuta": { "quando": "-5m", "esito": "guaio", "quanti": 0, "perche": "guaio" } }
+  ]
+ }
+}

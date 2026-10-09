@@ -11,7 +11,7 @@
 // documenti ha guardato, quante cose ha fatto, o perché niente.
 
 import { lingua, loc, t } from '../lingua.ts'
-import type { Giro, Quando } from '../api.ts'
+import type { Giro, Proponi, Quando, RicettaComposta } from '../api.ts'
 
 const en = () => lingua() === 'en'
 /** Le due lingue della stessa frase: l'italiano è la sorgente, l'inglese la sua metà. */
@@ -60,6 +60,8 @@ export function ricevuta(g: Giro | null | undefined, riprova?: string | null): s
   }
   if (g.esito === 'fatta') {
     const n = g.fatti ?? 1
+    // un promemoria non legge niente: «ha guardato 0 documenti» si leggeva come un guasto
+    if (!g.quanti) return du({ it: `Ha messo ${n} ${n === 1 ? 'riga' : 'righe'} in lista.`, en: `Put ${n} ${n === 1 ? 'line' : 'lines'} on your list.` })
     return du({
       it: `Ha guardato ${documenti(g.quanti)} e fatto ${n} ${n === 1 ? 'cosa' : 'cose'}.`,
       en: `Looked at ${documenti(g.quanti)} and made ${n} ${n === 1 ? 'item' : 'items'}.`
@@ -102,6 +104,29 @@ export function fraseOgniSettimana(testo: string): string {
   const corpo = testo.replace(/\s+/g, ' ').trim().replace(/[.!]+$/, '')
   if (!corpo) return ''
   return du({ it: `Ogni lunedì mattina: ${corpo}`, en: `Every Monday morning: ${corpo}` })
+}
+
+/**
+ * La ricetta che il gesto «Fallo ogni settimana» promette, scritta per intero:
+ * ogni lunedì alle 8, una riga in lista col testo della carta, ogni volta
+ * anche senza niente da leggere. Niente fonti e niente consegna lette dal
+ * testo: «il report mensile» non è un ritmo, «in agenda» non è un evento.
+ */
+export function ricettaDaCarta(testo: string): Pick<RicettaComposta, 'nome' | 'fai' | 'quando' | 'guarda' | 'metti' | 'attrezzi' | 'proponi'> {
+  const corpo = testo.replace(/\s+/g, ' ').trim()
+  return {
+    nome: corpo.slice(0, 60), fai: corpo, quando: { ogni: 'settimana', giorno: 1, ora: 8 },
+    guarda: { ogniVolta: true }, metti: { inLista: 'oggi', modo: 'io' }, attrezzi: [], proponi: undefined
+  }
+}
+
+/**
+ * Cosa può consegnare un ordine fisso qui: su un server l'agenda, la nota e il
+ * file non si approvano (passano da Calendario, Note e la Scrivania del Mac),
+ * e offrirli voleva dire spendere token per una carta che diceva di no.
+ */
+export function consegnaPossibile(p: Proponi | '' | null | undefined, ospitato: boolean): boolean {
+  return !ospitato || !p || !['agenda.aggiungi', 'nota.crea', 'file.crea'].includes(p)
 }
 
 /** L'avviso dopo «Approva»: cosa è successo, detto per quello che è. Mai «mandata»: non parte niente. */

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { salvaBozzaCasella, salvaRevisioneCasella, leggiBozzaAttuale, verificaBozzaInvariata, mimeBozza } from './mailbox-drafts.ts'
+import { salvaBozzaCasella, salvaRevisioneCasella, leggiBozzaAttuale, verificaBozzaInvariata, mimeBozza, primaDiScrivere, eraPrimaDiScrivere } from './mailbox-drafts.ts'
 import { createHash } from 'node:crypto'
 import * as posta from './connettori/posta.ts'
 const dir = mkdtempSync(join(tmpdir(), 'myynd-maildraft-'))
@@ -24,6 +24,29 @@ test('ambiguous network failure never blindly creates another draft', async () =
   assert.equal((await salvaBozzaCasella('lost', 'posta:INBOX:2', email, create, dir)).stato, 'errore')
   assert.match((await salvaBozzaCasella('lost','posta:INBOX:2',email,create,dir)).errore!, /uncertain/)
   assert.equal(calls,1)
+})
+test('a failure before touching the mailbox frees the reservation, so Approve can be retried', async () => {
+  let calls = 0
+  const create = async () => { calls++; if (calls === 1) throw primaDiScrivere(new Error('Cannot locate the original email.')); return { id: 'draft9', url: 'message://draft9' } }
+  const first = await salvaBozzaCasella('definite', 'posta:INBOX:9', email, create, dir)
+  assert.equal(first.errore, 'Cannot locate the original email.')
+  const again = await salvaBozzaCasella('definite', 'posta:INBOX:9', email, create, dir)
+  assert.equal(again.stato, 'salvata', 'the second Approve answered "uncertain" though nothing had been written')
+  assert.equal(calls, 2)
+})
+test('IMAP: only errors before APPEND are marked as nothing written', async () => {
+  const base = { connect: async()=>{}, list:async()=>[{path:'Drafts',specialUse:'\\Drafts'}], getMailboxLock:async()=>({release(){}}),
+    fetchOne:async()=>({source:Buffer.from('From: Sender <sender@example.com>\r\nMessage-ID: <original@example.com>\r\nSubject: Original\r\n\r\nHi.')}),
+    logout:async()=>{},close(){} }
+  const conf = {host:'mail.example.com',porta:993,utente:'me@example.com',password:'test'}
+  posta.usaClient(()=>({ ...base, append: async()=>({uid:1}) }) as never)
+  const wrong = await posta.salvaBozza(conf,'posta:INBOX:1',{...email,a:'other@example.com'},'x@myynd.local').catch(e => e)
+  assert.ok(eraPrimaDiScrivere(wrong), 'a recipient mismatch is known before APPEND')
+  assert.ok(eraPrimaDiScrivere(await posta.salvaBozza(conf,'bogus',email,'x@myynd.local').catch(e => e)))
+  posta.usaClient(()=>({ ...base, append: async()=>{ throw new Error('Connection lost after APPEND') } }) as never)
+  const lost = await posta.salvaBozza(conf,'posta:INBOX:1',email,'x@myynd.local').catch(e => e)
+  assert.equal(eraPrimaDiScrivere(lost), false, 'a failure during APPEND stays uncertain')
+  posta.usaClient(null)
 })
 test('IMAP selects existing Drafts and preserves actual reply headers without sending', async () => {
   const appends: unknown[][] = []

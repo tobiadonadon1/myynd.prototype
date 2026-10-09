@@ -52,17 +52,28 @@ export function quandoDetto(frase: string): Quando | null {
   if (/\b(?:giorni (?:feriali|lavorativi)|nei feriali|weekdays?|working days?|every workday|monday (?:to|through) friday)\b|\bdal luned[iì] al venerd[iì](?![\p{L}])/iu.test(frase)) {
     return { ogni: 'feriali', ora: h ?? 8 }
   }
-  // una volta al mese: il giorno detto («il 15 del mese», «on the 1st»), o il primo
-  if (/\b(?:ogni mese|una volta al mese|al mese|mensile|every month|monthly|once a month|each month|of (?:the|each|every) month|del mese)\b/i.test(frase)) {
-    const g = frase.match(/\b(?:il|on the|the)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i)
+  /*
+   * Un ritmo detto per esteso vince su un «mese» nominato di passaggio: «Ogni
+   * lunedì: paga l'affitto mensile», «every Friday, what is due by the end of
+   * the month», «abbonamenti da 20 euro al mese» sono settimanali, e leggerli
+   * al mese era il guaio di «Fallo ogni settimana» su ogni carta che diceva
+   * «mensile». Prima «ogni <giorno>» e «ogni giorno», attaccati; poi il mese.
+   */
+  const detto = GIORNI.find(([re]) => new RegExp(`(?<![\\p{L}])(?:ogni|every|each|tutti i|on)\\s+${re.source}`, 'iu').test(frase))
+  if (detto) return { ogni: 'settimana', giorno: detto[1], ora: h ?? 8 }
+  if (/\b(?:ogni (?:giorno|mattina|sera|pomeriggio)|every (?:day|morning|evening|afternoon)|daily|tutti i giorni)\b/i.test(frase)) {
+    return { ogni: 'giorno', ora: h ?? 8 }
+  }
+  // una volta al mese: il giorno detto («il 15 di ogni mese», «on the 1st of the month»), o il primo.
+  // «al mese» e «mensile» da soli no: sono quasi sempre un prezzo o un aggettivo.
+  const giornoDelMese = frase.match(/\b(?:il|on the|the)\s+(\d{1,2})(?:st|nd|rd|th)?\s+(?:di ogni mese|del mese|of (?:the|each|every) month)\b/i)
+  if (giornoDelMese || /\b(?:ogni mese|una volta al mese|tutti i mesi|every month|monthly|once a month|each month|mensilmente)\b/i.test(frase)) {
+    const g = giornoDelMese ?? frase.match(/\b(?:il|on the|the)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i)
     const giorno = g ? Number(g[1]) : 1
     return { ogni: 'mese', giorno: giorno >= 1 && giorno <= 31 ? giorno : 1, ora: h ?? 8 }
   }
   const giorno = GIORNI.find(([re]) => re.test(frase))
   if (giorno && /\b(?:ogni|every|on|each|tutti i|all)\b/i.test(frase)) return { ogni: 'settimana', giorno: giorno[1], ora: h ?? 8 }
-  if (/\b(?:ogni (?:giorno|mattina|sera|pomeriggio)|every (?:day|morning|evening|afternoon)|daily|tutti i giorni|ogni sera)\b/i.test(frase)) {
-    return { ogni: 'giorno', ora: h ?? 8 }
-  }
   if (/\b(?:ogni settimana|every week|weekly|una volta a settimana|once a week)\b/i.test(frase)) return { ogni: 'settimana', giorno: 1, ora: h ?? 8 }
   return null
 }

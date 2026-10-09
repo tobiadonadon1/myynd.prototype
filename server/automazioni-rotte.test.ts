@@ -130,6 +130,8 @@ test('le quattro di partenza: un interruttore ciascuna', async () => {
   const ids = (p.json.pacchetto as { id: string; accesa: boolean }[]).map(x => x.id)
   assert.deepEqual([...ids].sort(), ['coordinate-cambiate', 'rinnovi-in-scadenza', 'risposte-da-dare', 'sollecito-preventivi'])
   assert.ok((p.json.pacchetto as { accesa: boolean }[]).every(x => !x.accesa))
+  // al primo avvio la prima pagina le offre: nessuna sua, nessuna accesa
+  assert.equal(p.json.offerta, true)
 
   const su = await chiama('POST', '/api/automazioni/pacchetto/rinnovi-in-scadenza', { accesa: true })
   assert.equal(su.stato, 200, JSON.stringify(su.json))
@@ -137,9 +139,13 @@ test('le quattro di partenza: un interruttore ciascuna', async () => {
   const presa = (su.json.automazioni as { id: string; accesa: boolean; mia: boolean; quando: { ogni: string } }[]).find(x => x.id === 'rinnovi-in-scadenza')!
   assert.ok(presa.accesa && presa.mia, 'accesa e sua: si può cambiare e buttare')
   assert.equal(presa.quando.ogni, 'mese', 'dice «il primo del mese» e gira il primo del mese')
+  assert.equal(su.json.offerta, false, 'una accesa: la prima pagina non le offre più')
 
   const giu = await chiama('POST', '/api/automazioni/pacchetto/rinnovi-in-scadenza', { accesa: false })
   assert.equal((giu.json.automazioni as { id: string; accesa: boolean }[]).find(x => x.id === 'rinnovi-in-scadenza')?.accesa, false)
+  assert.equal(giu.json.offerta, true, 'tutte spente e tutte di partenza: si offrono di nuovo')
+  assert.equal((await chiama('POST', '/api/automazioni/pacchetto-visto')).stato, 200)
+  assert.equal((await chiama('GET', '/api/automazioni/pacchetto')).json.offerta, false, '«Non ora» le toglie dalla prima pagina')
   assert.equal((await chiama('POST', '/api/automazioni/pacchetto/posta-di-massa', { accesa: true })).stato, 400)
   assert.ok(Array.isArray((await chiama('GET', '/api/stato')).json.automazioniInGuaio))
 })

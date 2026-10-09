@@ -131,6 +131,22 @@ test('un giro andato storto non sposta l\'orologio, e riprova entro l\'ora', () 
   auto.butta('storta')
 })
 
+test('un guaio che si ripete aspetta di più ogni volta, fino a sei ore', () => {
+  const g = (esito: string) => ({ quando: new Date().toISOString(), esito, quanti: 0 })
+  assert.equal(store.attesaDopoGuai([]), 30 * 60_000, 'il primo riprova entro l\'ora')
+  assert.equal(store.attesaDopoGuai([g('fatta'), g('guaio')]), 60 * 60_000)
+  assert.equal(store.attesaDopoGuai([g('guaio'), g('guaio')]), 2 * 60 * 60_000)
+  assert.equal(store.attesaDopoGuai(Array.from({ length: 12 }, () => g('guaio'))), 6 * 60 * 60_000, 'un guasto fisso non chiama il modello ogni mezz\'ora per sempre')
+  assert.equal(store.attesaDopoGuai([g('guaio'), g('guaio'), g('fatta')]), 30 * 60_000, 'dopo una riuscita si riparte da capo')
+  // dal vivo: il secondo guaio di fila aspetta un'ora
+  const a = auto.scrivi(ricetta('storta-due'))
+  store.automazioneGirata(a.id, 'guaio', 'x')
+  store.automazioneGirata(a.id, 'guaio', 'x')
+  const fra = Date.parse(store.statoAutomazione(a.id)!.riprova!) - Date.now()
+  assert.ok(fra > 55 * 60_000 && fra <= 60 * 60_000, `riprova fra ${Math.round(fra / 60_000)} minuti`)
+  auto.butta(a.id)
+})
+
 test('anche una «quando arriva» andata storta riprova da sola', () => {
   const a = ricetta('arriva-storta', { quando: { quandoArriva: true }, guarda: { soloNuovi: true } })
   const s = stato('arriva-storta', { esito: 'guaio', riprova: new Date(Date.now() - 1000).toISOString() })
@@ -282,6 +298,44 @@ test('se la casella non salva nessuna bozza, la riga resta lì con la sua propos
   } finally { proposte.perProva(null) }
   assert.equal(store.compito(id)?.stato, 'pronto')
   assert.ok(store.compito(id)?.proposta)
+})
+
+test('se la casella ne salva solo alcune, la riga resta con quelle che mancano', async () => {
+  const id = 'c-casella-meta'
+  store.scriviCompito({ id, testo: 'Risposte', quando: 'oggi', ordine: 'a0', origine: 'auto:x' })
+  const b = (n: number) => ({ doc: `posta:m-${n}`, titolo: 't', a: `p${n}@blu.example`, oggetto: 'Re', corpo: 'Ciao', perche: 'p' })
+  const p = { azione: 'posta.bozza' as const, bozze: [b(1), b(2)] }
+  store.proponi(id, p, 'due')
+  proposte.perProva({ salvaBozzaCasella: (async (_t: string, source: string) => source === 'posta:m-1'
+    ? { stato: 'salvata', id: 'x', url: '' } : { stato: 'errore', errore: 'Cannot locate the original email.' }) as never })
+  try {
+    assert.equal((await proposte.esegui(store.compito(id)!, p)).spostati, 1)
+  } finally { proposte.perProva(null) }
+  const dopo = store.compito(id)!
+  assert.equal(dopo.stato, 'pronto', 'si è chiusa e la seconda risposta è sparita')
+  assert.deepEqual((dopo.proposta as { bozze: { doc: string }[] }).bozze.map(x => x.doc), ['posta:m-2'])
+})
+
+test('su un server la nota, il file e l\'agenda non si offrono e non si preparano', async () => {
+  auto.perProva({ ospitato: () => true })
+  try {
+    for (const proponi of ['nota.crea', 'file.crea', 'agenda.aggiungi']) {
+      assert.throws(() => auto.daCampi({ nome: 'Sul server', fai: 'Scrivi il riepilogo della settimana.', proponi }), /solo da Myynd sul Mac/)
+    }
+    // le bozze nella casella sì: si salvano dal server
+    assert.equal(auto.daCampi({ nome: 'Bozze dal server', fai: 'Prepara le risposte fra le bozze.', cerca: 'preventivo', proponi: 'posta.bozza' }).proponi, 'posta.bozza')
+  } finally { auto.perProva(null) }
+  // una scritta sul Mac che propone una nota, girata su un server: mette la sua riga, senza preparare niente
+  store.salvaDocumenti([{ id: 'srv-1', fonte: 'desktop', tipo: 'file', titolo: 'Preventivo Neri', corpo: 'Il preventivo per Neri.', quando: new Date().toISOString() }] as never)
+  const r = auto.scrivi(ricetta('nota-sul-server', { proponi: 'nota.crea' }))
+  let preparate = 0
+  auto.perProva({ ospitato: () => true, collegato: () => true, uso: () => ({ tetto: 0, entrata: 0, uscita: 0 }), chiediJSON: async (o: { lavoro?: string }) => { if (o.lavoro !== 'smistamento') preparate++; return { voci: [] } } })
+  try { await auto.fai(r) } finally { auto.perProva(null) }
+  const riga = store.elencoCompiti().find(c => c.origine === 'auto:nota-sul-server')
+  assert.ok(riga, 'su un server deve restare almeno la riga')
+  assert.equal(riga?.proposta ?? null, null, 'una nota da approvare su un server non si approva')
+  assert.equal(preparate, 0)
+  auto.butta(r.id)
 })
 
 test('in agenda solo con una data scritta; una nota e un file sono una cosa sola', async () => {

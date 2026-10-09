@@ -598,13 +598,13 @@ test('l’anteprima non scrive niente e non fa girare l’automazione', () => {
 // — il budget del giorno per quelle che fanno scrivere —
 
 /** Quanto si è speso oggi, per finta: il budget delle bozze si conta da qui. */
-const SPESO = { tetto: 100_000, entrata: 60_000, uscita: 0 }
+const SPESO = { tetto: 100_000, entrata: 90_000, uscita: 0 }
 const LARGO = { tetto: 10_000_000, entrata: 0, uscita: 0 }
 
 test('una ricetta che fa scrivere si ferma quando il budget di oggi è finito, a mano no, e col budget riparte', async () => {
   const ricetta = { ...RICETTA, id: 'tetto', metti: { inLista: 'oggi' as const, modo: 'bozza' as const } }
   const oggi = new Date()
-  // metà del tetto alle automazioni: cinquantamila, e se ne sono già spesi sessanta
+  // il tetto è centomila, e se ne sono già spesi novanta: non resta una bozza intera
   auto.perProva({ uso: () => SPESO })
   try {
     // le bozze sono l'unica spesa che si ripete da sola: oltre il budget non si
@@ -632,9 +632,12 @@ test('il budget si conta dal tetto di token, non da un numero fisso di bozze', (
   assert.equal(auto.bozzeRimaste(verso(3), adesso, { tetto: 0, entrata: 0, uscita: 0 }), senza - 3, 'quelle già partite oggi contano')
   // un tetto più alto vuol dire più bozze: era tre al giorno per ricetta, comunque
   assert.ok(auto.bozzeRimaste(verso(0), adesso, { tetto: 2_000_000, entrata: 0, uscita: 0 }) > senza)
-  // e quello che si è speso davvero toglie il resto
-  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 1_000_000, entrata: 470_000, uscita: 10_000 }), 1)
-  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 1_000_000, entrata: 600_000, uscita: 0 }), 0)
+  // la chat e il feed non mangiano la metà delle automazioni: la fermano solo vicino al tetto intero
+  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 1_000_000, entrata: 470_000, uscita: 10_000 }), 25)
+  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 1_000_000, entrata: 970_000, uscita: 0 }), 1)
+  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 1_000_000, entrata: 990_000, uscita: 0 }), 0)
+  // senza tetto non c'è niente da difendere: un giorno di chat lunga non ferma le bozze
+  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 0, entrata: 200_000, uscita: 50_000 }), senza)
 })
 
 test('una ricetta può chiedere il prompt: si accetta, la riga si affida in quel modo, e conta nel tetto', async () => {

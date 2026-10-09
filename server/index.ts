@@ -4687,13 +4687,19 @@ app.get('/api/automazioni/:id/mese', (req, res) => {
 
 /** Le quattro di partenza, con il loro interruttore (E). */
 app.get('/api/automazioni/pacchetto', (_req, res) => {
-  try { res.json({ pacchetto: automazioni.pacchetto() }) } catch (e) { errore(res, e) }
+  try { res.json({ pacchetto: automazioni.pacchetto(), offerta: automazioni.offertaPacchetto() }) } catch (e) { errore(res, e) }
+})
+
+/** «Non ora» sulla prima pagina: le quattro non si offrono più lì. */
+app.post('/api/automazioni/pacchetto-visto', (_req, res) => {
+  cfg.aggiorna({ pacchettoOfferto: true })
+  res.json({ ok: true })
 })
 
 app.post('/api/automazioni/pacchetto/:id', (req, res) => {
   try {
     automazioni.dalPacchetto(req.params.id, req.body?.accesa !== false)
-    res.json({ ok: true, pacchetto: automazioni.pacchetto(), automazioni: automazioni.elenco() })
+    res.json({ ok: true, pacchetto: automazioni.pacchetto(), offerta: automazioni.offertaPacchetto(), automazioni: automazioni.elenco() })
   } catch (e) { errore(res, e, 400) }
 })
 

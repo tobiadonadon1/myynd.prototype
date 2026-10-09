@@ -211,10 +211,10 @@ test('oltre il budget del giorno le righe nascono lo stesso, senza bozza', async
     metti: { inLista: 'oggi' as const, modo: 'bozza' as const, perDocumento: true }
   }
   const oggi = new Date()
-  // ne resta una sola nel budget: metà di un milione alle automazioni, e ne sono già spesi 480 mila
+  // ne resta una sola nel budget: il tetto è un milione, e ne sono già spesi 970 mila
   const prima = auto.bozzeOggi(store.statoAutomazione(BOZZA.id), oggi)
   ilModelloSceglie(docs => docs.slice(0, 3).map(d => ({ doc: d.id, testo: `Rispondere su ${d.titolo}` })),
-    () => ({ tetto: 1_000_000, entrata: 470_000, uscita: 10_000 }))
+    () => ({ tetto: 1_000_000, entrata: 960_000, uscita: 10_000 }))
 
   // non «saltata»: le righe ci sono tutte, è solo la bozza che aspetta domani
   assert.equal(await auto.fai(BOZZA, { adesso: oggi }), 'fatta')

@@ -33,7 +33,8 @@ import { Cestino, Hov, LABEL, useFocoDialogo } from '../ui'
 import { Glifo } from '../components/Stato'
 import { IconCroce, IconGiro } from '../icons'
 import { Casella, RIGO } from './Chiocciola'
-import { mesePrima, quandoData, quandoGira, ricevuta } from './quando'
+import { consegnaPossibile, mesePrima, quandoData, quandoGira, ricettaDaCarta, ricevuta } from './quando'
+import { eOspitato } from '../tempi'
 
 const PIENO: React.CSSProperties = {
   padding: '10px 19px', borderRadius: 99, border: 'none',
@@ -483,7 +484,8 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             style={{ ...VUOTO, display: 'inline-flex', alignItems: 'center', gap: 7, cursor: gira ? 'default' : 'pointer' }}
             hover={gira ? {} : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
             {gira && <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />}
-            {gira ? t('La faccio girare…') : t('Falla girare adesso')}
+            {/* con modifiche aperte gira quello che si vede: prima le salva, e lo dice */}
+            {gira ? t('La faccio girare…') : modificata ? t('Salva e falla girare') : t('Falla girare adesso')}
           </Hov>
 
           <div style={{ flex: 1, minWidth: 20 }} />
@@ -609,16 +611,20 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta, daCarta = null }: {
     setR(x => ({
       ...x,
       ...(letta.quando ? { quando: letta.quando } : {}),
-      ...(letta.proponi ? { proponi: letta.proponi } : {}),
+      ...(letta.proponi && consegnaPossibile(letta.proponi, eOspitato()) ? { proponi: letta.proponi } : {}),
       attrezzi: [...new Set([...(x.attrezzi ?? []), ...letta.attrezzi])]
     }))
   }
-  // da una carta: la frase c'è già, e si legge come se l'avesse scritta lui
+  /*
+   * Da una carta: la ricetta si scrive qui, non si rilegge dalla frase. Il
+   * testo di una carta dice di tutto («il report mensile», «in agenda»), e
+   * passato dal lettore della frase diventava un ordine al mese o un evento
+   * invece del promemoria del lunedì che il gesto promette.
+   */
   useEffect(() => {
     if (!daCarta) return
-    scrivi(daCarta.frase)
-    const testo = daCarta.testo.replace(/\s+/g, ' ').trim()
-    setR(x => ({ ...x, nome: testo.slice(0, 60), fai: testo, guarda: { ogniVolta: true }, metti: { inLista: 'oggi', modo: 'io' } }))
+    setFrase(daCarta.frase)
+    setR(x => ({ ...x, ...ricettaDaCarta(daCarta.testo) }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daCarta])
 

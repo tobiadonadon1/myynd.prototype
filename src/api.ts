@@ -1910,10 +1910,12 @@ export const api = {
   /** Il mese prima di una che c'è già. */
   meseDi: (id: string) => json<MesePrima>(`/api/automazioni/${encodeURIComponent(id)}/mese`),
   /** Le quattro di partenza, e il loro interruttore. */
-  pacchetto: () => json<{ pacchetto: DelPacchetto[] }>('/api/automazioni/pacchetto'),
+  pacchetto: () => json<{ pacchetto: DelPacchetto[]; offerta: boolean }>('/api/automazioni/pacchetto'),
   dalPacchetto: (id: string, accesa: boolean) =>
-    json<{ ok: true; pacchetto: DelPacchetto[]; automazioni: Automazione[] }>(`/api/automazioni/pacchetto/${encodeURIComponent(id)}`,
+    json<{ ok: true; pacchetto: DelPacchetto[]; offerta: boolean; automazioni: Automazione[] }>(`/api/automazioni/pacchetto/${encodeURIComponent(id)}`,
       { method: 'POST', body: JSON.stringify({ accesa }) }),
+  /** «Non ora» sulla prima pagina: le quattro di partenza non si offrono più lì. */
+  pacchettoVisto: () => json<{ ok: true }>('/api/automazioni/pacchetto-visto', { method: 'POST' }),
   /** Falla girare adesso invece di aspettare la sua ora. */
   automazioneAdesso: (id: string) =>
     json<{ ok: true; esito: 'fatta' | 'niente' | 'gia' | 'saltata'; automazioni: Automazione[] }>(

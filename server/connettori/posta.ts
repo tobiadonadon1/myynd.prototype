@@ -956,24 +956,30 @@ export async function sincronizza(
  * folder is used; no guessed folders or new message windows. */
 export async function salvaBozza(c: ConfigPosta, source: string, e: import('../store.ts').EmailPronta, messageId: string): Promise<{ id: string; url: string }> {
   vietato('posta.salvaBozza')
-  const { mimeBozza, destinatarioVerificato } = await import('../mailbox-drafts.ts')
+  const { mimeBozza, destinatarioVerificato, primaDiScrivere } = await import('../mailbox-drafts.ts')
   const m = source.match(/^posta:(.+):(\d+)$/)
-  if (!m) throw new Error('Cannot locate the original email.')
-  const { cl } = await apri(c)
+  if (!m) throw primaDiScrivere(new Error('Cannot locate the original email.'))
+  // tutto quello che succede prima di APPEND non ha scritto niente: si può riprovare
+  let cl: ImapFlow
+  try { ({ cl } = await apri(c)) } catch (err) { throw primaDiScrivere(err) }
   try {
-    const folders = await cl.list()
-    const drafts = folders.find(f => f.specialUse === '\\Drafts') ?? folders.find(f => /^(drafts|bozze|INBOX\.Drafts|INBOX\.Bozze)$/i.test(f.path))
-    if (!drafts) throw new Error('No Drafts folder was found in your email account.')
-    const lock = await cl.getMailboxLock(m[1])
+    let drafts: { path: string }
     let raw: string
     try {
-      const original = await cl.fetchOne(Number(m[2]), { source: true }, { uid: true })
-      if (!original || !original.source) throw new Error('The original email is no longer available.')
-      const parsed = await simpleParser(original.source)
-      destinatarioVerificato(e.a, parsed.replyTo?.text || parsed.from?.text || '')
-      if (!parsed.messageId || !e.rispondeA?.messageId || idPulito(e.rispondeA.messageId) !== idPulito(parsed.messageId)) throw new Error('Cannot verify the original message in this email account.')
-      raw = mimeBozza(c.utente, { ...e, oggetto: /^(re|r):/i.test(parsed.subject ?? '') ? parsed.subject! : `Re: ${parsed.subject ?? e.oggetto}`,  rispondeA: { messageId: idPulito(parsed.messageId), references: Array.isArray(parsed.references) ? parsed.references.map(idPulito) : [] } }, messageId)
-    } finally { lock.release() }
+      const folders = await cl.list()
+      const trovata = folders.find(f => f.specialUse === '\\Drafts') ?? folders.find(f => /^(drafts|bozze|INBOX\.Drafts|INBOX\.Bozze)$/i.test(f.path))
+      if (!trovata) throw new Error('No Drafts folder was found in your email account.')
+      drafts = trovata
+      const lock = await cl.getMailboxLock(m[1])
+      try {
+        const original = await cl.fetchOne(Number(m[2]), { source: true }, { uid: true })
+        if (!original || !original.source) throw new Error('The original email is no longer available.')
+        const parsed = await simpleParser(original.source)
+        destinatarioVerificato(e.a, parsed.replyTo?.text || parsed.from?.text || '')
+        if (!parsed.messageId || !e.rispondeA?.messageId || idPulito(e.rispondeA.messageId) !== idPulito(parsed.messageId)) throw new Error('Cannot verify the original message in this email account.')
+        raw = mimeBozza(c.utente, { ...e, oggetto: /^(re|r):/i.test(parsed.subject ?? '') ? parsed.subject! : `Re: ${parsed.subject ?? e.oggetto}`,  rispondeA: { messageId: idPulito(parsed.messageId), references: Array.isArray(parsed.references) ? parsed.references.map(idPulito) : [] } }, messageId)
+      } finally { lock.release() }
+    } catch (err) { throw primaDiScrivere(err) }
     const result = await cl.append(drafts.path, raw, ['\\Draft', '\\Seen'])
     if (!result) throw new Error('The mailbox did not confirm the saved draft. Check Drafts before retrying.')
     if (!Number.isSafeInteger(result.uid) || !result.uid) throw new Error('The mailbox did not return a stable draft identity. Check Drafts before retrying.')

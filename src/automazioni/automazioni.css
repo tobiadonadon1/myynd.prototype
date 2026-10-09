@@ -366,6 +366,10 @@
 .auto-pacchetto-testo b{font-size:14px;font-weight:500;color:var(--inchiostro);overflow-wrap:anywhere}
 .auto-pacchetto-testo span{font-size:12.5px;line-height:1.5;color:var(--inchiostro-2);overflow-wrap:anywhere}
 .auto-pacchetto-testo small{font-size:11.5px;color:var(--inchiostro-3);overflow-wrap:anywhere}
+/* sulla prima pagina, al primo avvio: la stessa lista, col titolo e «Non ora» su una riga */
+.auto-pacchetto.casa{margin:0 0 14px}
+.auto-pacchetto-testa{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 10px;padding:0 4px;min-width:0}
+.auto-pacchetto-testa h2{margin:0;min-width:0;overflow-wrap:anywhere}
 
 /* — E: il mese prima, in fondo al tratto «Legge» e sotto i binari di una nuova — */
 .auto-mese{margin:4px 0 14px;padding:11px 13px;border-radius:14px;border:1px solid rgba(var(--inchiostro-rgb),.1);background:rgba(var(--luce-rgb),.5);min-width:0}

@@ -1,7 +1,7 @@
 /** Publish unsent mailbox drafts, never messages. A durable reservation prevents
  * duplicate creation after an ambiguous network response or process crash. */
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import * as cfg from './config.ts'
 import * as google from './connettori/google.ts'
@@ -47,17 +47,35 @@ export function indirizzo(s: string): string { return (s.match(/[A-Z0-9.!#$%&'*+
 export function destinatarioVerificato(atteso: string, header: string) {
   if (!indirizzo(atteso) || indirizzo(atteso) !== atteso.trim().toLowerCase() || indirizzo(atteso) !== indirizzo(header)) throw new Error('The draft recipient does not match the original email. Review it before saving.')
 }
+/*
+ * Un errore arrivato prima di toccare la casella (E): la connessione non si è
+ * aperta, il messaggio originale non c'è, il destinatario non torna. Niente è
+ * stato scritto, e allora la prenotazione si libera: prima ogni errore la
+ * lasciava lì, e «Approva tutto» dopo un «Cannot locate the original email»
+ * rispondeva per sempre «a previous save is uncertain», con un bottone che
+ * non poteva più riuscire. Solo chi lo marca libera: un errore qualunque resta
+ * incerto, come deve, perché la scrittura potrebbe essere passata.
+ */
+const PRIMA = Symbol('primaDiScrivere')
+export function primaDiScrivere(err: unknown): Error {
+  const e = err instanceof Error ? err : new Error(String(err))
+  ;(e as Error & { [PRIMA]?: true })[PRIMA] = true
+  return e
+}
+export function eraPrimaDiScrivere(err: unknown): boolean {
+  return !!err && typeof err === 'object' && (err as { [PRIMA]?: true })[PRIMA] === true
+}
 const occupati = new Map<string, Promise<BozzaCasella>>()
 type Crea = (source: string, email: EmailPronta, messageId: string) => Promise<{ id: string; url: string }>
 async function crea(source: string, e: EmailPronta, messageId: string) {
   if (source.startsWith('google:')) return google.salvaBozza(source.slice(7), e, messageId)
   if (source.startsWith('posta:')) {
     const c = cfg.leggi().posta
-    if (!c) throw new Error('Reconnect your email account to save drafts.')
+    if (!c) throw primaDiScrivere(new Error('Reconnect your email account to save drafts.'))
     return posta.salvaBozza(c, source, e, messageId)
   }
-  if (source.startsWith('microsoft:')) throw new Error('Your Outlook connection is read-only. Saving mailbox drafts needs Mail.ReadWrite; this connection cannot save drafts yet.')
-  throw new Error('This email source cannot save mailbox drafts yet.')
+  if (source.startsWith('microsoft:')) throw primaDiScrivere(new Error('Your Outlook connection is read-only. Saving mailbox drafts needs Mail.ReadWrite; this connection cannot save drafts yet.'))
+  throw primaDiScrivere(new Error('This email source cannot save mailbox drafts yet.'))
 }
 export async function salvaBozzaCasella(task: string, source: string, e: EmailPronta, create: Crea = crea, profile = cfg.cartella()): Promise<BozzaCasella> {
   vietato('mailbox-drafts.salvaBozzaCasella')
@@ -77,7 +95,10 @@ export async function salvaBozzaCasella(task: string, source: string, e: EmailPr
       const result: BozzaCasella = { stato: 'salvata', ...await create(source, e, `myynd-${key}@draft.myynd.local`) }
       writeFileSync(path + '.tmp', JSON.stringify(result), { mode: 0o600 }); renameSync(path + '.tmp', path)
       return result
-    } catch (err) { return { stato: 'errore', errore: err instanceof Error ? err.message : String(err) } }
+    } catch (err) {
+      if (eraPrimaDiScrivere(err)) rmSync(path, { force: true })
+      return { stato: 'errore', errore: err instanceof Error ? err.message : String(err) }
+    }
   })()
   occupati.set(lock, run)
   try { return await run } finally { occupati.delete(lock) }

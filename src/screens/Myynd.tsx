@@ -9,6 +9,7 @@ import { Punto } from '../components/Punto'
 import { CartaSettimana } from '../components/Resoconto'
 import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaAllOrdineFisso, portaInChat, primoParagrafo, siPuoFareOgniSettimana, siPuoParlarne, taglia, type Vals } from '../vals'
 import { fraseOgniSettimana } from '../automazioni/quando'
+import { CartaPacchetto } from '../automazioni/Pacchetto'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
@@ -1383,6 +1384,9 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
           <button onClick={v.avviaOnboarding} style={{ ...BOTTONE, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{t('Configura il progetto')} <IconAvanti /></button>
         </div>
       )}
+
+      {/* E · le quattro di partenza al primo avvio: chi non apre mai gli ordini fissi le trova qui */}
+      {v.feedCaricato && <CartaPacchetto v={v} />}
 
       {/* Cosa è cambiato mentre non c'era, se c'è qualcosa da dire: sta sopra
           ai blocchi perché è la risposta alla domanda con cui si torna.

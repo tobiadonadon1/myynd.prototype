@@ -7,6 +7,8 @@ import { frasiProva } from '../prova'
 import { loc, t } from '../lingua'
 import { Editor, Nuova } from '../automazioni/Editor'
 import { quandoGira, ricevuta } from '../automazioni/quando'
+import { daOffrire } from '../automazioni/offerte'
+import { RighePacchetto } from '../automazioni/Pacchetto'
 import { Cestino } from '../ui'
 import { IconPiu, IconAvanti } from '../icons'
 import { ConnectorIcon, connectorPerAttrezzo } from '../components/ConnectorIcon'
@@ -126,22 +128,21 @@ export function Automazioni({ v }: { v: Vals }) {
   */
   /*
     Le quattro di partenza, finché tutte le sue vengono da lì: un interruttore
-    ciascuna, nell'ordine di chi la usa. Accenderne una la porta fra le sue, e
-    resta qui sotto il suo interruttore invece di saltare nella griglia; dalla
-    prima che si scrive da sé, il pacchetto si fa da parte.
+    ciascuna, nell'ordine di chi la usa. Accenderne una la porta fra le sue
+    come una scheda qualunque (`daOffrire`): con la ricevuta, «Falla girare
+    adesso» e la riga se non riesce. Dalla prima che si scrive da sé, il
+    pacchetto si fa da parte.
   */
-  const delPacchetto = new Set(pacchetto.map(p => p.id))
-  const conPacchetto = !!pacchetto.length && tutte.every(a => delPacchetto.has(a.id))
-  const prendi = (id: string, accesa: boolean) => azione(id, async () => {
-    setPacchetto(x => x.map(p => p.id === id ? { ...p, accesa } : p))
-    const r = await api.dalPacchetto(id, accesa)
+  const offerte = daOffrire(pacchetto, tutte)
+  const prendi = (id: string) => azione(id, async () => {
+    const r = await api.dalPacchetto(id, true)
     setPacchetto(r.pacchetto); setTutte(r.automazioni)
   })
   const semplice = tutte.length < SOGLIA
   const filtroVero = semplice ? 'tutte' : filtro
   const cercaVera = semplice ? '' : cerca
   const raccoltaVera = semplice ? '' : raccolta
-  const viste = tutte.filter(a => !(conPacchetto && delPacchetto.has(a.id))).filter(a =>
+  const viste = tutte.filter(a =>
     (!raccoltaVera || a.raccolta === raccoltaVera) &&
     (filtroVero === 'tutte' || (filtroVero === 'attive' ? a.accesa : filtroVero === 'pausa' ? !a.accesa : ['guaio', 'scollegata', 'muta'].includes(a.salute.stato))) &&
     `${a.nome} ${a.spiega} ${a.attrezzi.map(n => catalogo.find(c => c.nome === n)?.etichetta ?? n).join(' ')}`.toLocaleLowerCase().includes(cercaVera.toLocaleLowerCase()))
@@ -346,17 +347,12 @@ export function Automazioni({ v }: { v: Vals }) {
               {occupato === 'suggerimenti' ? t('Guardo…') : inProva > 0 ? frasiProva.neProvo(inProva) : t('Aggiorna i suggerimenti')}</button>
           </div>}
         </section>)}
-      {/* le quattro di partenza: un interruttore ciascuna, finché le sue vengono tutte da qui */}
-      {!carico && conPacchetto && <section className="auto-pacchetto" aria-labelledby="auto-pacchetto-titolo">
+      {/* le quattro di partenza ancora da prendere: un interruttore ciascuna, finché le sue vengono tutte da qui */}
+      {!carico && !!offerte.length && <section className="auto-pacchetto" aria-labelledby="auto-pacchetto-titolo">
         <h2 id="auto-pacchetto-titolo">{t('Per cominciare')}</h2>
-        <ul>{pacchetto.map(p => <li key={p.id}>
-          <div className="auto-pacchetto-testo"><b>{p.nome}</b><span>{p.spiega}</span>
-            <small>{quandoGira(p.quando)}{p.staccati.length ? ` · ${t('manca una fonte')}` : ''}</small></div>
-          <button className="auto-switch" role="switch" aria-checked={p.accesa} aria-label={`${p.accesa ? t('Mettila in pausa') : t('Accendila')}: ${p.nome}`}
-            disabled={!!occupato} onClick={() => prendi(p.id, !p.accesa)}><span /></button>
-        </li>)}</ul>
+        <RighePacchetto righe={offerte} occupato={!!occupato} prendi={prendi} />
       </section>}
-      {!carico && !viste.length && !suggeriti.length && !conPacchetto && <div className="auto-empty">
+      {!carico && !viste.length && !suggeriti.length && !offerte.length && <div className="auto-empty">
         <p>{tutte.length ? t('Nessun risultato') : t('Nessun ordine fisso ancora.')}</p>
         <button className={`auto-button ${tutte.length ? '' : 'primary'}`} onClick={() => { if (tutte.length) { setFiltro('tutte'); setCerca(''); setRaccolta('') } else { setDaCarta(null); setAperto('') } }}>{tutte.length ? t('Mostra tutte') : t('Nuovo ordine fisso')}</button>
       </div>}

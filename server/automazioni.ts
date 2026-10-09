@@ -43,6 +43,7 @@ import { VERSO_LISTA, type Verso } from './verso.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { usoDiOggi } from './tetto.ts'
 import { senzaTrattini } from './testo.ts'
+import { OSPITATO } from './ospitato.ts'
 
 // — la forma di una ricetta —
 
@@ -1034,8 +1035,10 @@ type Ferri = {
   chiediJSON: (o: Parameters<typeof chiediJSON>[0]) => Promise<unknown>
   /** Quanto si è speso oggi, e il tetto: il budget delle bozze si conta da qui. */
   uso: () => { tetto: number; entrata: number; uscita: number }
+  /** Su un server: le proposte che si eseguono solo sul Mac non si preparano. */
+  ospitato: () => boolean
 }
-const VERI: Ferri = { collegato, chiediJSON: o => chiediJSON(o), uso: () => usoDiOggi() }
+const VERI: Ferri = { collegato, chiediJSON: o => chiediJSON(o), uso: () => usoDiOggi(), ospitato: () => OSPITATO }
 let ferri: Ferri = VERI
 
 /** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
@@ -1207,8 +1210,13 @@ function riassunto(p: store.Proposta): string {
  * venti richieste vere al giorno (le altre diciassette restavano senza bozza),
  * e senza nessun legame con quanto poteva spendere davvero. Adesso si conta dal
  * budget: le automazioni hanno metà del tetto di token del giorno (o di
- * `BUDGET_SENZA_TETTO`, se un tetto non c'è), una bozza costa `STIMA_BOZZA`, e
- * vale il minore fra quelle che restano a conto fatto e quelle già speso.
+ * `BUDGET_SENZA_TETTO`, se un tetto non c'è), una bozza costa `STIMA_BOZZA`.
+ *
+ * Il giorno speso conta solo contro il tetto intero, e solo se c'è un tetto:
+ * prima toglieva dalla metà delle automazioni anche la chat e il feed, e un
+ * giorno di chat lunga fermava ogni ordine fisso che scrive, anche senza
+ * nessun tetto da difendere. Adesso la loro metà la consumano solo le loro
+ * bozze; la spesa di tutti le ferma quando il tetto intero sta per finire.
  */
 export const STIMA_BOZZA = 20_000
 export const QUOTA_AUTOMAZIONI = 0.5
@@ -1217,7 +1225,8 @@ export const BUDGET_SENZA_TETTO = 400_000
 export function bozzeRimaste(verso: Verso = VERSO_LISTA, adesso = new Date(), uso = ferri.uso()): number {
   const budget = (uso.tetto > 0 ? uso.tetto : BUDGET_SENZA_TETTO) * QUOTA_AUTOMAZIONI
   const perConto = Math.floor(budget / STIMA_BOZZA) - verso.bozzeDiOggi(adesso)
-  const perSpesa = Math.floor((budget - (uso.entrata + uso.uscita)) / STIMA_BOZZA)
+  if (uso.tetto <= 0) return Math.max(0, perConto)
+  const perSpesa = Math.floor((uso.tetto - (uso.entrata + uso.uscita)) / STIMA_BOZZA)
   return Math.max(0, Math.min(perConto, perSpesa))
 }
 
@@ -1244,7 +1253,10 @@ export async function fai(ricetta: Automazione, opzioni: { aMano?: boolean; ades
   inCorso.add(chiave)
   // dal vivo da subito: i quattordici giorni di vassoio (P6) non ci sono più,
   // al loro posto l'anteprima del mese prima, mostrata quando la si crea
-  try { return await faiInterna(ricetta, opzioni, VERSO_LISTA) }
+  // su un server una ricetta scritta sul Mac che propone una nota, un file o
+  // un evento mette la sua riga e basta: prepararla costerebbe e non si approva
+  const qui = ferri.ospitato() && ricetta.proponi && SOLO_SUL_MAC.includes(ricetta.proponi) ? { ...ricetta, proponi: undefined } : ricetta
+  try { return await faiInterna(qui, opzioni, VERSO_LISTA) }
   finally { inCorso.delete(chiave) }
 }
 
@@ -1778,10 +1790,18 @@ export function daProvare(patch: unknown): Automazione {
   return valida(ricettaDaCampi(patch as Record<string, unknown>), 'la tua automazione')
 }
 
+/**
+ * Le proposte che si approvano solo sul Mac: l'agenda passa da Calendario,
+ * la nota da Note, il file dalla Scrivania. Su un server di squadra si
+ * spendevano token a prepararle e la carta diceva di no solo ad «Approva».
+ */
+export const SOLO_SUL_MAC: Proponi[] = ['agenda.aggiungi', 'nota.crea', 'file.crea']
+
 /** La proposta scelta sui binari: una delle sei, o niente (una riga in lista). */
 function proponiDa(x: unknown): Proponi | undefined {
   if (x === undefined || x === null || x === '') return undefined
   if (!(PROPOSTE as string[]).includes(String(x))) throw new Error('Non so fare questa cosa.')
+  if (ferri.ospitato() && SOLO_SUL_MAC.includes(x as Proponi)) throw new Error('Questa si approva solo da Myynd sul Mac.')
   return x as Proponi
 }
 
@@ -2312,6 +2332,20 @@ export function pacchetto(): DelPacchetto[] {
       staccati: suoi.filter(n => !attrezzi.collegato(n))
     }]
   })
+}
+
+/**
+ * Se la prima pagina le offre (E). Al primo avvio un conto non ha nessun
+ * ordine fisso, e chi non apre mai quella pagina non le avrebbe viste: la
+ * prima pagina le offre finché non ne ha nessuna accesa e nessuna sua, e
+ * finché non ha detto «Non ora».
+ */
+export function offertaPacchetto(): boolean {
+  if ((leggi() as { pacchettoOfferto?: unknown }).pacchettoOfferto === true) return false
+  const tolte = store.automazioniTolte()
+  const stati = store.statiAutomazioni()
+  const sue = ricette().filter(r => !tolte.has(r.id))
+  return sue.every(r => (PACCHETTO as readonly string[]).includes(r.id) && (!!r.spenta || !!stati[r.id]?.spenta))
 }
 
 /** Accenderne una del pacchetto la copia fra le sue, se non c'è già; spegnerla la mette in pausa. */

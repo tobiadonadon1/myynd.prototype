@@ -15,6 +15,8 @@ let avvioMandato = false
 
 /** Lo dice `/api/auth`: ospitati, non si manda niente. */
 export function ospitatoQui(v: boolean) { ospitato = v }
+/** Se l'app parla con un server di squadra invece che col Mac di chi la usa. */
+export function eOspitato(): boolean { return ospitato }
 
 /** Un segno, con il suo nome, la prima volta che succede (per l'avvio) o ogni volta (per la chat). */
 export function segna(nome: Segno): void {
