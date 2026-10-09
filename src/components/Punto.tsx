@@ -31,6 +31,7 @@ import { IconAvanti, IconCroce } from '../icons'
 import { IeriGemello } from './IeriGemello'
 import type { Vals } from '../vals'
 import { usePunto } from '../usePunto'
+import { puntoConRighe, righeDelPunto } from '../collegamenti'
 import type { Compito, Punto as PuntoDelGiorno, RigaPunto } from '../api'
 import type { Lista } from '../oggi/useCompiti'
 import { laNotte, rigaDellaNotte, RigheDellaNotte } from './Stanotte'
@@ -177,7 +178,7 @@ function Finestra({ v, punto, guaio, chiudi, notte }: {
   const righe = (xs: RigaPunto[]) => xs.map((r, i) =>
     <Voce key={i} testo={r.testo} doc={r.doc} apriDoc={apriDoc} />)
 
-  const quante = punto ? contaRighe(punto) : 0
+  const quante = punto ? righeDelPunto(punto) : 0
   const vuoto = quante === 0
   const data = new Date(punto?.quando ?? Date.now()).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
   /*
@@ -322,7 +323,9 @@ export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
   // sulla carta, una riga: quante ne ha fatte e quante aspettano lei
   // F9 · con quanto è costata, cosa l'ha fermata, e quando il Mac dormiva
   const rigaNotte = n && <div style={SOTTO}>{rigaDellaNotte(notte?.l.turno, n)}.</div>
-  if (!p.punto) {
+  // un punto senza righe non è un punto: «0 cose» con «Apri» su un foglio vuoto
+  const punto = puntoConRighe(p.punto)
+  if (!punto) {
     if (!n) return p.vecchio ? <NonAncora p={p} /> : null
     if (soloNotte) return <Finestra v={v} punto={null} guaio={null} chiudi={() => setSoloNotte(false)} notte={notte} />
     return (
@@ -338,13 +341,13 @@ export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
       </>
     )
   }
-  if (p.daVedere) return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={p.nascondi} notte={notte} />
+  if (p.daVedere) return <Finestra v={v} punto={punto} guaio={p.guaio} chiudi={p.nascondi} notte={notte} />
   return (
     <div style={CARTA}>
       <div style={{ flex: 1, minWidth: 220 }}>
         <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
         <div style={SOTTO}>
-          {maiuscola(frasi.coseNelPunto(contaRighe(p.punto)))}. {t('Dieci secondi.')}
+          {maiuscola(frasi.coseNelPunto(righeDelPunto(punto)))}. {t('Dieci secondi.')}
         </div>
         {rigaNotte}
         {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
@@ -354,4 +357,3 @@ export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
   )
 }
 
-const contaRighe = (x: PuntoDelGiorno) => x.progetti.length + x.github.length + x.daLeggere.length + x.risposte.length + (x.aggiornamenti?.length ?? 0)

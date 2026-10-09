@@ -44,6 +44,7 @@ function LApp() {
   const [agg, setAgg] = useState<Aggiornamento | null>(null)
   const [chiedo, setChiedo] = useState(false)
   const [guaio, setGuaio] = useState('')
+  const [diagnosi, setDiagnosi] = useState<'' | 'salvo' | 'salvato'>('')
 
   useEffect(() => {
     if (!d) return
@@ -110,6 +111,13 @@ function LApp() {
   }
   const inCorso = chiedo || agg?.stato === 'controllo' || agg?.stato === 'scarico'
 
+  // il rapporto per chi aiuta: un file sulla Scrivania, niente rete
+  const salvaDiagnosi = async () => {
+    setDiagnosi('salvo'); setGuaio('')
+    try { await api.salvaDiagnosi(); setDiagnosi('salvato') }
+    catch (e) { setDiagnosi(''); setGuaio(e instanceof Error && e.message ? t(e.message) : t('Non sono riuscito a salvare il rapporto.')) }
+  }
+
   return (
     <Carta titolo={t('L’app')} id="app" larga stato={guaio || undefined} statoRame>
       <div className="f-riga">
@@ -143,6 +151,14 @@ function LApp() {
       <div className="f-riga">
         <div className="f-nome">{t('Notifiche')}</div>
         <Interruttore acceso={avvisi} cambia={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} etichetta={t('Notifiche')} />
+      </div>
+
+      <div className="f-riga">
+        <div>
+          <div className="f-nome">{t('Rapporto di diagnosi')}</div>
+          {diagnosi === 'salvato' && <div className="f-stato verde">{t('Salvato sulla Scrivania.')}</div>}
+        </div>
+        <Bottone onClick={salvaDiagnosi} occupato={diagnosi === 'salvo'} etichettaOccupato={t('Salvo…')}>{t('Salva')}</Bottone>
       </div>
 
       {/* il mostriciattolo (P1B): resta in questa scheda */}

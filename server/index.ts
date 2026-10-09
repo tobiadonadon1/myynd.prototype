@@ -12,7 +12,7 @@ import { COLORE_NOTE } from './colori-fonti.ts'
 import express from 'express'
 import { giornoValido, oraValida } from './giorno-compito.ts'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { existsSync } from 'node:fs'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
@@ -147,7 +147,10 @@ import * as abitudini from './abitudini.ts'
 import * as memoriaNuove from './memoria-nuove.ts'
 import * as oauth from './connettori/oauth.ts'
 import { riflua, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
+import * as diagnosi from './diagnosi.ts'
 
+// le ultime righe del registro, per il rapporto di diagnosi: anche senza il file del guscio
+diagnosi.ascolta()
 const app = express()
 
 /*
@@ -1814,6 +1817,33 @@ app.get('/api/incluso', async (_req, res) => {
  * Si può scegliere il fornitore solo se c'è: una scelta senza niente dietro
  * si rifiuta qui, invece di lasciare che ogni chiamata vada a vuoto.
  */
+/**
+ * Il rapporto di diagnosi (Preferenze, «L'app»): un file di testo sulla
+ * Scrivania, con quello che è suo coperto (`diagnosi.oscura`). Niente rete.
+ * Solo sul suo computer: su un server non c'è una Scrivania.
+ */
+app.post('/api/diagnosi', (_req, res) => {
+  if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Non ancora disponibile su questo server.' })
+  try {
+    const c = cfg.leggi()
+    const tg = saluteTeste.testaDaMostrare()
+    const motore = c.motore === 'compatibile' ? `compatibile (${c.compatibile?.modello ?? '?'})`
+      : c.motore === 'openai' ? `openai (${c.openai?.modello ?? '?'})` : (c.motore ?? 'claude')
+    const testo = diagnosi.rapporto({
+      versione: saluteFonti.versioneApp(),
+      macos: diagnosi.versioneMacOS(),
+      motore: `${motore}${c.motorePrima ? `, chosen ${c.motorePrima}` : ''}${mod.collegato() ? '' : ', not connected'}`,
+      modelli: cfg.modelliPerLivello(c),
+      salute: tg ? `${tg.via ?? tg.id}: ${tg.rimedio}${tg.minuti ? ` for ${tg.minuti} min` : ''}${tg.intanto ? `, working with ${tg.intanto.via}` : ''}` : 'ok',
+      mancate: mod.ultimeMancate(),
+      fonti: fontiIncomplete(chi.adesso() ?? '').map(f => ({ fonte: f.fonte, rimedio: f.rimedio ?? null })),
+      righe: diagnosi.ultimeRighe()
+    })
+    const percorso = diagnosi.salva(mani.cartellaDelLuogo('scrivania'), testo)
+    res.json({ ok: true, nome: basename(percorso) })
+  } catch (e) { errore(res, e) }
+})
+
 app.post('/api/modello/motore', async (req, res) => {
   const scelto = req.body?.motore
   if (!['claude', 'compatibile', 'chatgpt', 'openai', 'incluso'].includes(scelto)) return res.status(400).json({ errore: 'Choose an available model provider.' })

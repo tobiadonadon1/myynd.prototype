@@ -694,5 +694,45 @@ process.stdin.on('end', async () => {
 }
 // — F8: fine —
 
+// — la salute dei motori: inizio —
+/*
+ * `scena.motori` = { spento?: true, chatgptUscito?: true }.
+ *
+ * `spento`: il modello sul Mac scelto, a un indirizzo dove non risponde
+ * nessuno (la porta 9 di questa macchina), e nessun altro motore: la riga
+ * fissa dice che non risponde. `chatgptUscito`: l'account ChatGPT scelto, con
+ * un componente finto nella casa finta che dice «nessun account»; il modello
+ * finto resta collegato e risponde, quindi Myynd lavora con lui e la riga lo
+ * dice. Niente esce da questa macchina.
+ */
+type ScenaMotori = { spento?: boolean; chatgptUscito?: boolean }
+const motori = (scena as Record<string, unknown>).motori as ScenaMotori | undefined
+if (motori) {
+  if (motori.chatgptUscito) {
+    const { VERSIONE_CHATGPT } = await import(join(SERVER, 'chatgpt-runtime.ts'))
+    const base = join(CASA, 'Library', 'Caches', 'myynd-binari', 'codex', VERSIONE_CHATGPT, `${process.platform}-${process.arch}`)
+    mkdirSync(join(base, 'bin'), { recursive: true })
+    writeFileSync(join(base, 'runtime.json'), JSON.stringify({ version: VERSIONE_CHATGPT, platform: process.platform, arch: process.arch }))
+    const { chmodSync } = await import('node:fs')
+    writeFileSync(join(base, 'bin', 'codex'), `#!${process.execPath}
+// Il componente di ChatGPT, finto: risponde a tutto, e dice che nessuno è entrato.
+require('node:readline').createInterface({ input: process.stdin }).on('line', l => {
+  let m; try { m = JSON.parse(l) } catch { return }
+  if (m.id === undefined || !m.method) return
+  const result = m.method === 'account/read' ? { account: null } : m.method === 'config/read' ? { config: {} } : {}
+  process.stdout.write(JSON.stringify({ id: m.id, result }) + '\\n')
+})
+`)
+    chmodSync(join(base, 'bin', 'codex'), 0o755)
+  }
+  chi.dentro(conto.id, () => {
+    const c = cfg.leggi()
+    if (motori.spento && c.compatibile) { c.compatibile = { ...c.compatibile, url: 'http://127.0.0.1:9/v1' }; c.motore = 'compatibile' }
+    if (motori.chatgptUscito) { c.motore = 'chatgpt'; c.chatgpt = { attivo: true, email: 'alex@morgan-works.test' } }
+    cfg.scrivi(c)
+  })
+}
+// — la salute dei motori: fine —
+
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

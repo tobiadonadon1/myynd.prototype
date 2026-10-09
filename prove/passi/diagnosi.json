@@ -1,0 +1,14 @@
+[
+  { "aspetta": 1500 },
+  { "clicca": "Your account" },
+  { "vai": "Preferences" },
+  { "clicca": "Account and app" },
+  { "aspetta": 800 },
+  { "passa": "Diagnostics report" },
+  { "scatta": "diagnosi-prima" },
+  { "js": "(() => { const r = [...document.querySelectorAll('.f-riga')].find(e => /Diagnostics report/.test(e.textContent || '')); const b = r && r.querySelector('button'); if (b) b.click(); return !!b })()" },
+  { "aspetta": 1500 },
+  { "passa": "Diagnostics report" },
+  { "scatta": "diagnosi" },
+  { "testo": "diagnosi" }
+]

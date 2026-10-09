@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import * as ts from 'typescript'
 import { readFileSync } from 'node:fs'
-import { cambiaIlCollegamento, fontiCollegate, guaioDelPunto, moduloDaFinire, rigaDelleMancanze, rilettura, suCollegamento } from './collegamenti.ts'
+import { cambiaIlCollegamento, fontiCollegate, guaioDelPunto, moduloDaFinire, puntoConRighe, rigaDelleMancanze, rilettura, suCollegamento } from './collegamenti.ts'
 
 const apiUrl = new URL('./api.ts', import.meta.url).href
 const hooks = registerHooks({ load(url, context, nextLoad) {
@@ -202,4 +202,12 @@ test('la riga fissa dice che serve Claude finché non si ragiona, una volta, e s
   assert.equal(rigaDelleMancanze({ ...base, ragiona: false, guastoLettura: 'Collega Claude e potrò lavorarci.' }), 'Serve Claude.')
   assert.equal(rigaDelleMancanze({ ...base, ragiona: true, guastoLettura: 'Collega Claude e potrò lavorarci.' }), null)
   assert.equal(rigaDelleMancanze({ ...base, ragiona: true, guastoLettura: 'La lettura non è riuscita.' }), 'La lettura non è riuscita.')
+})
+
+test('un punto senza righe non si mostra: niente «0 cose» con «Apri» su un foglio vuoto', () => {
+  const vuoto = { progetti: [], github: [], daLeggere: [], risposte: [], aggiornamenti: [] }
+  assert.equal(puntoConRighe(vuoto), null)
+  assert.equal(puntoConRighe(null), null)
+  const uno = { ...vuoto, risposte: [{ testo: 'Marta aspetta il preventivo' }] }
+  assert.equal(puntoConRighe(uno), uno)
 })

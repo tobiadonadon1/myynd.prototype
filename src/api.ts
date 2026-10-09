@@ -1668,6 +1668,8 @@ export const api = {
   chatgpt: (signal?: AbortSignal) => json<ChatGPT>('/api/modello/chatgpt', { signal }),
   /** F8 · l'AI inclusa con Myynd: una chiamata vera al ponte, e la dose di oggi. */
   incluso: (signal?: AbortSignal) => json<Incluso>('/api/incluso', { signal }),
+  /** Il rapporto di diagnosi, sulla Scrivania, con quello che è suo coperto. Torna il nome del file. */
+  salvaDiagnosi: () => json<{ ok: true; nome: string }>('/api/diagnosi', { method: 'POST' }),
   accediChatGPT: (signal?: AbortSignal) => json<{ authUrl: string; loginId: string }>('/api/modello/chatgpt/login', { method: 'POST', signal }),
   statoAccessoChatGPT: (id: string, signal?: AbortSignal) => json<AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}`, { signal }),
   annullaAccessoChatGPT: (id: string) => json<{ ok: true } & AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
