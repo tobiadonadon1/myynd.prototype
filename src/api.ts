@@ -61,6 +61,8 @@ export type Stato = {
     lingua: string
     /** Chiaro, scuro, o come il sistema. */
     tema?: 'sistema' | 'chiaro' | 'scuro'
+    /** Per chi è Myynd: solo per sé o per una squadra; `null` finché non l'ha detto. Manca nei server di prima. */
+    pubblico?: 'persona' | 'azienda' | null
     /** Il fuso in cui ragiona il server per questa persona; `null` finché il browser non glielo dice. */
     fuso?: string | null
     oreFatte: number
@@ -2366,6 +2368,8 @@ export type PaginaAvvio = {
   perFonte?: Record<string, number>
   pagina: StatoPrimaPagina
   carte: number
+  /** Mentre legge: la prima frase trovata sul suo progetto, con la fonte. Manca nei server di prima. */
+  scoperta?: { testo: string; titolo: string; fonte: string } | null
   /** F6 · il primo giorno: il ritratto e le carte per la notte, con le righe di «Come lavori» e le carte nate. */
   primoGiorno?: { fase: 'attesa' | 'ritratto' | 'carte' | 'fatto'; righe: number; carte: number }
 }

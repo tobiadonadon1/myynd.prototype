@@ -1,0 +1,13 @@
+[
+  { "aspetta": 400 },
+  { "clicca": "Skip the intro" },
+  { "aspetta": 1200 },
+  { "scrivi": "Launch the new website by October", "in": "Put the new website online by October" },
+  { "scrivi": "New website", "in": "New website" },
+  { "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()" },
+  { "aspetta": 1800 },
+  { "clicca": "Mail on this Mac" },
+  { "aspetta": 1500 },
+  { "scatta": "d1-mail-disco" },
+  { "testo": "d1-mail-disco" }
+]

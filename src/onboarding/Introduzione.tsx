@@ -27,7 +27,7 @@ const MOMENTI: Momento[] = [
   { chiave: 'legge', kicker: 'Quello che legge', titolo: ['Legge quello', 'che hai già.'], riga: 'Posta, file, note, agenda. Li colleghi una volta; li rilegge ogni giorno.', visivo: 'fonti' },
   { chiave: 'pagina', kicker: 'La prima pagina', titolo: ['Una pagina', 'ogni mattina.'], riga: 'Cosa aspetta te, cosa può aspettare, cosa è già a posto.', visivo: 'pagina' },
   { chiave: 'bozza', kicker: 'Prepara, tu decidi', titolo: ['Fa il lavoro.', 'Tu premi Invia.'], riga: 'Risposte, brief, riassunti: pronti prima che li chieda. Niente esce senza di te.', visivo: 'bozza' },
-  { chiave: 'tuo', kicker: 'Resta tuo', titolo: ['Sul tuo computer.', 'Con la tua chiave.'], riga: 'Nessun modello incluso: colleghi Claude, o un modello che hai già. Cancelli tutto quando vuoi.', visivo: 'tuo' }
+  { chiave: 'tuo', kicker: 'Resta tuo', titolo: ['Sul tuo computer.', 'L’AI la scegli tu.'], riga: 'Ragiona con ChatGPT, Claude o un modello sul tuo Mac. Cancelli tutto quando vuoi.', visivo: 'tuo' }
 ]
 
 /** Le figure: costruite, non disegnate. Stessi colori del palco, stesse forme dell'app. */
@@ -72,7 +72,7 @@ function Figura({ visivo }: { visivo: Visivo }) {
   )
   return (
     <div className="intro-figura intro-fatti">
-      {([['I dati', 'Su questo computer'], ['Chi ragiona', 'Claude, o il tuo modello'], ['Chi decide', 'Tu, a ogni passo']] as const).map(([k, v]) => (
+      {([['I dati', 'Su questo computer'], ['Chi ragiona', 'ChatGPT, Claude o il tuo modello'], ['Chi decide', 'Tu, a ogni passo']] as const).map(([k, v]) => (
         <div key={k} className="intro-fatto"><span>{t(k)}</span><strong>{t(v)}</strong></div>
       ))}
     </div>

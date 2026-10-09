@@ -18,6 +18,7 @@ import { knob, track } from '../ui'
 import { preparaApertura } from '../navigazione.ts'
 import { controllaAccessoChatGPT, nomePianoChatGPT } from '../chatgpt-accesso.ts'
 import {statoAccessoNote} from '../note-access.ts'
+import { gmailPerLeApp, type Strada } from '../onboarding/primo-avvio.ts'
 
 export type Tema = 'scuro' | 'chiaro'
 
@@ -909,6 +910,8 @@ const FORNITORI = [
   { nome: 'LM Studio', url: 'http://127.0.0.1:1234/v1' },
   { nome: 'llama.cpp', url: 'http://127.0.0.1:8080/v1' }
 ]
+/** Le tre in casa: un modello acceso su questo computer, senza chiave. */
+const IN_CASA = new Set(['Ollama', 'LM Studio', 'llama.cpp'])
 
 /**
  * Un fornitore compatibile con OpenAI, al posto di Claude per il lavoro grosso.
@@ -919,7 +922,14 @@ const FORNITORI = [
  * sembra un indirizzo — su Ollama è la lista di quello che c'è installato, che
  * è esattamente quello che uno non ricorda mai come si scrive.
  */
-export function FormCompatibile({ tema, ok }: Props) {
+export function FormCompatibile({ tema, ok, inCasa = false }: Props & {
+  /**
+   * Solo un modello su questo computer (la quarta strada del primo avvio):
+   * i tre fornitori in casa, e niente chiave, che in casa non serve. Gli
+   * altri campi restano quelli.
+   */
+  inCasa?: boolean
+}) {
   const [url, setUrl] = useState('')
   const [chiave, setChiave] = useState('')
   const [chiaveSalvataPer, setChiaveSalvataPer] = useState('')
@@ -996,21 +1006,21 @@ export function FormCompatibile({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={guida(tema)}>{t('Un altro modello al posto di Claude: tuo, o di un fornitore.')}</div>
+      <div style={guida(tema)}>{inCasa ? t('Un modello acceso su questo Mac. Niente esce dal computer.') : t('Un altro modello al posto di Claude: tuo, o di un fornitore.')}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-        {FORNITORI.map(f => (
+        {FORNITORI.filter(f => !inCasa || IN_CASA.has(f.nome)).map(f => (
           <button key={f.nome} type="button" style={pastiglia(url === f.url)}
             onClick={() => { setUrl(f.url); if (!nome) setNome(f.nome) }}>{f.nome}</button>
         ))}
       </div>
       <Campo tema={tema} nome={t('Indirizzo')}>
         <input value={url} onChange={e => setUrl(e.target.value)}
-          placeholder="https://api.openai.com/v1" autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+          placeholder={inCasa ? 'http://127.0.0.1:11434/v1' : 'https://api.openai.com/v1'} autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
       </Campo>
-      <Campo tema={tema} nome={t('Chiave API (se serve)')} sotto={t('In casa di solito non serve.')}>
+      {!inCasa && <Campo tema={tema} nome={t('Chiave API (se serve)')} sotto={t('In casa di solito non serve.')}>
         <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
           placeholder={chiaveSalvataPer && url.trim().replace(/\/+$/, '') === chiaveSalvataPer ? t('Lascia vuoto per mantenere la chiave salvata') : 'sk-…'} autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
-      </Campo>
+      </Campo>}
       {/*
         Se c'è qualcuno, detto sotto l'indirizzo mentre lo si scrive.
         È la riga che mancava: chi incolla la porta di Ollama con Ollama spento
@@ -1026,7 +1036,7 @@ export function FormCompatibile({ tema, ok }: Props) {
       )}
       <Campo tema={tema} nome={t('Modello')}>
         <input list="modelli-compatibili" value={modello} onChange={e => setModello(e.target.value)}
-          placeholder="gpt-4.1 · qwen2.5:14b" autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
+          placeholder={inCasa ? 'qwen2.5:14b' : 'gpt-4.1 · qwen2.5:14b'} autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
           onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
         <datalist id="modelli-compatibili">
           {modelli.map(m => <option key={m} value={m} />)}
@@ -1038,7 +1048,7 @@ export function FormCompatibile({ tema, ok }: Props) {
       </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega il fornitore')}</Conferma>
-      <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
+      {!inCasa && <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
         <Passi tema={tema} numerati={false} passi={[
           <>OpenAI: <Vai tema={tema} url={PAGINE.chiaviOpenAI} /></>,
           <>OpenRouter: <Vai tema={tema} url={PAGINE.chiaviOpenRouter} /></>,
@@ -1046,7 +1056,7 @@ export function FormCompatibile({ tema, ok }: Props) {
           <>Mistral: <Vai tema={tema} url={PAGINE.chiaviMistral} /> › API Keys</>,
           t('Crea una chiave nuova e incollala qui sopra: il sito la mostra una volta sola.')
         ]} />
-      </Aiuto>
+      </Aiuto>}
       <Aiuto tema={tema} titolo={t('Come si collega un modello sul mio computer')}>
         <Passi tema={tema} passi={[
           t('Accendi Ollama, LM Studio o llama.cpp sul tuo computer.'),
@@ -1117,7 +1127,9 @@ export function FormPosta({ tema, ok, collegato }: Props) {
   // Gmail, iCloud e Yahoo non accettano la password dell'account via IMAP:
   // vogliono una «password per le app». Dirlo prima che fallisca.
   const h = host.toLowerCase()
-  const perLeApp = /gmail|googlemail/.test(h) ? 'google'
+  // Gmail anche dall'indirizzo: i due passi servono prima che il server sia trovato
+  const gmail = gmailPerLeApp(host, utente)
+  const perLeApp = gmail ? 'google'
     : /mail\.me\.com|icloud/.test(h) ? 'apple'
     : /yahoo/.test(h) ? 'yahoo' : ''
   const consiglio = perLeApp === 'google'
@@ -1186,7 +1198,15 @@ export function FormPosta({ tema, ok, collegato }: Props) {
 
       {/* con il no dell'azienda il consiglio sulla password punta dalla parte
           sbagliata: la password era giusta, e resta solo il blocco sotto */}
-      {consiglio && !caso && (
+      {/* Gmail: i due passi esatti, in vista, con la pagina giusta */}
+      {gmail && !caso && (
+        <Avviso tema={tema}>
+          <div>{t(gmail.righe[0])}</div>
+          <div style={{ marginTop: 4 }}>{t(gmail.righe[1])}</div>
+          <a href={gmail.url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, color: tema === 'scuro' ? '#E8A87C' : 'var(--rame-testo)' }}>{t('Apri «Password per le app»')}</a>
+        </Avviso>
+      )}
+      {consiglio && !gmail && !caso && (
         <Avviso tema={tema}>
           {consiglio}
           {dove && (
@@ -2709,15 +2729,114 @@ export function FormPostaMac({ tema, ok, collegato }: Props) {
   return (
     <div>
       <div style={guida(tema)}>{t('Legge le email di Mail su questo Mac: arrivate e inviate.')}</div>
-      {accesso === 'no' && <AccessoDisco tema={tema} testo={t('Per leggere Mail serve l’accesso completo al disco')} />}
-      {accesso === 'no' && d?.riavvia && <button type="button" onClick={() => { void d.riavvia?.() }} style={{ marginTop: 10, background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 12.5, color: tema === 'scuro' ? CHIARO : 'var(--rame-testo)', textDecoration: 'underline', cursor: 'pointer' }}>{t('Riapri Myynd')}</button>}
+      {/* nell'app, i tre passi guidati; nel browser (o in un guscio vecchio, senza «Riapri») la riga di sempre */}
+      {accesso === 'no' && d?.riavvia
+        ? <GuidaDisco tema={tema} riapri={() => { void d.riavvia?.() }} />
+        : accesso === 'no' && <AccessoDisco tema={tema} testo={t('Per leggere Mail serve l’accesso completo al disco')} />}
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato} tema={tema}>{frasi.collega(t('Mail del Mac'))}</Conferma>
+      {/* senza il permesso il gesto è «Riapri Myynd», dentro la guida: un «Collega» che fallirebbe non si mostra */}
+      {!(accesso === 'no' && d?.riavvia) && <Conferma onClick={collega} occupato={occupato} tema={tema}>{frasi.collega(t('Mail del Mac'))}</Conferma>}
+    </div>
+  )
+}
+
+/**
+ * L'accesso completo al disco per Mail, guidato: tre passi in vista.
+ *
+ * Era una riga con «Apri Impostazioni», i passi chiusi sotto «Serve un
+ * permesso del Mac» e un «Riapri Myynd» sottolineato più in basso: tre pezzi
+ * in tre posti, e chi arrivava fin lì non sapeva in che ordine. Adesso sono
+ * numerati, e i due gesti che l'app sa fare stanno sulla riga del loro passo.
+ * Riaperta l'app, il primo avvio torna su questa scheda da solo (la scheda
+ * aperta sta in localStorage), e il permesso c'è.
+ */
+function GuidaDisco({ tema, riapri }: { tema: Tema; riapri: () => void }) {
+  const d = desktop()
+  const [err, setErr] = useState('')
+  const apri = async () => {
+    setErr('')
+    try { await d?.apriFuori(PANNELLO_ACCESSO_DISCO) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+  }
+  const scuro = tema === 'scuro'
+  const passi: { testo: string; bottone?: string; fai?: () => void }[] = [
+    { testo: t('Apri Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco.'), bottone: t('Apri Impostazioni'), fai: () => void apri() },
+    { testo: t('Accendi l’interruttore di Myynd.') },
+    { testo: t('Riapri Myynd: si riprende da qui.'), bottone: t('Riapri Myynd'), fai: riapri }
+  ]
+  return (
+    <Avviso tema={tema}>
+      <div style={{ ...guida(tema), fontWeight: 500 }}>{t('Per leggere Mail serve l’accesso completo al disco')}.</div>
+      <ol style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 10 }}>
+        {passi.map((p, i) => (
+          <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <span aria-hidden="true" style={{
+              flex: 'none', width: 20, height: 20, borderRadius: 99, display: 'grid', placeItems: 'center', fontSize: 11,
+              border: `1px solid ${scuro ? 'rgba(244,239,232,.3)' : 'rgba(var(--inchiostro-rgb),.25)'}`
+            }}>{i + 1}</span>
+            <span style={{ ...nota(tema), flex: 1, minWidth: 0 }}>{p.testo}</span>
+            {p.bottone && <button type="button" onClick={p.fai} style={azione(tema)}>{p.bottone}</button>}
+          </li>
+        ))}
+      </ol>
+      {err && <div style={{ ...nota(tema), marginTop: 8, color: 'var(--rame-testo)' }}>{t(err)}</div>}
+    </Avviso>
+  )
+}
+
+/**
+ * Una strada sola per far ragionare Myynd, nel primo avvio.
+ *
+ * Le schede di Anthropic e OpenAI hanno due strade ciascuna (l'account e la
+ * chiave): al primo avvio si sceglie la strada prima del fornitore, e si
+ * vede solo quella. La chiave chiede quale delle due, con due pastiglie; il
+ * modello in casa è il modulo compatibile con i soli fornitori in casa.
+ */
+export function FormStrada({ strada, tema, ok }: Props & { strada: Strada }) {
+  const [claude, setClaude] = useState<ClaudeCon | null>(null)
+  const [s, setS] = useState<Stato | null>(null)
+  const [chatgpt, setChatgpt] = useState<ChatGPT | null>(null)
+  const [erroreChatgpt, setErroreChatgpt] = useState('')
+  const [chiaveDi, setChiaveDi] = useState<'anthropic' | 'openai'>('anthropic')
+  const guarda = useMemo(() => {
+    const leggiClaude = rilettura(() => api.claude(), setClaude)
+    const leggiStato = rilettura(() => api.stato(), setS)
+    const leggiChatgpt = rilettura(() => api.chatgpt(), c => { setChatgpt(c); setErroreChatgpt('') })
+    return () => {
+      if (strada === 'claude' || strada === 'chiave') void leggiClaude().catch(() => {})
+      void leggiStato().catch(() => {})
+      if (strada === 'chatgpt') leggiChatgpt().catch(e => setErroreChatgpt(e instanceof Error ? e.message : 'Non riesco a verificare l’accesso a ChatGPT.'))
+    }
+  }, [strada])
+  useEffect(() => { guarda() }, [guarda])
+  useEffect(() => suCollegamento(guarda), [guarda])
+  if (strada === 'locale') return <FormCompatibile tema={tema} ok={ok} inCasa />
+  if (strada === 'chatgpt') {
+    const inUso = s?.config.motore === 'chatgpt' && !!s.config.chatgpt?.attivo && !!chatgpt?.acceso
+    return <ConAccountChatGPT tema={tema} chatgpt={chatgpt} errore={erroreChatgpt} inUso={inUso} ok={ok} ricarica={guarda} />
+  }
+  if (strada === 'claude') return <ConAccountClaude tema={tema} s={claude} ok={ok} ricarica={guarda} />
+  const scuro = tema === 'scuro'
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 4 }} role="group" aria-label={t('Chiave API')}>
+        {([['anthropic', 'Anthropic'], ['openai', 'OpenAI']] as const).map(([id, nome]) => (
+          <button key={id} type="button" aria-pressed={chiaveDi === id} onClick={() => setChiaveDi(id)} style={{
+            padding: '6px 12px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer',
+            border: `1px solid ${chiaveDi === id ? 'var(--rame)' : (scuro ? 'rgba(244,239,232,.22)' : 'rgba(var(--inchiostro-rgb),.18)')}`,
+            background: chiaveDi === id ? 'rgba(var(--rame-rgb),.1)' : 'transparent',
+            color: chiaveDi === id ? (scuro ? '#E8A87C' : 'var(--rame-testo)') : (scuro ? CHIARO : 'var(--inchiostro)')
+          }}>{nome}</button>
+        ))}
+      </div>
+      {chiaveDi === 'anthropic'
+        ? <ConChiaveClaude tema={tema} s={claude} ok={ok} ricarica={guarda} />
+        : <ConChiaveOpenAI tema={tema} s={s} ok={ok} ricarica={guarda} />}
     </div>
   )
 }
 
 // ogni scheda riceve `collegato`: chi ha una conferma lo chiama appena il server dice sì
+
 export function Form({ id, tema, ok, collegato }: { id: string } & Props) {
   if (id === 'google') return <FormGoogle tema={tema} ok={ok} collegato={collegato} />
   if (id === 'claude') return <FormClaude tema={tema} ok={ok} collegato={collegato} />

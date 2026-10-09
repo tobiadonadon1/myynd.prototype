@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld('myynd', {
   mostraNelFinder: percorso => chiedi('myynd:mostra', String(percorso)),
   // riapre l'app: un permesso dato adesso vale solo per la copia che parte dopo
   riavvia: () => chiedi('myynd:riavvia'),
+  // la password dimenticata: il Mac dice chi c'è davanti, poi il guscio la cambia
+  touchId: () => chiedi('myynd:touch-id'),
+  reimpostaPassword: (email, nuova, via) => chiedi('myynd:reimposta-password', String(email ?? ''), String(nuova ?? ''), via === 'password' ? 'password' : 'touchid'),
   segnala: inAttesa => ipcRenderer.send('myynd:segnala', Number(inAttesa)),
   lingua: l => ipcRenderer.send('myynd:lingua', l === 'en' ? 'en' : 'it'),
   scorciatoia: () => chiedi('myynd:scorciatoia'),

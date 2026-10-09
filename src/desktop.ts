@@ -67,6 +67,14 @@ export type Desktop = {
   notifica?(avviso: { titolo: string; corpo: string; dove: Dove }): void
   /** Riapre l'app: serve quando un permesso dato adesso vale solo dopo un riavvio. Manca nei gusci vecchi. */
   riavvia?(): Promise<void>
+  /** Questo Mac sa chiedere Touch ID. Manca nei gusci vecchi. */
+  touchId?(): Promise<boolean>
+  /**
+   * La password dimenticata: il Mac conferma chi c'è davanti (Touch ID, o la
+   * password del Mac con `via: 'password'`), poi il guscio la cambia. Torna la
+   * sessione nuova. Manca nei gusci vecchi, e nel browser.
+   */
+  reimpostaPassword?(email: string, nuova: string, via?: 'touchid' | 'password'): Promise<{ token: string; account: { email: string } }>
   /** Questa pagina è la barra del richiamo, non l'app intera. Manca nei gusci vecchi. */
   dentroIlRichiamo?: boolean
   /** Quello che la barra può chiedere al guscio. Manca nei gusci vecchi. */

@@ -274,6 +274,32 @@ function pubblico(s: Salvato): StatoAvvio {
 export function stato(): StatoAvvio { return pubblico(leggi()) }
 
 /**
+ * La prima cosa utile trovata, mentre la prima lettura va ancora.
+ *
+ * L'attesa della lettura era una schermata da guardare: righe che diventano
+ * verdi e un conto che sale. Ma l'indice si riempie mentre legge, e una frase
+ * che parla del suo progetto c'è spesso dopo pochi secondi: è la prova che
+ * Myynd ha capito di cosa si parla, prima di qualunque modello. Si cerca con
+ * le stesse regole degli estratti (il progetto nominato, gli ultimi sei mesi,
+ * parole sue e mai riscritte), sulle fonti scelte o, finché non le ha scelte,
+ * su tutte quelle collegate. Niente si scrive: è una lettura.
+ */
+export function primaScoperta(o: { finito?: boolean } = {}): { testo: string; titolo: string; fonte: string } | null {
+  if (!existsSync(file())) return null
+  let s: Salvato
+  try { s = JSON.parse(readFileSync(file(), 'utf8')) as Salvato } catch { return null }
+  if (!s.progetto || !Array.isArray(s.confermati)) return null
+  // ad avvio finito serve solo alla sua ultima schermata, mentre la prima lettura va ancora
+  // (`finito`): la prima pagina dell'app chiede la stessa rotta, e lì non si cerca niente
+  if (s.risultato && !o.finito) return null
+  const fonti = s.fonteScelta ? fontiDi(s) : CATALOGO.filter(c => c.legge && fonteCollegata(c.id)).map(c => c.id)
+  if (!fonti.length) return null
+  // senza il limite della scelta: mentre legge, quello appena entrato è proprio quello che si cerca
+  const primo = evidenze({ ...s, fonti, fonteScelta: true, lettoFino: undefined })[0]
+  return primo ? { testo: primo.testo, titolo: primo.evidenza.titolo, fonte: primo.evidenza.fonte } : null
+}
+
+/**
  * Le fonti dell'avvio sono state scelte (o saltate), o l'avvio è finito. Si
  * guarda il file senza crearlo: il lavoro di fondo non scrive mai l'avvio.
  * `null` se l'avvio non è mai cominciato, o non si lascia leggere.

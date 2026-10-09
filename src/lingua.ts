@@ -240,8 +240,8 @@ const EN: Record<string, string> = {
   'Risposte, brief, riassunti: pronti prima che li chieda. Niente esce senza di te.': 'Replies, briefs, summaries: ready before you ask. Nothing goes out without you.',
   'Resta tuo': 'It stays yours',
   'Sul tuo computer.': 'On your computer.',
-  'Con la tua chiave.': 'With your key.',
-  'Nessun modello incluso: colleghi Claude, o un modello che hai già. Cancelli tutto quando vuoi.': 'No model included: you connect Claude, or a model you already have. Delete everything whenever you want.',
+  'L’AI la scegli tu.': 'Your choice of AI.',
+  'Ragiona con ChatGPT, Claude o un modello sul tuo Mac. Cancelli tutto quando vuoi.': 'It thinks with ChatGPT, Claude or a model on your Mac. Delete everything whenever you want.',
   'Restano dove sono.': 'They stay where they are.',
   'Agenda': 'Calendar',
   'Da fare · oggi': 'To do · today',
@@ -253,7 +253,7 @@ const EN: Record<string, string> = {
   'I dati': 'Your data',
   'Su questo computer': 'On this computer',
   'Chi ragiona': 'Who thinks',
-  'Claude, o il tuo modello': 'Claude, or your own model',
+  'ChatGPT, Claude o il tuo modello': 'ChatGPT, Claude or your own model',
   'Chi decide': 'Who decides',
   'Tu, a ogni passo': 'You, at every step',
   'Salta l’introduzione': 'Skip the intro',
@@ -1007,6 +1007,20 @@ const EN: Record<string, string> = {
   'Questo collegamento non vale più: chiedine un altro dalla schermata d’accesso.':
     'This link is no longer valid: ask for another one from the sign-in screen.',
   'La posta di questo server non è configurata.': 'This server has no outgoing mail configured.',
+  // — la password dimenticata sul Mac: Touch ID, o la password del Mac —
+  'Scegli una password nuova, poi conferma che sei tu su questo Mac.': 'Choose a new password, then confirm it is you on this Mac.',
+  'Conferma con Touch ID': 'Confirm with Touch ID',
+  'Conferma con la password del Mac': 'Confirm with your Mac password',
+  'Usa la password del Mac': 'Use your Mac password instead',
+  'Touch ID non ha confermato.': 'Touch ID did not confirm it.',
+  'Annullato.': 'Cancelled.',
+  'Il Mac non ha confermato la password.': 'The Mac did not confirm the password.',
+  'Scrivi il tuo indirizzo.': 'Type your address.',
+  'Myynd non è ancora partito. Riprova fra un momento.': 'Myynd has not started yet. Try again in a moment.',
+  'Non sono riuscito a cambiare la password.': 'I could not change the password.',
+  'Su un server la password si rimette dalla posta.': 'On a server, the password is reset by email.',
+  'Su questo Mac non c’è un conto con questo indirizzo.': 'There is no account with this address on this Mac.',
+  'Solo l’app sul Mac può farlo, dopo aver chiesto chi sei.': 'Only the Mac app can do this, after asking who you are.',
 
   // — chi sei: nome e ruolo, che prima li chiedeva solo il primo avvio —
   'Chi sei': 'Who you are',
@@ -2540,6 +2554,12 @@ const EN: Record<string, string> = {
 
   'Gmail vuole una «password per le app», non quella del tuo account.':
     'Gmail wants an app password, not your account password.',
+  'Accendi la verifica in due passaggi, poi apri «Password per le app» e creane una chiamata Myynd.':
+    'Turn on 2-Step Verification, then open App passwords and create one called Myynd.',
+  'Incolla qui le sedici lettere, al posto della password di Google.':
+    'Paste the 16 letters here, instead of your Google password.',
+  'Apri «Password per le app»': 'Open App passwords',
+
   'Dove trovo la password per le app?': 'Where do I find the app password?',
   'Gmail: Account Google › Sicurezza › Password per le app.': 'Gmail: Google Account › Security › App passwords.',
   'iCloud: appleid.apple.com › Accesso e sicurezza › Password per le app.':
@@ -2939,10 +2959,29 @@ const EN: Record<string, string> = {
   'Myynd usa questo obiettivo per decidere cosa mostrarti per primo ogni mattina.': 'Myynd uses this goal to decide what to show you first each morning.',
   'Mettere online il sito nuovo entro ottobre': 'Put the new website online by October',
   'Sito nuovo': 'New website',
+  // — per chi è Myynd: la domanda, e gli esempi per una squadra —
+  'Per chi è Myynd?': 'Who is Myynd for?',
+  'Solo per me': 'Just me',
+  'Per la mia squadra o azienda': 'My team or company',
+  'Chiudere tre nuovi clienti entro dicembre': 'Close three new clients by December',
+  'Nuovi clienti': 'New clients',
+  'Richiamare i due contatti più caldi': 'Call back the two warmest leads',
   'Una riga per progetto. Cmd+Invio per mandare.': 'One line per project. Cmd+Enter to send.',
   // — feedback 23 set: fonti —
   'Collega questa fonte prima di leggerla.': 'Connect this source before reading it.',
   'Cosa deve leggere Myynd?': 'What should Myynd read?',
+  // — chi ragiona, sul passo delle fonti: quattro strade, la prima non chiede niente —
+  'Non serve installare niente. Usa il tuo piano ChatGPT.': 'Nothing to install. Uses your ChatGPT plan.',
+  'Serve Claude Code su questo Mac.': 'Needs Claude Code on this Mac.',
+  'Scarica Claude Code': 'Get Claude Code',
+  'Anthropic o OpenAI, a consumo.': 'Anthropic or OpenAI, pay as you go.',
+  'Un modello su questo Mac': 'A model on this Mac',
+  'Ollama, LM Studio o llama.cpp. Niente esce dal Mac.': 'Ollama, LM Studio or llama.cpp. Nothing leaves the Mac.',
+  'Un modello acceso su questo Mac. Niente esce dal computer.': 'A model running on this Mac. Nothing leaves the computer.',
+  'Consigliato': 'Recommended',
+  'Usi Gmail o un’altra casella nel browser?': 'Use Gmail or another inbox in the browser?',
+  // la prima cosa utile trovata mentre legge
+  'Già trovato': 'Already found',
   'Collegane quante vuoi. Myynd le legge tutte insieme.': 'Connect as many as you like. Myynd reads them all together.',
   'Leggi le fonti': 'Read sources',
   'Continua senza fonti': 'Continue without sources',
@@ -3212,6 +3251,10 @@ const EN: Record<string, string> = {
   'Mail non è su questo Mac, o non è mai stata aperta.': 'Mail is not on this Mac, or has never been opened.',
   'Per leggere Mail serve l’accesso completo al disco.': 'Reading Mail needs Full Disk Access.',
   'Per leggere Mail serve l’accesso completo al disco': 'Reading Mail needs Full Disk Access',
+  // i tre passi guidati del permesso, sotto Mail del Mac
+  'Apri Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco.': 'Open System Settings › Privacy & Security › Full Disk Access.',
+  'Accendi l’interruttore di Myynd.': 'Turn on the switch for Myynd.',
+  'Riapri Myynd: si riprende da qui.': 'Reopen Myynd: you pick up right here.',
   'Mail ha cambiato formato: serve un aggiornamento di Myynd.': 'Mail has changed its format: Myynd needs an update.',
   'Questo conto è stato cancellato.': 'This account has been deleted.',
   'apro la posta': 'opening the mail',

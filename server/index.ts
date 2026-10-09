@@ -540,6 +540,18 @@ app.post('/api/auth/reimposta', async (req, res) => {
 })
 
 /*
+ * La password dimenticata sul Mac: la chiama solo il guscio, dopo Touch ID o
+ * la password del Mac, con il segreto che ha dato al server alla partenza.
+ * Senza quel segreto è un 403, sempre: la pagina non lo conosce.
+ */
+app.post('/api/auth/reimposta/mac', async (req, res) => {
+  if (!auth.dalGuscio(req.headers['x-myynd-guscio'])) return res.status(403).json({ errore: 'Solo l’app sul Mac può farlo, dopo aver chiesto chi sei.' })
+  const e = await auth.reimpostaDalMac(String(req.body?.email ?? ''), String(req.body?.password ?? ''))
+  if (!e.ok) return res.status(400).json({ errore: e.errore })
+  chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
+})
+
+/*
  * Il ponte dell'AI inclusa (F8), sopra la guardia: chi lo chiama è l'app sul
  * Mac di qualcuno, con il gettone del suo conto al posto di una chiave, e il
  * ponte lo controlla da sé (`incluso.ts`). Senza la chiave del conto
@@ -954,7 +966,7 @@ const profilo = async (req: express.Request, res: express.Response) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giorniLato', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giorniLato', 'giro', 'argomenti', 'tetto', 'fuso', 'pubblico'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
   // Con l'orologio fermo di una scena (MYYND_DEV=1 e MYYND_ADESSO), il fuso
@@ -994,8 +1006,10 @@ const profilo = async (req: express.Request, res: express.Response) => {
     autonomia: [...cfg.AUTONOMIE_VALIDE, 'osservare', 'agire'],
     modello: [...cfg.MODELLI.map(m => m.id), ...Object.keys(cfg.SUCCESSORI)],
     lingua: ['it', 'en'],
-    tema: cfg.TEMI_VALIDI
+    tema: cfg.TEMI_VALIDI,
+    pubblico: cfg.PUBBLICI_VALIDI
   }
+
   for (const [campo, valori] of Object.entries(ammessi)) {
     if (patch[campo] !== undefined && !valori.includes(String(patch[campo]))) {
       return res.status(400).json({ errore: `Non so cosa sia «${String(patch[campo])}» per ${campo}.` })
@@ -5521,6 +5535,8 @@ app.get('/api/avvio/pagina', (_req, res) => {
       // per fonte anche: la riga dei conti non conta una fonte la cui riga è ancora «In coda»
       perFonte: Object.fromEntries(perFonte.filter(r => Number(r.n) > 0).map(r => [r.fonte, Number(r.n)])),
       pagina: s.pagina, carte: s.carte,
+      // la prima frase sul suo progetto, durante l'avvio: senza modello, citata e basta; resta anche a lettura finita
+      scoperta: avvio.primaScoperta({ finito: lettura === 'prima' }),
       // F6 · «Imparo come lavori»: a che punto è il primo giorno
       primoGiorno: primoGiorno.stato()
     })

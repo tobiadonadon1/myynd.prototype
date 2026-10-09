@@ -16,6 +16,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { platform, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { attacca, pausa, trova } from './guida.mjs'
+import { createRequire } from 'node:module'
+const { unaSola } = createRequire(import.meta.url)('../build/una-sola.cjs')
 
 const BINARIO = resolve(process.argv[2] ?? 'dist-app/mac-arm64/Myynd.app/Contents/MacOS/Myynd')
 const PORTA_CDP = 9333
@@ -27,6 +29,7 @@ const CHIAVI = [
   'aggiornamenti', 'naviga', 'notifica', 'dentroIlRichiamo', 'richiamo', 'osservatore', 'compagno'
 ]
 CHIAVI.push('riavvia') // P8
+CHIAVI.push('touchId', 'reimpostaPassword') // la password dimenticata sul Mac
 const CHIAVI_RICHIAMO = ['chiudi', 'apri', 'misura', 'mostrato']
 const CHIAVI_AGGIORNAMENTI = ['attuale', 'controlla', 'installa', 'stato']
 
@@ -359,6 +362,11 @@ try {
 
   rmSync(dati, { recursive: true, force: true })
   rmSync(cartella, { recursive: true, force: true })
+  // aperta dal suo binario, la copia di dist-app si è registrata in Launch
+  // Services: la si toglie, perché sul Mac resti solo quella installata
+  if (platform() === 'darwin' && BINARIO.includes('.app/')) {
+    try { unaSola({ radice: process.cwd() }) } catch { /* pulizia, non prova */ }
+  }
   if (guasti) {
     const righe = uscita.split('\n').filter(Boolean).slice(-15)
     if (righe.length) console.log(`\nle ultime righe dell'app:\n  ${righe.join('\n  ')}`)

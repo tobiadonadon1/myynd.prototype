@@ -20,6 +20,8 @@ const EN: Record<string, string> = {
   'Esci': 'Quit',
   'Non ha scritto niente prima di fermarsi.': 'It did not say anything before stopping.',
   'Qualcosa è andato storto nel guscio.': 'Something went wrong in the shell.',
+  // la ragione che il Mac scrive sotto Touch ID: «Myynd vuole …»
+  'rimettere la password di Myynd': 'reset your Myynd password',
   'Continua': 'Continue',
   'Preferenze…': 'Preferences…',
   'Nuova chat': 'New chat',

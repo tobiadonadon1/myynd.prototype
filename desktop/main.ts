@@ -30,6 +30,7 @@ import { mailMessageLink } from './mail-link.ts'
 import { app, dialog, ipcMain, Notification, powerMonitor, powerSaveBlocker, shell, session, systemPreferences } from 'electron'
 import { join } from 'node:path'
 import * as server from './server.ts'
+import * as proprietario from './proprietario.ts'
 import * as finestra from './finestra.ts'
 import * as richiamo from './richiamo.ts'
 import * as menu from './menu.ts'
@@ -384,6 +385,18 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
    * chi deve salvare salva.
    */
   ipcMain.handle('myynd:riavvia', () => { app.relaunch(); app.quit() })
+  /*
+   * La password dimenticata: prima il Mac dice chi c'è davanti (Touch ID, o la
+   * sua password), poi il guscio chiama il server con il segreto che gli ha
+   * dato alla partenza. Vedi `proprietario.ts`.
+   */
+  ipcMain.handle('myynd:reimposta-password', (_e, email: unknown, nuova: unknown, via: unknown) => proprietario.reimposta({
+    sistema: systemPreferences, ragione: t('rimettere la password di Myynd'),
+    via: via === 'password' ? 'password' : 'touchid',
+    email: String(email ?? ''), nuova: String(nuova ?? ''),
+    chiama: proprietario.chiamaServer(server.porta, server.segretoGuscio())
+  }))
+  ipcMain.handle('myynd:touch-id', () => process.platform === 'darwin' && systemPreferences.canPromptTouchID())
   ipcMain.handle('myynd:mostra', (_e, percorso: unknown) => {
     if (typeof percorso === 'string' && percorso) shell.showItemInFolder(percorso)
   })
