@@ -2531,7 +2531,9 @@ Scrivi in ${nellaLingua()}.`),
         // prompt chiede «giovedì 9:30» e non «domani», e una carta che scrive
         // il giorno giusto non si butta via (e poi si tace per un giorno)
         if (!giornoFondato(v.urgenza, d)) return scarta(v, 'urgenza con un giorno che la fonte non nomina', 'urgenza')
-        if (v.tipo === 'Scadenza' && !/\b(?:\d{1,4}[/.:-]\d{1,2}|entro|scadenza|deadline|due|by|before)\b/i.test(v.prova ?? '')) return scarta(v, 'scadenza senza una data nella prova', 'scadenza')
+        // una «Scadenza» senza la data nella citazione non è una scadenza, ma resta una carta:
+        // buttarla via perdeva il dentista da confermare e l'ordine da confermare (9 ottobre 2026)
+        if (v.tipo === 'Scadenza' && !/\b(?:\d{1,4}[/.:-]\d{1,2}|entro|scadenza|deadline|due|by|before)\b/i.test(v.prova ?? '')) v = { ...v, tipo: 'Da decidere' }
         /*
          * P2 · il perché oggi, e i giorni, controllati dove la carta nasce.
          *

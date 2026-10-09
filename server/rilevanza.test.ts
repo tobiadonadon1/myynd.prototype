@@ -183,3 +183,12 @@ test('in italiano: «mi servirebbe il computo» regge «Manda il computo»; «In
   const comune = mail({ titolo: 'Pratica SCIA 2026/1184: richiesta integrazioni', corpo: `Gentile tecnico,\n\nper la pratica SCIA 2026/1184 ${scia} della presente.` , autore: 'SUAP Comune di Treviso <suap@comune.treviso.test>' })
   assert.equal(validaVoceFeed({ titolo: 'Integra la pratica SCIA 2026/1184 per il SUAP', testo: 'Il Comune chiede la relazione tecnica e gli elaborati grafici entro 10 giorni.', perche: 'Senza integrazione entro 10 giorni la pratica viene archiviata.', prova: scia }, comune), true)
 })
+
+test('un obbligo con una data da un mittente automatico va al feed; «no action needed» e «già pagato» no', () => {
+  const hmrc = mail({ titolo: 'Payment on account due', corpo: 'Your second payment on account of GBP 1,420.00 is due by 31 October. Pay online to avoid interest.', autore: 'HMRC <noreply@hmrc.test>' })
+  assert.equal(classifica(hmrc), 'feed')
+  assert.notEqual(classifica(mail({ titolo: 'Il tuo abbonamento si rinnova il 1 novembre', corpo: 'Il rinnovo avverrà automaticamente. Nessuna azione richiesta.', autore: 'Autodesk <noreply@autodesk.test>' })), 'feed')
+  assert.notEqual(classifica(mail({ titolo: 'Fattura disponibile', corpo: 'La fattura n. 2026-4412 di 19,90 EUR scade il 20. Pagamento già addebitato.', autore: 'Aruba <noreply@aruba.test>' })), 'feed')
+  // e una newsletter con una «deadline» resta una newsletter
+  assert.notEqual(classifica(mail({ titolo: 'Early bird tickets', corpo: 'Early bird deadline: by 12 October. Unsubscribe here.', autore: 'Conf <news@conf.test>' })), 'feed')
+})

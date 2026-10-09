@@ -46,6 +46,12 @@ const RADICI_IT = ['rispond', 'conferm', 'approv', 'rived', 'verific', 'firm', '
 // in inglese il verbo ovunque nel titolo, com'era; in italiano la radice in testa, perché
 // «di», «fai», «apr» in mezzo a un titolo sono preposizioni e pezzi di parola, non verbi
 const AZIONE = new RegExp(`\\b(?:${VERBI_EN.join('|')})\\b|^\\W*(?:${RADICI_IT.join('|')})[a-zàèéìòù']*(?![\\p{L}])`, 'iu')
+/** Un obbligo di chi legge: pagare, firmare, presentare. */
+const OBBLIGO = /\b(?:payment|pay|tax(?:es)?|vat|invoice|bill|balance|amount due|overdue|deadline|due|sign(?:ature)?|pagamento|pagare|paga|tasse|imposta|iva|f24|bolletta|fattura|saldo|sollecito|scadenza|scade|scaduto|firma|firmare)\b/i
+/** Una data entro cui farlo. */
+const CON_SCADENZA = /\b(?:due (?:by|on|date)|is due|are due|by \d{1,2}(?:st|nd|rd|th)?\s+\p{L}+|by (?:january|february|march|april|may|june|july|august|september|october|november|december)\b|before \d{1,2}|entro (?:il )?\d{1,2}|entro (?:il )?(?:luned|marted|mercoled|gioved|venerd|sabato|domenica)|scade il|in scadenza|deadline)/iu
+/** Quello che lo dice da sé: niente da fare. */
+const NIENTE_DA_FARE = /\b(?:no action (?:is )?(?:needed|required)|nessuna azione (?:richiesta|necessaria)|already (?:paid|charged)|has been paid|già (?:addebitat[oa]|pagat[oa])|renews? automatically|si rinnova automaticamente|avverrà automaticamente)\b/i
 const RICHIESTA = /\b(?:can|could|would|will) you\b|\b(?:please|kindly|ti chiedo|potresti|puoi|per favore|ti va|mi serve|ci serve|mi servirebbe|ci servirebbe|mi servono|ci servono|vorrei|need your|needs your|awaiting your|waiting for your|aspetto (?:la tua|una)|attendo (?:la tua|una)|review requested|requested (?:your|a) review|assigned to you|assegnat[oa] a te|action required|richiesta (?:la tua|una)|(?:mi|ci) (?:confermi|confermate|mandi|mandate|dici|dite|fai sapere|fate sapere))\b/i
 const DOMANDA_DIRETTA = /\b(?:are you|do you|did you|have you|what (?:do you|are your)|does .{0,65} work|is .{0,65} (?:ok|okay)|sei disponibile|siete disponibili|che ne pensi|cosa ne pensi|ti (?:va|torna)|vi (?:va|torna))\b[^?]{0,200}\?/i
 
@@ -102,6 +108,12 @@ export function classificaAttenzione(
     // classified the sender as automated or bulk.
     if (TRANSAZIONE.test(testo) && (d.massa || mittenteAutomatico(d.autore) || !contieneRichiesta(testo))) {
       return { destinazione: 'brief', motivo: 'aggiornamento_di_servizio' }
+    }
+    // un obbligo con una data, anche da un mittente automatico: le tasse, la banca,
+    // una bolletta. «Payment on account due by 31 October» da noreply@ finiva fra la
+    // posta in serie, e il modello non lo vedeva mai (9 ottobre 2026)
+    if (!d.massa && !PROMO.test(testo) && OBBLIGO.test(testo) && CON_SCADENZA.test(testo) && !NIENTE_DA_FARE.test(testo)) {
+      return { destinazione: 'feed', motivo: 'obbligo_con_scadenza' }
     }
     if (d.massa || mittenteAutomatico(d.autore) || PROMO.test(testo)) return no('posta_in_serie')
     if (d.letto && quando < adesso - GIORNO && !contieneRichiesta(testo)) return no('letta_senza_richiesta')
