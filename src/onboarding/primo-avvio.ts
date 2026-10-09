@@ -25,6 +25,14 @@ export const STRADE: { id: Strada; nome: string; nota: string; connettore: 'open
 ]
 /** La strada consigliata a chi non ha ancora niente: la prima. */
 export const CONSIGLIATA: Strada = STRADE[0]!.id
+/**
+ * Le strade che esistono qui. Su un server gli account (ChatGPT e Claude
+ * passano da programmi su questo Mac) e il modello in casa non ci sono: resta
+ * la chiave. Mostrarle vorrebbe dire aprire una scheda vuota.
+ */
+export function stradeQui(ospitato: boolean): typeof STRADE {
+  return ospitato ? STRADE.filter(s => s.id === 'chiave') : STRADE
+}
 
 /*
  * Le prime schede delle fonti, su un Mac.

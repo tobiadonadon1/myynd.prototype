@@ -13,7 +13,7 @@ import { IconFreccia } from '../icons'
 import { Scena, OnboardAttesa, OnboardErrore, type Momento } from './Scena'
 import { Introduzione } from './Introduzione'
 import { momentoAllaRipresa, riprendeLeggendo } from './passi'
-import { CONSIGLIATA, STRADE, esempi, prioritaFonti, pubblicoDi, type Pubblico, type Strada } from './primo-avvio'
+import { CONSIGLIATA, esempi, stradeQui, prioritaFonti, pubblicoDi, type Pubblico, type Strada } from './primo-avvio'
 
 // i modelli non si leggono: OpenAI stava fra le fonti e il server lo rifiutava
 const NON_FONTI = new Set(['claude', 'openai', 'compatibile', 'mind2do'])
@@ -572,7 +572,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
             {modelloCollegato
               ? <div className="onboard-connected" style={{ marginLeft: 0, marginTop: 8, fontSize: 12, overflowWrap: 'anywhere' }}>✓ {t('Collegato')} · {t(modelloCollegato.nome)}</div>
               : <div className="onboard-strade" role="group" aria-label={t('Chi ragiona')}>
-                {STRADE.map(x => <div key={x.id} className="onboard-strada">
+                {stradeQui(s.ospitato).map(x => <div key={x.id} className="onboard-strada">
                   <button type="button" aria-pressed={strada === x.id} onClick={() => apriStrada(x.id)}>
                     <span className="onboard-strada-nome">{t(x.nome)}{x.id === CONSIGLIATA && <em>{t('Consigliato')}</em>}</span>
                     <span className="onboard-strada-nota">{t(x.nota)}</span>

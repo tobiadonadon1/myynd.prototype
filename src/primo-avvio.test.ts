@@ -12,7 +12,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const { STRADE, CONSIGLIATA, prioritaFonti, esempi, gmailPerLeApp, pubblicoDi } = await import('./onboarding/primo-avvio.ts')
+const { STRADE, CONSIGLIATA, stradeQui, prioritaFonti, esempi, gmailPerLeApp, pubblicoDi } = await import('./onboarding/primo-avvio.ts')
 
 const dizionario = readFileSync(new URL('./lingua.ts', import.meta.url), 'utf8')
 const tradotta = (k: string) => dizionario.includes(`'${k}':`)
@@ -23,11 +23,14 @@ test('with nothing connected, ChatGPT sign-in comes first and is the recommended
   assert.match(STRADE[1]!.nota, /Claude Code/)
   assert.equal(STRADE.find(s => s.id === 'locale')!.connettore, 'compatibile')
   for (const s of STRADE) { assert.ok(tradotta(s.nome), s.nome); assert.ok(tradotta(s.nota), s.nota) }
+  // su un server gli account e il modello in casa non esistono: resta la chiave
+  assert.deepEqual(stradeQui(true).map(s => s.id), ['chiave'])
+  assert.equal(stradeQui(false), STRADE)
 })
 
 test('the onboarding uses the four routes, the recommended mark and a link to get Claude Code', () => {
   const onboarding = readFileSync(new URL('./onboarding/Onboarding.tsx', import.meta.url), 'utf8')
-  assert.match(onboarding, /STRADE\.map\(/)
+  assert.match(onboarding, /stradeQui\(s\.ospitato\)\.map\(/)
   assert.match(onboarding, /x\.id === CONSIGLIATA && <em>\{t\('Consigliato'\)\}<\/em>/)
   assert.match(onboarding, /href="https:\/\/claude\.com\/claude-code"/)
   assert.match(onboarding, /<FormStrada strada=\{strada\}/)
