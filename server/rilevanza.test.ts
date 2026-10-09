@@ -172,3 +172,14 @@ test('«Send written notice» regge sulla citazione «written notice is required
   const d = mail({ titolo: 'Lease renewal: action required', corpo: `Dear tenant,\n\nYour lease for Unit 4B ends on 31 December. ${prova}\n\nStudio Spaces` })
   assert.equal(validaVoceFeed({ titolo: 'Send written notice on the Unit 4B lease', testo: 'Without written notice by 31 October the lease for Unit 4B renews automatically.', perche: 'Written notice is required by 31 October.', prova }, d), true)
 })
+
+test('in italiano: «mi servirebbe il computo» regge «Manda il computo»; «Integra la pratica» è un verbo', () => {
+  const prova = 'mi servirebbe il computo metrico aggiornato con le nuove finestre entro mercoledì'
+  const d = mail({ titolo: 'Computo metrico villa Neri', corpo: `Buongiorno Chiara,\n\n${prova}, così lo giro all'impresa.\n\nPaolo` })
+  assert.equal(validaVoceFeed({ titolo: 'Manda a Paolo Neri il computo metrico aggiornato', testo: 'Paolo vuole il computo metrico con le nuove finestre entro mercoledì per girarlo all\'impresa.', perche: 'Paolo lo gira all\'impresa entro mercoledì.', prova }, d), true)
+  // una richiesta di un'altra cosa non regge «manda»
+  assert.equal(validaVoceFeed({ titolo: 'Manda a Paolo il contratto firmato', testo: 'Paolo vuole il contratto firmato entro mercoledì per girarlo all\'impresa.', perche: 'Paolo lo gira all\'impresa entro mercoledì.', prova }, d), false)
+  const scia = 'si richiede l\'integrazione della relazione tecnica e degli elaborati grafici entro 10 giorni dal ricevimento'
+  const comune = mail({ titolo: 'Pratica SCIA 2026/1184: richiesta integrazioni', corpo: `Gentile tecnico,\n\nper la pratica SCIA 2026/1184 ${scia} della presente.` , autore: 'SUAP Comune di Treviso <suap@comune.treviso.test>' })
+  assert.equal(validaVoceFeed({ titolo: 'Integra la pratica SCIA 2026/1184 per il SUAP', testo: 'Il Comune chiede la relazione tecnica e gli elaborati grafici entro 10 giorni.', perche: 'Senza integrazione entro 10 giorni la pratica viene archiviata.', prova: scia }, comune), true)
+})

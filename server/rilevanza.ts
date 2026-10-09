@@ -33,8 +33,20 @@ const istruzioniInterne = (testo: string, d: Pick<Documento, 'tipo' | 'fonte'>) 
 const ARCHIVIO = /(?:^|[\s_./-])(?:cv|résumé|resume|curriculum(?: vitae)?)(?:$|[\s_./-])|\b(?:employment history|work experience|esperienze lavorative)\b/i
 const PROMO = /\b(?:unsubscribe|disiscriviti|annulla l.iscrizione|view (?:this email )?in (?:your )?browser|offerta esclusiva|exclusive offer|limited.time offer|shop now|buy now|flash sale|sale ends|newsletter|weekly digest|daily digest|codice sconto|discount code)\b/i
 const TRANSAZIONE = /\b(?:(?:your |il tuo |la tua )?(?:order|package|parcel|shipment|delivery|ordine|pacco|spedizione|consegna)\b.{0,70}\b(?:confirmed|confirmation|shipped|delivered|arrived|arrivato|confermato|consegnat[oa]|spedito|on (?:its|the) way|out for delivery|update|aggiornamento|tracking)|(?:subscription|abbonamento)\b.{0,65}\b(?:renew(?:al|ed|s)?|scadenz[ae]|rinnov[oa]|expires?|payment|pagamento|receipt)|(?:payment|pagamento)\s+(?:received|confirmed|ricevuto|confermato)|(?:receipt (?:for|from)|ricevuta di|order confirmation|conferma (?:dell.?ordine|ordine)))/i
-const AZIONE = /\b(?:reply|respond|answer|confirm|approve|review|sign|send|share|choose|decide|update|fix|resolve|schedule|book|submit|provide|complete|pay|return|check|prepare|review|give|tell|verify|renew|cancel|terminate|chase|accept|decline|arrange|file|pick|select|agree|settle|sort|plan|set|follow|call|meet|attend|register|order|hire|invite|interview|read|approve|answer|reschedule|move|draft|write|finish|finalize|finalise|sign|scegli|seleziona|accordati|fissa|chiama|incontra|iscriviti|ordina|assumi|invita|leggi|scrivi|finisci|disdic(?:i|ere)|rinnov(?:a|are)|annull(?:a|are)|sollecit(?:a|are)|accett(?:a|are)|rifiut(?:a|are)|organizz(?:a|are)|rispond(?:i|ere)|conferm(?:a|are)|approv(?:a|are)|rived(?:i|ere)|verific(?:a|are)|firm(?:a|are)|invi(?:a|are)|mand(?:a|are)|scegl(?:i|iere)|decid(?:i|ere)|aggiorn(?:a|are)|corregg(?:i|ere)|risolv(?:i|ere)|fiss(?:a|are)|prenot(?:a|are)|complet(?:a|are)|pag(?:a|are)|restitui(?:sci|re)|controll(?:a|are)|prepar(?:a|are))\b/i
-const RICHIESTA = /\b(?:can|could|would|will) you\b|\b(?:please|kindly|ti chiedo|potresti|puoi|per favore|ti va|mi serve|ci serve|need your|needs your|awaiting your|waiting for your|aspetto (?:la tua|una)|attendo (?:la tua|una)|review requested|requested (?:your|a) review|assigned to you|assegnat[oa] a te|action required|richiesta (?:la tua|una)|(?:mi|ci) (?:confermi|confermate|mandi|mandate|dici|dite|fai sapere|fate sapere))\b/i
+/*
+ * I verbi con cui comincia il titolo di una carta: «Rispondi a…», «Pick the…».
+ * Era un elenco corto, e una carta giusta cadeva per il suo verbo: «Verify
+ * the bank details», «Pick the typeface», «Integra la pratica SCIA» (9
+ * ottobre 2026, prove sul modello vero in inglese e in italiano). Adesso è
+ * largo; per l'italiano, la radice con le uscite dell'imperativo e
+ * dell'infinito.
+ */
+const VERBI_EN = ['reply', 'respond', 'answer', 'confirm', 'approve', 'review', 'sign', 'send', 'share', 'choose', 'decide', 'update', 'fix', 'resolve', 'schedule', 'book', 'submit', 'provide', 'complete', 'pay', 'return', 'check', 'prepare', 'give', 'tell', 'verify', 'renew', 'cancel', 'terminate', 'chase', 'accept', 'decline', 'arrange', 'file', 'pick', 'select', 'agree', 'settle', 'sort', 'plan', 'set', 'follow', 'call', 'meet', 'attend', 'register', 'order', 'hire', 'invite', 'interview', 'read', 'reschedule', 'move', 'draft', 'write', 'finish', 'finalize', 'finalise', 'integrate', 'upload', 'deliver', 'forward', 'request', 'ask', 'quote', 'estimate', 'calculate', 'revise', 'correct', 'clarify', 'contact', 'email', 'phone', 'visit', 'inspect', 'approve', 'authorize', 'authorise', 'transfer', 'invoice', 'collect', 'claim', 'book', 'reserve', 'confirm', 'thank', 'introduce', 'connect', 'escalate', 'investigate', 'test', 'ship', 'publish', 'post', 'renew', 'extend', 'close', 'open', 'start', 'stop', 'pause', 'prioritize', 'prioritise', 'assign', 'delegate', 'discuss', 'negotiate', 'compare', 'evaluate', 'assess', 'audit', 'reconcile', 'download', 'install', 'migrate', 'backup', 'restore', 'remind', 'notify', 'warn', 'look']
+const RADICI_IT = ['rispond', 'conferm', 'approv', 'rived', 'verific', 'firm', 'invi', 'mand', 'scegl', 'decid', 'aggiorn', 'corregg', 'risolv', 'fiss', 'prenot', 'complet', 'pag', 'restitu', 'controll', 'prepar', 'disdic', 'rinnov', 'annull', 'sollecit', 'accett', 'rifiut', 'organizz', 'selezion', 'chiam', 'incontr', 'iscriv', 'ordin', 'assum', 'invit', 'legg', 'scriv', 'fin', 'integr', 'present', 'deposit', 'caric', 'consegn', 'inoltr', 'richied', 'chied', 'sistem', 'calcol', 'valut', 'spost', 'comunic', 'contatt', 'telefon', 'visit', 'ispezion', 'autorizz', 'trasfer', 'fattur', 'incass', 'rimbors', 'ringrazi', 'present', 'colleg', 'segnal', 'indag', 'test', 'spedisc', 'spedi', 'pubblic', 'chiud', 'apr', 'avvi', 'ferm', 'sospend', 'assegn', 'deleg', 'discut', 'negozi', 'confront', 'stim', 'quantific', 'riconcili', 'scaric', 'install', 'ricord', 'avvis', 'guard', 'condivid', 'fornisc', 'forn', 'compil', 'rivedi', 'rivalut', 'definisc', 'defin', 'pianific', 'programm', 'concord', 'accord', 'propon', 'dai', 'fai', 'di']
+// in inglese il verbo ovunque nel titolo, com'era; in italiano la radice in testa, perché
+// «di», «fai», «apr» in mezzo a un titolo sono preposizioni e pezzi di parola, non verbi
+const AZIONE = new RegExp(`\\b(?:${VERBI_EN.join('|')})\\b|^\\W*(?:${RADICI_IT.join('|')})[a-zàèéìòù']*(?![\\p{L}])`, 'iu')
+const RICHIESTA = /\b(?:can|could|would|will) you\b|\b(?:please|kindly|ti chiedo|potresti|puoi|per favore|ti va|mi serve|ci serve|mi servirebbe|ci servirebbe|mi servono|ci servono|vorrei|need your|needs your|awaiting your|waiting for your|aspetto (?:la tua|una)|attendo (?:la tua|una)|review requested|requested (?:your|a) review|assigned to you|assegnat[oa] a te|action required|richiesta (?:la tua|una)|(?:mi|ci) (?:confermi|confermate|mandi|mandate|dici|dite|fai sapere|fate sapere))\b/i
 const DOMANDA_DIRETTA = /\b(?:are you|do you|did you|have you|what (?:do you|are your)|does .{0,65} work|is .{0,65} (?:ok|okay)|sei disponibile|siete disponibili|che ne pensi|cosa ne pensi|ti (?:va|torna)|vi (?:va|torna))\b[^?]{0,200}\?/i
 
 const MARCATORE_INOLTRO = /[- ]{2,}\s*(?:Forwarded message|Messaggio inoltrato)\s*[- ]{2,}/i
@@ -207,7 +219,14 @@ export function validaVoceFeed(
     // titolo leggeva «return», la dichiarazione, come «restituisci», e ogni carta
     // su una dichiarazione IVA o dei redditi finiva scartata
     const verbo = titolo.split(/\s+/).slice(0, 2).join(' ')
-    if (famiglie.some(f => f.test(verbo) && !f.test(prova))) return false
+    // «mi servirebbe il computo metrico» chiede di mandarlo: per il verbo «manda»
+    // basta una richiesta nella citazione, non serve la parola «manda»
+    // ma solo se è la stessa cosa: una parola piena del titolo, dopo il verbo, sta nella citazione
+    const piene = (t: string) => new Set(normalizza(t).split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 4))
+    const nellaProva = piene(prova)
+    const stessaCosa = [...piene(titolo.split(/\s+/).slice(1).join(' '))].some(w => nellaProva.has(w))
+    const chiedeUnaCosa = RICHIESTA.test(prova) && stessaCosa
+    if (famiglie.some((f, i) => f.test(verbo) && !f.test(prova) && !(i === famiglie.length - 1 && chiedeUnaCosa))) return false
   }
   // Concrete identities/numbers mentioned in the card must be present in
   // the source. The exact request remains available to audit semantic fit.
