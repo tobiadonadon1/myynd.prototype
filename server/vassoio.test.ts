@@ -1,4 +1,8 @@
-// Il vassoio di prova (P6): i primi quattordici giorni di un'automazione accesa.
+// Il vassoio di prova (P6): erano i primi quattordici giorni di un'automazione accesa.
+//
+// Adesso un ordine fisso acceso gira dal vivo da subito (E), e nel vassoio non
+// entra più niente. Restano i risultati arrivati prima: si scrivono, si mettono
+// in lista con un dito, si scartano, e il loro documento non si rifà.
 //
 //   node --test server/vassoio.test.ts
 
@@ -82,42 +86,36 @@ const righe = (id: string) => (db.prepare('SELECT COUNT(*) AS n FROM compiti WHE
 const bozzeDi = (id: string) => store.statoAutomazione(id)?.bozze ?? 0
 async function finche(f: () => boolean, ms = 5000) { const fine = Date.now() + ms; while (!f() && Date.now() < fine) await new Promise(r => setTimeout(r, 15)) }
 
-test('accenderne una nuova apre quattordici giorni di vassoio; riaccenderla non li riapre', () => {
-  const a = auto.scrivi(RISPOSTE)
-  auto.accendi(a.id, false)
-  assert.equal(store.statoAutomazione(a.id)?.vassoio ?? null, null)
-  auto.accendi(a.id, true)
-  const fino = Date.parse(store.statoAutomazione(a.id)!.vassoio!)
-  assert.ok(Math.abs(fino - (ORA + 14 * GIORNO)) < 60_000)
-  auto.accendi(a.id, false); auto.accendi(a.id, true)
-  assert.equal(Date.parse(store.statoAutomazione(a.id)!.vassoio!), fino)
-})
+/** Un risultato rimasto nel vassoio da prima, come lo scriveva il giro di allora. */
+function rimasto(automazione: string, doc: string, stato: 'senza bozza' | 'da scrivere') {
+  const prova = `v-${automazione}`
+  if (!store.prova(prova)) store.nuovaProva({ id: prova, automazione, tipo: 'vassoio', stato: 'in corso', origine: 'vassoio' })
+  const id = `e-${doc}`
+  store.scriviEsito({
+    id, prova, automazione, tipo: 'riga', stato, quando: new Date().toISOString(),
+    testo: `Reply about ${store.documento(doc)!.titolo}`, doc, inLista: 'oggi',
+    docs: JSON.stringify({ ids: [doc], nuovi: [doc], anche: [] }),
+    attrezzi: JSON.stringify({ nomi: ['posta.leggi'], origine: 'automazione' }), ...(stato === 'da scrivere' ? { modo: 'bozza' } : {})
+  })
+  return id
+}
 
-test('nel vassoio il giro scrive risultati e nessuna riga; le bozze contano nel tetto, e chi le scrive non lo tocca', async () => {
-  arriva('Quote request A'); arriva('Quote request B')
-  const a = auto.ricette().find(x => x.id === 'risposte')!
-  assert.equal(await auto.fai(a), 'fatta')
-  assert.equal(righe('risposte'), 0)
-  const inAttesa = store.vassoioInAttesa().filter(e => e.automazione === 'risposte')
-  assert.equal(inAttesa.length, 2)
-  assert.ok(inAttesa.every(e => e.stato === 'da scrivere'))
-  assert.equal(bozzeDi('risposte'), 2, 'le bozze del vassoio contano nel tetto del giorno')
+test('i risultati rimasti da prima si scrivono, uno per giro, e non segnano bozze', async () => {
+  auto.scrivi(RISPOSTE)
+  const c = arriva('Quote request C'); const d = arriva('Quote request D')
+  rimasto('risposte', c, 'da scrivere'); rimasto('risposte', d, 'da scrivere')
   const prima = bozzeDi('risposte')
   assert.equal(await vassoio.giro(), true)
   assert.equal(bozzeDi('risposte'), prima, 'chi scrive nel vassoio non segna bozze')
   assert.equal(store.vassoioInAttesa().filter(e => e.stato === 'scritta').length, 1, 'una bozza per giro')
-  // oltre il tetto del giorno, righe senza bozza
-  arriva('Quote request C'); arriva('Quote request D')
-  await auto.fai(a)
-  const nuove = store.vassoioInAttesa().filter(e => e.stato === 'senza bozza')
-  assert.equal(nuove.length, 1, `tetto: ${auto.BOZZE_AL_GIORNO}`)
+  rimasto('risposte', arriva('Quote request H'), 'senza bozza')
 })
 
-test('un documento nel vassoio non è una carta del feed e non si rifà', async () => {
+test('un documento rimasto nel vassoio non si rifà in lista', async () => {
   const a = auto.ricette().find(x => x.id === 'risposte')!
-  const prima = store.vassoioInAttesa().length
-  await auto.fai(a)
-  assert.equal(store.vassoioInAttesa().length, prima, 'nessun doppione')
+  const prima = righe('risposte')
+  await auto.fai(a, { aMano: true })
+  assert.equal(righe('risposte'), prima, 'un documento che aspetta nel vassoio è tornato in lista')
   const ids = store.vassoioInAttesa().map(e => e.doc!)
   assert.deepEqual([...store.docsNelVassoio(ids)].sort(), [...ids].sort())
 })
@@ -130,8 +128,9 @@ test('«Metti in lista»: una riga sola, la bozza nella casella solo adesso, e d
   assert.equal(riga.origine, 'auto:risposte')
   await finche(() => salvate.length > 0)
   assert.deepEqual(salvate, [id], 'la bozza va nella casella dopo il dito')
+  const dopo = righe('risposte')
   assert.equal(await vassoio.inLista(e.id), id)
-  assert.equal(righe('risposte'), 1)
+  assert.equal(righe('risposte'), dopo, 'due volte è la stessa riga')
   const azione = db.prepare("SELECT dettaglio FROM azioni WHERE compito = ?").get(id) as { dettaglio: string }
   assert.equal(azione.dettaglio, 'dal vassoio')
 })
@@ -160,6 +159,7 @@ test('messo in lista mentre si scriveva: la bozza si butta', async () => {
 })
 
 test('«Non serve» segna sbagliato; i nuovi e «visto»', () => {
+  rimasto('risposte', arriva('Quote request J'), 'senza bozza')
   const primi = vassoio.nonVisti()
   assert.ok(primi > 0)
   const e = store.vassoioInAttesa()[0]
@@ -170,28 +170,16 @@ test('«Non serve» segna sbagliato; i nuovi e «visto»', () => {
   assert.equal(vassoio.nonVisti(), 0)
 })
 
-test('«Termina la prova»: da lì le righe vanno in lista, e un documento che aspetta nel vassoio non si rifà', async () => {
-  arriva('Quote request G')
-  await auto.fai(auto.ricette().find(x => x.id === 'risposte')!)
-  const aspetta = store.vassoioInAttesa().filter(e => e.automazione === 'risposte').map(e => e.doc!)
-  vassoio.dalVivo('risposte')
-  assert.equal(store.nelVassoio('risposte'), false)
-  arriva('Quote request E')
-  // domani: il tetto di oggi non conta
-  const prima = righe('risposte')
-  await auto.fai(auto.ricette().find(x => x.id === 'risposte')!, { adesso: new Date(Date.now() + GIORNO) })
-  assert.equal(righe('risposte'), prima + 1, 'la riga nuova è in lista')
-  const docs = (db.prepare('SELECT doc FROM compiti WHERE origine = ?').all('auto:risposte') as { doc: string }[]).map(r => r.doc)
-  assert.ok(aspetta.length > 0)
-  for (const d of aspetta) assert.ok(!docs.includes(d), `${d} rifatto in lista`)
-})
-
-test('una già accesa prima del vassoio non ci entra mai: il giro dal vivo scrive in lista (controcaso)', async () => {
-  const a = auto.scrivi({ ...RISPOSTE, id: 'vecchia' })
-  store.accendiAutomazione(a.id, true)
-  assert.equal(store.statoAutomazione(a.id)?.vassoio ?? null, null)
-  arriva('Quote request F')
-  await auto.fai(auto.ricette().find(x => x.id === 'vecchia')!)
-  assert.equal(store.statoAutomazione(a.id)?.vassoio, '1970-01-01T00:00:00.000Z')
-  assert.ok(righe('vecchia') >= 1)
+test('accenderne una la mette dal vivo subito: niente vassoio, le righe vanno in lista', async () => {
+  // per ultima: le sue righe dal vivo fanno lavorare la lista, e il vassoio aspetta chi lavora
+  const a = auto.scrivi({ ...RISPOSTE, id: 'dal-vivo' })
+  auto.accendi(a.id, false)
+  auto.accendi(a.id, true)
+  assert.equal(store.statoAutomazione(a.id)?.vassoio ?? null, null, 'accenderla ha aperto un vassoio')
+  arriva('Quote request A'); arriva('Quote request B')
+  const prima = store.vassoioInAttesa().length
+  assert.equal(await auto.fai(auto.ricette().find(x => x.id === 'dal-vivo')!), 'fatta')
+  assert.ok(righe('dal-vivo') >= 2, 'le righe dovevano andare in lista')
+  assert.equal(store.vassoioInAttesa().length, prima, 'nel vassoio non entra più niente')
+  assert.equal(auto.elenco().find(x => x.id === 'dal-vivo')?.ricevuta?.fatti, righe('dal-vivo'), 'la ricevuta conta le righe fatte')
 })

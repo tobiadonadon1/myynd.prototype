@@ -151,6 +151,8 @@ export type Stato = {
   suggerimentiNuovi: number
   /** I risultati nuovi del vassoio di prova (P6): accendono lo stesso punto. */
   vassoioNuovi?: number
+  /** Gli ordini fissi accesi il cui ultimo giro è andato storto (E): la riga fissa del motore li dice. */
+  automazioniInGuaio?: { id: string; nome: string; riprova: string | null }[]
   /** P5: le cose da guardare nate dopo l'ultima visita alla Memoria. */
   memoriaNuove?: { quante: number; dove: 'come-lavori' | 'ritratto' | null }
   /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
@@ -584,10 +586,41 @@ export function letturaDesktop(m: Record<string, unknown>): LetturaDesktop | nul
  * prima di premere, e «sono tutte newsletter» non si può controllare mentre
  * «Newsletter di Vinted, ogni martedì» sì.
  */
-export type Proposta = {
-  azione: 'posta.cestina' | 'posta.archivia'
-  voci: { doc: string; titolo: string; perche: string }[]
+export type Proposta =
+  | { azione: 'posta.cestina' | 'posta.archivia'; voci: { doc: string; titolo: string; perche: string }[] }
+  | { azione: 'agenda.aggiungi'; eventi: { titolo: string; inizio: string; minuti?: number; dove?: string; perche: string }[] }
+  /** Risposte da mettere fra le bozze della casella (E): mai mandate. */
+  | { azione: 'posta.bozza'; bozze: { doc: string; titolo: string; a: string; oggetto: string; corpo: string; perche: string }[] }
+  | { azione: 'nota.crea'; note: { titolo: string; testo: string; perche: string }[] }
+  | { azione: 'file.crea'; file: { titolo: string; testo: string; perche: string }[] }
+
+/** Cosa un ordine fisso consegna oltre a una riga in lista: una proposta da approvare con un dito. */
+export type Proponi = 'posta.cestina' | 'posta.archivia' | 'posta.bozza' | 'agenda.aggiungi' | 'nota.crea' | 'file.crea'
+
+/** Quando gira un ordine fisso. */
+export type Quando =
+  | { ogni: 'giorno'; ora: number }
+  | { ogni: 'feriali'; ora: number }
+  | { ogni: 'settimana'; giorno: number; ora: number }
+  | { ogni: 'mese'; giorno: number; ora: number }
+  | { quandoArriva: true }
+
+/** Un giro, com'è andato: la ricevuta che resta sull'ordine fisso (E). */
+export type Giro = {
+  quando: string; esito: string; quanti: number; fatti?: number
+  perche?: 'vuoto' | 'niente' | 'condizione' | 'gia' | 'tetto' | 'guaio'
+  risultato?: string
 }
+
+/** «Il mese scorso avrebbe fatto queste N cose»: l'anteprima che si guarda prima di crearlo. */
+export type MesePrima = {
+  ok: true; cose: number; volte: number; documenti: number
+  docs: { id: string; titolo: string; fonte: string; quando: string | null }[]
+  staccati: string[]
+}
+
+/** Una delle quattro di partenza, con il suo interruttore. */
+export type DelPacchetto = { id: string; nome: string; spiega: string; quando: Quando; attrezzi: string[]; accesa: boolean; staccati: string[] }
 
 /** Da dove arrivano le automazioni, e quand'è andata l'ultima volta. */
 export type StatoRicette = { repo: string | null; quando: string | null; guaio: string | null }
@@ -955,13 +988,15 @@ export type Passo = { id: string; tipo: 'condizione' | 'trasforma'; testo: strin
 export type RicettaComposta = {
   nome: string
   spiega: string
-  quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
-  guarda: { cerca?: string; soloNuovi?: boolean; limite?: number }
+  quando: Quando
+  guarda: { cerca?: string; soloNuovi?: boolean; ogniVolta?: boolean; limite?: number }
   fai: string
   passi?: Passo[]
   metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto' | 'prompt'; perDocumento?: boolean }
   attrezzi?: string[]
   cartella?: string
+  /** Cosa consegna oltre a una riga: niente = una riga in lista. */
+  proponi?: Proponi
 }
 /**
  * Una proposta, con dentro i campi di una ricetta vera.
@@ -972,7 +1007,7 @@ export type RicettaComposta = {
  */
 export type SuggerimentoAutomazione = {
   id: string; nome: string; spiega: string; quanti: number; esempi: string[]; attrezzi: string[]
-  quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
+  quando: Quando
   /** La prova d'idea passata (P6): solo quelle passate si mostrano. */
   prova?: RiassuntoProva
 }
@@ -982,7 +1017,7 @@ export type Automazione = {
   id: string
   nome: string
   spiega: string
-  quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
+  quando: Quando
   metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto' | 'prompt'; perDocumento?: boolean }
   accesa: boolean
   ultima: string | null
@@ -993,11 +1028,11 @@ export type Automazione = {
   mia: boolean
   /** Quando girerà da sola. Null = è in pausa, o non va a orologio. */
   prossima: string | null
-  /** Cosa guarda e cosa fa: sta nel dettaglio, non nella riga. */
-  guarda: { cerca?: string; soloNuovi?: boolean; limite?: number }
+  /** Cosa guarda e cosa fa: sta nel dettaglio, non nella riga. `ogniVolta`: un promemoria, anche senza niente da leggere. */
+  guarda: { cerca?: string; soloNuovi?: boolean; ogniVolta?: boolean; limite?: number }
   fai: string
-  /** C'è solo su quelle che si offrono di mettere via dei messaggi. */
-  proponi?: 'posta.cestina' | 'posta.archivia'
+  /** C'è solo su quelle che propongono una cosa da approvare invece di una riga. */
+  proponi?: Proponi
   /** Cosa può aprire mentre gira. Vuoto = solo l'indice, come una volta. */
   attrezzi: string[]
   /** Dove lavora Claude Code, per quelle che ce l'hanno. */
@@ -1015,27 +1050,15 @@ export type Automazione = {
   /** Il turno è già passato: girerà al primo giro utile, non all'ora scritta. */
   inRitardo: boolean
   /** Le ultime volte, dalla più vecchia alla più recente. */
-  storia: { quando: string; esito: string; quanti: number; risultato?: string }[]
-  /** Fino a quando è nel vassoio di prova (P6). Nel passato: già finito. */
-  vassoio?: string | null
-  /** Accesa e fuori dal vassoio: il bottone la fa girare dal vivo. */
-  dalVivo?: boolean
-  /** Quanti risultati aspettano nel suo vassoio. */
+  storia: Giro[]
+  /** La ricevuta dell'ultimo giro, anche di quelli che non hanno guardato niente (E). */
+  ricevuta?: Giro | null
+  /** Se l'ultimo giro è andato storto: quando riprova da sola. */
+  riprova?: string | null
+  /** Quanti risultati aspettano ancora nel vecchio vassoio di prova (P6). */
   inVassoio?: number
   /** L'ultima prova sugli ultimi 30 giorni. */
   prova?: RiassuntoProva | null
-}
-
-/** Quello che un'automazione guarderebbe adesso, senza fare niente. */
-export type Anteprima = {
-  ok: true
-  docs: { id: string; titolo: string; fonte: string; quando: string | null }[]
-  /** Le fonti in cui ha davvero cercato. Vuoto = tutte. */
-  dentro: string[]
-  /** Gli attrezzi dichiarati che non sono collegati. */
-  staccati: string[]
-  soloNuovi: boolean
-  dal: string | null
 }
 
 /** Un attrezzo del catalogo, come lo mostra il menù della chiocciola. */
@@ -1822,12 +1845,11 @@ export const api = {
     json<{ ok: true; nuove: number; cambiate: number; tolte: number; automazioni: Automazione[]; ricette: StatoRicette }>(
       '/api/automazioni/aggiorna', { method: 'POST' }),
 
-  /** Da una frase a un'automazione. Nasce in pausa: prima la guardi. */
   /** La frase composta, non ancora scritta: torna la ricetta da mettere sui binari. */
   componiAutomazione: (descrizione: string, attrezzi?: string[]) =>
     json<{ ok: true; ricetta: RicettaComposta }>('/api/automazioni/componi',
       { method: 'POST', body: JSON.stringify({ descrizione, attrezzi }) }),
-  /** Una ricetta assemblata sui binari, salvata: nasce in pausa. */
+  /** Una ricetta assemblata sui binari, salvata: nasce accesa, dal vivo (E). */
   nuovaAutomazione: (ricetta: Record<string, unknown>) =>
     json<{ ok: true; id: string; automazioni: Automazione[] }>('/api/automazioni/nuova',
       { method: 'POST', body: JSON.stringify(ricetta) }),
@@ -1879,18 +1901,22 @@ export const api = {
     json<{ ok: true; automazioni: Automazione[] }>(`/api/automazioni/${encodeURIComponent(id)}/accendi`,
       { method: 'POST', body: JSON.stringify({ accesa }) }),
 
-  /** Falla girare adesso invece di aspettare la sua ora. */
   /**
-   * Cosa guarderebbe adesso. Non scrive niente e non costa un token.
-   *
-   * È la differenza fra scrivere le parole della ricerca al buio e vederle
-   * funzionare: si preme mentre si scrive, quante volte si vuole.
+   * Il mese prima di una ricetta non ancora scritta: sola lettura (E). Ha
+   * preso il posto di «cosa troverebbe adesso», che guardava un istante solo.
    */
-  anteprimaAutomazione: (id: string) =>
-    json<Anteprima>(`/api/automazioni/${encodeURIComponent(id)}/anteprima`),
-
+  mesePrima: (ricetta: Record<string, unknown>) =>
+    json<MesePrima>('/api/automazioni/mese', { method: 'POST', body: JSON.stringify({ ricetta }) }),
+  /** Il mese prima di una che c'è già. */
+  meseDi: (id: string) => json<MesePrima>(`/api/automazioni/${encodeURIComponent(id)}/mese`),
+  /** Le quattro di partenza, e il loro interruttore. */
+  pacchetto: () => json<{ pacchetto: DelPacchetto[] }>('/api/automazioni/pacchetto'),
+  dalPacchetto: (id: string, accesa: boolean) =>
+    json<{ ok: true; pacchetto: DelPacchetto[]; automazioni: Automazione[] }>(`/api/automazioni/pacchetto/${encodeURIComponent(id)}`,
+      { method: 'POST', body: JSON.stringify({ accesa }) }),
+  /** Falla girare adesso invece di aspettare la sua ora. */
   automazioneAdesso: (id: string) =>
-    json<{ ok: true; esito: 'fatta' | 'niente' | 'gia'; automazioni: Automazione[] }>(
+    json<{ ok: true; esito: 'fatta' | 'niente' | 'gia' | 'saltata'; automazioni: Automazione[] }>(
       `/api/automazioni/${encodeURIComponent(id)}/adesso`, { method: 'POST' }),
 
   // — la rassegna —
@@ -2340,8 +2366,6 @@ export const apiP6 = {
     json<{ compiti: unknown; vassoio: GruppoVassoio[] }>(`/api/vassoio/${encodeURIComponent(id)}/lista`, { method: 'POST' }),
   scartaEsito: (id: string) =>
     json<{ vassoio: GruppoVassoio[] }>(`/api/vassoio/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  dalVivo: (id: string) =>
-    json<{ automazioni: Automazione[] }>(`/api/automazioni/${encodeURIComponent(id)}/dalvivo`, { method: 'POST' }),
   suggerimentiConProva: (rifai = false) =>
     json<{ suggerimenti: SuggerimentoAutomazione[]; inProva?: number }>(`/api/automazioni/suggerimenti${rifai ? '?rifai=1' : ''}`)
 }

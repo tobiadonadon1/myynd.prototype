@@ -3,7 +3,7 @@
   "nome": "Rinnovi che scattano da soli",
   "spiega": "Il primo del mese cerca abbonamenti e contratti che si rinnovano da sé, e dice entro quando si può disdire.",
   "quando": {
-    "ogni": "settimana",
+    "ogni": "mese",
     "giorno": 1,
     "ora": 9
   },
@@ -22,7 +22,7 @@
   ],
   "en": {
     "nome": "Renewals that fire on their own",
-    "spiega": "Every Monday, looks for subscriptions and contracts that renew themselves, and says by when you can still cancel.",
+    "spiega": "On the first of the month, looks for subscriptions and contracts that renew themselves, and says by when you can still cancel.",
     "cerca": "automatic renewal subscription cancellation notice period contract expiry",
     "fai": "Which of these renew on their own if nobody does anything? For each: what it is, what the renewal costs, the date it fires, and — the part that actually matters — the date by which you must cancel to stop it. Only where the date is written down: a cancellation missed because of an invented date is worse than the renewal."
   }

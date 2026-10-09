@@ -8,7 +8,8 @@
 // «p6» (tutto facoltativo):
 //   config       unita alla configurazione (cfg.aggiorna): la posta finta su 127.0.0.1
 //   ricette      [{ ...ricetta, accesa?: boolean }]: automazioni.scrivi, poi accesa o in pausa
-//   stati        [{ id, vassoio: "+8d" | "1970" | null, ultima?: "-2h", quante? }]
+//   stati        [{ id, vassoio: "+8d" | "1970" | null, ultima?: "-2h", quante?, esito?, guaio?, riprova?: "+25m",
+//                   ricevuta?: { quando: "-2h", esito, quanti, fatti?, perche? } }]: E, la ricevuta e il giro storto
 //   vassoio      [{ automazione, testo, doc, stato, bozza?, quando }]: risultati nel vassoio
 //   inviati      [id]: documenti mandati da lui (inviato = 1)
 //   suggerimento { ...Suggerimento, giusti?, giudicati? }: nel foglio delle scoperte, già provato e passato
@@ -20,13 +21,12 @@ const SERVER = new URL('../server/', import.meta.url).pathname
 const cfg = await import(join(SERVER, 'config.ts'))
 const store = await import(join(SERVER, 'store.ts'))
 const auto = await import(join(SERVER, 'automazioni.ts'))
-const verso = await import(join(SERVER, 'verso.ts'))
 const scoperte = await import(join(SERVER, 'scoperte.ts'))
 
 type P6 = {
   config?: Record<string, unknown>
   ricette?: (Record<string, unknown> & { id: string; accesa?: boolean })[]
-  stati?: { id: string; vassoio?: string | null; ultima?: string; quante?: number }[]
+  stati?: { id: string; vassoio?: string | null; ultima?: string; quante?: number; esito?: string; guaio?: string; riprova?: string; ricevuta?: Record<string, unknown> & { quando?: string } }[]
   vassoio?: { automazione: string; testo: string; doc: string; stato: string; bozza?: string; quando?: string }[]
   inviati?: string[]
   suggerimento?: Record<string, unknown> & { id: string; giusti?: number; giudicati?: number; prove?: string[] }
@@ -53,11 +53,24 @@ export function semina(p6: P6, _o: { dati?: string } = {}) {
     store.vediAutomazione(s.id)
     store.default.prepare('UPDATE automazioni SET vassoio = ?, ultima = COALESCE(?, ultima), vista = COALESCE(?, vista), quante = COALESCE(?, quante) WHERE id = ?')
       .run(s.vassoio === null || s.vassoio === undefined ? null : tempo(s.vassoio), s.ultima ? tempo(s.ultima) : null, s.ultima ? tempo(s.ultima) : null, s.quante ?? null, s.id)
+    // E: la ricevuta dell'ultimo giro, e un giro andato storto che riprova da sé
+    if (s.ricevuta) {
+      const g = { ...s.ricevuta, quando: tempo(s.ricevuta.quando) }
+      store.default.prepare('UPDATE automazioni SET ricevuta = ?, storia = ? WHERE id = ?').run(JSON.stringify(g), JSON.stringify([g]), s.id)
+    }
+    if (s.esito) store.default.prepare('UPDATE automazioni SET esito = ?, guaio = ?, riprova = ? WHERE id = ?')
+      .run(s.esito, s.guaio ?? null, s.riprova ? tempo(s.riprova) : null, s.id)
+  }
+  // i risultati rimasti nel vassoio da prima (E: non ci entra più niente di nuovo)
+  const provaDelVassoio = (automazione: string) => {
+    const id = `v-${automazione}`
+    if (!store.prova(id)) store.nuovaProva({ id, automazione, tipo: 'vassoio', stato: 'in corso', origine: 'vassoio' })
+    return id
   }
   for (const [i, e] of (p6.vassoio ?? []).entries()) {
     const quando = tempo(e.quando)
     store.scriviEsito({
-      id: `vassoio-${i}`, prova: verso.provaDelVassoio(e.automazione), automazione: e.automazione, tipo: 'riga', stato: e.stato,
+      id: `vassoio-${i}`, prova: provaDelVassoio(e.automazione), automazione: e.automazione, tipo: 'riga', stato: e.stato,
       quando, creato: quando, testo: e.testo, doc: e.doc, docs: JSON.stringify({ ids: [e.doc], nuovi: [e.doc], anche: [] }),
       inLista: 'settimana', modo: 'bozza', attrezzi: JSON.stringify({ nomi: ['posta.leggi'], origine: 'automazione' }),
       nota: `Da guardare:\n— [${e.doc}] ${store.documento(e.doc)?.titolo ?? ''}`,

@@ -1,0 +1,79 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "progetti": [
+  { "chiave": "northwind", "nome": "Northwind", "obiettivo": "Fit-out of the Northwind offices" }
+ ],
+ "documenti": [
+  { "id": "posta:q-1", "fonte": "posta", "tipo": "email", "titolo": "Quote for the lobby fit-out", "corpo": "Hi Alex, could you send me a quote for the lobby fit-out? Labour and materials, please. Thanks, Dana", "autore": "Dana Reyes <dana@northwind.example>", "quando": "-27d", "filo": "f-q-1", "messageId": "<q-1@example>" },
+  { "id": "posta:q-2", "fonte": "posta", "tipo": "email", "titolo": "Quote for the kitchen fit-out", "corpo": "Hi Alex, any news on the kitchen quote? Thanks, Lee", "autore": "Lee Park <lee@contoso.example>", "quando": "-19d", "filo": "f-q-2", "messageId": "<q-2@example>" },
+  { "id": "posta:q-3", "fonte": "posta", "tipo": "email", "titolo": "Quote for the meeting room", "corpo": "Hi Alex, we would like a quote for the meeting room by Friday. Sam", "autore": "Sam Ito <sam@fabrikam.example>", "quando": "-11d", "filo": "f-q-3", "messageId": "<q-3@example>" },
+  { "id": "posta:q-4", "fonte": "posta", "tipo": "email", "titolo": "Quote for the warehouse fit-out", "corpo": "Hi Alex, could you quote the warehouse fit-out? Ana", "autore": "Ana Ruiz <ana@tailspin.example>", "quando": "-4d", "filo": "f-q-4", "messageId": "<q-4@example>" },
+  { "id": "posta:q-5", "fonte": "posta", "tipo": "email", "titolo": "Quote follow-up: reception desk", "corpo": "Hi Alex, following up on the reception desk quote. Dana", "autore": "Dana Reyes <dana@northwind.example>", "quando": "-2d", "filo": "f-q-5", "messageId": "<q-5@example>" },
+  { "id": "posta:r-1", "fonte": "posta", "tipo": "email", "titolo": "Your subscription renews on 1 November", "corpo": "Your annual plan renews automatically on 1 November for 480 euro. Cancel by 25 October to stop the renewal.", "autore": "Billing <billing@toolco.example>", "quando": "-6d", "filo": "f-r-1" },
+  { "id": "posta:v-1", "fonte": "posta", "tipo": "email", "titolo": "Site visit on Tuesday 20 October at 10:00", "corpo": "Hi Alex, confirming the site visit at Northwind on Tuesday 20 October at 10:00. Dana", "autore": "Dana Reyes <dana@northwind.example>", "quando": "-1d", "filo": "f-v-1" }
+ ],
+ "feed": [
+  { "id": "card-status", "tipo": "Priorità", "titolo": "Send Dana the weekly site status", "testo": "Dana asks for the weekly status of the Northwind site, as every Friday.", "fonte": "posta", "doc": "posta:q-5", "progetto": "northwind", "quando": "-3h", "peso": 2, "offerta": "I can draft the status from this week's mail.", "perche": "She asks every Friday" }
+ ],
+ "compiti": [
+  {
+   "id": "c-bozze", "testo": "Replies to give", "quando": "oggi", "origine": "auto:replies-in-drafts", "stato": "pronto", "modo": "io",
+   "risultato": "2 replies to put in your Drafts.",
+   "proposta": {
+    "azione": "posta.bozza",
+    "bozze": [
+     { "doc": "posta:q-4", "titolo": "Quote for the warehouse fit-out", "a": "ana@tailspin.example", "oggetto": "Re: Quote for the warehouse fit-out", "corpo": "Hi Ana,\n\nThanks for asking. I will send the warehouse quote by Thursday, with labour and materials split out.\n\nBest,\nAlex", "perche": "Ana asks for a quote and has had no reply" },
+     { "doc": "posta:q-5", "titolo": "Quote follow-up: reception desk", "a": "dana@northwind.example", "oggetto": "Re: Quote follow-up: reception desk", "corpo": "Hi Dana,\n\nThe reception desk quote is attached to my next mail, today. Sorry for the wait.\n\nAlex", "perche": "Dana is following up for the second time" }
+    ]
+   }
+  },
+  {
+   "id": "c-agenda", "testo": "Site visits", "quando": "oggi", "origine": "auto:site-visits", "stato": "pronto", "modo": "io",
+   "risultato": "1 thing to put in the calendar.",
+   "proposta": {
+    "azione": "agenda.aggiungi",
+    "eventi": [ { "titolo": "Site visit at Northwind", "inizio": "2026-10-20T10:00", "minuti": 60, "dove": "Northwind offices", "perche": "Dana confirmed it in writing" } ]
+   }
+  },
+  { "id": "c-status", "testo": "Send the weekly site status to Dana", "quando": "oggi", "progetto": "northwind" }
+ ],
+ "p6": {
+  "config": { "posta": { "host": "127.0.0.1", "porta": 9, "utente": "alex@northwind.example", "password": "finta" } },
+  "ricette": [
+   {
+    "id": "quote-follow-ups", "nome": "Quote follow-ups", "spiega": "Every working day, a nudge for each quote that went quiet.",
+    "quando": { "ogni": "feriali", "ora": 9 }, "guarda": { "cerca": "quote", "limite": 8 },
+    "fai": "Draft a short nudge for each quote request that is still waiting for a reply.",
+    "metti": { "inLista": "oggi", "modo": "bozza", "perDocumento": true }, "attrezzi": ["posta.leggi"], "accesa": true,
+    "en": { "nome": "Quote follow-ups", "spiega": "Every working day, a nudge for each quote that went quiet.", "fai": "Draft a short nudge for each quote request that is still waiting for a reply.", "cerca": "quote" }
+   },
+   {
+    "id": "monthly-renewals", "nome": "Renewals before they fire", "spiega": "On the first of the month, what renews by itself and by when to cancel.",
+    "quando": { "ogni": "mese", "giorno": 1, "ora": 9 }, "guarda": { "cerca": "renews renewal", "limite": 8 },
+    "fai": "List what renews by itself, what it costs and by when it can still be cancelled.",
+    "metti": { "inLista": "settimana", "modo": "bozza" }, "proponi": "nota.crea", "attrezzi": ["posta.leggi"], "accesa": true,
+    "en": { "nome": "Renewals before they fire", "spiega": "On the first of the month, what renews by itself and by when to cancel.", "fai": "List what renews by itself, what it costs and by when it can still be cancelled.", "cerca": "renews renewal" }
+   },
+   {
+    "id": "replies-in-drafts", "nome": "Replies in your drafts", "spiega": "When mail arrives, a reply in your drafts for each person waiting on you.",
+    "quando": { "quandoArriva": true }, "guarda": { "soloNuovi": true, "limite": 8 },
+    "fai": "Write a reply for each message from a person who is waiting on you.",
+    "metti": { "inLista": "oggi", "modo": "io" }, "proponi": "posta.bozza", "attrezzi": ["posta.leggi"], "accesa": true,
+    "en": { "nome": "Replies in your drafts", "spiega": "When mail arrives, a reply in your drafts for each person waiting on you.", "fai": "Write a reply for each message from a person who is waiting on you." }
+   },
+   {
+    "id": "friday-digest", "nome": "Friday digest", "spiega": "Every Friday, the week in one file.",
+    "quando": { "ogni": "settimana", "giorno": 5, "ora": 17 }, "guarda": { "soloNuovi": true, "limite": 8 },
+    "fai": "Write the week in one page: what moved, what is waiting, what is due next week.",
+    "metti": { "inLista": "oggi", "modo": "io" }, "proponi": "file.crea", "attrezzi": ["posta.leggi"], "accesa": false,
+    "en": { "nome": "Friday digest", "spiega": "Every Friday, the week in one file.", "fai": "Write the week in one page: what moved, what is waiting, what is due next week." }
+   }
+  ],
+  "stati": [
+   { "id": "quote-follow-ups", "ultima": "-3h", "quante": 9, "ricevuta": { "quando": "-3h", "esito": "fatta", "quanti": 6, "fatti": 2 } },
+   { "id": "monthly-renewals", "ultima": "-8d", "quante": 1, "ricevuta": { "quando": "-8d", "esito": "niente", "quanti": 3, "perche": "niente" } },
+   { "id": "replies-in-drafts", "ultima": "-1d", "quante": 14, "esito": "guaio", "guaio": "The provider did not answer.", "riprova": "+35m", "ricevuta": { "quando": "-12m", "esito": "guaio", "quanti": 0, "perche": "guaio" } }
+  ]
+ }
+}

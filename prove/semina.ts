@@ -225,7 +225,9 @@ chi.dentro(conto.id, () => {
       ['domandeFatte', typeof c.domandeFatte === 'number' ? c.domandeFatte : undefined], ['guaio', (c.guaio as string) ?? undefined],
       // — F1: il contratto, la prova e il diario di una carta —
       ['contratto', json(c.contratto)], ['prova', json(c.prova)], ['diario', json(c.diario)], ['turno', turnoVero(c.turno)],
-      ['aggiornato', c.aggiornato ? tempo(c.aggiornato) : undefined], ['priorita', (c.priorita as string) ?? undefined]
+      ['aggiornato', c.aggiornato ? tempo(c.aggiornato) : undefined], ['priorita', (c.priorita as string) ?? undefined],
+      // — E: la proposta di un ordine fisso, da approvare con un dito —
+      ['proposta', json(c.proposta)]
     ]
     for (const [k, v] of p3) {
       if (v === undefined || v === null) continue

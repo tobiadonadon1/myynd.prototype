@@ -1,8 +1,9 @@
-// Le rotte della prova e del vassoio (P6), su un server vero.
+// Le rotte degli ordini fissi, della prova e del vassoio (P6, E), su un server vero.
 //
-// «Falla girare adesso» risponde 409 quando l'automazione è in pausa o nei suoi
-// quattordici giorni di vassoio, e 200 quando è dal vivo: il bottone è uno, e
-// la sua parola segue lo stato.
+// Un ordine fisso nasce acceso e gira dal vivo da subito: «Falla girare
+// adesso» risponde 200 appena creato, e anche in pausa (il dito è il suo
+// consenso). Prima di crearlo si guarda il mese prima; le quattro di partenza
+// si accendono una per una.
 //
 //   node --test server/automazioni-rotte.test.ts
 
@@ -96,25 +97,51 @@ async function chiama(metodo: string, percorso: string, corpo?: unknown): Promis
 }
 
 
-test('«Falla girare adesso»: 409 in pausa, 409 nel vassoio, 200 dal vivo', async () => {
-  const nuova = await chiama('POST', '/api/automazioni/nuova', { nome: 'Quote follow-ups', fai: 'Draft a follow-up for each quote.', cerca: 'quote', quando: { ogni: 'giorno', ora: 9 } })
+test('un ordine fisso nasce acceso e «Falla girare adesso» va subito, anche in pausa', async () => {
+  const ricetta = { nome: 'Quote follow-ups', fai: 'Draft a follow-up for each quote.', cerca: 'quote', quando: { ogni: 'feriali', ora: 9 } }
+  // prima di crearlo, il mese prima: sola lettura, e la ricetta non c'è ancora
+  const mese = await chiama('POST', '/api/automazioni/mese', { ricetta })
+  assert.equal(mese.stato, 200, JSON.stringify(mese.json))
+  assert.equal(mese.json.cose, 0)
+  assert.ok(mese.json.volte >= 20, `nei giorni feriali di un mese gira una ventina di volte, non ${mese.json.volte}`)
+  assert.equal((await chiama('GET', '/api/automazioni')).json.automazioni.length, 0, 'guardare il mese prima ha scritto la ricetta')
+  assert.equal((await chiama('POST', '/api/automazioni/mese', { ricetta: { nome: 'x' } })).stato, 400)
+
+  const nuova = await chiama('POST', '/api/automazioni/nuova', ricetta)
   assert.equal(nuova.stato, 200, JSON.stringify(nuova.json))
   const id = nuova.json.id as string
-  const pausa = await chiama('POST', `/api/automazioni/${id}/adesso`)
-  assert.equal(pausa.stato, 409)
-  assert.equal(pausa.json.errore, 'È in pausa: provala sugli ultimi 30 giorni.')
-  const accesa = await chiama('POST', `/api/automazioni/${id}/accendi`, { accesa: true })
-  const scheda = (accesa.json.automazioni as { id: string; vassoio: string | null; dalVivo: boolean }[]).find(a => a.id === id)!
-  assert.ok(scheda.vassoio && scheda.vassoio > new Date().toISOString())
-  assert.equal(scheda.dalVivo, false)
-  const vassoio = await chiama('POST', `/api/automazioni/${id}/adesso`)
-  assert.equal(vassoio.stato, 409)
-  assert.equal(vassoio.json.errore, 'È ancora in prova: provala sugli ultimi 30 giorni.')
-  const vivo = await chiama('POST', `/api/automazioni/${id}/dalvivo`)
-  assert.equal(vivo.stato, 200)
-  assert.equal((vivo.json.automazioni as { id: string; dalVivo: boolean }[]).find(a => a.id === id)?.dalVivo, true)
+  const scheda = (nuova.json.automazioni as { id: string; accesa: boolean; quando: unknown }[]).find(a => a.id === id)!
+  assert.equal(scheda.accesa, true, 'una nuova nasce accesa, dal vivo')
+  assert.deepEqual(scheda.quando, { ogni: 'feriali', ora: 9 })
   const ora = await chiama('POST', `/api/automazioni/${id}/adesso`)
   assert.equal(ora.stato, 200, JSON.stringify(ora.json))
+  assert.equal((await chiama('GET', `/api/automazioni/${id}/mese`)).stato, 200)
+
+  await chiama('POST', `/api/automazioni/${id}/accendi`, { accesa: false })
+  const inPausa = await chiama('POST', `/api/automazioni/${id}/adesso`)
+  assert.equal(inPausa.stato, 200, JSON.stringify(inPausa.json))
+  assert.equal((await chiama('POST', `/api/automazioni/${id}/dalvivo`)).stato, 404, 'la rotta del vassoio è sparita')
+  await chiama('DELETE', `/api/automazioni/${id}`)
+})
+
+test('le quattro di partenza: un interruttore ciascuna', async () => {
+  const p = await chiama('GET', '/api/automazioni/pacchetto')
+  assert.equal(p.stato, 200)
+  const ids = (p.json.pacchetto as { id: string; accesa: boolean }[]).map(x => x.id)
+  assert.deepEqual([...ids].sort(), ['coordinate-cambiate', 'rinnovi-in-scadenza', 'risposte-da-dare', 'sollecito-preventivi'])
+  assert.ok((p.json.pacchetto as { accesa: boolean }[]).every(x => !x.accesa))
+
+  const su = await chiama('POST', '/api/automazioni/pacchetto/rinnovi-in-scadenza', { accesa: true })
+  assert.equal(su.stato, 200, JSON.stringify(su.json))
+  assert.equal((su.json.pacchetto as { id: string; accesa: boolean }[]).find(x => x.id === 'rinnovi-in-scadenza')?.accesa, true)
+  const presa = (su.json.automazioni as { id: string; accesa: boolean; mia: boolean; quando: { ogni: string } }[]).find(x => x.id === 'rinnovi-in-scadenza')!
+  assert.ok(presa.accesa && presa.mia, 'accesa e sua: si può cambiare e buttare')
+  assert.equal(presa.quando.ogni, 'mese', 'dice «il primo del mese» e gira il primo del mese')
+
+  const giu = await chiama('POST', '/api/automazioni/pacchetto/rinnovi-in-scadenza', { accesa: false })
+  assert.equal((giu.json.automazioni as { id: string; accesa: boolean }[]).find(x => x.id === 'rinnovi-in-scadenza')?.accesa, false)
+  assert.equal((await chiama('POST', '/api/automazioni/pacchetto/posta-di-massa', { accesa: true })).stato, 400)
+  assert.ok(Array.isArray((await chiama('GET', '/api/stato')).json.automazioniInGuaio))
 })
 
 test('le rotte della prova e del vassoio rispondono', async () => {

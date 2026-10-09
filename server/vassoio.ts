@@ -1,7 +1,11 @@
-// Il vassoio di prova (P6): i primi quattordici giorni di un'automazione accesa.
+// Il vassoio di prova (P6): erano i primi quattordici giorni di un'automazione accesa.
 //
-// Gira dal vivo, sui documenti di adesso, ma quello che farebbe non va in lista:
-// resta qui come risultato in attesa. Le bozze si scrivono da un lavoro loro,
+// Non ci entra più niente: un ordine fisso acceso gira dal vivo da subito, e
+// l'anteprima del mese prima ha preso il posto della prova (automazioni.mese).
+// Restano i risultati arrivati prima, finché lui non li sposta o li scarta.
+//
+// Quello che faceva: girava dal vivo, sui documenti di adesso, ma quello che
+// avrebbe fatto non andava in lista: restava qui come risultato in attesa. Le bozze si scrivono da un lavoro loro,
 // una per giro, nella stessa fila delle prove. Un dito su «Metti in lista» ne
 // fa una riga vera, che da lì in poi si comporta come una nata dal vivo (il
 // file, la bozza nella casella, la cosa dopo). I risultati che non sposta non
@@ -153,11 +157,6 @@ export function scarta(esitoId: string): void {
   if (!e) throw new Error('Non conosco questo risultato.')
   if (e.compito) return
   store.aggiornaEsito(esitoId, { suo: 'sbagliato', stato: 'scartata' })
-}
-
-/** «Termina la prova»: da adesso le righe vanno in lista. */
-export function dalVivo(automazione: string): void {
-  store.chiudiVassoio(automazione)
 }
 
 export function visto(): void {

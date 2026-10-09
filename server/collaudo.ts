@@ -24,9 +24,7 @@ import * as mani from './mani.ts'
 import { rigaIpotesi } from './cornice.ts'
 import { withBackgroundWork } from './lavoro-background.ts'
 import { ragioneDi } from './feed-esiti.ts'
-import { VASSOIO_GIORNI, versoCheRegistra, type Annotato } from './verso.ts'
-
-export { VASSOIO_GIORNI }
+import { versoCheRegistra, type Annotato } from './verso.ts'
 
 export const PROVA_GIORNI = 30
 export const PROVA_OCCORRENZE = 12

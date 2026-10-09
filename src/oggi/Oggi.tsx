@@ -27,7 +27,7 @@ import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito, type ProjectExecutionReport, type ProjectRuntime } from '../api'
-import { nomePorta, portaAlleFonti, portaAlProgetto, portaInChat, siPuoAprireLeFonti, siPuoParlarne } from '../vals'
+import { nomePorta, portaAlleFonti, portaAllOrdineFisso, portaAlProgetto, portaInChat, siPuoAprireLeFonti, siPuoFareOgniSettimana, siPuoParlarne } from '../vals'
 import { Calendario } from './Calendario'
 import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
@@ -37,6 +37,7 @@ import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 import { RigaIpotesi } from './RigaIpotesi'
 import { bloccoDi, haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
+import { approva, fraseOgniSettimana } from '../automazioni/quando'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -451,6 +452,21 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                     <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 1 }}>{t('Se è un obiettivo e non un compito')}</div>
                   </Hov>
                 )}
+                {/* una cosa che torna ogni settimana diventa un ordine fisso, già scritto (E) */}
+                {siPuoFareOgniSettimana() && (
+                  <Hov as="button" type="button" role="menuitem"
+                    onClick={() => { setMenu(false); portaAllOrdineFisso({ frase: fraseOgniSettimana(c.testo), testo: c.testo }) }}
+                    onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
+                      padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+                      color: 'var(--inchiostro)', fontSize: '13px'
+                    }}
+                    hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+                    <div>{t('Fallo ogni settimana')}</div>
+                    <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 1 }}>{t('Diventa un ordine fisso')}</div>
+                  </Hov>
+                )}
               </MenuGiu>
             )}
           </span>
@@ -653,13 +669,31 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
   const [guaio, setGuaio] = useState('')
   const p = c.proposta
   if (!p) return null
-  const cestino = p.azione === 'posta.cestina'
 
   const vai = async () => {
     setFaccio(true); setGuaio('')
-    try { await l.esegui(c.id) }
+    try { await l.esegui(c.id, p.azione) }
     catch (e) { setGuaio(e instanceof Error ? e.message : String(e)); setFaccio(false) }
   }
+
+  /*
+   * Le voci, una per una, come le eseguirà il server: quello che si vede è
+   * quello che succede. Le proposte degli ordini fissi (E) hanno la stessa
+   * forma: le risposte da mettere fra le bozze, gli eventi, una nota, un file.
+   */
+  const voci: { chiave: string; titolo: string; perche: string; testo?: string }[] =
+    p.azione === 'posta.bozza' ? p.bozze.map(b => ({ chiave: b.doc, titolo: `${b.oggetto} · ${b.a}`, perche: b.perche, testo: b.corpo }))
+    : p.azione === 'agenda.aggiungi' ? p.eventi.map((e, i) => ({
+      chiave: `${i}`, perche: e.perche,
+      titolo: [e.titolo, new Date(e.inizio).toLocaleString(loc(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), e.dove].filter(Boolean).join(' · ')
+    }))
+    : p.azione === 'nota.crea' ? p.note.map((n, i) => ({ chiave: `${i}`, titolo: n.titolo, perche: n.perche, testo: n.testo }))
+    : p.azione === 'file.crea' ? p.file.map((f, i) => ({ chiave: `${i}`, titolo: f.titolo, perche: f.perche, testo: f.testo }))
+    : p.voci.map(v => ({ chiave: v.doc, titolo: v.titolo, perche: v.perche }))
+  const sposta = p.azione === 'posta.cestina' || p.azione === 'posta.archivia'
+  const etichetta = p.azione === 'posta.cestina' ? 'Da mettere nel cestino' : p.azione === 'posta.archivia' ? 'Da archiviare'
+    : p.azione === 'posta.bozza' ? 'Da mettere fra le bozze' : p.azione === 'agenda.aggiungi' ? 'Da mettere in agenda'
+    : p.azione === 'nota.crea' ? 'Da salvare in Note' : 'Da salvare come file'
 
   return (
     <div style={{
@@ -673,37 +707,44 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
       gridColumn: '1 / -1', marginTop: 11, marginBottom: 2, padding: '15px 17px',
       borderRadius: 13, background: 'rgba(var(--inchiostro-rgb),.045)',
       border: '1px solid rgba(var(--luce-rgb),.5)',
-      boxShadow: 'inset 0 1px 3px rgba(var(--ombra-rgb),.09)'
+      boxShadow: 'inset 0 1px 3px rgba(var(--ombra-rgb),.09)', minWidth: 0
     }}>
       <div style={{
         fontSize: '10.5px', letterSpacing: '.1em', textTransform: 'uppercase',
         color: 'rgba(var(--inchiostro-rgb),.45)', marginBottom: 9
-      }}>{t(cestino ? 'Da mettere nel cestino' : 'Da archiviare')}</div>
+      }}>{t(etichetta)}</div>
 
       <div style={{ maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 9 }}>
-        {p.voci.map(v => (
-          <div key={v.doc} style={{ display: 'flex', gap: 9, alignItems: 'baseline' }}>
+        {voci.map(v => (
+          <div key={v.chiave} style={{ display: 'flex', gap: 9, alignItems: 'baseline', minWidth: 0 }}>
             <span style={{ color: 'rgba(var(--inchiostro-rgb),.3)', fontSize: 11, flex: 'none' }}>·</span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '13.5px', color: 'var(--inchiostro)', overflowWrap: 'anywhere' }}>{v.titolo}</div>
-              <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 1, overflowWrap: 'anywhere' }}>{v.perche}</div>
+              {v.perche && <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 1, overflowWrap: 'anywhere' }}>{v.perche}</div>}
+              {/* il testo che finirà fuori: quattro righe, il resto si legge scorrendo dopo averlo approvato */}
+              {v.testo && <div style={{
+                fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.72)', marginTop: 5, lineHeight: 1.55, whiteSpace: 'pre-wrap',
+                overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+              }}>{v.testo}</div>}
             </div>
           </div>
         ))}
       </div>
 
-      {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 10 }}>{t(guaio)}</div>}
+      {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 13, flexWrap: 'wrap' }}>
         <button type="button" onClick={vai} disabled={faccio} aria-busy={faccio || undefined} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
           background: faccio ? 'rgba(var(--inchiostro-rgb),.1)' : 'var(--gradiente-rame)',
           color: faccio ? 'rgba(var(--inchiostro-rgb),.35)' : 'var(--avorio)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: faccio ? 'default' : 'pointer'
-        }}>{faccio ? t('Li sposto…') : frasi.mettiViaTutti(p.voci.length, cestino)}</button>
+        }}>{sposta
+          ? (faccio ? t('Li sposto…') : frasi.mettiViaTutti(voci.length, p.azione === 'posta.cestina'))
+          : (faccio ? t('Un momento…') : approva(voci.length))}</button>
         <span style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.35)' }}>
-          {t('si spostano, non si cancellano')}
+          {sposta ? t('si spostano, non si cancellano') : p.azione === 'posta.bozza' ? t('restano bozze: non parte niente') : ''}
         </span>
       </div>
     </div>

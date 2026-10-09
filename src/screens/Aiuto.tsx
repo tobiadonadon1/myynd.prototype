@@ -53,8 +53,9 @@ const ETICHETTE: Record<string, () => string> = {
   nonMiInteressa: () => t('Non mi interessa'),
   guardaIGiornali: () => t('Guarda i giornali'),
   rassegna: () => t('Notizie'),
-  scrivineUna: () => t('Scrivine una a parole'),
-  cosaTroverebbe: () => t('Cosa troverebbe adesso'),
+  nuovoOrdine: () => t('Nuovo ordine fisso'),
+  creaEAccendi: () => t('Crea e accendi'),
+  failoOgniSettimana: () => t('Fallo ogni settimana'),
   ottimizza: () => t('Ottimizza'),
   comeLavori: () => t('Come lavori'),
   ilTuoRitratto: () => t('Il tuo ritratto'),
@@ -381,48 +382,48 @@ const SEZIONI: Sezione[] = [
   },
   {
     id: 'aiuto-automazioni',
-    titolo: { it: 'Le automazioni', en: 'Automations' },
+    titolo: { it: 'Gli ordini fissi', en: 'Standing orders' },
     pezzi: [
       {
         p: {
-          it: 'Un’automazione è un lavoro che Myynd fa da solo: a un’ora fissa, ogni giorno o un giorno alla settimana, oppure quando arriva qualcosa di nuovo. Quando trova qualcosa ti lascia una riga in lista. Non manda niente a nessuno.',
-          en: 'An automation is a job Myynd does on its own: at a fixed hour, every day or one day a week, or when something new arrives. When it finds something it leaves a line in your list. It sends nothing to anyone.'
+          it: 'Un ordine fisso è un lavoro che Myynd fa da solo: ogni giorno, dal lunedì al venerdì, un giorno alla settimana, una volta al mese, oppure quando arriva qualcosa di nuovo. Ti lascia una riga in lista, o una cosa pronta da approvare: una bozza nella casella, un evento in agenda, una nota, un file. Non manda niente a nessuno.',
+          en: 'A standing order is a job Myynd does on its own: every day, on weekdays, one day a week, once a month, or when something new arrives. It leaves you a line in your list, or something ready to approve: a draft in your mailbox, a calendar event, a note, a file. It sends nothing to anyone.'
         }
       },
       {
         voci: [
           {
-            nome: { it: 'Scriverne una', en: 'Writing one' },
+            nome: { it: 'Scriverne uno', en: 'Writing one' },
             testo: {
-              it: 'Premi {{scrivineUna}} e descrivila a parole: «Ogni lunedì dimmi quali preventivi nella posta sono ancora senza risposta». Scrivi @ per dirle cosa può aprire. Al resto pensa Myynd: il nome, l’ora, le parole della ricerca.',
-              en: 'Press {{scrivineUna}} and describe it in words: “Every Monday tell me which quotes in my mail are still unanswered”. Type @ to say what it may open. Myynd does the rest: the name, the hour, the search words.'
+              it: 'Premi {{nuovoOrdine}} e descrivilo a parole: «Ogni lunedì dimmi quali preventivi nella posta sono ancora senza risposta». Sotto vedi cosa avrebbe fatto il mese scorso; {{creaEAccendi}} lo fa partire subito. Da una riga in lista, {{failoOgniSettimana}} lo scrive per te.',
+              en: 'Press {{nuovoOrdine}} and describe it in words: “Every Monday tell me which quotes in my mail are still unanswered”. Below it you see what it would have done last month; {{creaEAccendi}} starts it right away. From a line in your list, {{failoOgniSettimana}} writes it for you.'
             }
           },
           {
             nome: { it: 'Cosa può leggere', en: 'What it may read' },
             testo: {
-              it: 'Solo gli attrezzi che le hai dato: la posta, il desktop, Notion, Granola, le conversazioni, Slack, Drive, SharePoint, Dropbox, WhatsApp, l’agenda, le chat passate. Claude Code è un attrezzo a parte: guarda un progetto e scrive cosa farebbe, senza toccare niente. Un attrezzo è un permesso: se la fonte non è collegata, l’automazione lo dice e non trova niente.',
-              en: 'Only the tools you gave it: mail, desktop, Notion, Granola, conversations, Slack, Drive, SharePoint, Dropbox, WhatsApp, calendar, past chats. Claude Code is a tool of its own: it reads a project and writes what it would do, touching nothing. A tool is a permission: if the source is not connected, the automation says so and finds nothing.'
+              it: 'Solo gli attrezzi che gli hai dato: la posta, il desktop, Notion, Granola, le conversazioni, Slack, Drive, SharePoint, Dropbox, WhatsApp, l’agenda, le chat passate. Claude Code è un attrezzo a parte: guarda un progetto e scrive cosa farebbe, senza toccare niente. Un attrezzo è un permesso: se la fonte non è collegata, l’ordine fisso lo dice e non trova niente.',
+              en: 'Only the tools you gave it: mail, desktop, Notion, Granola, conversations, Slack, Drive, SharePoint, Dropbox, WhatsApp, calendar, past chats. Claude Code is a tool of its own: it reads a project and writes what it would do, touching nothing. A tool is a permission: if the source is not connected, the standing order says so and finds nothing.'
             }
           },
           {
-            nome: { it: 'Nasce in pausa', en: 'It starts paused' },
+            nome: { it: 'Come sta', en: 'How it is doing' },
             testo: {
-              it: 'Una nuova automazione nasce in pausa. Aprila e premi {{cosaTroverebbe}}: vedi subito cosa leggerebbe e cosa ne verrebbe fuori, senza aspettare l’ora. Quando ti convince, accendila con l’interruttore. {{ottimizza}} la fa riscrivere meglio a Claude, solo se lo chiedi tu.',
-              en: 'A new automation starts paused. Open it and press {{cosaTroverebbe}}: you see right away what it would read and what would come out, without waiting for its hour. When it convinces you, switch it on. {{ottimizza}} has Claude rewrite it better, only when you ask.'
+              it: 'Ogni giro lascia una riga sulla sua scheda: quanti documenti ha guardato e quante cose ha fatto, o perché niente. Se un giro non riesce, riprova entro l’ora e la prima pagina lo dice. {{ottimizza}} lo fa riscrivere meglio a Claude, solo se lo chiedi tu.',
+              en: 'Every run leaves a line on its card: how many documents it looked at and how many things it made, or why nothing. If a run fails, it retries within the hour and the first page says so. {{ottimizza}} has Claude rewrite it better, only when you ask.'
             }
           },
           {
             nome: { it: 'Le cartelle', en: 'Folders' },
             testo: {
-              it: 'Le cartelle a sinistra sono tue: creale come vuoi e trascinaci dentro le schede. Sotto, «per cosa aprono» filtra le automazioni per attrezzo.',
-              en: 'The folders on the left are yours: create them as you like and drag cards into them. Below, “by what they open” filters automations by tool.'
+              it: 'Le cartelle a sinistra sono tue: creale come vuoi e trascinaci dentro le schede. Sotto, «per cosa aprono» filtra gli ordini fissi per attrezzo.',
+              en: 'The folders on the left are yours: create them as you like and drag cards into them. Below, “by what they open” filters standing orders by tool.'
             }
           }
         ]
       }
     ],
-    azione: { etichetta: () => t('Apri le automazioni'), vai: v => v.goAuto() }
+    azione: { etichetta: () => t('Apri gli ordini fissi'), vai: v => v.goAuto() }
   },
   {
     id: 'aiuto-memoria',

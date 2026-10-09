@@ -123,6 +123,10 @@ export function RimedioFonte({ controllo, v, quandoImpostazioni, quandoTitoli }:
     }
   }
 
+  if (controllo.tipo === 'automazioni') {
+    return <Hov as="a" href="#" onClick={(e: { preventDefault: () => void }) => { e.preventDefault(); v.goAuto() }}
+      style={STILE_LINK} hover={{ color: 'var(--inchiostro)' }}>{t('Vai agli ordini fissi')}</Hov>
+  }
   if (controllo.tipo === 'fonti') {
     const id = controllo.id
     return <Hov as="a" href="#" onClick={(e: { preventDefault: () => void }) => { e.preventDefault(); if (id) v.apriConnessioni(id); else v.goConn() }}

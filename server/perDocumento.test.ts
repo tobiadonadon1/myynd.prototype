@@ -101,8 +101,9 @@ let chiamate = 0
  * che passa dal modello grande dopo ogni lettura della posta è la voce di
  * spesa che il tetto delle bozze esiste per evitare.
  */
-function ilModelloSceglie(scelta: (docs: Visto[], istruzione: string) => { doc: string; testo: string }[]) {
+function ilModelloSceglie(scelta: (docs: Visto[], istruzione: string) => { doc: string; testo: string }[], uso?: () => { tetto: number; entrata: number; uscita: number }) {
   auto.perProva({
+    ...(uso ? { uso } : {}),
     chiediJSON: async o => {
       chiamate++
       assert.equal(o.lavoro, 'smistamento', 'lo smistamento deve passare dal lavoro economico')
@@ -203,16 +204,17 @@ test('la guardia è per ricetta: un\'altra ricetta può avere la sua riga sullo 
   assert.ok(righe('per-doc-altra').length >= 2)
 })
 
-test('oltre il tetto del giorno le righe nascono lo stesso, senza bozza', async () => {
+test('oltre il budget del giorno le righe nascono lo stesso, senza bozza', async () => {
   leBozzeLeScrive(async () => ({ testo: 'Gentile cliente, ecco la risposta.', fonti: [] }))
   const BOZZA = {
     ...CON_RICERCA, id: 'per-doc-bozza',
     metti: { inLista: 'oggi' as const, modo: 'bozza' as const, perDocumento: true }
   }
   const oggi = new Date()
-  // ne resta una sola sotto il tetto
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO - 1; i++) store.segnaBozza(BOZZA.id, auto.giornoDi(oggi))
-  ilModelloSceglie(docs => docs.slice(0, 3).map(d => ({ doc: d.id, testo: `Rispondere su ${d.titolo}` })))
+  // ne resta una sola nel budget: metà di un milione alle automazioni, e ne sono già spesi 480 mila
+  const prima = auto.bozzeOggi(store.statoAutomazione(BOZZA.id), oggi)
+  ilModelloSceglie(docs => docs.slice(0, 3).map(d => ({ doc: d.id, testo: `Rispondere su ${d.titolo}` })),
+    () => ({ tetto: 1_000_000, entrata: 470_000, uscita: 10_000 }))
 
   // non «saltata»: le righe ci sono tutte, è solo la bozza che aspetta domani
   assert.equal(await auto.fai(BOZZA, { adesso: oggi }), 'fatta')
@@ -221,12 +223,14 @@ test('oltre il tetto del giorno le righe nascono lo stesso, senza bozza', async 
   assert.equal(r.filter(c => c.modo === 'bozza').length, 1, 'ha affidato più righe di quante il tetto permetta')
   assert.equal(r.filter(c => c.modo === 'io' && c.stato === 'aperto').length, 2,
     'le righe oltre il tetto dovevano restare aperte, da fare a mano o da riaffidare')
-  assert.equal(auto.bozzeOggi(store.statoAutomazione(BOZZA.id), oggi), auto.BOZZE_AL_GIORNO)
+  assert.equal(auto.bozzeOggi(store.statoAutomazione(BOZZA.id), oggi), prima + 1)
+  // e la ricevuta conta le righe fatte, non le bozze
+  assert.equal(store.ricevutaDi(store.statoAutomazione(BOZZA.id))?.fatti, 3)
 
-  // a mano il tetto non c'è: un dito che preme non è una spesa ricorrente
+  // a mano il budget non c'è: un dito che preme non è una spesa ricorrente
   const A_MANO = { ...BOZZA, id: 'per-doc-mano' }
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.segnaBozza(A_MANO.id, auto.giornoDi(oggi))
-  ilModelloSceglie(docs => docs.slice(0, 2).map(d => ({ doc: d.id, testo: `Rispondere su ${d.titolo}` })))
+  ilModelloSceglie(docs => docs.slice(0, 2).map(d => ({ doc: d.id, testo: `Rispondere su ${d.titolo}` })),
+    () => ({ tetto: 1_000_000, entrata: 900_000, uscita: 0 }))
   assert.equal(await auto.fai(A_MANO, { aMano: true, adesso: oggi }), 'fatta')
   assert.equal(righe('per-doc-mano').filter(c => c.modo === 'bozza').length, 2)
 })

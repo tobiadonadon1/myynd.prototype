@@ -595,30 +595,46 @@ test('l’anteprima non scrive niente e non fa girare l’automazione', () => {
   auto.butta('muta-anteprima')
 })
 
-// — il tetto del giorno per quelle che fanno scrivere —
+// — il budget del giorno per quelle che fanno scrivere —
 
-test('una ricetta che fa scrivere si ferma al tetto del giorno, a mano no, e domani riparte', async () => {
+/** Quanto si è speso oggi, per finta: il budget delle bozze si conta da qui. */
+const SPESO = { tetto: 100_000, entrata: 60_000, uscita: 0 }
+const LARGO = { tetto: 10_000_000, entrata: 0, uscita: 0 }
+
+test('una ricetta che fa scrivere si ferma quando il budget di oggi è finito, a mano no, e col budget riparte', async () => {
   const ricetta = { ...RICETTA, id: 'tetto', metti: { inLista: 'oggi' as const, modo: 'bozza' as const } }
   const oggi = new Date()
-  // il conto sta su una colonna sua, non nella storia: la storia tiene venti
-  // giri e una ricetta che gira ogni quarto d'ora ci faceva scorrere via le
-  // bozze del mattino, azzerando il tetto da sola prima di sera
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.segnaBozza('tetto', auto.giornoDi(oggi))
-  assert.equal(auto.bozzeOggi(store.statoAutomazione('tetto'), oggi), auto.BOZZE_AL_GIORNO)
+  // metà del tetto alle automazioni: cinquantamila, e se ne sono già spesi sessanta
+  auto.perProva({ uso: () => SPESO })
+  try {
+    // le bozze sono l'unica spesa che si ripete da sola: oltre il budget non si
+    // guarda nemmeno il materiale, e non è un guasto
+    assert.equal(await auto.fai(ricetta, { adesso: oggi }), 'saltata')
+    const s = store.statoAutomazione('tetto')!
+    assert.equal(s.esito, 'saltata')
+    assert.equal(s.guaio, null, 'un budget finito non è un guaio: la scheda lo mostrerebbe in rosso')
+    assert.equal(auto.salute(ricetta, s).stato, 'bene')
+    assert.equal(store.ricevutaDi(s)?.perche, 'tetto', 'la ricevuta dice perché non ha fatto niente')
+    // un dito che preme non è una spesa ricorrente
+    assert.notEqual(await auto.fai(ricetta, { aMano: true, adesso: oggi }), 'saltata')
+    // con il budget, riparte
+    auto.perProva({ uso: () => LARGO })
+    assert.notEqual(await auto.fai(ricetta, { adesso: oggi }), 'saltata')
+  } finally { auto.perProva(null) }
+})
 
-
-  // le bozze sono l'unica spesa che si ripete da sola: oltre il tetto non si
-  // guarda nemmeno il materiale, e non è un guasto
-  assert.equal(await auto.fai(ricetta, { adesso: oggi }), 'saltata')
-  const s = store.statoAutomazione('tetto')!
-  assert.equal(s.esito, 'saltata')
-  assert.equal(s.guaio, null, 'un tetto raggiunto non è un guaio: la scheda lo mostrerebbe in rosso')
-  assert.equal(auto.salute(ricetta, s).stato, 'bene')
-
-  // un dito che preme non è una spesa ricorrente
-  assert.notEqual(await auto.fai(ricetta, { aMano: true, adesso: oggi }), 'saltata')
-  // e domani il conto ricomincia
-  assert.notEqual(await auto.fai(ricetta, { adesso: new Date(oggi.getTime() + 86_400_000) }), 'saltata')
+test('il budget si conta dal tetto di token, non da un numero fisso di bozze', () => {
+  const verso = (n: number) => ({ bozzeDiOggi: () => n }) as unknown as import('./verso.ts').Verso
+  const adesso = new Date()
+  // senza tetto vale `BUDGET_SENZA_TETTO`: metà alle automazioni, una bozza ne costa `STIMA_BOZZA`
+  const senza = Math.floor(auto.BUDGET_SENZA_TETTO * auto.QUOTA_AUTOMAZIONI / auto.STIMA_BOZZA)
+  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 0, entrata: 0, uscita: 0 }), senza)
+  assert.equal(auto.bozzeRimaste(verso(3), adesso, { tetto: 0, entrata: 0, uscita: 0 }), senza - 3, 'quelle già partite oggi contano')
+  // un tetto più alto vuol dire più bozze: era tre al giorno per ricetta, comunque
+  assert.ok(auto.bozzeRimaste(verso(0), adesso, { tetto: 2_000_000, entrata: 0, uscita: 0 }) > senza)
+  // e quello che si è speso davvero toglie il resto
+  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 1_000_000, entrata: 470_000, uscita: 10_000 }), 1)
+  assert.equal(auto.bozzeRimaste(verso(0), adesso, { tetto: 1_000_000, entrata: 600_000, uscita: 0 }), 0)
 })
 
 test('una ricetta può chiedere il prompt: si accetta, la riga si affida in quel modo, e conta nel tetto', async () => {
@@ -630,6 +646,7 @@ test('una ricetta può chiedere il prompt: si accetta, la riga si affida in quel
     chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }),
     domandeDaFare: async () => []
   })
+  auto.perProva({ uso: () => LARGO })
   try {
     const ricetta = { ...RICETTA, id: 'prompt', nome: 'Il prompt', metti: { inLista: 'oggi' as const, modo: 'prompt' as const } }
     auto.scrivi(ricetta)
@@ -647,6 +664,7 @@ test('una ricetta può chiedere il prompt: si accetta, la riga si affida in quel
     assert.deepEqual(modi, ['prompt'])
   } finally {
     compiti.perProva(null)
+    auto.perProva(null)
     auto.butta('prompt')
   }
 })
@@ -660,20 +678,20 @@ test('il conto delle bozze non scorre via con la storia', () => {
   // ricetta che gira ogni quarto d'ora si azzerava il tetto da sola prima di
   // sera — proprio quelle che il tetto lo raggiungono.
   const oggi = new Date()
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.segnaBozza('scorre', auto.giornoDi(oggi))
+  for (let i = 0; i < 3; i++) store.segnaBozza('scorre', auto.giornoDi(oggi))
   for (let i = 0; i < 25; i++) store.automazioneGirata('scorre', 'niente', undefined, 0)
 
   assert.equal(store.storiaDi(store.statoAutomazione('scorre')).some(g => g.esito === 'fatta'), false,
     'la prova non prova niente se le «fatta» sono ancora nella storia')
-  assert.equal(auto.bozzeOggi(store.statoAutomazione('scorre'), oggi), auto.BOZZE_AL_GIORNO)
+  assert.equal(auto.bozzeOggi(store.statoAutomazione('scorre'), oggi), 3)
   // e il giorno dopo riparte da zero senza che nessuno azzeri niente
   assert.equal(auto.bozzeOggi(store.statoAutomazione('scorre'), new Date(oggi.getTime() + 86_400_000)), 0)
 })
 
-test('il tetto non tocca chi scrive una riga e basta, né chi propone', async () => {
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO + 2; i++) store.segnaBozza('io-solo', auto.giornoDi(new Date()))
+test('il budget non tocca chi scrive una riga e basta', async () => {
   const soloRiga = { ...RICETTA, id: 'io-solo', metti: { inLista: 'oggi' as const, modo: 'io' as const } }
-  assert.notEqual(await auto.fai(soloRiga), 'saltata')
+  auto.perProva({ uso: () => SPESO })
+  try { assert.notEqual(await auto.fai(soloRiga), 'saltata') } finally { auto.perProva(null) }
 })
 
 test('workflow output reaches the task and does not mutate the saved recipe', async () => {
@@ -717,9 +735,8 @@ test('overlapping workflow runs cannot create duplicate tasks', async () => {
 })
 test('per-document workflows also respect the daily step budget', async () => {
   const r = auto.scrivi({ ...RICETTA, id: 'flow-budget', metti: { ...RICETTA.metti, perDocumento: true }, passi: [{ id: 'step', tipo: 'trasforma', testo: 'Extract' }] })
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.segnaBozza(r.id, auto.giornoDi(new Date()))
   let calls = 0
-  auto.perProva({ collegato: () => true, chiediJSON: async () => { calls++; return { continua: true, testo: 'Done' } } })
+  auto.perProva({ collegato: () => true, uso: () => SPESO, chiediJSON: async () => { calls++; return { continua: true, testo: 'Done' } } })
   try {
     assert.equal(await auto.fai(r), 'saltata')
     assert.equal(calls, 0)

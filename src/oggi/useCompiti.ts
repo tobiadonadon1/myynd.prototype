@@ -23,6 +23,7 @@ import { giornoLocale } from './giorni'
 import { secchioVivo } from './secchi'
 import { preparaApertura } from '../navigazione.ts'
 import { rigaImparata } from '../gemello-frasi.ts'
+import { approvata } from '../automazioni/quando'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -735,11 +736,12 @@ export function useCompiti(
    * per una cosa che non è avvenuta non si disfa: si scopre giorni dopo, con la
    * casella piena e una riga che giura il contrario.
    */
-  const esegui = useCallback(async (id: string) => {
+  const esegui = useCallback(async (id: string, azione?: string) => {
     const r = await api.esegui(id)
     setCompiti(r.compiti); setChiusi(r.chiusi)
     scorda(id)
-    mostraToast(frasi.spostati(r.spostati, r.dove))
+    // spostare dei messaggi si dice «spostati»; una bozza, una nota, un file, un evento si dicono per quello che sono
+    mostraToast(azione && azione !== 'posta.cestina' && azione !== 'posta.archivia' ? approvata(azione, r.spostati, r.dove) : frasi.spostati(r.spostati, r.dove))
   }, [mostraToast])
 
   /**

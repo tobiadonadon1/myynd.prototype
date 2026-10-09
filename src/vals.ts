@@ -267,6 +267,22 @@ export function siPuoAprireLeFonti(): boolean { return !!portaAlleConnessioni }
 export function portaAlleFonti() { portaAlleConnessioni?.() }
 
 /**
+ * «Fallo ogni settimana», detto da una carta (E).
+ *
+ * Una riga in Da fare o una carta del feed diventano un ordine fisso: la
+ * pagina degli ordini fissi si apre con la scheda nuova già scritta, «Ogni
+ * lunedì mattina: …». Stessa mano delle altre porte: le righe di Da fare non
+ * ricevono `v`.
+ */
+/** Quello che una carta passa alla scheda nuova: la frase da leggere, e il testo della carta che diventa la cosa da fare. */
+export type DaCarta = { frase: string; testo: string }
+let portaOrdine: ((x: DaCarta) => void) | null = null
+export function registraPortaOrdine(f: ((x: DaCarta) => void) | null) { portaOrdine = f }
+/** Vera quando c'è chi sa aprirla: senza, il gesto non si disegna. */
+export function siPuoFareOgniSettimana(): boolean { return !!portaOrdine }
+export function portaAllOrdineFisso(x: DaCarta) { if (x.frase.trim() && x.testo.trim()) portaOrdine?.(x) }
+
+/**
  * Come si chiama il bottone che porta lì: dice *cosa* apre.
  *
  * «Portami lì» era una parola sola per tre posti diversi, e su una riga che non
@@ -1277,6 +1293,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     return () => registraPortaFonti(null)
   }, [])
 
+  // e quella degli ordini fissi, per «Fallo ogni settimana» su una carta: vedi `portaAllOrdineFisso`
+  const [ordineDaCarta, setOrdineDaCarta] = useState<DaCarta | null>(null)
+  useEffect(() => {
+    registraPortaOrdine((x: DaCarta) => { setOrdineDaCarta(x); setScreen('auto'); setSearch(false); setMenu(false) })
+    return () => registraPortaOrdine(null)
+  }, [])
+
   return {
     threadRef, cvA, cvB,
 
@@ -1294,6 +1317,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     suggerimentiNuovi: stato.suggerimentiNuovi ?? 0,
     vassoioNuovi: stato.vassoioNuovi ?? 0,
     segnaVassoioVisto,
+    /** Gli ordini fissi il cui ultimo giro è andato storto: la riga fissa del motore li dice (E). */
+    automazioniInGuaio: stato.automazioniInGuaio ?? [],
+    /** La frase con cui una carta ha chiesto un ordine fisso: la pagina la apre già scritta, poi la scorda. */
+    ordineDaCarta,
+    scordaOrdineDaCarta: () => setOrdineDaCarta(null),
     segnaSuggerimentiVisti,
     menuPref: screen === 'pref' ? MENU_ON : MENU_OFF,
     menuMappa: screen === 'mappa' ? MENU_ON : MENU_OFF,
