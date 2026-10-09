@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cartella, leggi, lingua } from './config.ts'
-import { chiediJSON } from './modello.ts'
+import { chiediJSON, collegato } from './modello.ts'
 import { linguaSbagliata, soloInLingua } from './testo.ts'
 import { affinita, gusto, perIlModello, type Gusto } from './gusto.ts'
 import * as store from './store.ts'
@@ -55,6 +55,17 @@ export const PER_GIRO = 5
  * ne sono non lo si chiama nemmeno.
  */
 export const MINUTI_GIRO = 20
+
+/**
+ * Ogni quanto, al massimo, i titoli nuovi vanno al modello.
+ *
+ * I giornali si leggono ogni venti minuti, e a ogni giro con un titolo mai
+ * visto partiva una chiamata: cinquanta, sessanta al giorno, per scegliere
+ * otto notizie. Adesso i titoli nuovi aspettano, e ogni due ore partono tutti
+ * insieme in una chiamata sola. In mezzo entrano solo i rilasci dei
+ * laboratori, che la regola riconosce gratis: la notizia che conta non aspetta.
+ */
+export const ORE_MODELLO = 2
 
 /** Quanto indietro si guarda per chiamarla «di adesso». */
 const ORE_FRESCHE = 36
@@ -835,7 +846,7 @@ export type Esito = { notizie: store.Notizia[]; recenti: store.Notizia[]; quando
  * lista buttava via la rassegna intera, che è l'altra ragione per cui a volte
  * restava una notizia sola.
  */
-type Edizione = { versione: 1; focus: string; quando: string; ids: string[]; controllata?: string; riprovaMinuti?: number; copertura?: 1; valutate?: string[] }
+type Edizione = { versione: 1; focus: string; quando: string; ids: string[]; controllata?: string; riprovaMinuti?: number; copertura?: 1; valutate?: string[]; modello?: string }
 const EDIZIONE = () => join(cartella(), 'rassegna-edizione.json')
 const improntaFocus = (focus: Fuoco[]) => createHash('sha256').update(JSON.stringify([lingua(), focus, contestoOperativo()])).digest('hex')
 
@@ -847,10 +858,10 @@ function leggiEdizione(): Edizione | null {
   } catch { return null }
 }
 
-function salvaEdizione(focus: Fuoco[], ids: string[], opzioni: { quando?: string; valutate?: string[] } = {}): Edizione {
+function salvaEdizione(focus: Fuoco[], ids: string[], opzioni: { quando?: string; valutate?: string[]; modello?: string } = {}): Edizione {
   const ora = new Date().toISOString()
   const e: Edizione = { versione: 1, copertura: 1, focus: improntaFocus(focus), quando: opzioni.quando ?? ora, controllata: ora,
-    ids: ids.slice(0, QUANTE), valutate: (opzioni.valutate ?? []).slice(-VALUTATE) }
+    ids: ids.slice(0, QUANTE), valutate: (opzioni.valutate ?? []).slice(-VALUTATE), ...(opzioni.modello ? { modello: opzioni.modello } : {}) }
   mkdirSync(cartella(), { recursive: true, mode: 0o700 })
   const file = EDIZIONE()
   writeFileSync(`${file}.tmp`, JSON.stringify(e), { mode: 0o600 })
@@ -942,6 +953,16 @@ export function daRifare(
   return oraLocale.ora >= ORA_MATTINA && giornoIn(new Date(quando)) !== oraLocale.giorno
 }
 
+/**
+ * Il modello si può chiamare adesso: l'ultima chiamata è di almeno due ore fa.
+ * Vale anche per il bottone: rinfrescare la pagina legge i giornali, non
+ * compra un'altra scelta.
+ */
+export function modelloDaChiamare(ultima: string | undefined, adesso = Date.now()): boolean {
+  const t = Date.parse(ultima ?? '')
+  return !Number.isFinite(t) || adesso - t >= ORE_MODELLO * 3_600_000
+}
+
 /** Aprire la pagina avvia il controllo senza bloccare la risposta della cache. */
 export function prepara(): void {
   void aggiorna(false).catch(e => {
@@ -1020,8 +1041,13 @@ async function giro(focus: Fuoco[]): Promise<Esito> {
   const attuali = risposta(focus, precedente).notizie
   const posti = Math.max(PER_GIRO, QUANTE - attuali.length)
   const miei = focus.map(f => `• ${f.testo}`).join('\n')
-  // Niente di nuovo: niente modello. È il caso di quasi tutti i giri.
-  const dalModello = candidate.length ? await scegli(candidate, miei, gusto(), posti, attuali.map(n => n.titolo)) : []
+  // Niente di nuovo: niente modello. È il caso di quasi tutti i giri. E con un
+  // modello che ha già scelto nelle ultime due ore, i titoli nuovi aspettano il
+  // prossimo giro buono, tutti insieme: non si segnano come guardati.
+  const conModello = collegato()
+  const aspetta = conModello && candidate.length > 0 && !modelloDaChiamare(precedente?.modello)
+  const chiamato = conModello && candidate.length > 0 && !aspetta
+  const dalModello = aspetta ? [] : candidate.length ? await scegli(candidate, miei, gusto(), posti, attuali.map(n => n.titolo)) : []
   // Senza modello, il criterio resta il tema: parole in comune con il lavoro o con l'IA.
   const selezionate = dalModello === null
     ? candidate.filter(n => rilevanza(n, focus) > 0)
@@ -1079,7 +1105,12 @@ async function giro(focus: Fuoco[]): Promise<Esito> {
   const arrivate = mazzo.filter(n => nuoveIds.includes(n.id))
   const e = salvaEdizione(focus, mazzo.map(n => n.id), {
     ...(!arrivate.length && precedente ? { quando: precedente.quando } : {}),
-    valutate: [...valutate, ...candidate.map(n => n.id)]
+    // in attesa si segnano come guardati solo i rilasci passati per la regola:
+    // senza, lo stesso rilascio rientrava a ogni giro e riaccendeva il pallino
+    valutate: aspetta ? [...valutate, ...selezionate.map(s => s.n.id)] : [...valutate, ...candidate.map(n => n.id)],
+    // l'ora dell'ultima chiamata resta anche se questa è andata male: un
+    // modello che non risponde non si richiama ogni venti minuti
+    modello: chiamato ? new Date().toISOString() : precedente?.modello
   })
   dopoErrore.delete(cartella())
   if (confermate.length) {

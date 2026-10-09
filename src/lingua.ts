@@ -306,6 +306,7 @@ const EN: Record<string, string> = {
   'Usa il credito API di Anthropic. Il lavoro può fare più giri di ricerca prima di scrivere.': 'Uses Anthropic API credit. The work can make several search passes before writing.',
   'In uso': 'In use',
   'Finita per oggi': 'Used up for today',
+  'Finita per il mese': 'Used up for the month',
   'Da configurare': 'Setup needed',
   'Pronto': 'Ready',
   'Il tuo primo passo è pronto.': 'Your first step is ready.',
@@ -1639,10 +1640,10 @@ const EN: Record<string, string> = {
   'Formale': 'Formal',
   'Il più rapido e il più economico. Basta finché le domande sono semplici.':
     'The fastest and cheapest. Enough while the questions stay simple.',
-  'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a meno della metà.':
-    'The default. Nearly Opus quality on your material, at under half the cost.',
-  'Il più capace. Si sente sulle domande che intrecciano più documenti; costa cinque volte tanto.':
-    'The most capable. It shows on questions that weave several documents together; it costs five times as much.',
+  'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a metà prezzo.':
+    'The default. Nearly Opus quality on your material, at half the price.',
+  'Il più capace. Si sente sulle domande che intrecciano più documenti; costa il doppio.':
+    'The most capable. It shows on questions that weave several documents together; it costs twice as much.',
   '"Ciao Marta, ti mando il preventivo aggiornato. Consegna quattro settimane dalla conferma."':
     '"Hi Marta, sending the updated quote. Delivery four weeks from confirmation."',
   '"Ciao Marta, come promesso ti mando il preventivo aggiornato: spero sia tutto chiaro, fammi sapere."':
@@ -2097,6 +2098,9 @@ const EN: Record<string, string> = {
   'Serve Ctrl, Alt o Win insieme a un tasto.': 'It needs Ctrl, Alt or Win together with a key.',
   'Non sono riuscito a cambiare la scorciatoia.': 'I could not change the shortcut.',
   'Si apre all’accesso': 'Opens at login',
+  'Rapporto di diagnosi': 'Diagnostics report',
+  'Salvato sulla Scrivania.': 'Saved to your Desktop.',
+  'Non sono riuscito a salvare il rapporto.': 'I couldn’t save the report.',
   'Myynd parte da solo quando entri nel computer.': 'Myynd starts on its own when you log in to the computer.',
   'I tuoi dati': 'Your data',
   'Mostra nel Finder': 'Show in Finder',
@@ -2848,6 +2852,7 @@ const EN: Record<string, string> = {
   'Una lettura delle fonti è già in corso. Attendi che finisca e riprova.': 'A source read is already running. Wait for it to finish and try again.',
   // — la riga fissa delle fonti non lette, e i progetti in una scheda sola —
   'Vai alle Fonti': 'Go to Sources',
+  'Vai alle Preferenze': 'Go to Preferences',
   'I tuoi progetti': 'Your projects',
   'Parliamone': 'Discuss',
   // — la prima pagina a blocchi: un blocco per progetto, e in fondo quello
@@ -3274,6 +3279,17 @@ const EN: Record<string, string> = {
   '{nome} non risponde più a quell’indirizzo.': '{nome} no longer answers at that address.',
   '{nome} non accetta più il token.': '{nome} no longer accepts the token.',
   '{nome} non accetta più la chiave.': '{nome} no longer accepts the key.',
+  '{nome} non risponde.': '{nome} isn’t answering.',
+  'l’AI inclusa': 'the included AI',
+  'il modello sul tuo Mac': 'the model on your Mac',
+  'il modello collegato': 'the connected model',
+  'Devo accedere di nuovo al tuo conto Myynd per l’AI inclusa.': 'I need to sign in to your Myynd account again for the included AI.',
+  'L’AI inclusa non risponde.': 'The included AI isn’t answering.',
+  'L’AI inclusa è ferma: il piano va rinnovato.': 'The included AI is paused: the plan needs renewing.',
+  'Non riesco a pensare da {n} minuti.': 'I haven’t been able to think for {n} minutes.',
+  'Non riesco a pensare da un’ora.': 'I haven’t been able to think for an hour.',
+  'Non riesco a pensare da {n} ore.': 'I haven’t been able to think for {n} hours.',
+  'Intanto lavoro con {nome}.': 'Meanwhile I’m working with {nome}.',
   '{nome} aspetta il via libera del tuo amministratore.': '{nome} is waiting for your admin’s approval.',
   'Non trovo {nome} su questo Mac.': 'I can’t find {nome} on this Mac.',
   'Non so più leggere {nome}: a Myynd serve un aggiornamento.': 'I no longer know how to read {nome}: Myynd needs an update.',
@@ -3502,7 +3518,9 @@ const EN: Record<string, string> = {
   'Incluso con Myynd': 'Included with Myynd',
   'Non ancora disponibile': 'Not available yet',
   'La dose di oggi è finita.': 'Today’s allowance is used up.',
+  'La dose del mese è finita.': 'This month’s allowance is used up.',
   'Hai finito l’AI inclusa di oggi. Si riparte domani.': 'You’ve used today’s included AI. It starts again tomorrow.',
+  'Hai finito l’AI inclusa di questo mese. Si riparte il primo del mese.': 'You’ve used this month’s included AI. It starts again on the first of the month.',
   'L’AI inclusa con Myynd non è ancora disponibile.': 'The AI included with Myynd isn’t available yet.',
   'Claude Code non riceve immagini da Myynd.': 'Claude Code doesn’t receive images from Myynd.',
   'Claude Code non è pronto su questo computer.': 'Claude Code isn’t ready on this computer.',

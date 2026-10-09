@@ -609,6 +609,7 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
   const vivi = progettiDaGuardare()
   if (!ferri.collegato() || inCorso.has(conto)) return vivi.flatMap(p => archivio[p.id] ?? [])
   inCorso.add(conto)
+  senzaRisposta.delete(conto)
   try {
     const docs = store.recenti(1200)
     const candidati: { p: progetti.Progetto; m: Materiale }[] = []
@@ -632,7 +633,8 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
       try {
         const m = await materiale(p, docs, ferri.leggi, adesso, ferri.guarda).catch(() => interno)
         const q = await quadroDi(p, m)
-        if (!q) continue
+        // il modello non ha risposto: il quadro di prima resta, e il giro lo dice a chi lo segna
+        if (!q) { senzaRisposta.add(conto); continue }
         archivio[p.id] = { ...q, messe: archivio[p.id]?.messe }
         scriviQuadri(archivio)
         console.log(`myynd · quadro · ${p.nome}: ${q.mosse.length} mosse · traguardo «${q.traguardo.slice(0, 80)}»`)
@@ -651,6 +653,18 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
   } finally {
     inCorso.delete(conto)
   }
+}
+
+/*
+ * I conti il cui ultimo giro ha avuto un quadro senza risposta. Un quadro
+ * che non arriva non scrive niente nel suo archivio, e si richiede al giro
+ * dopo; ma il giro delle priorità che lo contiene non deve segnarsi come
+ * fatto, o il giro dopo è fra quattro ore.
+ */
+const senzaRisposta = new Set<string>()
+/** L'ultimo giro dei quadri di questa persona ha avuto un modello che non ha risposto. */
+export function senzaRispostaAlGiro(): boolean {
+  return senzaRisposta.has(cartella())
 }
 
 /** Il punteggio di una mossa: quanto sposta, quanto è urgente, e se il progetto l'ha segnato lui come importante. */

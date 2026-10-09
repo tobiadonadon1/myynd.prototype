@@ -2708,6 +2708,15 @@ export function costoDal(da: string, a?: string): number {
   return r.c
 }
 
+/**
+ * I micro-dollari di tutte le chiamate da un istante in qua, carte o no: la
+ * spesa del mese dell'AI inclusa, sul registro del server (`incluso.ts`).
+ */
+export function spesaDal(da: string): number {
+  const r = db.prepare('SELECT COALESCE(SUM(costo),0) AS c FROM uso WHERE quando >= ?').get(da) as { c: number }
+  return r.c
+}
+
 /** F9 · il costo delle ultime carte lavorate, in micro-dollari, dalla più recente: serve a dire se il resto del budget basta per un'altra. */
 export function costiUltimeCarte(quante: number): number[] {
   const righe = db.prepare(`

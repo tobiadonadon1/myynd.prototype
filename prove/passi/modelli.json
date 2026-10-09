@@ -1,0 +1,10 @@
+[
+  { "aspetta": 1500 },
+  { "clicca": "Your account" },
+  { "vai": "Preferences" },
+  { "clicca": "AI and costs" },
+  { "aspetta": 1200 },
+  { "passa": "A model for each job" },
+  { "scatta": "modelli" },
+  { "testo": "modelli" }
+]

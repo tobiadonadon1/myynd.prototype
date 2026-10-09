@@ -1,0 +1,11 @@
+[
+  { "aspetta": 2500 },
+  { "js": "location.reload(); 1" },
+  { "aspetta": 3000 },
+  { "scatta": "riga" },
+  { "testo": "riga" },
+  { "clicca": "Go to Sources" },
+  { "aspetta": 1500 },
+  { "scatta": "scheda" },
+  { "testo": "scheda" }
+]

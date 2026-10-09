@@ -83,6 +83,42 @@ test('lo stesso documento si giudica una volta sola, anche fra due letture', asy
   assert.equal(ancora.get('a')?.chiede, 0.9)
 })
 
+test('le domande a Jev dicono il nome del conto, mai «Tobia»; senza nome, «the user»', async () => {
+  const corpi: string[] = []
+  const fingi = () => jev.perProva(async (_u, opz) => {
+    corpi.push(String((opz as RequestInit).body))
+    return new Response(JSON.stringify({ answers: {
+      chiede: { type: 'noul', noul: 0.9 },
+      urgenza: { type: 'score', score: 2, confidence: 0.9, probabilities: {}, legend: {} },
+      genere: { type: 'choice', choice: 'richiesta', confidence: 0.8, probabilities: { richiesta: 0.8 } }
+    } }), { status: 200, headers: { 'content-type': 'application/json' } })
+  })
+  cfg.scrivi({ lingua: 'en', jev: { apiKey: 'apikey_prova' }, nome: 'Marta' })
+  fingi()
+  await giudizi.attenzione([mail('m', { titolo: 'm', corpo: 'Mi confermi?' })])
+  assert.ok(corpi.length, 'Jev è stato chiamato')
+  assert.match(corpi[0], /Someone other than Marta is waiting/)
+  assert.match(corpi[0], /"persona":"Marta"/)
+  assert.doesNotMatch(corpi[0], /Tobia|\{persona\}/)
+
+  corpi.length = 0
+  cfg.scrivi({ lingua: 'en', jev: { apiKey: 'apikey_prova' } })
+  jev.dimentica(); giudizi.scorda(); fingi()
+  await giudizi.attenzione([mail('n', { titolo: 'n', corpo: 'Mi confermi?' })])
+  assert.match(corpi[0], /Someone other than the user is waiting/)
+  assert.match(corpi[0], /"persona":"the user"/)
+  assert.doesNotMatch(corpi[0], /Tobia/)
+
+  // il peso da solo, quello di ogni giro delle priorità, passa dalla stessa strada
+  corpi.length = 0
+  cfg.scrivi({ lingua: 'en', jev: { apiKey: 'apikey_prova' }, nome: 'Marta' })
+  jev.dimentica(); giudizi.scorda(); fingi()
+  await giudizi.peso([mail('p', { titolo: 'p', corpo: 'Il preventivo da rivedere.' })])
+  assert.ok(corpi.length, 'Jev è stato chiamato per il peso')
+  assert.match(corpi[0], /the work Marta should pick up next/)
+  assert.doesNotMatch(corpi[0], /Tobia|\{persona\}/)
+})
+
 test('chi non aspetta nessuno esce dalla fila, chi aspetta passa davanti', async () => {
   const docs = [
     mail('grazie', { titolo: 'grazie', corpo: 'Grazie mille, ricevuto tutto. Ti aggiorno io.' }),

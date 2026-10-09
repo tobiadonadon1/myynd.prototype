@@ -49,6 +49,21 @@ export function tettoDelPianoSulServer(): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : TETTO_DEL_PIANO
 }
 
+/*
+ * La dose del mese dell'AI inclusa, in dollari: il conto vero che paga chi
+ * ospita. I token di un giorno tengono il ritmo; i dollari del mese tengono la
+ * bolletta, anche per chi usa la dose intera ogni giorno. Di serie venti
+ * dollari a persona; la cifra del piano la mette chi ospita
+ * (`MYYND_INCLUSO_MESE_USD`), zero vuol dire nessun tetto.
+ */
+export const TETTO_DEL_MESE_USD = 20
+/** In micro-dollari, come `prezzi.costo`. */
+export function tettoDelMeseSulServer(): number {
+  const v = (process.env.MYYND_INCLUSO_MESE_USD ?? '').trim()
+  const n = v === '' ? TETTO_DEL_MESE_USD : Number(v)
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 1_000_000) : 0
+}
+
 /** Quanto si è speso oggi, e se il tetto è stato raggiunto. */
 export function usoDiOggi(): store.Totale & { tetto: number; raggiunto: boolean } {
   const t = tetto()
@@ -60,6 +75,8 @@ export function usoDiOggi(): store.Totale & { tetto: number; raggiunto: boolean 
 export const TETTO_RAGGIUNTO = 'Hai raggiunto il tetto di token di oggi. Si riparte domani, o lo alzi nelle preferenze.'
 /** F8 · la dose dell'AI inclusa: non si alza dalle preferenze, e lo si dice. */
 export const INCLUSO_FINITO = 'Hai finito l’AI inclusa di oggi. Si riparte domani.'
+/** La dose del mese, detta dal ponte: si riparte il primo, non domani. */
+export const INCLUSO_FINITO_MESE = 'Hai finito l’AI inclusa di questo mese. Si riparte il primo del mese.'
 
 /** Gli errori del tetto: chi li prende deve sapere che non sono un guasto della strada. */
 const DEL_TETTO = new WeakSet<Error>()

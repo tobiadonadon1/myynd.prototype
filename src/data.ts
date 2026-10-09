@@ -65,9 +65,9 @@ export const AUTONOMIE = [
 
 /** I modelli fra cui scegliere, dal più economico al più capace. Rispecchia MODELLI in server/config.ts. */
 export const MODELLI = [
-  { id: 'claude-haiku-4-5', nome: 'Haiku 4.5', nota: 'Il più rapido e il più economico. Basta finché le domande sono semplici.' },
-  { id: 'claude-sonnet-5', nome: 'Sonnet 5', nota: 'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a meno della metà.' },
-  { id: 'claude-opus-5', nome: 'Opus 5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti; costa cinque volte tanto.' }
+  { id: 'claude-haiku-5-5', nome: 'Haiku 5.5', nota: 'Il più rapido e il più economico. Basta finché le domande sono semplici.' },
+  { id: 'claude-sonnet-5-5', nome: 'Sonnet 5.5', nota: 'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a metà prezzo.' },
+  { id: 'claude-opus-5-5', nome: 'Opus 5.5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti; costa il doppio.' }
 ]
 
 /**

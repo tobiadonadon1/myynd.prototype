@@ -133,6 +133,19 @@ export function guaioDelPunto(guaio: string | null, ragionavaPrima: boolean, rag
   return !ragionavaPrima && ragionaAdesso ? null : guaio
 }
 
+/** Le righe di un punto: progetti, GitHub, da leggere, risposte, aggiornamenti. */
+export type RighePunto = { progetti: unknown[]; github: unknown[]; daLeggere: unknown[]; risposte: unknown[]; aggiornamenti?: unknown[] }
+export const righeDelPunto = (x: RighePunto) => x.progetti.length + x.github.length + x.daLeggere.length + x.risposte.length + (x.aggiornamenti?.length ?? 0)
+
+/**
+ * Il punto da mostrare, o niente: un punto senza righe non è un punto. La
+ * carta diceva «0 cose. Dieci secondi.» con «Apri» su un foglio vuoto, e il
+ * foglio si apriva anche da solo.
+ */
+export function puntoConRighe<T extends RighePunto>(p: T | null): T | null {
+  return p && righeDelPunto(p) > 0 ? p : null
+}
+
 /**
  * Le teste non sono fonti.
  *

@@ -74,10 +74,26 @@ const GENERI = new Set<string>(['richiesta', 'scadenza', 'aggiornamento', 'rumor
  */
 export type Giudizio = { chiede: number; urgenza: number; genere: Genere; sicurezza: number; peso?: number }
 
+/**
+ * Chi è la persona, per Jev: il nome del conto, o «the user».
+ *
+ * C'era scritto «Tobia» nelle domande e come riserva: sul Mac di chiunque
+ * altro Jev giudicava se qualcuno aspettava *Tobia*. Il nome lo dice il
+ * conto; senza nome, una parola che non è di nessuno.
+ */
+export function nomePersona(c = leggi()): string {
+  return c.nome?.trim() || 'the user'
+}
+
+/** Le domande con `{persona}` riempito: il testo cambia, la forma no. */
+export function conPersona<T extends object>(domande: T, nome = nomePersona()): T {
+  return JSON.parse(JSON.stringify(domande).replaceAll('{persona}', JSON.stringify(nome).slice(1, -1))) as T
+}
+
 const CHIEDE = {
   type: 'noul',
   instructions:
-    'Someone other than Tobia is waiting on him: this document asks him personally for an action, ' +
+    'Someone other than {persona} is waiting on him: this document asks him personally for an action, ' +
     'a decision, an answer or a payment that only he can give, and he has not given it yet.',
   criteria: {
     true: {
@@ -96,7 +112,7 @@ const CHIEDE = {
 
 const URGENZA = {
   type: 'score',
-  instructions: 'How soon Tobia must act on this.',
+  instructions: 'How soon {persona} must act on this.',
   criteria: [
     'Nothing is waiting on him: he can read it whenever, or never',
     'Worth doing this week; no date and nobody blocked',
@@ -107,7 +123,7 @@ const URGENZA = {
 
 const GENERE = {
   type: 'choice',
-  instructions: 'What this is for Tobia’s working day.',
+  instructions: 'What this is for the working day of {persona}.',
   criteria: {
     richiesta: 'A person asks him for something concrete',
     scadenza: 'A date or deadline he has to meet',
@@ -118,7 +134,7 @@ const GENERE = {
 
 const PESO = {
   type: 'score',
-  instructions: 'How much this document says about the work Tobia should pick up next.',
+  instructions: 'How much this document says about the work {persona} should pick up next.',
   criteria: [
     'Nothing about his work: noise, or a matter already finished',
     'Background about his world; nothing of his is pending in it',
@@ -156,7 +172,7 @@ const FACOLTATIVE = ['peso'] as const
 function scheda(d: Documento) {
   const c = leggi()
   return {
-    persona: [c.nome || 'Tobia', c.ruolo].filter(Boolean).join(', '),
+    persona: [nomePersona(c), c.ruolo].filter(Boolean).join(', '),
     documento: {
       fonte: d.fonte,
       da: d.autore ?? '',
@@ -307,7 +323,7 @@ export async function attenzione(docs: readonly Documento[], tetto = 60): Promis
     else oltre++
   }
   if (!daChiedere.length || !jev.collegato()) return fuori
-  const risposte = await jev.giudicaTanti(daChiedere, scheda, ATTENZIONE, { facoltative: FACOLTATIVE })
+  const risposte = await jev.giudicaTanti(daChiedere, scheda, conPersona(ATTENZIONE), { facoltative: FACOLTATIVE })
   let giudicati = 0
   for (const [d, r] of risposte) {
     if (!r) continue
@@ -349,7 +365,7 @@ export async function peso(docs: readonly Documento[], tetto = 60): Promise<Map<
     else oltre++
   }
   if (!daChiedere.length || !jev.collegato()) return fuori
-  const risposte = await jev.giudicaTanti(daChiedere, scheda, { peso: PESO })
+  const risposte = await jev.giudicaTanti(daChiedere, scheda, conPersona({ peso: PESO }))
   let giudicati = 0
   for (const [d, r] of risposte) {
     if (!r) continue
@@ -518,7 +534,7 @@ export async function doppioni<T extends Carta>(nuove: readonly T[], aperte: rea
     const candidate = vicine(nuova, confronto)
     if (!candidate.length) { confronto.push(nuova); continue }
     const r = await jev.giudica({
-      persona: leggi().nome || 'Tobia',
+      persona: nomePersona(),
       carta_nuova: { titolo: nuova.titolo, testo: (nuova.testo ?? '').slice(0, 200) }
     }, {
       doppione: {
@@ -578,7 +594,7 @@ export async function progettoDelle<T extends Carta>(
     ['nessuno', 'None of them: personal, admin, or something outside his projects']
   ])
   const risposte = await jev.giudicaTanti(carte, c => ({
-    persona: leggi().nome || 'Tobia',
+    persona: nomePersona(),
     carta: { titolo: c.titolo, testo: (c.testo ?? '').slice(0, 300) }
   }), {
     progetto: {
@@ -683,7 +699,7 @@ export async function giudicaCarte<T extends CartaIntera>(
   const fuori = new Map<T, GiudizioCarta>()
   if (!carte.length || !jev.collegato()) return fuori
   const oggi = opz.oggi ?? new Date()
-  const persona = leggi().nome || 'Tobia'
+  const persona = nomePersona()
   const risposte = await jev.giudicaTanti(carte, c => ({
     persona,
     oggi: giornoDi(oggi),
@@ -729,7 +745,7 @@ export const SOGLIA_DA_APRIRE = 0.5
 const VALE_APRIRLO = {
   type: 'noul',
   instructions:
-    'Opening this document would put in front of Tobia the very thing the briefing line talks about, ' +
+    'Opening this document would put in front of {persona} the very thing the briefing line talks about, ' +
     'and reading it is worth his ten seconds.',
   criteria: {
     true: {
@@ -766,7 +782,7 @@ export async function valeAprire<T extends { testo: string; doc: Documento }>(
 ): Promise<Map<T, number>> {
   const fuori = new Map<T, number>()
   if (!righe.length || !jev.collegato()) return fuori
-  const persona = leggi().nome || 'Tobia'
+  const persona = nomePersona()
   const risposte = await jev.giudicaTanti(righe, r => ({
     persona,
     riga: r.testo.slice(0, 240),
@@ -777,7 +793,7 @@ export async function valeAprire<T extends { testo: string; doc: Documento }>(
       titolo: r.doc.titolo.slice(0, 200),
       testo: corpoAttuale(r.doc).replace(/\s+/g, ' ').slice(0, 700)
     }
-  }), { vale: VALE_APRIRLO })
+  }), conPersona({ vale: VALE_APRIRLO }))
   let giudicati = 0
   for (const [r, risposta] of risposte) {
     if (!risposta) continue
@@ -837,7 +853,7 @@ export async function interesseNotizie<T extends { id: string; titolo: string; r
 ): Promise<Map<string, number>> {
   const fuori = new Map<string, number>()
   if (!notizie.length || !jev.collegato()) return fuori
-  const persona = leggi().nome || 'Tobia'
+  const persona = nomePersona()
   const segue = lavoro.slice(0, 10).map(l => l.slice(0, 220))
   const risposte = await jev.giudicaTanti(notizie, n => ({
     persona,
@@ -892,7 +908,7 @@ export async function stessoFatto<T extends { id: string; titolo: string; riassu
     if (!candidate.length) { confronto.push(carta(nuova)); continue }
     chieste++
     const r = await jev.giudica({
-      persona: leggi().nome || 'Tobia',
+      persona: nomePersona(),
       notizia_nuova: { titolo: nuova.titolo, riassunto: nuova.riassunto.slice(0, 200) }
     }, {
       stesso: {

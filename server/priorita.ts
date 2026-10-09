@@ -198,7 +198,15 @@ const DOMANDE_AL_GIRO = 2
  */
 const TETTO_PER_FONTE: Record<string, number> = { conversazioni: 12, x: 8 }
 
-type Archivio = { ultimo: string | null; proposte: number }
+/**
+ * `fallito`: l'ultimo giro in cui il modello non ha risposto (le priorità o il
+ * quadro di un progetto). Non sposta `ultimo`: un giro andato a vuoto non è un
+ * giro fatto, e il prossimo riprova dopo `MINUTI_RIPROVA` invece che fra
+ * quattro o dodici ore.
+ */
+type Archivio = { ultimo: string | null; proposte: number; fallito?: string }
+/** Dopo un giro senza risposta, fra quanto si riprova. */
+export const MINUTI_RIPROVA = 15
 const FILE = () => join(cartella(), 'priorita.json')
 function leggiArchivio(): Archivio {
   try { return { ultimo: null, proposte: 0, ...JSON.parse(readFileSync(FILE(), 'utf8')) as Partial<Archivio> } } catch { return { ultimo: null, proposte: 0 } }
@@ -785,7 +793,10 @@ export function pronta(forza = false): boolean {
   const a = leggiArchivio()
   const da = a.ultimo ? Date.now() - Date.parse(a.ultimo) : Infinity
   if (da < MINUTI_MINIMI * 60_000) return false
+  // il giro a vuoto aspetta un quarto d'ora, ma non «Leggi adesso»: chi ha
+  // appena sistemato il motore e lo preme vuole il giro adesso
   if (forza) return true
+  if (a.fallito && Date.now() - Date.parse(a.fallito) < MINUTI_RIPROVA * 60_000) return false
   // un quadro scritto da un ragionamento vecchio si rifà al primo giro utile, senza aspettare le ore;
   // una volta sola per conto e per avvio, così un modello che non risponde non lo fa ripartire ogni dieci minuti
   if (!rifattiPerVersione.has(cartella()) && Object.values(quadro.leggiQuadri()).some(q => q.versione !== quadro.VERSIONE)) {
@@ -831,7 +842,9 @@ export async function forse(forza = false): Promise<number> {
      */
     const dalQuadro = await carteDalQuadro()
     const esito = await proponi(dalQuadro.quadri, dalQuadro.titoli)
-    scriviArchivio({ ultimo: new Date().toISOString(), proposte: (esito?.voci.length ?? 0) + dalQuadro.salvate })
+    // il modello non ha risposto (qui o in un quadro): il giro non è fatto, e si riprova presto
+    if (!esito || quadro.senzaRispostaAlGiro()) scriviArchivio({ ...leggiArchivio(), fallito: new Date().toISOString() })
+    else scriviArchivio({ ultimo: new Date().toISOString(), proposte: esito.voci.length + dalQuadro.salvate })
     if (!esito) return dalQuadro.salvate
     // superata dal giro, non lasciata passare da lui: la ragione lo dice
     for (const x of esito.superate) store.cambiaStatoFeed(x.id, 'scaduto', x.motivo, 'superata')

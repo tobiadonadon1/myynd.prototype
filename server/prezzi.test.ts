@@ -7,11 +7,11 @@ import assert from 'node:assert/strict'
 import { PREZZI, costo, costoEsatto, daDollari } from './prezzi.ts'
 import { MODELLI } from './config.ts'
 
-test('ogni modello che si può scegliere ha un prezzo, con la cache a un decimo e a un quarto in più', () => {
+test('ogni modello che si può scegliere ha un prezzo, con la cache a un decimo (Opus 5.5 a un ventesimo) e a un quarto in più', () => {
   for (const m of MODELLI) {
     const p = PREZZI[m.id]
     assert.ok(p, `${m.id} non ha un prezzo`)
-    assert.equal(p.cacheLettura, p.entrata * 0.1)
+    assert.equal(p.cacheLettura, p.entrata * (m.id === 'claude-opus-5-5' ? 0.05 : 0.1))
     assert.equal(p.cacheScrittura, p.entrata * 1.25)
     assert.ok(p.uscita > p.entrata)
   }
@@ -26,6 +26,15 @@ test('il costo: entrata, uscita, cache letta e scritta, in micro-dollari interi'
   assert.equal(costo('claude-opus-5', { entrata: 1_000_000, uscita: 0 }), 5_000_000)
   assert.equal(costo('claude-haiku-4-5', { entrata: 1_000_000, uscita: 0 }), 1_000_000)
   assert.ok(Number.isInteger(costo('claude-haiku-4-5', { entrata: 3, uscita: 7, cache: 11 })!))
+})
+
+test('il listino del 9 ottobre: Opus 5.5 4/20, Sonnet 5.5 2/10, Haiku 5.5 0,10/0,50, la cache letta a un decimo (Opus 5.5 a 0,20)', () => {
+  assert.equal(costo('claude-opus-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 24_000_000)
+  assert.equal(costo('claude-sonnet-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 12_000_000)
+  assert.equal(costo('claude-haiku-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 600_000)
+  assert.equal(costo('claude-haiku-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 10_000)
+  assert.equal(costo('claude-sonnet-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 200_000)
+  assert.equal(costo('claude-opus-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 200_000, 'il listino di Opus 5.5 dice 0,20, non un decimo')
 })
 
 test('un modello senza prezzo non ha un costo, e i numeri storti non contano', () => {

@@ -162,8 +162,8 @@ export type Stato = {
   accessoNote?: {stato:'leggibile'|'negato'|'assente'|'errore'|'non-mac';verificato:string;fase?:string;codice?:string}
   /** Le fonti che l'ultima lettura non ha letto per intero: la prima pagina le dice in una riga fissa. */
   letturaIncompleta?: FonteIncompleta[]
-  /** Il guaio del motore che lavora (uscito dall'account, chiave rifiutata): la stessa riga fissa (P8). */
-  testa?: { id: 'claude' | 'openai'; rimedio: 'accedi' | 'credenziale' } | null
+  /** Il guaio del motore (uscito dall'account, chiave rifiutata, spento, il ponte, niente risposte): la stessa riga fissa (P8). */
+  testa?: TestaGuasta | null
   /** I titoli delle finestre sono accesi: la pagina chiede al guscio se l'Accessibilità c'è davvero (P8). */
   osservaTitoli?: boolean
   /**
@@ -1102,7 +1102,8 @@ export type Abbonamento = {
 }
 
 /** F8 · l'AI inclusa: «pronto» solo dopo una risposta vera del ponte. */
-export type Incluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; scelto: boolean }
+/** `codice` è l'ultima risposta del ponte quando non è un sì: 401 rientrare, 402 il piano, il resto giù. */
+export type Incluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; mese?: boolean; codice?: number; scelto: boolean }
 
 export type ChatGPT = {
   installato: boolean
@@ -1139,6 +1140,20 @@ export type ProjectExecutionReport = {
   agentFinished: boolean
   runtimeProvenance?: { runtime: 'claude' | 'hermes'; executable: string; version?: string; scope: 'copy-files'; model?: string; provider?: string }
   team?: {mode:'worker-reviewer'; acceptanceCriteria:string; accepted:boolean; roles: {role:'worker'|'reviewer'; runtime:'claude'|'hermes'; outcome:string; findings?:string[]}[]}
+}
+
+/** I motori come li scrive la configurazione: `chatgpt` è l'account, `openai` la chiave. */
+export type ViaMotore = 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso'
+/**
+ * Il guaio di un motore, per la riga fissa. `id` è la scheda dove si sistema;
+ * `intanto` il motore che lavora al suo posto; `minuti` da quanto non si
+ * riesce a pensare (`fermo`). Rispecchia `TestaGuasta` in server/salute-teste.ts.
+ */
+export type TestaGuasta = {
+  id: 'claude' | 'openai' | 'compatibile' | 'incluso'
+  rimedio: 'accedi' | 'credenziale' | 'spento' | 'ponte' | 'pagamento' | 'finito' | 'finitoMese' | 'fermo'
+  via?: ViaMotore; nome?: string; locale?: boolean; minuti?: number
+  intanto?: { via: ViaMotore; nome?: string; locale?: boolean }
 }
 
 export type ProjectRuntime = { id: 'claude' | 'hermes'; executable: string | null; status: 'supported' | 'missing' | 'incompatible'; version?: string; reason?: string; defaults?: { model?: string; provider?: string }; inferenceCredentialConfigured?:boolean; authenticated?:boolean; authenticationPending?:boolean }
@@ -1654,6 +1669,8 @@ export const api = {
   chatgpt: (signal?: AbortSignal) => json<ChatGPT>('/api/modello/chatgpt', { signal }),
   /** F8 · l'AI inclusa con Myynd: una chiamata vera al ponte, e la dose di oggi. */
   incluso: (signal?: AbortSignal) => json<Incluso>('/api/incluso', { signal }),
+  /** Il rapporto di diagnosi, sulla Scrivania, con quello che è suo coperto. Torna il nome del file. */
+  salvaDiagnosi: () => json<{ ok: true; nome: string }>('/api/diagnosi', { method: 'POST' }),
   accediChatGPT: (signal?: AbortSignal) => json<{ authUrl: string; loginId: string }>('/api/modello/chatgpt/login', { method: 'POST', signal }),
   statoAccessoChatGPT: (id: string, signal?: AbortSignal) => json<AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}`, { signal }),
   annullaAccessoChatGPT: (id: string) => json<{ ok: true } & AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),

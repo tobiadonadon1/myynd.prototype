@@ -185,7 +185,7 @@ test('una lettura: le Note senza permesso si dicono subito, il calendario è pul
   assert.equal(connettore(s, 'claude')?.problema, 'accedi')
   assert.equal(connettore(s, 'note')?.problema, 'permesso-disco')
   assert.equal(connettore(s, 'calendario')?.problema, undefined)
-  assert.deepEqual(s.testa, { id: 'claude', rimedio: 'accedi' })
+  assert.deepEqual(s.testa, { id: 'claude', via: 'claude', rimedio: 'accedi' })
   // i motori non stanno mai nell'elenco delle fonti
   assert.equal(incompleta(s, 'claude'), undefined)
   assert.equal(s.osservaTitoli, false)

@@ -1,0 +1,9 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "compiti": [
+    { "id": "c-mese", "testo": "Write the onboarding checklist for the new designer", "quando": "oggi", "stato": "aperto" }
+  ],
+  "f8": { "incluso": { "token": "gettone-finto-di-prova" } }
+}

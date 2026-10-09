@@ -1,0 +1,15 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" }
+  ],
+  "file": [
+    { "nome": "plan.md", "testo": "# Northwind plan\n\n1. Fix the three account issues.\n2. Upload build 1.0.4.\n" }
+  ],
+  "compiti": [
+    { "id": "c-m1", "testo": "Upload Northwind build 1.0.4 to TestFlight", "quando": "oggi", "stato": "aperto" }
+  ],
+  "motori": { "chatgptUscito": true }
+}

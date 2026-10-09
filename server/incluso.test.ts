@@ -103,7 +103,7 @@ test('un 429 `budget_exhausted` del ponte è un errore del tetto: una richiesta 
 // — il ponte, sul server —
 
 type Segnato = Parameters<typeof incluso.PONTE_VERO.segna>[0]
-function ponteFinto(o: { chiave?: string; usati?: number; rete?: typeof fetch } = {}) {
+function ponteFinto(o: { chiave?: string; usati?: number; spesa?: number; rete?: typeof fetch } = {}) {
   const segnati: Segnato[] = []
   const f: typeof incluso.PONTE_VERO = {
     chiave: () => o.chiave,
@@ -111,6 +111,8 @@ function ponteFinto(o: { chiave?: string; usati?: number; rete?: typeof fetch } 
     dentro: (_u, fai) => fai(),
     usati: () => o.usati ?? 0,
     tetto: () => 1000,
+    spesaDelMese: () => o.spesa ?? 0,
+    tettoDelMese: () => 5_000_000,
     segna: u => { segnati.push(u) },
     rete: o.rete ?? (async () => { throw new Error('non doveva uscire') })
   }
@@ -175,14 +177,14 @@ test('il ponte inoltra con la chiave sua, non con il gettone, e segna i token ve
     assert.equal(chiesti[0].url, incluso.URL_ANTHROPIC)
     assert.equal(chiesti[0].chiave, 'sk-ant-aziendale')
     assert.equal(chiesti[0].corpo.max_tokens, 32_000, 'una risposta sola non passa il tetto del ponte')
-    assert.deepEqual(segnati[0], { lavoro: 'incluso', motore: incluso.MOTORE_INCLUSO, entrata: 15, cache: 0, uscita: 5, scritti: 3, modello: 'claude-sonnet-5' })
+    assert.deepEqual(segnati[0], { lavoro: 'incluso', motore: incluso.MOTORE_INCLUSO, entrata: 15, cache: 0, uscita: 5, scritti: 3, modello: 'claude-sonnet-5-5' })
 
     const flusso = await manda(url, 'sessione-buona', JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 100, stream: true, messages: [{ role: 'user', content: 'hi' }] }))
     assert.match(flusso.headers.get('content-type') ?? '', /event-stream/)
     const testo = await flusso.text()
     assert.match(testo, /text_delta/)
     assert.match(testo, /message_delta/)
-    assert.deepEqual(segnati[1], { lavoro: 'incluso', motore: incluso.MOTORE_INCLUSO, entrata: 40, cache: 300, uscita: 9, scritti: 0, modello: 'claude-sonnet-5' })
+    assert.deepEqual(segnati[1], { lavoro: 'incluso', motore: incluso.MOTORE_INCLUSO, entrata: 40, cache: 300, uscita: 9, scritti: 0, modello: 'claude-sonnet-5-5' })
     // una richiesta che non è dei Messaggi non esce
     assert.equal((await manda(url, 'sessione-buona', JSON.stringify({ model: 'gpt-5', messages: [] }))).status, 400)
     assert.equal(chiesti.length, 2)
@@ -196,8 +198,8 @@ test('la salute del ponte: «pronto» solo dopo un 200, «finito» a dose usata,
   assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(200, { usati: 41_000, tetto: 200_000 }) }), { stato: 'pronto', usati: 41_000, tetto: 200_000 })
   assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(200, { usati: 200_000, tetto: 200_000 }) }), { stato: 'finito', usati: 200_000, tetto: 200_000 })
   assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(429, {}) }), { stato: 'finito' })
-  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(503, { error: { type: 'not_configured' } }) }), { stato: 'assente' })
-  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: (async () => { throw new Error('giù') }) as typeof fetch }), { stato: 'assente' })
+  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(503, { error: { type: 'not_configured' } }) }), { stato: 'assente', codice: 503 })
+  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: (async () => { throw new Error('giù') }) as typeof fetch }), { stato: 'assente', codice: 0 })
 })
 
 before(() => { cfg.scrivi({ lingua: 'en' }) })
@@ -223,6 +225,58 @@ test('il ponte: un modello fuori lista diventa uno permesso, e le richieste in v
     assert.equal(seconda.status, 429, 'due richieste insieme hanno letto la stessa dose')
     lascia()
     assert.equal((await prima).status, 200)
-    assert.deepEqual(chiesti, ['claude-sonnet-5'], 'il modello più caro è passato')
+    assert.deepEqual(chiesti, ['claude-sonnet-5-5'], 'il modello più caro è passato')
   } finally { s.close() }
+})
+
+test('il ponte: i modelli 5.5, i nomi vecchi al successore, Opus solo se chi ospita lo permette', () => {
+  delete process.env.MYYND_INCLUSO_MODELLI
+  assert.deepEqual(incluso.modelliPermessi(), ['claude-haiku-5-5', 'claude-sonnet-5-5'])
+  assert.equal(incluso.modelloPermesso('claude-haiku-5-5'), 'claude-haiku-5-5')
+  assert.equal(incluso.modelloPermesso('claude-haiku-4-5'), 'claude-haiku-5-5')
+  assert.equal(incluso.modelloPermesso('claude-sonnet-5'), 'claude-sonnet-5-5')
+  assert.equal(incluso.modelloPermesso('claude-opus-5-5'), 'claude-sonnet-5-5')
+  process.env.MYYND_INCLUSO_MODELLI = 'claude-haiku-5-5,claude-sonnet-5-5,claude-opus-5-5'
+  try { assert.equal(incluso.modelloPermesso('claude-opus-5'), 'claude-opus-5-5') } finally { delete process.env.MYYND_INCLUSO_MODELLI }
+})
+
+test('la dose conta la cache letta a un decimo, e il mese ha un tetto in dollari', async () => {
+  assert.equal(incluso.tokenDellaDose({ entrata: 100, uscita: 50, cache: 30_000 }), 3150)
+  delete process.env.MYYND_INCLUSO_MESE_USD
+  assert.equal(tetto.tettoDelMeseSulServer(), 20_000_000)
+  process.env.MYYND_INCLUSO_MESE_USD = '0'
+  assert.equal(tetto.tettoDelMeseSulServer(), 0, 'zero: nessun tetto')
+  delete process.env.MYYND_INCLUSO_MESE_USD
+  const { app } = ponteFinto({ chiave: 'sk-ant-aziendale', usati: 0, spesa: 5_000_000 })
+  const { s, url } = await accendi(app)
+  try {
+    const r = await manda(url, 'sessione-buona')
+    assert.equal(r.status, 429)
+    const e = ((await r.json()) as { error: { type: string; message: string } }).error
+    assert.equal(e.type, 'budget_exhausted')
+    assert.match(e.message, /month/)
+    // la bussata di salute lo sa: senza, diceva «pronto» e la riga si spegneva
+    const st = await fetch(`${url}/api/incluso/stato`, { headers: { 'x-api-key': 'sessione-buona' } })
+    assert.deepEqual(await st.json(), { usati: 0, tetto: 1000, mese: true })
+    assert.deepEqual(await incluso.salute({ url, gettone: 'sessione-buona' }), { stato: 'finito', usati: 0, tetto: 1000, mese: true })
+  } finally { s.close() }
+})
+
+test('il «mese finito» del ponte si dice col mese, non con «domani»', async () => {
+  const s = createServer((req, res) => {
+    req.resume()
+    req.on('end', () => {
+      res.statusCode = 429
+      res.setHeader('content-type', 'application/json')
+      res.setHeader('x-should-retry', 'false')
+      res.end(JSON.stringify({ type: 'error', error: { type: 'budget_exhausted', message: 'This month’s included AI allowance is used up.' } }))
+    })
+  })
+  await new Promise<void>(r => s.listen(0, '127.0.0.1', r))
+  process.env.MYYND_INCLUSO_URL = `http://127.0.0.1:${(s.address() as { port: number }).port}`
+  try {
+    cfg.scrivi({ lingua: 'en', motore: 'incluso', incluso: { token: 'gettone-di-prova' } })
+    await assert.rejects(mod.chiedi({ lavoro: 'titolo', system: 's', messages: [{ role: 'user', content: 'x' }], max_tokens: 50 }),
+      (e: Error) => e.message === tetto.INCLUSO_FINITO_MESE)
+  } finally { s.close(); delete process.env.MYYND_INCLUSO_URL }
 })
