@@ -1,0 +1,57 @@
+{
+  "modello": "finto",
+  "risposte": [
+    {
+      "se": "Guardi il risultato di un compito affidato",
+      "in": "system",
+      "json": {
+        "chiede": false,
+        "manca": [],
+        "domanda": "",
+        "visto": ""
+      }
+    },
+    {
+      "se": "Sei il revisore di un lavoro",
+      "in": "system",
+      "json": {
+        "esito": "pass",
+        "per": "Maya",
+        "comeTe": "It holds.",
+        "comeLoro": "Clear.",
+        "problemi": [],
+        "verificato": [
+          "the reply answers her question"
+        ]
+      }
+    },
+    {
+      "se": "Un assistente ha appena finito un lavoro",
+      "in": "system",
+      "json": {
+        "prossimo": ""
+      }
+    },
+    {
+      "se": "Prendi una bozza scritta per una persona",
+      "in": "system",
+      "json": {
+        "a": "maya@northwind-studio.test",
+        "oggetto": "Re: Homepage copy for the new website",
+        "corpo": "Hi Maya,\n\nThe homepage copy works for me. Go ahead with it, and send me the final version by Friday.\n\nThanks,\nAlex",
+        "allegato": ""
+      }
+    },
+    {
+      "se": "REVISION REQUEST",
+      "in": "utente",
+      "testo": "Hi Maya,\n\nThe homepage copy works for me. Send me the final version by Monday.\n\nThanks,\nAlex"
+    },
+    {
+      "se": "Il compito: Reply to Maya about the homepage copy",
+      "in": "utente",
+      "testo": "Hi Maya,\n\nThe homepage copy works for me. Go ahead with it, and send me the final version by Friday.\n\nThanks,\nAlex\n\nI assumed Friday for the final version."
+    }
+  ],
+  "predefinita": "Hi Maya,\n\nThe homepage copy works for me.\n\nThanks,\nAlex"
+}

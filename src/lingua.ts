@@ -2266,6 +2266,8 @@ const EN: Record<string, string> = {
   'Le bozze di Mail si salvano solo da Myynd sul Mac.': 'Mail drafts can only be saved from Myynd on the Mac.',
   'La bozza non ha un destinatario valido: controllalo prima di salvarla.': 'The draft has no valid recipient: check it before saving.',
   'Il testo della bozza non si può salvare in Mail.': 'The draft text cannot be saved in Mail.',
+  // la prenotazione delle caselle (server/mailbox-drafts.ts): un salvataggio rimasto a metà
+  'Un salvataggio precedente nella posta è rimasto in dubbio. Guarda nelle Bozze prima di riprovare: Myynd non ne crea un doppione.': 'A previous mailbox save is uncertain. Check Drafts before trying again; Myynd will not create a duplicate.',
   'Manca il percorso del file.': 'The file path is missing.',
   'Non esiste nessun file a questo percorso.': 'There is no file at this path.',
   'Posso leggere solo dentro la tua cartella personale o la cartella del compito.': 'I can only read inside your home folder or the task folder.',

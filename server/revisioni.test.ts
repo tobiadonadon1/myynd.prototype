@@ -144,3 +144,27 @@ test('«Cambia» su una bozza salvata nella posta (P3) apre una figlia rev- dal 
  assert.deepEqual(rifiutoCorrezione(new Error('Reconnect your email account to read the saved draft.')),{stato:400,errore:'Collega la posta per rileggere la bozza salvata.'})
  assert.equal(rifiutoCorrezione(new Error('ENOENT: no such file')),null)
 })
+
+test('«Cambia» su una bozza salvata in Mail del Mac: la base è il testo della riga, non una rilettura che Mail non sa fare', async () => {
+ store.scriviCompito({id:'bozza-mac',testo:'Reply to Maya about the venue',doc:'postamac:INBOX:9',ordine:'f'})
+ store.affidaCompito('bozza-mac','bozza')
+ store.risultatoCompito('bozza-mac','Done: the reply.\n\nHi Maya,\n\nFriday works.\n\nBest\n\nI assumed Friday for the final version.',[],'pronto')
+ store.scriviEmailCompito('bozza-mac',{a:'maya@studio.example',oggetto:'Re: Venue',corpo:'Hi Maya,\n\nFriday works.\n\nBest',conosciuto:true,casella:{stato:'salvata',id:'mail-del-mac:predefinito',url:''}})
+ const avviate:string[]=[]
+ const out=await rivediDaCorrezione('bozza-mac','Make it shorter',(id,mode)=>{avviate.push(mode);store.affidaCompito(id,mode)},{bozza:async()=>assert.fail('Mail del Mac non si rilegge')})
+ assert.deepEqual(avviate,['bozza'])
+ const figlia=store.compito(out.id)!
+ assert.equal(figlia.doc,'postamac:INBOX:9')
+ assert.match(figlia.nota||'',/"tipo":"mailDelMac"/)
+ assert.doesNotMatch(figlia.nota||'',/"tipo":"bozza"/)
+ assert.match(figlia.nota||'',/Friday works/)
+ // «Cambia» toglie la riga dell'ipotesi dal risultato della madre (index.ts): la base non si rompe
+ const lavoroDati=await import('./lavoro-dati.ts')
+ lavoroDati.scriviIpotesi('bozza-mac',['I assumed Friday for the final version.'])
+ lavoroDati.passaIpotesi('bozza-mac')
+ assert.doesNotMatch(store.compito('bozza-mac')?.risultato||'',/I assumed/)
+ await verificaBaseRevisione(figlia)
+ // (contro) la bozza di prima cambiata davvero: la revisione si ferma
+ store.scriviEmailCompito('bozza-mac',{...store.compito('bozza-mac')!.email!,corpo:'Hi Maya,\n\nSaturday works.\n\nBest'})
+ await assert.rejects(verificaBaseRevisione(figlia),/changed/)
+})

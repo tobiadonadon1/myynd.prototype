@@ -1,7 +1,7 @@
 /** Publish unsent mailbox drafts, never messages. A durable reservation prevents
  * duplicate creation after an ambiguous network response or process crash. */
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import * as cfg from './config.ts'
 import * as google from './connettori/google.ts'
@@ -50,6 +50,12 @@ export function destinatarioVerificato(atteso: string, header: string) {
   if (!indirizzo(atteso) || indirizzo(atteso) !== atteso.trim().toLowerCase() || indirizzo(atteso) !== indirizzo(header)) throw new Error('The draft recipient does not match the original email. Review it before saving.')
 }
 const occupati = new Map<string, Promise<BozzaCasella>>()
+/** Un salvataggio interrotto a metà: la bozza potrebbe esserci, e non se ne fa un doppione. */
+const INCERTO = 'Un salvataggio precedente nella posta è rimasto in dubbio. Guarda nelle Bozze prima di riprovare: Myynd non ne crea un doppione.'
+/** L'errore di chi non ha mandato niente alla casella: si può riprovare senza rischiare un doppione. */
+export function primaDelSalvataggio(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { primaDelSalvataggio?: unknown }).primaDelSalvataggio === true
+}
 type Crea = (source: string, email: EmailPronta, messageId: string) => Promise<{ id: string; url: string }>
 async function crea(source: string, e: EmailPronta, messageId: string) {
   if (source.startsWith('google:')) return google.salvaBozza(source.slice(7), e, messageId)
@@ -73,7 +79,7 @@ export async function salvaBozzaCasella(task: string, source: string, e: EmailPr
     const path = join(dir, key + '.json')
     if (existsSync(path)) {
       const saved = JSON.parse(readFileSync(path, 'utf8')) as BozzaCasella
-      return saved.stato === 'salvata' ? saved : { stato: 'errore', errore: 'A previous mailbox save is uncertain. Check Drafts before trying again; Myynd will not create a duplicate.' }
+      return saved.stato === 'salvata' ? saved : { stato: 'errore', errore: INCERTO }
     }
     // Reserve before any request. Never retry a potentially successful POST.
     writeFileSync(path, JSON.stringify({ stato: 'errore' }), { mode: 0o600, flag: 'wx' })
@@ -81,7 +87,13 @@ export async function salvaBozzaCasella(task: string, source: string, e: EmailPr
       const result: BozzaCasella = { stato: 'salvata', ...await create(source, e, `myynd-${key}@draft.myynd.local`) }
       writeFileSync(path + '.tmp', JSON.stringify(result), { mode: 0o600 }); renameSync(path + '.tmp', path)
       return result
-    } catch (err) { return { stato: 'errore', errore: err instanceof Error ? err.message : String(err) } }
+    } catch (err) {
+      // un no sicuro, detto prima che la casella abbia ricevuto qualcosa (il permesso
+      // di Automazione negato la prima notte): la prenotazione si toglie, e il giro
+      // dopo, col permesso dato, ci riprova invece di restare «incerto» per sempre
+      if (primaDelSalvataggio(err)) rmSync(path, { force: true })
+      return { stato: 'errore', errore: err instanceof Error ? err.message : String(err) }
+    }
   })()
   occupati.set(lock, run)
   try { return await run } finally { occupati.delete(lock) }

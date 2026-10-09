@@ -1,0 +1,44 @@
+[
+  {
+    "aspetta": 2000
+  },
+  {
+    "clicca": "Your account"
+  },
+  {
+    "vai": "Preferences"
+  },
+  {
+    "aspetta": 800
+  },
+  {
+    "js": "(() => { const t = document.querySelector('[data-scheda=turno]'); if (t) t.scrollIntoView({ block: 'center' }); return !!t })()"
+  },
+  {
+    "aspetta": 400
+  },
+  {
+    "scatta": "turno-pausa"
+  },
+  {
+    "testo": "turno-pausa"
+  },
+  {
+    "clicca": "Myynd works the board on its own"
+  },
+  {
+    "aspetta": 700
+  },
+  {
+    "scatta": "turno-spento"
+  },
+  {
+    "testo": "turno-spento"
+  },
+  {
+    "clicca": "Myynd works the board on its own"
+  },
+  {
+    "aspetta": 500
+  }
+]

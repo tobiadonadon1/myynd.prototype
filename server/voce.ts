@@ -69,7 +69,8 @@ function daCache<T>(m: Map<string, Cache<T>>, k: string, calcola: () => T): T {
 
 const EPISTOLARE = /\b(?:mail|e-?mail|reply|repl\w*|respond\w*|answer\w*|send|sending|forward|message|messages|write\s+(?:back\s+)?to\b|rispond\w*|risposta|mand\w*|invi\w*|inoltr\w*|messagg\w*|scriv\w*\s+(?:a|al|alla|allo|ai|agli|alle)\b)/i
 const INDIRIZZO = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
-const DI_POSTA = /^(?:posta|google|gmail|microsoft|outlook):/i
+// postamac: la posta di Mail del Mac (`connettori/posta-mac.ts`), che ha anche lei le Bozze dove la risposta va
+const DI_POSTA = /^(?:posta|postamac|google|gmail|microsoft|outlook):/i
 
 /** Il nome di chi ha scritto, senza l'indirizzo e le virgolette; il primo nome, se ce n'è più d'uno. */
 /** «Marco Rossi, PhD»: quello che sta dopo la virgola è un titolo, non il nome. */

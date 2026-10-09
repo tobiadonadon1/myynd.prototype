@@ -1,0 +1,78 @@
+[
+  {
+    "aspetta": 2500
+  },
+  {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }; const prima = await (await fetch('/api/compiti', { headers: h })).json(); const c0 = (prima.compiti || prima).find(x => x.id === 'c-mac'); if (c0 && c0.stato === 'aperto') await fetch('/api/compiti/c-mac/delega', { method: 'POST', headers: h, body: JSON.stringify({ modo: 'bozza' }) }); const fine = Date.now() + 100000; for (;;) { const j = await (await fetch('/api/compiti', { headers: h })).json(); const c = (j.compiti || j).find(x => x.id === 'c-mac'); if (c && c.stato === 'pronto' && c.email && c.email.casella) return { stato: c.stato, casella: c.email.casella, ipotesi: c.ipotesi || null }; if (Date.now() > fine) return 'ancora: ' + (c ? c.stato : '?'); await new Promise(x => setTimeout(x, 1000)) } })()"
+  },
+  {
+    "aspetta": 1500
+  },
+  {
+    "clicca": "Reply to Maya about the homepage copy"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "scatta": "salvata"
+  },
+  {
+    "testo": "salvata"
+  },
+  {
+    "clicca": "Change: Reply to Maya about the homepage copy"
+  },
+  {
+    "aspetta": 500
+  },
+  {
+    "scatta": "cambia"
+  },
+  {
+    "scrivi": "Monday for the final version",
+    "in": "I assumed Friday for the final version"
+  },
+  {
+    "premi": "Enter"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "scatta": "rifalla"
+  },
+  {
+    "testo": "rifalla"
+  },
+  {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const fine = Date.now() + 85000; for (;;) { const j = await (await fetch('/api/compiti', { headers: h })).json(); const righe = j.compiti || j; const figlia = righe.find(x => x.madre === 'c-mac' && x.id.startsWith('rev-')); if (figlia && figlia.stato !== 'delegato' && (figlia.email || Date.now() > fine - 40000)) return { id: figlia.id, stato: figlia.stato, casella: figlia.email && figlia.email.casella, guaio: figlia.guaio || null }; if (Date.now() > fine) return 'ancora: ' + (figlia ? figlia.stato : 'nessuna figlia'); await new Promise(x => setTimeout(x, 1000)) } })()"
+  },
+  {
+    "aspetta": 1200
+  },
+  {
+    "clicca": "Reply to Maya about the homepage copy"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "js": "(() => { const t = [...document.querySelectorAll('*')].filter(e => e.children.length === 0 && e.textContent === 'Reply to Maya about the homepage copy'); const h = t[t.length - 1]; if (!h) return false; h.click(); return t.length })()"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "js": "(() => { const t = [...document.querySelectorAll('*')].filter(e => e.children.length === 0 && e.textContent === 'Reply to Maya about the homepage copy'); const h = t[t.length - 1]; if (h) h.scrollIntoView({ block: 'start' }); return !!h })()"
+  },
+  {
+    "aspetta": 700
+  },
+  {
+    "scatta": "rifatta"
+  },
+  {
+    "testo": "rifatta"
+  }
+]

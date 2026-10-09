@@ -9,7 +9,7 @@
 
 import { test, after, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -96,4 +96,42 @@ test('il contratto di una risposta a Mail del Mac ha la mano della posta solo se
   assert.ok(contratto.forma(carta).mani.includes('posta'))
   contratto.perProva({ postaCollegata: () => true, bozzeInMail: () => false })
   assert.ok(!contratto.forma(carta).mani.includes('posta'), 'una casella IMAP non salva le bozze di Mail del Mac')
+})
+
+test('il permesso di Automazione negato la prima notte non chiude la carta per sempre: dato il permesso, il giro dopo salva', async () => {
+  let volte = 0
+  mailDelMac.perProva({
+    piattaforma: () => 'darwin', ospitato: () => false,
+    osascript: async argomenti => {
+      chiamate.push(argomenti)
+      // quello che fa la mano vera con -1743: un no detto prima che Mail riceva qualcosa
+      if (volte++ === 0) throw Object.assign(new Error('Permetti a Myynd di controllare Mail in Impostazioni di Sistema, Privacy e sicurezza, Automazione.'), { primaDelSalvataggio: true })
+      return 'salvata\n'
+    }
+  })
+  const prima = await salvaBozzaCasella('carta-permesso', 'postamac:CONTO/INBOX/10.emlx', email, undefined, CASA)
+  assert.equal(prima.stato, 'errore')
+  assert.match(prima.errore ?? '', /Automazione/)
+  const dopo = await salvaBozzaCasella('carta-permesso', 'postamac:CONTO/INBOX/10.emlx', email, undefined, CASA)
+  assert.equal(dopo.stato, 'salvata')
+  assert.equal(chiamate.length, 2)
+  // (contro) Mail che non conferma resta in dubbio: nessun doppione al giro dopo
+  sulMac('')
+  chiamate = []
+  assert.equal((await salvaBozzaCasella('carta-dubbio', 'postamac:CONTO/INBOX/11.emlx', email, undefined, CASA)).stato, 'errore')
+  assert.match((await salvaBozzaCasella('carta-dubbio', 'postamac:CONTO/INBOX/11.emlx', email, undefined, CASA)).errore ?? '', /in dubbio/)
+  assert.equal(chiamate.length, 1)
+})
+
+test('un destinatario storto è un no sicuro: la prenotazione non resta', async () => {
+  sulMac()
+  const r = await salvaBozzaCasella('carta-storta', 'postamac:CONTO/INBOX/12.emlx', { ...email, a: 'non-un-indirizzo' }, undefined, CASA)
+  assert.match(r.errore ?? '', /destinatario valido/)
+  assert.equal(chiamate.length, 0)
+  assert.equal((await salvaBozzaCasella('carta-storta', 'postamac:CONTO/INBOX/12.emlx', email, undefined, CASA)).stato, 'salvata')
+})
+
+test('la richiesta di permesso che macOS mostra dice delle bozze in Mail', () => {
+  const yml = readFileSync(join(import.meta.dirname, '..', 'electron-builder.yml'), 'utf8')
+  assert.match(yml.match(/NSAppleEventsUsageDescription: (.*)/)?.[1] ?? '', /drafts in Mail without sending/)
 })

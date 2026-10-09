@@ -41,6 +41,11 @@ export const SCRIPT_BOZZA = `on run argv
   end tell
 end run`
 
+/** Un no detto prima di parlare con Mail: la prenotazione della casella si toglie (`mailbox-drafts.ts`). */
+function sicuro(messaggio: string): Error {
+  return Object.assign(new Error(messaggio), { primaDelSalvataggio: true })
+}
+
 type Esecutore = (argomenti: string[]) => Promise<string>
 type Ferri = { osascript: Esecutore; piattaforma: () => string; ospitato: () => boolean }
 const VERI: Ferri = {
@@ -49,7 +54,8 @@ const VERI: Ferri = {
     if (osascriptInProva('bozza-mail-mac', 'una bozza nuova nelle Bozze di Mail')) return ok('salvata\n')
     execFile('/usr/bin/osascript', argomenti, { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024 }, (errore, stdout, stderr) => {
       if (!errore) return ok(stdout)
-      if (/(-1743|not authorized|not permitted)/i.test(stderr)) return no(new Error('Permetti a Myynd di controllare Mail in Impostazioni di Sistema, Privacy e sicurezza, Automazione.'))
+      // -1743: macOS ha fermato l'evento prima che arrivasse a Mail, quindi nessuna bozza
+      if (/(-1743|not authorized|not permitted)/i.test(stderr)) return no(sicuro('Permetti a Myynd di controllare Mail in Impostazioni di Sistema, Privacy e sicurezza, Automazione.'))
       // la diagnostica di AppleScript può contenere il testo della mail: non si rilancia
       no(new Error('Mail non ha salvato la bozza. Controlla che sia aperta e che non ci sia una finestra di permesso.'))
     })
@@ -74,12 +80,12 @@ const INDIRIZZO = /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i
  * la mail, fra cui Mail cerca il suo conto per il mittente.
  */
 export async function salva(e: { a: string; oggetto: string; corpo: string }, suoi: string[] = []): Promise<{ id: string; url: string }> {
-  if (ferri.ospitato() || ferri.piattaforma() !== 'darwin') throw new Error('Le bozze di Mail si salvano solo da Myynd sul Mac.')
+  if (ferri.ospitato() || ferri.piattaforma() !== 'darwin') throw sicuro('Le bozze di Mail si salvano solo da Myynd sul Mac.')
   const a = String(e.a ?? '').trim()
-  if (!INDIRIZZO.test(a)) throw new Error('La bozza non ha un destinatario valido: controllalo prima di salvarla.')
+  if (!INDIRIZZO.test(a)) throw sicuro('La bozza non ha un destinatario valido: controllalo prima di salvarla.')
   const oggetto = String(e.oggetto ?? '').replace(/[\r\n]+/g, ' ').trim()
   const corpo = String(e.corpo ?? '').replace(/\r\n?/g, '\n')
-  if (!corpo.trim() || corpo.length > 100_000 || corpo.includes('\0') || oggetto.includes('\0') || oggetto.length > 500) throw new Error('Il testo della bozza non si può salvare in Mail.')
+  if (!corpo.trim() || corpo.length > 100_000 || corpo.includes('\0') || oggetto.includes('\0') || oggetto.length > 500) throw sicuro('Il testo della bozza non si può salvare in Mail.')
   const conti = [...new Set(suoi.map(s => s.trim().toLowerCase()).filter(s => INDIRIZZO.test(s)))].slice(0, 20)
   const uscita = await ferri.osascript(['-e', SCRIPT_BOZZA, '--', a, oggetto, corpo, ...conti])
   const [esito, mittente = ''] = uscita.replace(/\r/g, '').split('\n').map(r => r.trim())
