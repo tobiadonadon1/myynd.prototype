@@ -41,6 +41,7 @@ import * as avvio from './avvio.ts'
 import { leggiSeAncoraCollegata } from './fonti-collegate.ts'
 import * as compiti from './compiti.ts'
 import * as contratto from './contratto.ts'
+import * as cestino from './cestino.ts'
 import * as turno from './turno.ts'
 import * as turnoGuscio from './turno-guscio.ts'
 import * as presenza from './presenza.ts'
@@ -6147,6 +6148,12 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // scelto e spento — si ripara adesso, prima che i giri di fondo la usino
   for (const u of conti.tutti()) {
     try { if (chi.dentro(u, () => mod.riparaIlMotore())) console.log(`myynd · motore riparato all'avvio per ${u}`) } catch { /* uno rotto non ferma gli altri */ }
+  }
+  // le carte pronte giudicate prima delle regole di adesso: la prova sul file, e il .md che si apriva in Xcode
+  if (!ospitato.OSPITATO) {
+    for (const u of conti.tutti()) {
+      try { chi.dentro(u, () => contratto.riparaConsegne(cestino)) } catch { /* idem */ }
+    }
   }
   if (appesi) console.log(`myynd · ${appesi} compit${appesi === 1 ? 'o rimasto' : 'i rimasti'} a metà, riaperti`)
   const quantiConti = conti.quanti()

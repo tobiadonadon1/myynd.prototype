@@ -1,6 +1,8 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { extname } from 'node:path'
+import { daBuffer } from './connettori/estrai.ts'
 import * as store from './store.ts'
 import { dopo } from './ordine.ts'
 import { leggiDocumentoAttuale, verificaDocumentoInvariato, type DocumentoAttuale } from './native-document.ts'
@@ -44,7 +46,7 @@ export async function verificaBaseRevisione(c:store.Compito, deps:{documento?:ty
   } else if (base.tipo === 'file' && base.percorso) {
     // il file che ha scritto da sé: si rilegge dal disco, e deve essere quello di prima
     let ora = ''
-    try { ora = readFileSync(base.percorso, 'utf8').trim() } catch { throw new Error('The saved file is no longer there. Read the current version and revise again.') }
+    try { ora = await testoDelFile(base.percorso) } catch { throw new Error('The saved file is no longer there. Read the current version and revise again.') }
     if (createHash('sha256').update(ora).digest('hex') !== base.impronta) throw new Error('The saved file changed while this revision was prepared. Read its current version and revise again.')
   } else if (base.tipo === 'testo' && base.task) {
     const parent=store.compito(base.task)
@@ -52,11 +54,16 @@ export async function verificaBaseRevisione(c:store.Compito, deps:{documento?:ty
     if (!parent || parent.versione !== base.versione || createHash('sha256').update(now).digest('hex') !== base.impronta) throw new Error('The previous draft changed while this revision was prepared. Read its current version and revise again.')
   } else throw new Error('This revision has an invalid artifact baseline.')
 }
+/** Il testo di un file consegnato: un .docx (`documento.ts`) si legge come documento, il resto come testo. */
+async function testoDelFile(percorso: string): Promise<string> {
+  const buf = readFileSync(percorso)
+  return (extname(percorso).toLowerCase() === '.docx' ? await daBuffer(buf, percorso) : buf.toString('utf8')).trim()
+}
 async function versioneAttuale(c:store.Compito, letture:Letture):Promise<{testo:string;baseline:object;impronta:string;stili?:object[]}> {
   const d = c.consegna
   if (d && d.app === 'File') {
     // il file scritto da sé si legge dal disco: la versione attuale è quella, non il testo della riga
-    const testo = readFileSync(d.percorso, 'utf8').trim()
+    const testo = await testoDelFile(d.percorso)
     const impronta = createHash('sha256').update(testo).digest('hex')
     return {testo,baseline:{tipo:'file',percorso:d.percorso,impronta},impronta}
   }

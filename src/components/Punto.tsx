@@ -282,25 +282,28 @@ function Finestra({ v, punto, guaio, chiudi, notte }: {
 }
 
 /**
- * Il punto di ieri, che non è il punto di oggi.
+ * Il punto di oggi, che non c'è ancora.
  *
- * Il testo non si mostra: era vero alle due del pomeriggio di ieri, e quello
- * che diceva di fare adesso lui l'ha fatto ieri sera. Si dice che è scaduto e
- * si offre l'unica cosa che serve — rifarlo — con accanto, se c'è, il motivo
- * per cui l'ultimo tentativo non è andato.
+ * Diceva «Il punto di ieri è scaduto. Rifallo quando vuoi». «Why would you
+ * tell me "just produce another one for today"?» (9 ottobre 2026). Quello di
+ * ieri non è una notizia, e rifare il punto non è un compito suo: il punto di
+ * oggi si scrive da solo quando torna. La carta parla di oggi: lo sta
+ * scrivendo, o dice in una riga perché non è arrivato, con «Riprova».
  */
-function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
+function NonAncora({ p }: { p: ReturnType<typeof usePunto> }) {
+  const riga = p.carico ? t('Lo sto scrivendo.')
+    : p.tetto ? t('Per oggi basta: tre punti al giorno. Si riparte domani.')
+    : p.guaio ? spiegaGuaio(p.guaio)
+    : t('Non è ancora pronto.')
   return (
     <div style={CARTA}>
       <div style={{ flex: 1, minWidth: 220 }}>
-        <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di ieri è scaduto.')}</div>
-        <div style={SOTTO}>{t('Rifallo quando vuoi: dieci secondi.')}</div>
-        {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
-        {p.tetto && <div style={SPIEGA}>{t('Per oggi basta: tre punti al giorno. Si riparte domani.')}</div>}
+        <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
+        <div style={SOTTO}>{riga}</div>
       </div>
-      <button type="button" onClick={p.rifai} disabled={p.carico} aria-busy={p.carico || undefined} style={BOTTONE}>
-        {p.carico ? t('Un momento…') : t('Rifai il punto')}
-      </button>
+      {!p.carico && !p.tetto && (
+        <button type="button" onClick={p.rifai} style={BOTTONE}>{p.guaio ? t('Riprova') : t('Scrivilo adesso')}</button>
+      )}
     </div>
   )
 }
@@ -308,8 +311,8 @@ function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
 /**
  * In pagina: il foglio se il punto è da vedere, altrimenti la carta che lo
  * riapre. Senza un punto, niente — una cornice vuota in cima alla prima
- * pagina è la cosa peggiore che si possa aggiungere qui — tranne quando ce
- * n'è uno di ieri: allora la carta c'è, e dice che è scaduto.
+ * pagina è la cosa peggiore che si possa aggiungere qui. Quando ce n'era uno
+ * ieri la carta c'è, e parla di quello di oggi.
  */
 export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
   const p = usePunto(v.claudeOn)
@@ -320,11 +323,11 @@ export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
   // F9 · con quanto è costata, cosa l'ha fermata, e quando il Mac dormiva
   const rigaNotte = n && <div style={SOTTO}>{rigaDellaNotte(notte?.l.turno, n)}.</div>
   if (!p.punto) {
-    if (!n) return p.vecchio ? <Scaduto p={p} /> : null
+    if (!n) return p.vecchio ? <NonAncora p={p} /> : null
     if (soloNotte) return <Finestra v={v} punto={null} guaio={null} chiudi={() => setSoloNotte(false)} notte={notte} />
     return (
       <>
-        {p.vecchio && <Scaduto p={p} />}
+        {p.vecchio && <NonAncora p={p} />}
         <div style={CARTA}>
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>

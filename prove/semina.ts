@@ -506,7 +506,7 @@ type ScenaP5 = {
   fuoco?: string
   config?: { tono?: string; tema?: string; autonomia?: string; osservatore?: boolean }
   memoriaVista?: string
-  compiti?: { id: string; consegna?: { titolo: string; percorso: string; app?: string } }[]
+  compiti?: { id: string; consegna?: { titolo: string; percorso: string; app?: string; dove?: string } }[]
 }
 const p5 = scena as unknown as ScenaP5
 if (p5.convinzioni || p5.blocchi || p5.fuoco || p5.config || p5.memoriaVista || p5.compiti?.some(c => c.consegna)) {
@@ -525,7 +525,7 @@ if (p5.convinzioni || p5.blocchi || p5.fuoco || p5.config || p5.memoriaVista || 
       const percorso = c.consegna.percorso.startsWith('~/') ? join(CASA, c.consegna.percorso.slice(2)) : c.consegna.percorso
       if (c.consegna.percorso.startsWith('~/')) { mkdirSync(dirname(percorso), { recursive: true }); writeFileSync(percorso, `# ${c.consegna.titolo}\n`) }
       store.default.prepare('UPDATE compiti SET consegna = ? WHERE id = ?')
-        .run(JSON.stringify({ titolo: c.consegna.titolo, percorso, app: c.consegna.app ?? 'File' }), c.id)
+        .run(JSON.stringify({ titolo: c.consegna.titolo, percorso, app: c.consegna.app ?? 'File', ...(c.consegna.dove ? { dove: c.consegna.dove } : {}) }), c.id)
     }
     if (p5.memoriaVista) cfg.aggiorna({ memoriaVista: tempo(p5.memoriaVista) })
     // le convinzioni per ultime: la più nuova è quella che accende il punto

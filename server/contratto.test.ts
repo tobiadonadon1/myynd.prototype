@@ -203,3 +203,33 @@ test('pulisci: niente etichetta, niente virgolette, una frase, maiuscola', () =>
   assert.equal(contratto.pulisci(42), '')
   assert.equal(contratto.pulisci('x'.repeat(400)).length, 220)
 })
+
+test('all\'avvio: la prova bocciata solo per il file regge, la domanda se ne va, e il .md diventa un .docx (9 ottobre)', async () => {
+  const mani = await import('./mani.ts')
+  const scrivania = join(CASA, 'Desktop')
+  mani.perProva({ scrivania: () => scrivania })
+  try {
+    const cartella = join(scrivania, 'Myynd', 'Myynd')
+    const { mkdirSync, existsSync, readFileSync } = await import('node:fs')
+    mkdirSync(cartella, { recursive: true })
+    const md = join(cartella, 'Draft the X posts.md')
+    writeFileSync(md, 'Post 1\n\nclaude remembers.\nmyynd learns.')
+    const id = carta('Draft the X posts')
+    store.scriviConsegnaCompito(id, { app: 'File', titolo: 'Draft the X posts.md', percorso: md, dove: 'myynd' })
+    store.scriviProvaCompito(id, { esito: 'fail', perche: 'the posts meet every rule, but no tool shows the file was written to Desktop/Myynd/Myynd.', controlli: [], quando: new Date().toISOString() })
+    store.chiediSuCompito(id, [{ domanda: 'Which file should the X drafts be saved as?', opzioni: ['a.md', 'b.md'], multipla: false }])
+    store.cambiaStatoCompito(id, 'pronto', 'Done: the posts.')
+    const buttati: string[] = []
+    assert.equal(store.compito(id)!.stato, 'pronto')
+    assert.equal(contratto.riparaConsegne({ butta: p => buttati.push(p), nelLuogoDelleConsegne: p => p.startsWith(scrivania) }), 2)
+    const c = store.compito(id)!
+    assert.equal(c.prova?.esito, 'pass')
+    assert.equal(c.prova?.perche, 'The file is saved.')
+    assert.ok(!c.chieste?.length, 'la domanda «in che file salvo?» resta sotto un file salvato')
+    assert.equal(c.consegna?.titolo, 'Draft the X posts.docx')
+    assert.ok(existsSync(c.consegna!.percorso))
+    assert.equal(readFileSync(c.consegna!.percorso).subarray(0, 2).toString(), 'PK')
+    assert.deepEqual(buttati, [md])
+    assert.equal(contratto.riparaConsegne({ butta: p => buttati.push(p), nelLuogoDelleConsegne: p => p.startsWith(scrivania) }), 0, 'una seconda volta non c\'è più niente da fare')
+  } finally { mani.perProva(null) }
+})

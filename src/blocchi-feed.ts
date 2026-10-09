@@ -26,7 +26,7 @@ import { BLOCCHI, MANCA_UN_DATO } from './lavoro-affidato.ts'
 
 export type VoceDaBlocco = { id: string; progetto?: string | null; quando: string; peso?: number | null }
 /** Una riga della lista: `origine` e `madre` dicono se è «la cosa dopo» di un'altra. */
-export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null; guaio?: string | null }
+export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null; guaio?: string | null; modo?: string | null }
 /** Un progetto: solo quelli attivi hanno un blocco. `priorita` «alta» lo porta davanti. */
 export type ProgettoDaBlocco = { id: string; nome: string; stato?: string; priorita?: string | null }
 
@@ -275,6 +275,24 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
  * una riga si vede, si conta; se non si vede (oltre il tetto dei compiti),
  * no. Le domande stanno nella loro carta, e ognuna è una cosa che aspetta lui.
  */
+/**
+ * I blocchi come stanno in pagina.
+ *
+ * Con la lista a destra le righe sue e basta (aperte, senza Myynd, senza un
+ * guaio) stanno nella lista e non nel feed; un blocco che resta vuoto se ne
+ * va, tranne quello di un progetto appena nato. Il titolo e il menù contano
+ * da qui tutti e due: il 9 ottobre 2026 il menù diceva 7 e il titolo 4, perché
+ * il menù contava anche le tre righe della lista a destra. «Why does it say 7
+ * on the top left, and then it says 4? What's the point?»
+ */
+export function blocchiInPagina<B extends { progetto: string | null; righe: RigaBlocco<unknown, CompitoDaBlocco>[] }>(blocchi: B[], listaDiLato: boolean, nuovi: readonly string[] = []): B[] {
+  if (!listaDiLato) return blocchi
+  const soloSua = (c: CompitoDaBlocco) => c.stato === 'aperto' && (!c.modo || c.modo === 'io') && !c.guaio
+  return blocchi
+    .map(b => ({ ...b, righe: b.righe.filter(r => !(r.genere === 'compito' && soloSua(r.compito))) }))
+    .filter(b => b.righe.length > 0 || nuovi.includes(b.progetto ?? ''))
+}
+
 export function sulTavolo(blocchi: { righe: unknown[] }[], domande: number): number {
   return blocchi.reduce((n, b) => n + b.righe.length, 0) + Math.max(0, domande)
 }

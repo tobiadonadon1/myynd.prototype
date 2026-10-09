@@ -155,12 +155,13 @@ test('il lavoro che fa da sé va in coda per la notte, non sul feed; la domanda 
   assert.equal(quadro.leggiQuadri()[vaga.id]!.versione, 0)
 })
 
-test('la consegna del quadro va nella sottocartella del progetto', () => {
+test('la consegna del quadro va nella sottocartella del progetto, come documento di Word che Myynd rilegge', async () => {
   mani.perProva({ scrivania: () => scrivania, ospitato: () => false } as never)
   const s = mani.salvaConsegna({ titolo: 'Two blog drafts', testo: '# Draft one\n\nText.', luogo: 'myynd', sotto: 'tobiadonadon.com' })
-  assert.equal(s.percorso, join(scrivania, 'Myynd', 'tobiadonadon.com', 'Two blog drafts.md'))
+  assert.equal(s.percorso, join(scrivania, 'Myynd', 'tobiadonadon.com', 'Two blog drafts.docx'))
   assert.ok(existsSync(s.percorso))
-  assert.match(readFileSync(s.percorso, 'utf8'), /Draft one/)
+  const { daBuffer } = await import('./connettori/estrai.ts')
+  assert.match(await daBuffer(readFileSync(s.percorso), s.percorso), /Draft one[\s\S]*Text\./)
   const strano = mani.salvaConsegna({ titolo: 'x note', testo: 'Testo.', luogo: 'myynd', sotto: '../../etc' })
   assert.ok(strano.percorso.startsWith(join(scrivania, 'Myynd')), 'un nome storto non esce dalla cartella')
 })

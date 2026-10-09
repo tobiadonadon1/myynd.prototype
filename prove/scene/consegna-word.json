@@ -1,0 +1,28 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "my", "nome": "Myynd", "obiettivo": "Launch the Myynd waitlist", "priorita": "alta" }
+  ],
+  "compiti": [
+    {
+      "id": "x1",
+      "testo": "Draft the X posts that announce Myynd on Friday",
+      "quando": "oggi",
+      "progetto": "my",
+      "stato": "pronto",
+      "modo": "tutto",
+      "origine": "quadro",
+      "risultato": "Done: «Draft the X posts that announce Myynd on Friday.md» is on your Desktop, in the Myynd folder.\n\nI assumed the posting order already in the file; nothing has been published.",
+      "ipotesi": ["I assumed the posting order already in the file; nothing has been published."],
+      "consegna": { "app": "File", "titolo": "Draft the X posts that announce Myynd on Friday.md", "percorso": "~/Desktop/Myynd/Myynd/Draft the X posts that announce Myynd on Friday.md", "dove": "myynd" },
+      "prova": { "esito": "fail", "perche": "the five posts and the thread meet every rule, but no tool shows the file was written to Desktop/Myynd/Myynd.", "controlli": [], "quando": "2026-10-02T17:34:20.000Z" },
+      "chieste": [{ "domanda": "Which file should the X drafts be saved as in Desktop/Myynd/Myynd?", "opzioni": ["myynd-launch-x-posts-9-october.md", "Draft the X posts that announce Myynd on Friday.md"], "multipla": false }],
+      "aggiornato": "-2h"
+    },
+    { "id": "t1", "testo": "Review homepage as buyer", "quando": "oggi", "progetto": "my", "stato": "aperto" },
+    { "id": "t2", "testo": "Pick three Myynd pages", "quando": "oggi", "progetto": "my", "stato": "aperto" },
+    { "id": "t3", "testo": "Update Myynd X avatar", "quando": "oggi", "progetto": "my", "stato": "aperto" }
+  ]
+}

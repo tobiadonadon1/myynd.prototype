@@ -43,6 +43,7 @@ import { RADICE, cartella as cartellaProfilo, leggi, lingua as cfgLingua } from 
 import { OSPITATO } from './ospitato.ts'
 import { daBuffer, daHtml, RICCHI } from './connettori/estrai.ts'
 import { riflua } from './testo.ts'
+import { documentoWord } from './documento.ts'
 import { IPOTESI, MANCA } from './cornice.ts'
 import * as lavoro from './lavoro.ts'
 import { landReport } from './esecuzione-isolata.ts'
@@ -574,7 +575,7 @@ export const TESTO_SCRIVIBILE = ['.md', '.markdown', '.txt', '.csv', '.tsv', '.j
  * I collegamenti si risolvono sull'antenato che esiste: una cartella Myynd
  * che fosse un link a un'altra parte del disco non si usa.
  */
-export function percorsoScrivibile(percorso: string, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO): { percorso: string; nellaCopia: boolean } {
+export function percorsoScrivibile(percorso: string, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO, ammessi: readonly string[] = TESTO_SCRIVIBILE): { percorso: string; nellaCopia: boolean } {
   if (typeof percorso !== 'string' || !percorso.trim() || percorso.includes('\0')) throw new Error('Manca il percorso del file da scrivere.')
   const consegne = cartellaConsegne()
   // il luogo che ha scelto lei, oltre alla cartella Myynd: un nome nudo va lì
@@ -591,15 +592,16 @@ export function percorsoScrivibile(percorso: string, copia?: string | null, luog
   const sullaScrivania = !nellaCopia && (dentro(realeAnche(consegne), reale) || dentro(realeAnche(scelta), reale))
   if (!nellaCopia && !sullaScrivania) throw new Error('Posso scrivere solo nella cartella Myynd sulla Scrivania, nella cartella delle consegne o in una copia di lavoro.')
   if (existsSync(reale) && !statSync(reale).isFile()) throw new Error('Questo percorso è una cartella, non un file.')
-  if (sullaScrivania && !TESTO_SCRIVIBILE.includes(extname(reale).toLowerCase())) throw new Error('Sulla Scrivania scrivo solo file di testo: .md, .txt, .csv, .json, .html e simili.')
+  if (sullaScrivania && !ammessi.includes(extname(reale).toLowerCase())) throw new Error('Sulla Scrivania scrivo solo file di testo: .md, .txt, .csv, .json, .html e simili.')
   return { percorso: reale, nellaCopia }
 }
 
-export function scriviFile(o: { percorso: string; testo: string }, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO): string {
+export function scriviFile(o: { percorso: string; testo: string; word?: boolean }, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO): string {
   if (ferri.ospitato()) throw new Error('Su un server non ho una Scrivania su cui scrivere.')
   const testo = String(o.testo ?? '')
   if (!testo.trim() || testo.length > 200_000 || testo.includes('\0')) throw new Error('Serve il testo del file, sotto i duecentomila caratteri.')
-  let { percorso, nellaCopia } = percorsoScrivibile(o.percorso, copia, luogo)
+  // `word`: il testo diventa un documento di Word (solo per la consegna, mai dal modello)
+  let { percorso, nellaCopia } = percorsoScrivibile(o.percorso, copia, luogo, o.word ? ['.docx'] : TESTO_SCRIVIBILE)
   if (!nellaCopia && existsSync(percorso)) {
     const ext = extname(percorso)
     const base = percorso.slice(0, -ext.length || undefined)
@@ -608,7 +610,7 @@ export function scriviFile(o: { percorso: string; testo: string }, copia?: strin
     percorso = `${base}-${n}${ext}`
   }
   mkdirSync(dirname(percorso), { recursive: true, mode: 0o700 })
-  writeFileSync(percorso, testo, { mode: 0o600, flag: nellaCopia ? 'w' : 'wx' })
+  writeFileSync(percorso, o.word ? documentoWord(testo) : testo, { mode: 0o600, flag: nellaCopia ? 'w' : 'wx' })
   return percorso
 }
 
@@ -617,9 +619,12 @@ export function scriviFile(o: { percorso: string; testo: string }, copia?: strin
 /**
  * Il lavoro finito, salvato come file nel luogo scelto.
  *
- * Markdown, col nome preso dal titolo della riga: «Introducing Myynd to
- * H-Farm.md». Mai sopra a un file che c'era: se il nome è preso si numera,
- * come per ogni altra scrittura sulla Scrivania.
+ * Un documento di Word, col nome preso dal titolo della riga: «Introducing
+ * Myynd to H-Farm.docx». Era Markdown, e un .md sul Mac si apre in Xcode:
+ * «MD always opens Xcode for most people» (9 ottobre 2026). Un .docx si apre
+ * in Pages, in Word, o in TextEdit (`documento.ts`). Mai sopra a un file che
+ * c'era: se il nome è preso si numera, come per ogni altra scrittura sulla
+ * Scrivania.
  */
 export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo; sotto?: string | null }): { percorso: string; nome: string; luogo: Luogo } {
   vietato('mani.salvaConsegna')
@@ -627,7 +632,7 @@ export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo; 
   // una sottocartella per progetto, col suo nome ripulito: «Desktop/Myynd/tobiadonadon.com»
   const sotto = o.sotto ? o.sotto.replace(/[\/\\:*?"<>|\0]+/g, ' ').replace(/^\.+/, '').replace(/\s+/g, ' ').trim().slice(0, 60) : ''
   const cartella = sotto ? join(cartellaDelLuogo(o.luogo), sotto) : cartellaDelLuogo(o.luogo)
-  const percorso = scriviFile({ percorso: join(cartella, `${nomeFile(o.titolo)}.md`), testo: o.testo }, null, o.luogo)
+  const percorso = scriviFile({ percorso: join(cartella, `${nomeFile(o.titolo)}.docx`), testo: o.testo, word: true }, null, o.luogo)
   return { percorso, nome: basename(percorso), luogo: o.luogo }
 }
 
@@ -733,7 +738,7 @@ export async function apriFile(percorso: string): Promise<void> {
   if (ferri.ospitato() || ferri.piattaforma() !== 'darwin') throw new Error('Apri questo file dall’app Myynd sul Mac.')
   if (typeof percorso !== 'string' || !isAbsolute(percorso) || percorso.includes('\0') || !existsSync(percorso)) throw new Error('Il file non c’è più.')
   const reale = realpathSync(percorso)
-  if (!luogoDelPercorso(reale) || !statSync(reale).isFile() || !TESTO_SCRIVIBILE.includes(extname(reale).toLowerCase())) throw new Error('Questo file non è una consegna di Myynd.')
+  if (!luogoDelPercorso(reale) || !statSync(reale).isFile() || ![...TESTO_SCRIVIBILE, '.docx'].includes(extname(reale).toLowerCase())) throw new Error('Questo file non è una consegna di Myynd.')
   await ferri.apri(reale)
 }
 

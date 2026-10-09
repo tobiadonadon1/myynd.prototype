@@ -36,7 +36,7 @@
 import * as provaChiusa from './prova-chiusa.ts'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'node:crypto'
-import { aggiorna, leggi, lingua, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
+import { aggiorna, leggi, lingua, scrivi as scriviConfig, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as chi from './chi.ts'
@@ -184,7 +184,9 @@ export function scegliClaudeSeServe(): boolean {
  * se in Myynd è acceso. Un motore che lavora non si tocca mai.
  */
 export function riparaIlMotore(): boolean {
+  if (tornaAlMotoreDiPrima()) return true
   if (collegato()) return false
+  const prima = leggi().motore ?? 'claude'
   if (scegliClaudeSeServe()) return true
   const c = leggi()
   const candidati: ['incluso' | 'compatibile' | 'openai' | 'chatgpt', boolean][] = [
@@ -196,7 +198,35 @@ export function riparaIlMotore(): boolean {
   ]
   const via = candidati.find(([m, puo]) => puo && m !== c.motore)?.[0]
   if (!via) return false
-  aggiorna({ motore: via })
+  // scelto da Myynd, non da lei: si ricorda da dove si veniva, per tornarci
+  aggiorna({ motore: via, ...(c.motorePrima ? {} : { motorePrima: prima }) })
+  return true
+}
+
+/**
+ * Il motore di prima può di nuovo lavorare: si torna lì.
+ *
+ * Vale solo per un cambio fatto da `riparaIlMotore`, mai per una scelta sua:
+ * quella non scrive `motorePrima`. Torna Claude (la chiave o l'account che ha
+ * detto di nuovo «sono dentro»), o ChatGPT riacceso. Il modello sul computer
+ * che era stato messo al suo posto non conta come «lavora»: c'è un indirizzo
+ * scritto, non una prova che risponda.
+ */
+export function tornaAlMotoreDiPrima(): boolean {
+  const c = leggi()
+  const prima = c.motorePrima
+  if (!prima) return false
+  if (prima === c.motore) { delete c.motorePrima; scriviConfig(c, { togli: ['motorePrima'] }); return false }
+  const puo = prima === 'claude' ? conClaude()
+    : prima === 'chatgpt' ? c.chatgpt?.attivo === true && !!chatgpt.installato()
+    : prima === 'openai' ? !!fornitoreOpenAI(c)
+    : prima === 'incluso' ? !!fornitoreIncluso(c)
+    : !!(c.compatibile?.url && c.compatibile.modello)
+  if (!puo) return false
+  c.motore = prima
+  delete c.motorePrima
+  scriviConfig(c, { togli: ['motorePrima'] })
+  console.log(`myynd · il motore torna a ${prima}: può di nuovo lavorare`)
   return true
 }
 

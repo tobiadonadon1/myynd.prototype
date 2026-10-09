@@ -859,6 +859,16 @@ export type Config = {
    */
   motore?: 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso'
   /**
+   * Il motore che c'era prima che Myynd ne scegliesse un altro da solo.
+   *
+   * Il 2 ottobre Claude Code è uscito e `riparaIlMotore` ha messo al lavoro il
+   * modello sul computer, rimasto scritto da settembre con Ollama spento. Il
+   * 3 ottobre Claude era di nuovo dentro, ma il motore restava quello: per una
+   * settimana niente ha ragionato. Si scrive solo quando la scelta la fa Myynd,
+   * e appena quel motore torna a poter lavorare si torna lì.
+   */
+  motorePrima?: 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso'
+  /**
    * F8 · l'AI inclusa con Myynd: il gettone del conto Myynd con cui il ponte
    * (`MYYND_INCLUSO_URL`) riconosce chi chiede. È una credenziale come le altre
    * e non esce mai verso la schermata. Senza, l'AI inclusa non c'è.

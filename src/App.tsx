@@ -19,7 +19,7 @@ import { Foglio, Oggi } from './oggi/Oggi'
 import { ListaDiLato } from './oggi/Calendario'
 import { Dettaglio } from './oggi/Dettaglio'
 import { useCompiti } from './oggi/useCompiti'
-import { blocchiFeed, cheAspettano, sulTavolo } from './blocchi-feed'
+import { blocchiFeed, blocchiInPagina, cheAspettano, sulTavolo } from './blocchi-feed'
 import { Preferenze } from './screens/Preferenze'
 import { Memoria } from './screens/Memoria'
 import { PaginaProgetto } from './screens/PaginaProgetto'
@@ -319,9 +319,6 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   // i progetti appena nati da qui hanno il loro blocco anche vuoti: vedi `vuoti`
   const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite, corrette: lista.appenaCorrette, vuoti: v.progettiNuovi }),
     [v.voci, lista.compiti, v.progetti, lista.appenaFinite, lista.appenaCorrette, v.progettiNuovi])
-  // le domande stanno nella loro carta, e ognuna è una cosa che aspetta lui
-  // e la carta di Myynd che ha scritto: lo stesso conto del titolo, da `cheAspettano`
-  const sulTavoloAdesso = sulTavolo(blocchi, cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
 
   /**
    * Il giro è stato chiuso *adesso*, prima che il server lo racconti.
@@ -366,6 +363,9 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
    * I 64 sono le due imbottiture della colonna centrale, i 36 lo spazio fra.
    */
   const conLista = larghezza - colonna - 64 >= 760 + 36 + 340
+  // il menù conta quello che la pagina mostra: con la lista a destra le righe sue stanno là,
+  // non nel feed; più le domande nella loro carta. Lo stesso conto del titolo
+  const sulTavoloAdesso = sulTavolo(blocchiInPagina(blocchi, conLista, v.progettiNuovi ?? []), cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
   /*
    * Dove comincia la lista: all'altezza della prima carta del feed, non in
    * cima alla pagina. «I told you already it has to start from where the

@@ -23,7 +23,8 @@
 // Senza modello il contratto c'è lo stesso: la base deterministica sotto è un
 // criterio vero, solo meno preciso. Il modello lo rende specifico.
 
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { basename } from 'node:path'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
 import * as progetti from './progetti.ts'
@@ -32,7 +33,7 @@ import { OSPITATO } from './ospitato.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
 import { tipoDiLavoro, type Tipo } from './domanda-sola.ts'
-import { luogoPreferito, sembraLavoroDiCodice, type Luogo } from './mani.ts'
+import { luogoPreferito, scriviFile, sembraLavoroDiCodice, type Luogo } from './mani.ts'
 import { destinatario } from './revisione-lavoro.ts'
 
 export type Contratto = store.Contratto
@@ -374,6 +375,60 @@ export function scriviDaLei(id: string, criterio: string | null): Contratto | nu
 }
 
 /**
+ * Il revisore giudica prima che il file sia scritto: se quello che dice
+ * mancare è solo il file, e il disco dice che c'è, il «fatto» regge.
+ */
+const parlaDelFile = (t: string) => /\b(?:no tool|nothing|nessun|non .{0,20}(?:mostra|risulta))\b[^.]*\b(?:file|written|saved|scritt|salvat)/i.test(t)
+
+/**
+ * Le carte pronte giudicate e salvate prima delle regole di adesso.
+ *
+ * Il 9 ottobre 2026 la carta «Draft the X posts that announce Myynd on
+ * Friday» diceva in rosso «Not done yet: … no tool shows the file was
+ * written», sotto il file salvato, con la domanda «in che file salvo?»: era
+ * stata giudicata il 2 ottobre, poche ore prima della regola qui sopra, e la
+ * prova scritta allora restava. E il file era un .md, che sul Mac si apre in
+ * Xcode. All'avvio, sulle carte ancora da guardare:
+ *
+ * - la prova bocciata solo per il file, con il file sul disco, regge, e la
+ *   domanda per finirla se ne va;
+ * - il file consegnato in .md diventa un .docx accanto (`documento.ts`), la
+ *   carta punta lì, e il .md va nel Cestino, da dove si riprende.
+ *
+ * Quante ne ha toccate. Non lancia: una carta storta non ferma l'avvio.
+ */
+export function riparaConsegne(ferriCestino: { butta: (p: string) => unknown; nelLuogoDelleConsegne: (p: string) => boolean } = { butta: () => null, nelLuogoDelleConsegne: () => false }): number {
+  let toccate = 0
+  for (const c of store.elencoCompiti()) {
+    if (c.stato !== 'pronto') continue
+    try {
+      const d = c.consegna
+      if (!d || d.app !== 'File' || !d.percorso || !existsSync(d.percorso)) continue
+      const p = c.prova
+      if (p?.esito === 'fail' && parlaDelFile(p.perche)) {
+        const en = cfg.lingua() === 'en'
+        store.scriviProvaCompito(c.id, { ...p, esito: 'pass', perche: en ? 'The file is saved.' : 'Il file è salvato.' })
+        store.scordaChieste(c.id)
+        toccate++
+      }
+      // solo un file che ha scritto Myynd nella cartella Myynd, quella che apre lui (fuori di lì un
+      // .md può essere di qualcun altro, o l'allegato di una mail), e mai sotto una mail
+      if (/\.md$/i.test(d.percorso) && d.dove === 'myynd' && !c.email && ferriCestino.nelLuogoDelleConsegne(d.percorso)) {
+        const testo = readFileSync(d.percorso, 'utf8')
+        const nuovo = scriviFile({ percorso: d.percorso.replace(/\.md$/i, '.docx'), testo, word: true }, null, (d.dove as Luogo | undefined) ?? luogoPreferito())
+        store.scriviConsegnaCompito(c.id, { ...d, percorso: nuovo, titolo: basename(nuovo) })
+        ferriCestino.butta(d.percorso)
+        console.log(`myynd · consegna in Word: ${basename(nuovo)}`)
+        toccate++
+      }
+    } catch (e) {
+      console.warn(`myynd · consegna di ${c.id} non riparata: ${e instanceof Error ? e.message : e}`)
+    }
+  }
+  return toccate
+}
+
+/**
  * La prova del lavoro consegnato contro il suo «fatto».
  *
  * Due metà. I controlli duri, che non hanno bisogno di nessuno: il file c'è
@@ -420,7 +475,6 @@ export function prova(o: {
    * ottobre una carta buona è tornata «da finire» per questo, con la domanda
    * «in che file salvo?» sotto un file già salvato.
    */
-  const parlaDelFile = (t: string) => /\b(?:no tool|nothing|nessun|non .{0,20}(?:mostra|risulta))\b[^.]*\b(?:file|written|saved|scritt|salvat)/i.test(t)
   const fileCe = !!file && ferri.esiste(file)
   if (v?.criterio) {
     const soloIlFile = fileCe && v.criterio.esito === 'not_met' && parlaDelFile(v.criterio.perche)

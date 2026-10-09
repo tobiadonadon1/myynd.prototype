@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, loc, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconOcchio, IconPiu, IconSpunta } from '../icons'
+import { IconAvanti, IconDoc, IconOcchio, IconPiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
@@ -17,7 +17,7 @@ import { quando } from '../data'
 import { dataFonte, testoCarta, secondaRiga, RAGIONI_NON_UTILE } from '../feed-carta'
 import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
+import { blocchiFeed, blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { RigaCheLavora } from '../components/RigaCheLavora'
 import { testoPasso } from '../lettura-passo'
@@ -474,7 +474,7 @@ function Portami({ c, l, v, scuro, piatto = false, anteprima = false, etichetta:
   return (
     <Hov as="button" type="button"
       onClick={(e: MouseEvent) => { e.stopPropagation(); void vai() }}
-      title={c.consegna?.percorso ?? c.consegna?.titolo ?? etichetta}
+      title={c.consegna?.titolo ?? etichetta}
       style={{ ...vestito, flex: 'none', whiteSpace: data ? 'normal' : 'nowrap', overflowWrap: 'anywhere', cursor: 'pointer', fontFamily: 'inherit' }}
       hover={scuro ? { background: 'rgba(var(--avorio-rgb),.16)', borderColor: 'rgba(var(--avorio-rgb),.5)' } : piatto ? { textDecorationColor: 'currentColor' } : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
       {etichetta}
@@ -546,6 +546,13 @@ function VoceUsata({ c, v }: { c: Compito; v: Vals }) {
  * «revisione superata» sotto una cosa già dichiarata pronta è la stessa
  * notizia detta due volte.
  */
+/** La scheda del file consegnato: un oggetto, non una riga di testo. */
+const FILE_FATTO: CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 10, maxWidth: '100%', minWidth: 0,
+  padding: '8px 14px 8px 11px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
+  border: '1px solid rgba(var(--inchiostro-rgb),.14)', background: 'var(--carta-alta)', textAlign: 'left'
+}
+
 function ConsegnaPronta({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const d = c.consegna
   if (!d) return null
@@ -556,13 +563,27 @@ function ConsegnaPronta({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
    * «He should tell me, "Hey, I saved it to your desktop"». Il verdetto
    * della rilettura non si ripete qui: lo dice già `Riletta`, sopra.
    */
+  /*
+   * Il 9 ottobre 2026 diventa un oggetto: «The location in which a file is…
+   * this is not UX-friendly… it should tell me if that file is done… or show
+   * it to me in a different way». Erano tre righe di testo (il «Done: … is on
+   * your Desktop», il «Saved on your Desktop, in the Myynd folder:» col nome
+   * del file, e il percorso intero sotto il dito) che si leggevano come le
+   * altre. Adesso è la scheda di un file: l'icona, il nome, «Apri». Si vede
+   * che è una cosa fatta, e la si apre con un dito. Dove sta lo dice il
+   * Finder, se serve.
+   */
   if (d.app === 'File') {
+    const nome = d.titolo.replace(/\.(?:docx|md|txt|markdown)$/i, '')
     return (
-      <div className="task-completed" aria-label={en ? 'Saved file' : 'File salvato'}>
-        <span className="task-completed-check"><IconSpunta size={12} /></span>
-        <span className="task-completed-meta">{frasi.salvatoDove(d.dove)}</span>
-        {/* il nome è il bottone: un «Apri» a parte andava a capo da solo, staccato dal nome */}
-        <Portami c={c} l={l} v={v} piatto etichetta={d.titolo} />
+      <div style={{ marginTop: 9 }} onClick={e => e.stopPropagation()}>
+        <Hov as="button" type="button" aria-label={`${t('Apri')}: ${nome}`}
+          onClick={(e: MouseEvent) => { e.stopPropagation(); void l.portami(c.id) }}
+          style={FILE_FATTO} hover={{ borderColor: 'var(--rame)' }}>
+          <IconDoc size={18} style={{ flex: 'none', color: 'var(--rame-testo)' }} />
+          <span style={{ minWidth: 0, fontWeight: 500, color: 'var(--inchiostro)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</span>
+          <span style={{ flex: 'none', color: 'rgba(var(--inchiostro-rgb),.55)' }}>{t('Apri')}</span>
+        </Hov>
       </div>
     )
   }
@@ -599,7 +620,8 @@ function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
   // su un file scritto da sé resta la riga per lei, se c'era: le ipotesi
   // fatte, la scelta presa. Il documento sta nel file, non qui.
-  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c) || fraseFinita(c) : ''
+  // («Done: … is on your Desktop» non si ripete: lo dice la scheda del file, sotto)
+  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c) : ''
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
   if (c.stato === 'chiede') return domande(c).visto
   // una figlia di revisione non mostra mai la sua nota: è il blocco di
@@ -677,8 +699,15 @@ function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
   const p = c.prova
   if (c.stato === 'pronto' && p && p.esito !== 'unavailable' && p.perche) {
     const regge = p.esito === 'pass'
+    /*
+     * «There's red writing that I'm never going to read» (9 ottobre 2026).
+     * Che non è finita lo dice già la pastiglia; quando sotto c'è la domanda
+     * per finirla, il perché è la domanda stessa, e qui non si scrive niente.
+     * Senza domanda resta una riga, spenta come il resto del corpo.
+     */
+    if (!regge && c.chieste?.length) return null
     return (
-      <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? (regge ? 'var(--verde-cupo)' : 'var(--rame-testo)') : 'rgba(var(--avorio-rgb),.72)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+      <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? (regge ? 'var(--verde-cupo)' : 'rgba(var(--inchiostro-rgb),.58)') : 'rgba(var(--avorio-rgb),.72)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>
         {regge ? `✓ ${frasi.provaRegge(p.perche)}` : frasi.provaNonRegge(p.perche)}
       </div>
     )
@@ -1256,11 +1285,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
   const chiavi = tieni ? ordineStabile(ordinati.map(chiaveBlocco), visto.current!.chiavi) : ordinati.map(chiaveBlocco)
   useEffect(() => { if (pronta) visto.current = { chiavi, salvato } })
   const tutti = chiavi.map(k => ordinati.find(b => chiaveBlocco(b) === k)!)
-  const soloSua = (c: Compito) => c.stato === 'aperto' && (!c.modo || c.modo === 'io') && !c.guaio
-  const blocchi = listaDiLato
-    ? tutti.map(b => ({ ...b, righe: b.righe.filter(r => !(r.genere === 'compito' && soloSua(r.compito))) }))
-      .filter(b => b.righe.length > 0 || (v.progettiNuovi ?? []).includes(b.progetto ?? ''))
-    : tutti
+  // con la lista a destra le righe sue stanno là: lo stesso filtro con cui conta il menù
+  const blocchi = blocchiInPagina(tutti, listaDiLato, v.progettiNuovi ?? [])
   const muovi = (da: number, a: number) => {
     // dentro il suo gruppo e basta: un normale sopra un alto tornerebbe giù da solo
     if (da === a || !stessoGruppo(blocchi, da, a)) return
