@@ -1,4 +1,9 @@
-// Il punto: la carta di quando torni, e il foglio che ci sta dietro.
+// La ricevuta: la carta di quando torni, e il foglio che ci sta dietro.
+//
+// Dal 9 ottobre 2026 la carta in cima non è più «Il punto di oggi»: è la
+// ricevuta, cosa è stato fatto e cosa aspetta lui (`server/mattina.ts`), e il
+// foglio comincia da lì. Sotto, le novità dei progetti che il punto aveva già.
+// Quello che segue racconta il foglio del punto, che è rimasto.
 //
 // Sono due cose, e vanno tenute distinte. In prima pagina c'è una carta come
 // le altre — titolo, una riga sotto, un bottone: «Il punto di oggi. 5 cose.
@@ -6,9 +11,10 @@
 // domanda con cui si torna nell'app merita il peso delle altre carte.
 //
 // Aprendola si apre un *documento*: un foglio color avorio, largo seicento
-// quaranta, con i margini di una pagina e una riga per cosa. Quattro sezioni,
-// e sono le quattro domande che ha scelto lui: i progetti, GitHub, cosa
-// leggere, chi ha risposto. Ogni riga apre il documento da cui viene — la
+// quaranta, con i margini di una pagina e una riga per cosa. Le sezioni del
+// punto sono le domande che ha scelto lui: i progetti, GitHub, chi ha
+// risposto, gli aggiornamenti pratici. Le notizie no: stanno nella pastiglia
+// «News» in testa alla pagina, e dirle due volte era rumore. Ogni riga apre il documento da cui viene — la
 // mail, la pagina del repository, il file — e le righe che non hanno niente
 // dietro sono testo e basta.
 //
@@ -31,14 +37,15 @@ import { IconAvanti, IconCroce } from '../icons'
 import { IeriGemello } from './IeriGemello'
 import type { Vals } from '../vals'
 import { usePunto } from '../usePunto'
-import { puntoConRighe, righeDelPunto } from '../collegamenti'
-import type { Compito, Punto as PuntoDelGiorno, RigaPunto } from '../api'
+import { righeDelPunto } from '../collegamenti'
+import type { AspettaMattina, Compito, Mattina, Punto as PuntoDelGiorno, RigaPunto } from '../api'
 import type { Lista } from '../oggi/useCompiti'
-import { laNotte, rigaDellaNotte, RigheDellaNotte } from './Stanotte'
+import { RIGHE_IN_CARTA } from '../mattina'
+import { laNotte, ora, rigaDellaNotte, RigheAspettano, RigheFatte } from './Stanotte'
 
 /**
- * Il lavoro della notte, per il foglio del punto (F5): la lista delle righe e
- * come si apre una carta. Senza, il punto è quello di sempre.
+ * La lista delle righe e come si apre una carta: le righe della ricevuta
+ * aprono la loro carta, e la riga della notte (F9) legge il turno da qui.
  */
 export type NotteDelPunto = { l: Lista; apri: (c: Compito) => void }
 
@@ -155,83 +162,106 @@ function Voce({ nome, testo, doc, apriDoc }: {
   )
 }
 
+/** Il titolo della ricevuta: dopo la notte, o da quando se n'è andato. */
+export const titoloRicevuta = (m: Mattina | null) => m?.mattina ? t('Fatto mentre dormivi.') : t('Da quando sei uscito.')
+
 /**
- * Il foglio. `punto` può mancare: una notte di lavoro senza un punto di oggi
- * (non ancora scritto, o di ieri) apre lo stesso foglio con la sola notte.
+ * Le domande stanno nella loro carta, sotto i blocchi: una riga della
+ * ricevuta che ne nomina una porta lì, e mette il cursore nella prima
+ * scatola. Rispondere si fa dove si risponde.
  */
-function Finestra({ v, punto, guaio, chiudi, notte }: {
-  v: Vals; punto: PuntoDelGiorno | null; guaio: string | null; chiudi: () => void; notte?: NotteDelPunto
+function vaiAlleDomande() {
+  const carta = document.querySelector<HTMLElement>('[data-carta-domande]')
+  if (!carta) return
+  carta.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  carta.querySelector<HTMLElement>('textarea, input')?.focus({ preventScroll: true })
+}
+
+/**
+ * Il foglio: la ricevuta per intero, poi il punto.
+ *
+ * Prima quello che è stato fatto, poi quello che aspetta lui, poi la riga
+ * della settimana; sotto, le novità dei progetti che il punto aveva già. Il
+ * punto può mancare: il foglio resta, con la sola ricevuta.
+ */
+function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
+  v: Vals; punto: PuntoDelGiorno | null; guaio: string | null; chiudi: () => void
+  m: Mattina | null; ricevuta: AspettaMattina[]; notte?: NotteDelPunto
 }) {
   const finestra = useRef<HTMLDivElement>(null)
   useFocoDialogo(finestra, chiudi)
-  const p = { nascondi: chiudi, guaio }
-  const laNotteQui = notte ? laNotte(notte.l) : null
 
   /*
    * Una riga si apre su quello che la dice.
    *
    * È l'unico gesto rimasto nella finestra, ed è sempre lo stesso: la mail che
-   * ha ricevuto, la pagina del repository, il file arrivato. Il documento si
-   * apre alla fonte originale; la copia salvata è un ripiego dichiarato.
+   * ha ricevuto, la pagina del repository, il file arrivato, la carta. Il
+   * documento si apre alla fonte originale; la copia salvata è un ripiego
+   * dichiarato. Aprire una carta chiude il foglio: la carta si apre in pagina.
    */
-  const apriDoc = (id: string) => { p.nascondi(); void v.portamiFonte(id) }
+  const apriDoc = (id: string) => { chiudi(); void v.portamiFonte(id) }
+  const apriCarta = (c: Compito) => { chiudi(); notte?.apri(c) }
   const righe = (xs: RigaPunto[]) => xs.map((r, i) =>
     <Voce key={i} testo={r.testo} doc={r.doc} apriDoc={apriDoc} />)
 
-  const quante = punto ? righeDelPunto(punto) : 0
-  const vuoto = quante === 0
+  const fatte = m?.done ?? []
+  const settimana = m && m.week.mandate > 0 ? frasi.bozzePartite(m.week.mandate, m.week.comeEra, m.week.ritoccate) : null
+  // F9 · la mattina, la riga della notte: quanto è costata, cosa l'ha fermata, quando il Mac dormiva
+  const n = m?.mattina && notte ? laNotte(notte.l) : null
+  const quante = fatte.length + ricevuta.length + (punto ? righeDelPunto(punto) : 0)
   const data = new Date(punto?.quando ?? Date.now()).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
   /*
    * La data e il conto. Quanto sei stato via, no.
    *
    * «Remove the time that I was away for. I don't care to know, and I don't
-   * want him to tell me.» Era la terza cosa scritta qui sotto — «sei stato
-   * via tredici ore» — e non risponde a nessuna domanda che si faccia
-   * aprendo un punto: quello che è successo lo dicono le righe. Il server
-   * continua a sapere da quanto manca, perché è con quello che decide da
-   * dove ripartire a guardare; semplicemente non glielo dice più.
+   * want him to tell me.» Quello che è successo lo dicono le righe.
    */
-  const sotto = [
-    data,
-    // quando non c'è niente lo dice il foglio, una riga sotto: dirlo due volte
-    // nella stessa finestra è il modo di far sembrare vuoto anche il resto
-    vuoto ? '' : frasi.coseNelPunto(quante)
-  ].filter(Boolean).join(' · ')
+  const sotto = [data, quante ? frasi.coseNelPunto(quante) : ''].filter(Boolean).join(' · ')
 
   return (
-    <div style={VELO} onMouseDown={e => { if (e.target === e.currentTarget) p.nascondi() }}>
+    <div style={VELO} onMouseDown={e => { if (e.target === e.currentTarget) chiudi() }}>
       <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="punto-titolo" tabIndex={-1} style={FOGLIO}>
-        <Hov as="button" type="button" onClick={p.nascondi} title={t('Chiudi')} aria-label={t('Chiudi')}
+        <Hov as="button" type="button" onClick={chiudi} title={t('Chiudi')} aria-label={t('Chiudi')}
           style={{
             position: 'absolute', top: 14, right: 14, width: 28, height: 28, borderRadius: 99,
             border: 'none', background: 'none', cursor: 'pointer', color: 'rgba(var(--inchiostro-rgb),.4)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
           }}
-          hover={{ color: 'var(--inchiostro)', background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+          hover={{ color: 'var(--inchiostro)' }}>
           <IconCroce size={11} />
         </Hov>
 
-        {/* il titolo del foglio, in grazie come ogni h1; sotto, la data e il conto */}
+        {/* il titolo del foglio è quello della ricevuta, in grazie come ogni h1; sotto, la data e il conto */}
         <h1 id="punto-titolo" style={{ margin: 0, fontSize: 28, lineHeight: 1.2, paddingRight: 34, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-          {t('Il punto di oggi.')}
+          {titoloRicevuta(m)}
         </h1>
         <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.5)', overflowWrap: 'anywhere' }}>
           {sotto}
         </div>
-        {/* P10 · anche qui, se l'ultimo «Rifai il punto» non è andato, si dice perché */}
-        {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
+        {/* P10 · se l'ultimo punto non è arrivato, si dice perché, in una riga */}
+        {guaio && <div style={SPIEGA}>{spiegaGuaio(guaio)}</div>}
 
-        {/* F5 · la prima cosa del foglio: cosa ha fatto il turno mentre dormiva.
-            Aprire una carta chiude il foglio: la carta si apre in pagina. */}
-        {notte && laNotteQui && (
-          <Sezione etichetta={t('Mentre dormivi')}>
-            <RigheDellaNotte l={notte.l} notte={laNotteQui} apri={c => { chiudi(); notte.apri(c) }} />
+        {(fatte.length > 0 || n) && (
+          <Sezione etichetta={t('Fatto')}>
+            {n && notte && <p className="stanotte-conto">{rigaDellaNotte(notte.l.turno, n)}</p>}
+            {fatte.length > 0 && <RigheFatte xs={fatte} l={notte?.l} apri={apriCarta} disfa />}
+          </Sezione>
+        )}
+        {ricevuta.length > 0 && (
+          <Sezione etichetta={t('Aspetta te')}>
+            <RigheAspettano xs={ricevuta} l={notte?.l} apri={apriCarta}
+              apriChat={() => { chiudi(); v.goChat() }} apriDomande={() => { chiudi(); vaiAlleDomande() }} />
+          </Sezione>
+        )}
+        {settimana && (
+          <Sezione etichetta={t('Questa settimana')}>
+            <div style={LINEA}><span style={TESTO}>{settimana}</span></div>
           </Sezione>
         )}
 
-        {punto && vuoto && !laNotteQui && (
+        {quante === 0 && !n && (
           <div style={{ ...LINEA, marginTop: 26 }}>
-            <span style={TESTO}>{t('Niente di nuovo da quando ci siamo visti.')}</span>
+            <span style={TESTO}>{prossimaCosa(m) ?? t('Niente di nuovo da quando ci siamo visti.')}</span>
           </div>
         )}
 
@@ -245,22 +275,7 @@ function Finestra({ v, punto, guaio, chiudi, notte }: {
         {punto && punto.github.length > 0 && (
           <Sezione etichetta={t('GitHub')}>{righe(punto.github)}</Sezione>
         )}
-        {punto && punto.daLeggere.length > 0 && (
-          <Sezione etichetta={t('Da leggere')}>
-            {punto.daLeggere.map((n, i) => (
-              <div key={i} style={LINEA}>
-                <span style={TESTO}>
-                  {n.link
-                    ? <Hov as="a" href={n.link} target="_blank" rel="noreferrer"
-                        style={{ fontWeight: 500, color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
-                        hover={RAME}>{n.titolo}</Hov>
-                    : <span style={{ fontWeight: 500 }}>{n.titolo}</span>}
-                  {n.perche && <span style={SPENTO}> {n.perche}</span>}
-                </span>
-              </div>
-            ))}
-          </Sezione>
-        )}
+        {/* le notizie no: stanno nella pastiglia «News» in testa alla pagina, e basta */}
         {punto && punto.risposte.length > 0 && (
           <Sezione etichetta={t('Risposte')}>{righe(punto.risposte)}</Sezione>
         )}
@@ -268,92 +283,82 @@ function Finestra({ v, punto, guaio, chiudi, notte }: {
           <Sezione etichetta={t('Aggiornamenti')}>{righe(punto.aggiornamenti)}</Sezione>
         )}
 
-        {/* In fondo non c'è niente.
-            «Remove the "redo briefing" and the "close" that appear at the
-            bottom.» Erano due gesti scritti piccoli sotto una riga: uno
-            rifaceva quello che si stava leggendo, l'altro ripeteva la croce
-            che sta già in alto a destra. Un foglio da leggere si chiude dove
-            si chiudono i fogli, e finisce con l'ultima riga. Rifarlo resta
-            possibile dalla carta in prima pagina, che è dove ha senso: lì il
-            punto non c'è ancora, o è di ieri. */}
-        <IeriGemello chiudi={p.nascondi} apriMemoria={() => v.goMemoria()} />
+        {/* In fondo non c'è niente: un foglio da leggere si chiude dove si
+            chiudono i fogli, e finisce con l'ultima riga. */}
+        <IeriGemello chiudi={chiudi} apriMemoria={() => v.goMemoria()} />
       </div>
     </div>
   )
 }
 
 /**
- * Il punto di oggi, che non c'è ancora.
+ * La prossima cosa che farà, per una ricevuta senza niente da dire: la notte,
+ * con le carte in coda o senza, o la coda adesso. Mai un allarme, mai «niente
+ * da segnalare»: se non c'è una prossima cosa, null.
+ */
+export function prossimaCosa(m: Mattina | null): string | null {
+  const p = m?.prossima
+  if (!p) return null
+  if (p.genere === 'coda') return frasi.carteInCoda(p.carte)
+  return frasi.prossimaNotte(ora(p.quando), p.carte)
+}
+
+/**
+ * La ricevuta in cima alla prima pagina.
  *
- * Diceva «Il punto di ieri è scaduto. Rifallo quando vuoi». «Why would you
- * tell me "just produce another one for today"?» (9 ottobre 2026). Quello di
- * ieri non è una notizia, e rifare il punto non è un compito suo: il punto di
- * oggi si scrive da solo quando torna. La carta parla di oggi: lo sta
- * scrivendo, o dice in una riga perché non è arrivato, con «Riprova».
+ * Sostituisce tre carte: «Il punto di oggi», «Mentre dormivi» (che stava nel
+ * foglio del punto) e la fascia «Myynd ti ha scritto». Un titolo che dice da
+ * quando, «Fatto mentre dormivi.» la mattina e «Da quando sei uscito.» il
+ * resto del giorno, poi le prime tre cose fatte e le prime tre che aspettano
+ * lui, e un bottone solo che apre il foglio intero. Senza niente da dire, una
+ * riga sola con la prossima cosa che farà.
+ *
+ * Non dice mai che il punto di ieri è scaduto (9 ottobre 2026: «Why would you
+ * tell me "just produce another one for today"?»): il punto di oggi si scrive
+ * da solo quando torna, e se non c'è il foglio ha la sola ricevuta. Il
+ * foglio si apre da solo una volta al giorno, come prima (`usePunto`).
  */
-function NonAncora({ p }: { p: ReturnType<typeof usePunto> }) {
-  const riga = p.carico ? t('Lo sto scrivendo.')
-    : p.tetto ? t('Per oggi basta: tre punti al giorno. Si riparte domani.')
-    : p.guaio ? spiegaGuaio(p.guaio)
-    : t('Non è ancora pronto.')
-  return (
-    <div style={CARTA}>
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
-        <div style={SOTTO}>{riga}</div>
-      </div>
-      {!p.carico && !p.tetto && (
-        <button type="button" onClick={p.rifai} style={BOTTONE}>{p.guaio ? t('Riprova') : t('Scrivilo adesso')}</button>
-      )}
-    </div>
-  )
-}
-
-/**
- * In pagina: il foglio se il punto è da vedere, altrimenti la carta che lo
- * riapre. Senza un punto, niente — una cornice vuota in cima alla prima
- * pagina è la cosa peggiore che si possa aggiungere qui. Quando ce n'era uno
- * ieri la carta c'è, e parla di quello di oggi.
- */
-export function Punto({ v, notte }: { v: Vals; notte?: NotteDelPunto }) {
+export function Punto({ v, mattina: m, ricevuta, notte }: {
+  v: Vals; mattina: Mattina | null; ricevuta: AspettaMattina[]; notte?: NotteDelPunto
+}) {
   const p = usePunto(v.claudeOn)
-  // il foglio con la sola notte, quando un punto di oggi non c'è
-  const [soloNotte, setSoloNotte] = useState(false)
-  const n = notte ? laNotte(notte.l) : null
-  // sulla carta, una riga: quante ne ha fatte e quante aspettano lei
-  // F9 · con quanto è costata, cosa l'ha fermata, e quando il Mac dormiva
-  const rigaNotte = n && <div style={SOTTO}>{rigaDellaNotte(notte?.l.turno, n)}.</div>
-  // un punto senza righe non è un punto: «0 cose» con «Apri» su un foglio vuoto
-  const punto = puntoConRighe(p.punto)
-  if (!punto) {
-    if (!n) return p.vecchio ? <NonAncora p={p} /> : null
-    if (soloNotte) return <Finestra v={v} punto={null} guaio={null} chiudi={() => setSoloNotte(false)} notte={notte} />
-    return (
-      <>
-        {p.vecchio && <NonAncora p={p} />}
-        <div style={CARTA}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
-            {rigaNotte}
-          </div>
-          <button type="button" onClick={() => setSoloNotte(true)} style={BOTTONE}>{t('Apri')} <IconAvanti /></button>
-        </div>
-      </>
-    )
+  const [aperto, setAperto] = useState(false)
+  const chiudi = () => { setAperto(false); if (p.daVedere) p.nascondi() }
+  if (aperto || p.daVedere) {
+    return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={chiudi} m={m} ricevuta={ricevuta} notte={notte} />
   }
-  if (p.daVedere) return <Finestra v={v} punto={punto} guaio={p.guaio} chiudi={p.nascondi} notte={notte} />
+  const fatte = m?.done ?? []
+  const nelPunto = p.punto ? righeDelPunto(p.punto) : 0
+  const qualcosa = fatte.length > 0 || ricevuta.length > 0
+  const settimana = m && m.week.mandate > 0 ? frasi.bozzePartite(m.week.mandate, m.week.comeEra, m.week.ritoccate) : null
+  const prossima = prossimaCosa(m)
+  // niente fatto, niente che aspetta, niente nel punto e niente in programma: nessuna cornice vuota
+  if (!qualcosa && !nelPunto && !settimana && !prossima) return null
+  const daAprire = qualcosa || nelPunto > 0 || !!settimana
+  const apriCarta = (c: Compito) => notte?.apri(c)
+  const oltre = Math.max(0, fatte.length - RIGHE_IN_CARTA) + Math.max(0, ricevuta.length - RIGHE_IN_CARTA)
   return (
-    <div style={CARTA}>
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
-        <div style={SOTTO}>
-          {maiuscola(frasi.coseNelPunto(righeDelPunto(punto)))}. {t('Dieci secondi.')}
+    <section aria-labelledby="ricevuta-titolo" style={{ ...CARTA, flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <h2 id="ricevuta-titolo" style={{ margin: 0, fontSize: 15, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{titoloRicevuta(m)}</h2>
+          {/* senza righe, la riga sotto il titolo: quello che c'è nel punto, la settimana, o la prossima cosa che farà */}
+          {!qualcosa && (
+            <div style={SOTTO}>
+              {nelPunto > 0 ? `${maiuscola(frasi.coseNelPunto(nelPunto))}. ${t('Dieci secondi.')}` : settimana ?? prossima}
+            </div>
+          )}
         </div>
-        {rigaNotte}
-        {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
+        {daAprire && <button type="button" onClick={() => setAperto(true)} style={BOTTONE}>{t('Apri')} <IconAvanti /></button>}
       </div>
-      <button type="button" onClick={p.riapri} style={BOTTONE}>{t('Apri')} <IconAvanti /></button>
-    </div>
+      {fatte.length > 0 && <RigheFatte xs={fatte.slice(0, RIGHE_IN_CARTA)} l={notte?.l} apri={apriCarta} inCarta />}
+      {ricevuta.length > 0 && (
+        <RigheAspettano xs={ricevuta.slice(0, RIGHE_IN_CARTA)} l={notte?.l} apri={apriCarta} inCarta
+          apriChat={() => v.goChat()} apriDomande={vaiAlleDomande} />
+      )}
+      {/* il resto è nel foglio: si dice quante, non si mostrano */}
+      {oltre > 0 && <div style={{ ...SOTTO, marginTop: 0 }}>{frasi.altreNelFoglio(oltre)}</div>}
+    </section>
   )
 }
 

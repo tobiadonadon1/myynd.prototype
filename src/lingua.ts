@@ -2361,17 +2361,13 @@ const EN: Record<string, string> = {
   'Parlane in chat': 'Talk about it in chat',
   // il pallino che salta sulla pastiglia delle notizie: quello che legge chi non vede il pallino
   'Notizie nuove': 'New stories',
-  // le quattro sezioni del punto: «Progetti», «Da leggere» e «Risposte» il dizionario le ha già
+  // le sezioni del punto: «Progetti» e «Risposte» il dizionario le ha già
   'GitHub': 'GitHub',
   'Niente di nuovo da quando ci siamo visti.': 'Nothing new since we last met.',
   'Il punto non è arrivato: il fornitore non ha risposto.': 'The briefing did not come: the provider did not answer.',
-  'Lo sto scrivendo.': 'Writing it now.',
-  'Non è ancora pronto.': 'Not ready yet.',
-  'Scrivilo adesso': 'Write it now',
   'Il punto non è arrivato in una forma leggibile. Riprova.': 'The briefing did not come back in a readable shape. Try again.',
   'Questo progetto l’hai scritto tu: chiudilo dalla Memoria.': 'You wrote this project yourself: close it from Memory.',
   'Rifai il punto': 'Redo the briefing',
-  'Per oggi basta: tre punti al giorno. Si riparte domani.': 'That’s it for today: three briefings a day. Tomorrow again.',
   'Questo progetto non c’è nel punto.': 'This project is not in the briefing.',
   'Non c’è nessun angolo da tenere.': 'There is no angle to keep.',
   'Non c’è nessun angolo da scartare.': 'There is no angle to discard.',
@@ -2379,7 +2375,6 @@ const EN: Record<string, string> = {
   'Accendi': 'Switch on',
   'Fagliela fare': 'Hand it over',
   'apri': 'open',
-  'Il punto di oggi.': 'Today’s briefing.',
   // — il prompt: la riga diventa una richiesta da incollare in un altro assistente —
   'Preparami il prompt': 'Write me the prompt',
   'Da incollare in Claude o ChatGPT': 'To paste into Claude or ChatGPT',
@@ -3434,7 +3429,10 @@ const EN: Record<string, string> = {
   'Scrivi qui': 'Write here',
   'Tutta la settimana': 'The whole week',
   'Per finirla': 'To finish it',
-  'Mentre dormivi': 'While you slept',
+  // — la ricevuta in cima alla prima pagina: cosa è stato fatto, cosa aspetta te —
+  'Fatto mentre dormivi.': 'Done while you slept.',
+  'Da quando sei uscito.': 'Since you left.',
+  'Da approvare': 'Ready for your OK',
   'Disfa': 'Undo',
   'Disfatta: il file è nel Cestino, la bozza resta in Bozze. La carta è di nuovo tua.': 'Undone: the file is in the Trash, the draft stays in Drafts. The card is yours again.',
   'Disfatta: il file è nel Cestino. La carta è di nuovo tua.': 'Undone: the file is in the Trash. The card is yours again.',
@@ -4188,6 +4186,18 @@ export const frasi = {
   stanotteFatte: (fatte: number, attende: number) => corrente === 'en'
     ? `Last night: ${fatte} done${attende ? `, ${attende} need${attende === 1 ? 's' : ''} you` : ''}`
     : `Stanotte: ${fatte === 1 ? '1 fatta' : `${fatte} fatte`}${attende ? `, ${attende === 1 ? '1 aspetta te' : `${attende} aspettano te`}` : ''}`,
+  /** La ricevuta: le bozze partite questa settimana, così com'erano o ritoccate. */
+  bozzePartite: (n: number, comeEra: number, ritoccate: number) => corrente === 'en'
+    ? `${n === 1 ? '1 draft' : `${n} drafts`} sent: ${comeEra} as written, ${ritoccate} edited.`
+    : `${n === 1 ? '1 bozza partita' : `${n} bozze partite`}: ${comeEra} così com’${comeEra === 1 ? 'era' : 'erano'}, ${ritoccate} ${ritoccate === 1 ? 'ritoccata' : 'ritoccate'}.`,
+  /** La ricevuta senza niente da dire: la prossima notte, con le carte in coda o senza. */
+  prossimaNotte: (ora: string, carte: number) => corrente === 'en'
+    ? (carte ? `Tonight from ${ora}: ${carte === 1 ? '1 card' : `${carte} cards`} in the queue.` : `Tonight from ${ora} I work on the cards you hand me.`)
+    : (carte ? `Stanotte dalle ${ora}: ${carte === 1 ? '1 carta' : `${carte} carte`} in coda.` : `Stanotte dalle ${ora} lavoro sulle carte che mi affidi.`),
+  /** La ricevuta, di notte: la coda che sta lavorando. */
+  carteInCoda: (n: number) => corrente === 'en' ? `${n === 1 ? '1 card' : `${n} cards`} in the queue.` : `${n === 1 ? '1 carta' : `${n} carte`} in coda.`,
+  /** Sulla carta della ricevuta, quello che non ci sta: si legge nel foglio. */
+  altreNelFoglio: (n: number) => corrente === 'en' ? `${n} more inside.` : (n === 1 ? 'Un’altra dentro.' : `Altre ${n} dentro.`),
   /** La notte prima di un giorno, «AAAA-MM-GG», detta con il giorno di quella notte: «Wednesday night». */
   laNottePrima: (giorno: string) => {
     const d = new Date(`${giorno}T12:00:00`)

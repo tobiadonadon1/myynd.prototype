@@ -11,13 +11,14 @@ import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat,
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
-import type { Chiesta, Compito } from '../api'
+import type { AspettaMattina, Chiesta, Compito, Mattina } from '../api'
 import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta, secondaRiga, RAGIONI_NON_UTILE } from '../feed-carta'
 import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiFeed, blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
+import { blocchiFeed, blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, contaInPagina } from '../blocchi-feed'
+import { conLettera } from '../mattina'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { RigaCheLavora } from '../components/RigaCheLavora'
 import { testoPasso } from '../lettura-passo'
@@ -34,12 +35,6 @@ import { RigaIpotesi } from '../oggi/RigaIpotesi'
 import { Testo } from '../Testo'
 import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
 export { CAMPO, Scatola }
-
-/** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
-const PIENO_SCURO: CSSProperties = {
-  padding: '12px 26px', borderRadius: 99, border: '1px solid var(--avorio)', background: 'var(--avorio)', color: 'var(--su-avorio)',
-  fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(var(--ombra-rgb),.3)', cursor: 'pointer', fontFamily: 'inherit'
-}
 
 /*
  * Il vestito di una riga dentro un blocco.
@@ -1251,8 +1246,10 @@ function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
   )
 }
 
-export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriLavoro }: {
+export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriLavoro, mattina = null, ricevuta: dallaRicevuta }: {
   v: Vals; lista?: Lista; blocchi?: BloccoPagina[]
+  /** La ricevuta in cima (`server/mattina.ts`), e quello che aspetta lui con la lettera: li tiene il guscio, che li conta nel menù. */
+  mattina?: Mattina | null; ricevuta?: AspettaMattina[]
   /** Apre il lavoro consegnato di una carta nel foglio (lo tiene `App.tsx`). */
   apriLavoro?: (c: Compito) => void
   /**
@@ -1292,9 +1289,11 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
     if (da === a || !stessoGruppo(blocchi, da, a)) return
     v.salvaOrdineBlocchi(ordineDopoIlTrascinamento(chiavi, da, a, v.ordineBlocchi))
   }
-  // quello che c'è in pagina: ogni riga che si vede, e le domande nella loro
-  // carta. Lo stesso conto del menù, per costruzione.
-  const inPagina = sulTavolo(blocchi, cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
+  // quello che c'è in pagina: ogni riga che si vede, le domande nella loro
+  // carta e quello che la ricevuta dice che aspetta lui, ognuna una volta.
+  // Lo stesso conto del menù, per costruzione.
+  const ricevuta = dallaRicevuta ?? conLettera(mattina?.needsYou ?? [], v.chatDaLeggere ? t('Myynd ti ha scritto.') : null)
+  const inPagina = contaInPagina(blocchi, { domanda: v.domanda, iniziative: v.iniziative, lettera: v.chatDaLeggere }, ricevuta)
   // P4 · la prima pagina di un conto nuovo: finché la prepara, una riga che lavora sotto la riga fissa
   const primaPagina = usePrimaPagina()
   const preparando = inVista(primaPagina)
@@ -1354,18 +1353,13 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
           finita={!leggendo && v.finita} onFinita={() => v.setFinita(false)} />
       )}
 
-      {/* Myynd ha scritto: le domande per conoscerti aspettano in chat. Sta in
-          cima a tutto, perché rispondergli viene prima del resto. */}
-      {v.chatDaLeggere && (
-        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderRadius: 20, background: 'var(--carta-scura)', color: 'var(--avorio)', padding: '18px 22px', marginBottom: 14, boxShadow: '0 22px 52px rgba(var(--ombra-rgb),.18)' }}>
-          <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: 'var(--avorio)' }} />
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Myynd ti ha scritto.')}</div>
-            <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'rgba(var(--avorio-rgb),.78)', marginTop: 3, textWrap: 'pretty' }}>{t('Ha qualche domanda per conoscerti: due minuti.')}</div>
-          </div>
-          <button onClick={v.goChat} style={{ ...PIENO_SCURO, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{t('Rispondi')} <IconAvanti /></button>
-        </div>
-      )}
+      {/* «Myynd ti ha scritto» era una fascia scura qui, sopra tutto: adesso è
+          una riga della ricevuta, fra quello che aspetta lui (9 ottobre 2026) */}
+      {/* La ricevuta: cosa è stato fatto da quando non c'era, e cosa aspetta
+          lui, in una carta sola. Sta sopra ai blocchi perché è la risposta alla
+          domanda con cui si torna; il bottone apre il foglio intero, con sotto
+          le novità dei progetti del punto. Il vestito è in `components/Punto.tsx`. */}
+      <Punto v={v} mattina={mattina} ricevuta={ricevuta} notte={lista && apriLavoro ? { l: lista, apri: apriLavoro } : undefined} />
 
       {/* Il primo progetto, dalla prima pagina e non da una carta in fondo alle
           preferenze: finché non c'è, è la cosa che manca, e si dice qui. */}
@@ -1379,15 +1373,6 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
         </div>
       )}
 
-      {/* Cosa è cambiato mentre non c'era, se c'è qualcosa da dire: sta sopra
-          ai blocchi perché è la risposta alla domanda con cui si torna.
-          È una carta — titolo, una riga, un bottone — e non un rigo scritto
-          piccolo: aprendola si apre il foglio da leggere. Il vestito ce l'ha
-          dentro, in `components/Punto.tsx`. */}
-      {/* Una riga del punto apre il documento da cui viene, e niente altro: le
-          cose da fare non stanno lì dentro, stanno qui sotto. */}
-      {/* F5 · cosa ha fatto il turno mentre dormiva sta dentro il punto, prima sezione */}
-      <Punto v={v} notte={lista && apriLavoro ? { l: lista, apri: apriLavoro } : undefined} />
       <CartaSettimana v={v} />
 
       {/*
@@ -1589,7 +1574,7 @@ function CartaDomande({ v }: { v: Vals }) {
   }
 
   return (
-    <section ref={carta} aria-label={t('Myynd ti chiede')} style={{
+    <section ref={carta} data-carta-domande aria-label={t('Myynd ti chiede')} style={{
       flex: 'none', marginTop: 14, borderRadius: 20, overflow: 'visible',
       background: 'rgba(var(--carta-rgb),.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
       border: '1px solid rgba(var(--luce-rgb),.7)',

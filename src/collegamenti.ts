@@ -133,9 +133,9 @@ export function guaioDelPunto(guaio: string | null, ragionavaPrima: boolean, rag
   return !ragionavaPrima && ragionaAdesso ? null : guaio
 }
 
-/** Le righe di un punto: progetti, GitHub, da leggere, risposte, aggiornamenti. */
-export type RighePunto = { progetti: unknown[]; github: unknown[]; daLeggere: unknown[]; risposte: unknown[]; aggiornamenti?: unknown[] }
-export const righeDelPunto = (x: RighePunto) => x.progetti.length + x.github.length + x.daLeggere.length + x.risposte.length + (x.aggiornamenti?.length ?? 0)
+/** Le righe di un punto: progetti, GitHub, risposte, aggiornamenti. Le notizie stanno nella pastiglia, non qui. */
+export type RighePunto = { progetti: unknown[]; github: unknown[]; risposte: unknown[]; aggiornamenti?: unknown[] }
+export const righeDelPunto = (x: RighePunto) => x.progetti.length + x.github.length + x.risposte.length + (x.aggiornamenti?.length ?? 0)
 
 /**
  * Il punto da mostrare, o niente: un punto senza righe non è un punto. La

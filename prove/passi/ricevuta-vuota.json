@@ -1,0 +1,6 @@
+[
+  { "aspetta": 3500 },
+  { "scatta": "prima" },
+  { "testo": "prima" },
+  { "js": "document.querySelector('[data-testa-casa] h1')?.textContent" }
+]

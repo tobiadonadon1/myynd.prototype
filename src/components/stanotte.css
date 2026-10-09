@@ -21,3 +21,13 @@
 .stanotte-gesti button.pieno {border-color:transparent;background:var(--rame-forte, #C4623B);color:var(--avorio, #FFF7F0);font-weight:500;}
 .stanotte-gesti button.pieno:hover {background:var(--rame-forte-su, #B24E2E);color:var(--avorio, #FFF7F0);}
 .stanotte-righe button:focus-visible {outline:2px solid var(--rame);outline-offset:2px;}
+/*
+ * La ricevuta (9 ottobre 2026): la riga intera è il bersaglio. Al passaggio
+ * il titolo prende il rame, e basta: niente velo sotto il mouse, di giorno
+ * come di notte.
+ */
+.ricevuta-apri {flex:1;min-width:0;display:flex;align-items:flex-start;gap:10px;padding:0;margin:0;border:0;background:none;text-align:left;font:inherit;color:inherit;}
+button.ricevuta-apri {cursor:pointer;}
+button.ricevuta-apri:hover .stanotte-titolo {color:var(--rame);}
+.stanotte-righe.in-carta li {padding:7px 0;}
+.stanotte-righe.in-carta li:first-child {padding-top:2px;}

@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, cheAspettano, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, blocchiInPagina, cheAspettano, chiaveBlocco, contaInPagina, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -371,6 +371,27 @@ test('la carta di Myynd che ha scritto è una cosa sul tavolo: il titolo e il me
   assert.equal(sulTavolo([{ righe: [1] }], cheAspettano({ domanda: null, iniziative: 0, lettera: true })), 2)
   assert.equal(cheAspettano({ domanda: { id: 'q' }, iniziative: 2, lettera: false }), 3)
   assert.equal(cheAspettano({ domanda: null, iniziative: 0, lettera: false }), 0)
+})
+
+test('la ricevuta in cima non conta due volte quello che sta anche nei blocchi o nella carta delle domande', () => {
+  // la mattina del 9 ottobre: una carta che chiede, una pronta, e la domanda di Myynd
+  const blocchi = blocchiFeed({
+    voci: [voce('v1', 'hf', '2026-10-09T07:00:00Z')],
+    compiti: [compito('chiede', 'hf', { stato: 'chiede' }), compito('pronta', 'nx', { stato: 'pronto' }), compito('mia', null)],
+    progetti: PROGETTI, nomeResto: 'Il resto'
+  })
+  const aspettano = { domanda: { id: 'd1' }, iniziative: [{ id: 'i1' }], lettera: true }
+  const prima = contaInPagina(blocchi, aspettano)
+  assert.equal(prima, sulTavolo(blocchi, cheAspettano({ domanda: aspettano.domanda, iniziative: 1, lettera: true })), 'senza ricevuta è il conto di sempre')
+  const ricevuta = [
+    { genere: 'carta', id: 'chiede' }, { genere: 'domanda', id: 'd1' }, { genere: 'iniziativa', id: 'i1' }, { genere: 'lettera', id: 'lettera' }
+  ]
+  assert.equal(contaInPagina(blocchi, aspettano, ricevuta), prima, 'la ricevuta ha fatto contare due volte la stessa cosa')
+  // una carta che si vede solo nella ricevuta (oltre il tetto dei blocchi) si conta, una volta
+  assert.equal(contaInPagina(blocchi, aspettano, [...ricevuta, { genere: 'carta', id: 'oltre' }, { genere: 'carta', id: 'oltre' }]), prima + 1)
+  // con la lista a destra la riga sua esce dai blocchi, e il titolo e il menù dicono lo stesso numero
+  const lato = blocchiInPagina(blocchi, true)
+  assert.equal(contaInPagina(lato, aspettano, ricevuta), prima - 1)
 })
 
 test('una revisione sta sotto sua madre e non conta nel tetto: con sei righe pronte si vede lo stesso (P3)', () => {
