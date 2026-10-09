@@ -98,6 +98,20 @@ export function riflua(testo: string): string {
   return fuori.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+/**
+ * Il congedo sta su una riga sua.
+ *
+ * Sul modello vero (9 ottobre 2026) una bozza riscritta dopo la rilettura
+ * finiva con «whichever suits you better. Cheers,» e il nome sotto: il saluto
+ * incollato alla frase prima. Un congedo seguito da una riga corta (il nome)
+ * torna a capo, con una riga vuota prima. Una parola come «Thanks» in mezzo a
+ * una frase non si tocca: serve la virgola e il nome sotto.
+ */
+const CONGEDO = /([.!?])[ \t]+((?:Cheers|Best|Best regards|Kind regards|Warm regards|Regards|Thanks|Thank you|Many thanks|All the best|Un caro saluto|Cari saluti|Saluti|Un saluto|A presto|Grazie|Buona giornata)[,!]?)[ \t]*\n(?=[^\n]{1,40}(?:\n|$))/g
+export function congedoAParte(testo: string): string {
+  return testo.replace(CONGEDO, '$1\n\n$2\n')
+}
+
 /*
  * Via i trattini lunghi.
  *

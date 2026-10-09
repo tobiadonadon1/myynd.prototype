@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
+import { congedoAParte, riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -260,4 +260,14 @@ test('senzaTrattiniFuoriCodice pulisce la prosa e lascia stare il codice, a bloc
   const c = senzaCodice('a `b[1]` c')
   assert.ok(!c.testo.includes('b[1]'))
   assert.equal(c.rimetti(c.testo), 'a `b[1]` c')
+})
+
+test('il congedo incollato alla frase prima torna su una riga sua; un «thanks» in mezzo resta dov\'è', () => {
+  assert.equal(congedoAParte('Hi Marco,\n\nTuesday works, whichever suits you better. Cheers,\nAlex'),
+    'Hi Marco,\n\nTuesday works, whichever suits you better.\n\nCheers,\nAlex')
+  assert.equal(congedoAParte('Ciao Giulia,\n\nva bene per venerdì. Un caro saluto,\nTobia'), 'Ciao Giulia,\n\nva bene per venerdì.\n\nUn caro saluto,\nTobia')
+  const giusto = 'Hi Nora,\n\nThe quote is attached.\n\nCheers,\nAlex'
+  assert.equal(congedoAParte(giusto), giusto)
+  const inMezzo = 'Done. Thanks for the notes, they helped a lot with the outline.\nNext we review the budget.'
+  assert.equal(congedoAParte(inMezzo), inMezzo)
 })
