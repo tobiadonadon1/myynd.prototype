@@ -14,6 +14,7 @@ const { join } = require('node:path')
 const yaml = require('js-yaml')
 const binari = require('./binari.cjs')
 const chatgpt = require('./chatgpt-runtime.cjs')
+const { nonIndicizzare, unaSola } = require('./una-sola.cjs')
 
 const fissa = yaml.load(readFileSync(join(__dirname, '..', 'electron-builder.yml'), 'utf8'))
 const amb = process.env
@@ -77,11 +78,26 @@ if (feed) {
   mac.target = [...mac.target, ...[...archi].map(a => ({ target: 'zip', arch: [a] }))]
 }
 
+/*
+ * Una Myynd sola sul Mac (`build/una-sola.cjs`): Spotlight non entra in
+ * dist-app da prima che ci finisca l'app, e finiti gli artefatti (dopo i DMG,
+ * che si montano per un attimo) Launch Services dimentica ogni copia che non
+ * sta in /Applications.
+ */
+if (process.platform === 'darwin') nonIndicizzare(join(__dirname, '..'))
+
 module.exports = {
   ...fissa,
   mac,
   win,
   beforePack: async ctx => { await binari.beforePack(ctx); await chatgpt.beforePack(ctx) },
   afterPack: async ctx => { await binari.afterPack(ctx); await chatgpt.afterPack(ctx) },
+  afterAllArtifactBuild: () => {
+    if (process.platform === 'darwin') {
+      const r = unaSola({ radice: join(__dirname, '..') })
+      for (const p of r.tolte) console.log(`myynd · una sola · tolta ${p}`)
+    }
+    return []
+  },
   publish
 }
