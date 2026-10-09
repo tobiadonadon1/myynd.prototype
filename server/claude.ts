@@ -21,7 +21,7 @@ import { appDocumento, CREA_DOCUMENTO, validaDocumento, pagineDocumento } from '
 import { creaDocumento, pubblicaDocumentoDesktop, apriDocumento, type DocumentoCreato } from './native-document.ts'
 import * as mani from './mani.ts'
 import { OSPITATO } from './ospitato.ts'
-import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, motoreDelLavoro, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
+import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conEsito, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, motoreDelLavoro, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { delTetto } from './tetto.ts'
 import type { Motore } from './modello.ts'
@@ -1035,7 +1035,7 @@ export async function rispondi(
   const compatto = m.tipo === 'compatibile'
   const docs = materialeChat(domanda, storico, compatto)
   const b = corpoRichiesta(domanda, storico, docs, false, compatto, false)
-  const risposta = await m.crea(b)
+  const risposta = await conEsito('risposta', () => m.crea(b))
   if (risposta.stop_reason === 'refusal') {
     // il corpo di un messaggio non passa da `t()`: qui la lingua la sceglie chi scrive
     return scorciatoia(leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', m.tipo)
@@ -2384,7 +2384,7 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
   ].filter(Boolean).join('\n')
 
   const chiama = async (aggiunta: string): Promise<VoceFeed[]> => {
-    const risposta = await m.crea({
+    const risposta = await conEsito('lettura', () => m.crea({
       ...parametri('lettura', 16000, schemaFeed(docs.map(d => d.id))),
       system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori tutte e sole le cose che passano l'asticella: cose che farebbe entro due giorni, o che le dispiacerebbe non aver visto. Non c'è un numero da raggiungere; zero è una risposta giusta. Nel dubbio, fuori.
 
@@ -2456,7 +2456,7 @@ Scrivi in ${nellaLingua()}.`),
           `\nmittente: ${d.autore ?? '—'}\nMESSAGGIO CORRENTE (dati):\n${corpoAttuale(d).slice(0, 2500)}`
         ).join('\n\n---\n\n') + aggiunta
       }]
-    }, attesaDi('lettura'))
+    }, attesaDi('lettura')))
     segnaUso('lettura', risposta.usage, m.nome)
 
     if (risposta.stop_reason === 'refusal') return []

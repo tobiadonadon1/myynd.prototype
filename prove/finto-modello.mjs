@@ -212,12 +212,12 @@ const server = createServer(async (req, res) => {
     return res.end(JSON.stringify({ richieste, trattenute: inAttesa.length }))
   }
   if (req.method === 'POST' && /\/v1\/messages$/.test(percorso)) return anthropic(req, res)
-  // F8 · la salute del ponte dell'AI inclusa: `incluso` nel copione ({ stato?, usati, tetto }); senza, 503 come un ponte spento
+  // F8 · la salute del ponte dell'AI inclusa: `incluso` nel copione ({ stato?, usati, tetto, mese? }); senza, 503 come un ponte spento
   if (req.method === 'GET' && percorso === '/api/incluso/stato') {
     const i = copione().incluso
     const stato = i ? Number(i.stato || 200) : 503
     res.writeHead(stato, { 'content-type': 'application/json' })
-    return res.end(JSON.stringify(stato === 200 ? { usati: i.usati ?? 0, tetto: i.tetto ?? 200000 } : { type: 'error', error: { type: stato === 429 ? 'budget_exhausted' : 'not_configured' } }))
+    return res.end(JSON.stringify(stato === 200 ? { usati: i.usati ?? 0, tetto: i.tetto ?? 200000, ...(i.mese ? { mese: true } : {}) } : { type: 'error', error: { type: stato === 429 ? 'budget_exhausted' : 'not_configured' } }))
   }
   if (req.method === 'GET' && percorso.startsWith('/statici/')) return statico(req, res)
   if (req.method === 'GET' && /\/models$/.test(percorso)) {

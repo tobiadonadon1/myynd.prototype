@@ -255,6 +255,10 @@ test('la dose conta la cache letta a un decimo, e il mese ha un tetto in dollari
     const e = ((await r.json()) as { error: { type: string; message: string } }).error
     assert.equal(e.type, 'budget_exhausted')
     assert.match(e.message, /month/)
+    // la bussata di salute lo sa: senza, diceva «pronto» e la riga si spegneva
+    const st = await fetch(`${url}/api/incluso/stato`, { headers: { 'x-api-key': 'sessione-buona' } })
+    assert.deepEqual(await st.json(), { usati: 0, tetto: 1000, mese: true })
+    assert.deepEqual(await incluso.salute({ url, gettone: 'sessione-buona' }), { stato: 'finito', usati: 0, tetto: 1000, mese: true })
   } finally { s.close() }
 })
 

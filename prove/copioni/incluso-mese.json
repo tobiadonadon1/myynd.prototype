@@ -1,0 +1,8 @@
+{
+  "modello": "finto",
+  "incluso": { "usati": 41000, "tetto": 200000, "mese": true },
+  "risposte": [
+    { "in": "tutto", "se": ".", "stato": 429, "json": { "type": "error", "error": { "type": "budget_exhausted", "message": "This month’s included AI allowance is used up." } } }
+  ],
+  "predefinita": "Done."
+}

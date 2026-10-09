@@ -74,12 +74,13 @@ export function oscura(testo: string, o: { casa?: string; utente?: string } = {}
   s = s.replace(/\b(?:sk-(?:ant-|proj-)?[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|xox[abprs]-[A-Za-z0-9-]{8,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,}|ya29\.[0-9A-Za-z._-]+|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+)/g, segreto)
   // «Bearer …», «Basic …»
   s = s.replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{6,}/gi, `$1 ${segreto}`)
-  // chiave=valore, "chiave": "valore", con i nomi che di solito tengono un segreto
-  s = s.replace(/\b((?:x-)?api[_-]?key|apikey|token|access[_-]?token|refresh[_-]?token|id[_-]?token|secret|client[_-]?secret|password|passwd|pass|chiave|gettone|authorization|cookie|session|sessione)(["']?\s*[:=]\s*["']?)(?!(?:Bearer|Basic)\s)([^\s"',;&}]+)/gi, `$1$2${segreto}`)
+  // chiave=valore, "chiave": "valore", con i nomi che di solito tengono un segreto;
+  // anche in coda a un nome d'ambiente (MYYND_SMTP_PASS=…), dove `\b` non c'è
+  s = s.replace(/(?<![A-Za-z0-9])((?:x-)?api[_-]?key|apikey|token|access[_-]?token|refresh[_-]?token|id[_-]?token|secret|client[_-]?secret|password|passwd|pass|chiave|gettone|authorization|cookie|session|sessione)(["']?\s*[:=]\s*["']?)(?!(?:Bearer|Basic)\s)([^\s"',;&}]+)/gi, `$1$2${segreto}`)
   // i valori nelle query degli indirizzi: l'iCal privato, un codice OAuth
   s = s.replace(/([?&][A-Za-z0-9_.-]+=)[^\s&#"')]+/g, `$1${segreto}`)
-  // indirizzi email
-  s = s.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[email]')
+  // indirizzi email, anche scritti dentro un indirizzo web (tobia%40… nell'iCal di Google)
+  s = s.replace(/[A-Za-z0-9._%+-]+?(?:@|%40)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gi, '[email]')
   // la sua cartella di casa, e quella di chiunque in /Users o /home: il percorso intero, spazi compresi
   if (casa && casa !== '/') s = s.split(casa).join('/~HOME~')
   s = copriPercorsi(s)
@@ -99,7 +100,8 @@ const FINE_PERCORSO = /^(?:["'`)\]>,;\n]|\s+[·—-]\s|\s+(?:e|ed|o|and|or|per|f
  * non finisce al primo spazio: finisce dove riprende la frase.
  */
 function copriPercorsi(s: string): string {
-  const inizio = /\/~HOME~|\/(?:Users|home)\/[^\s/"'`)\],;]+/g
+  // anche quelli scritti con la tilde: «~/Progetti/Segreto» dice già dove sta
+  const inizio = /\/~HOME~|\/(?:Users|home)\/[^\s/"'`)\],;]+|(?<![\w/~])~\/(?!\[path\])[^\s/"'`)\],;]+/g
   let fuori = ''
   let da = 0
   for (let m = inizio.exec(s); m; m = inizio.exec(s)) {

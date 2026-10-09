@@ -147,6 +147,24 @@ test('una scelta sua dimentica il cambio: Myynd non la rimette com’era', () =>
   assert.equal(cfg.leggi().motore, 'claude')
 })
 
+test('dopo un cambio, il motore che lei sceglie di nuovo a mano resta: un «morto» di prima non lo rimanda su Claude', async () => {
+  usa({ motore: 'compatibile', compatibile: LOCALE, claude: { apiKey: 'sk-ant-a' } })
+  vivo = false
+  await teste.sonda({ forza: true }); await teste.sonda({ forza: true })
+  assert.equal(cfg.leggi().motore, 'claude')
+  assert.equal(cfg.leggi().motorePrima, 'compatibile')
+  // il locale si è riacceso e lei lo sceglie dalle Preferenze, prima della bussata dopo
+  vivo = true
+  mod.scegliIlMotore('compatibile')
+  assert.equal(mod.riparaIlMotore(), false, '/api/stato ripara a ogni giro: non deve toccare la sua scelta')
+  assert.equal(cfg.leggi().motore, 'compatibile')
+  assert.equal(teste.testaDaMostrare(), null, 'e la riga non dice più «non risponde»')
+  // se poi muore davvero, servono bussate nuove
+  vivo = false
+  await teste.sonda({ forza: true })
+  assert.equal(cfg.leggi().motore, 'compatibile', 'una bussata sola non basta')
+})
+
 test('ChatGPT da cui si è usciti: «accedi», sulla scheda di OpenAI', async () => {
   usa({ motore: 'chatgpt', chatgpt: { attivo: true, email: 'a@example.com' } })
   teste.perProvaFerri({ statoChatGPT: async () => ({ installato: true, entrato: false }) })
@@ -168,6 +186,9 @@ test('il ponte dell’AI inclusa: 401 rientrare, 402 il piano, 429 la dose, 5xx 
     assert.equal(teste.testaDaMostrare()?.rimedio, 'pagamento')
     dice({ stato: 'finito' }); await teste.sonda({ forza: true })
     assert.equal(teste.testaDaMostrare()?.rimedio, 'finito')
+    // la dose del mese ha la sua frase, non «domani»
+    dice({ stato: 'finito', usati: 1, tetto: 10, mese: true }); await teste.sonda({ forza: true })
+    assert.equal(teste.testaDaMostrare()?.rimedio, 'finitoMese')
     dice({ stato: 'assente', codice: 503 }); await teste.sonda({ forza: true })
     assert.equal(teste.testaDaMostrare()?.rimedio, 'ponte')
     dice({ stato: 'pronto', usati: 1, tetto: 10 }); await teste.sonda({ forza: true })
@@ -180,6 +201,14 @@ test('il ponte dell’AI inclusa: 401 rientrare, 402 il piano, 429 la dose, 5xx 
       await assert.rejects(mod.chiedi({ lavoro: 'titolo', system: 's', messages: [{ role: 'user', content: 'x' }], max_tokens: 20 }))
       assert.equal(teste.testaDaMostrare()?.rimedio, 'pagamento')
     } finally { ponte.close() }
+    // e una chiamata vera che prende «finita la dose del mese» lo dice col mese
+    const mese = createServer((req, res) => { req.resume(); req.on('end', () => { res.statusCode = 429; res.setHeader('content-type', 'application/json'); res.setHeader('x-should-retry', 'false'); res.end(JSON.stringify({ type: 'error', error: { type: 'budget_exhausted', message: 'This month’s included AI allowance is used up.' } })) }) })
+    await new Promise<void>(r => mese.listen(0, '127.0.0.1', r))
+    process.env.MYYND_INCLUSO_URL = `http://127.0.0.1:${(mese.address() as { port: number }).port}`
+    try {
+      await assert.rejects(mod.chiedi({ lavoro: 'titolo', system: 's', messages: [{ role: 'user', content: 'x' }], max_tokens: 20 }))
+      assert.equal(teste.testaDaMostrare()?.rimedio, 'finitoMese')
+    } finally { mese.close() }
   } finally { delete process.env.MYYND_INCLUSO_URL }
 })
 
@@ -197,4 +226,19 @@ test('ogni chiamata fallisce da dieci minuti: «non riesco a pensare»; chiediJS
   giu = false
   assert.deepEqual(await mod.chiediJSON({ lavoro: 'classifica', system: 's', messages: [{ role: 'user', content: 'x' }], max_tokens: 20, formato: { type: 'object' } }), { ok: true })
   assert.equal(mod.pensieroFermo(fra), null)
+})
+
+test('la lettura del feed e la chat chiamano il motore da sé, e contano lo stesso per «non riesco a pensare»', async () => {
+  usa({ motore: 'claude', claude: { apiKey: 'sk-ant-a' } })
+  const claude = await import('./claude.ts')
+  // la chat senza streaming passa da `rispondi`: Anthropic finto risponde 500
+  await assert.rejects(claude.rispondi('Quanto abbiamo fatturato col progetto Orsini rispetto al trimestre scorso?', []))
+  const m = mod.ultimeMancate().find(x => x.lavoro === 'risposta')
+  assert.ok(m, 'il guasto della chat è nella serie')
+  assert.ok(mod.pensieroFermo(Date.parse(m.dal) + (mod.MINUTI_FERMO + 1) * 60_000))
+  // e un feed che legge chiude la serie, come qualunque risposta
+  await mod.conEsito('lettura', async () => 'letto')
+  assert.equal(mod.pensieroFermo(Date.parse(m.dal) + (mod.MINUTI_FERMO + 1) * 60_000), null)
+  await assert.rejects(mod.conEsito('lettura', async () => { throw new Error('boom') }))
+  assert.equal(mod.ultimeMancate().find(x => x.lavoro === 'lettura')?.perche, 'boom')
 })

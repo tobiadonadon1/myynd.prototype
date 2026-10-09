@@ -155,8 +155,7 @@ export function ponte(f: FerriPonte = PONTE_VERO): express.RequestHandler {
     const dentro = await chiEntra(f, req, res)
     if (!dentro) return
     await f.dentro(dentro.utente, async () => {
-      const mese = f.tettoDelMese()
-      if (mese > 0 && f.spesaDelMese() >= mese) return no(res, 429, 'budget_exhausted', 'This month’s included AI allowance is used up.')
+      if (meseFinito(f)) return no(res, 429, 'budget_exhausted', 'This month’s included AI allowance is used up.')
       if (f.usati() >= f.tetto()) return no(res, 429, 'budget_exhausted', 'Today’s included AI allowance is used up.')
       const corpo = (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? { ...req.body } : null) as Record<string, unknown> | null
       if (!corpo || typeof corpo.model !== 'string' || !/^claude-/.test(corpo.model) || !Array.isArray(corpo.messages)) {
@@ -234,13 +233,23 @@ export function ponte(f: FerriPonte = PONTE_VERO): express.RequestHandler {
   }
 }
 
-/** `GET /api/incluso/stato`: la chiamata di salute, con la dose di oggi. Non costa un token. */
+/**
+ * `GET /api/incluso/stato`: la chiamata di salute, con la dose di oggi. Non
+ * costa un token. `mese` dice che è finita la dose del mese: senza, la
+ * bussata diceva «pronto» mentre ogni chiamata vera tornava indietro.
+ */
 export function statoDelPonte(f: FerriPonte = PONTE_VERO): express.RequestHandler {
   return async (req, res) => {
     const dentro = await chiEntra(f, req, res)
     if (!dentro) return
-    f.dentro(dentro.utente, () => res.json({ usati: f.usati(), tetto: f.tetto() }))
+    f.dentro(dentro.utente, () => res.json({ usati: f.usati(), tetto: f.tetto(), ...(meseFinito(f) ? { mese: true } : {}) }))
   }
+}
+
+/** La dose del mese in dollari è usata. */
+function meseFinito(f: FerriPonte): boolean {
+  const mese = f.tettoDelMese()
+  return mese > 0 && f.spesaDelMese() >= mese
 }
 
 // — lo stato, per le preferenze —
@@ -249,9 +258,9 @@ export function statoDelPonte(f: FerriPonte = PONTE_VERO): express.RequestHandle
  * Cosa dire nella riga «Incluso con Myynd». `assente` finché il ponte non ha
  * risposto per davvero: nessun gettone, nessun indirizzo, un 503 o un 401,
  * la rete giù. `pronto` solo dopo un 200 del ponte. `finito` quando la dose
- * di oggi è usata.
+ * di oggi è usata, con `mese` quando è finita quella del mese.
  */
-export type StatoIncluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; codice?: number }
+export type StatoIncluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; codice?: number; mese?: boolean }
 
 export async function salute(o: { url?: string; gettone?: string; rete?: typeof fetch; attesa?: number }): Promise<StatoIncluso> {
   const url = (o.url ?? '').trim().replace(/\/+$/, '')
@@ -262,9 +271,10 @@ export async function salute(o: { url?: string; gettone?: string; rete?: typeof 
     if (r.status === 429) return { stato: 'finito' }
     // il codice serve alla salute dei motori: 401 rientrare, 402 il piano, 5xx il ponte giù
     if (!r.ok) return { stato: 'assente', codice: r.status }
-    const d = await r.json() as { usati?: unknown; tetto?: unknown }
+    const d = await r.json() as { usati?: unknown; tetto?: unknown; mese?: unknown }
     const usati = n(d.usati), tetto = n(d.tetto)
     if (!tetto) return { stato: 'assente' }
+    if (d.mese === true) return { stato: 'finito', usati, tetto, mese: true }
     return { stato: usati >= tetto ? 'finito' : 'pronto', usati, tetto }
   } catch { return { stato: 'assente', codice: 0 } }
 }
@@ -279,6 +289,7 @@ export async function statoQui(o: { ospitato: boolean; motore?: string; gettone?
   if (o.ospitato) {
     if (!PONTE_VERO.chiave()) return { stato: 'assente', scelto }
     const usati = PONTE_VERO.usati(), tetto = PONTE_VERO.tetto()
+    if (meseFinito(PONTE_VERO)) return { stato: 'finito', usati, tetto, mese: true, scelto }
     return { stato: usati >= tetto ? 'finito' : 'pronto', usati, tetto, scelto }
   }
   return { ...(await salute({ url: o.url ?? process.env.MYYND_INCLUSO_URL, gettone: o.gettone, rete: o.rete })), scelto }

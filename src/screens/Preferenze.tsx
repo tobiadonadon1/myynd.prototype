@@ -475,7 +475,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
 
   /** Cosa manca a questa strada per poter lavorare adesso. Vuoto = niente. */
   const manca = (via: Via): string => {
-    if (via === 'incluso') return incluso?.stato === 'finito' ? t('La dose di oggi è finita.') : ''
+    if (via === 'incluso') return incluso?.stato === 'finito' ? (incluso.mese ? t('La dose del mese è finita.') : t('La dose di oggi è finita.')) : ''
     if (via === 'claude') return claudeCollegato ? '' : t('Non ancora collegato.')
     if (via === 'openai') return openaiCollegato || !chatgpt ? '' : t('Non ancora collegato.')
     return f ? '' : t('Non ancora collegato.')
@@ -539,7 +539,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                 <div className="prefs-via-cima">
                   <span>{x.titolo}</span>
                   <span className={`prefs-status ${guaio || spento || nonAncora ? 'needs-attention' : 'ready'}`}>
-                    {spento ? t('Disattivato in Myynd') : nonAncora ? t('Non ancora disponibile') : x.id === 'incluso' && guaio ? t('Finita per oggi') : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
+                    {spento ? t('Disattivato in Myynd') : nonAncora ? t('Non ancora disponibile') : x.id === 'incluso' && guaio ? (incluso?.mese ? t('Finita per il mese') : t('Finita per oggi')) : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
                   </span>
                   {x.apri && <Bottone piccolo onClick={e => { e.stopPropagation(); x.apri?.() }}>{x.collegato ? t('Gestisci') : t('Collega')}</Bottone>}
                 </div>

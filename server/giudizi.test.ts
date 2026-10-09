@@ -108,6 +108,15 @@ test('le domande a Jev dicono il nome del conto, mai «Tobia»; senza nome, «th
   assert.match(corpi[0], /Someone other than the user is waiting/)
   assert.match(corpi[0], /"persona":"the user"/)
   assert.doesNotMatch(corpi[0], /Tobia/)
+
+  // il peso da solo, quello di ogni giro delle priorità, passa dalla stessa strada
+  corpi.length = 0
+  cfg.scrivi({ lingua: 'en', jev: { apiKey: 'apikey_prova' }, nome: 'Marta' })
+  jev.dimentica(); giudizi.scorda(); fingi()
+  await giudizi.peso([mail('p', { titolo: 'p', corpo: 'Il preventivo da rivedere.' })])
+  assert.ok(corpi.length, 'Jev è stato chiamato per il peso')
+  assert.match(corpi[0], /the work Marta should pick up next/)
+  assert.doesNotMatch(corpi[0], /Tobia|\{persona\}/)
 })
 
 test('chi non aspetta nessuno esce dalla fila, chi aspetta passa davanti', async () => {

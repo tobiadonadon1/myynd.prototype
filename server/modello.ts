@@ -218,12 +218,17 @@ export function riparaIlMotore(): boolean {
  * La scelta sua, dalle Fonti o dalle preferenze: si scrive, e si dimentica da
  * dove Myynd era venuto. Senza, un motore scelto a mano dopo un cambio fatto
  * da Myynd veniva rimesso com'era al primo ritorno di quello di prima.
+ *
+ * Si dimenticano anche le bussate a vuoto di quel motore: lo ha appena scelto
+ * lei, e un «morto» di prima lo rimandava su un altro al giro dopo. Per dirlo
+ * morto di nuovo servono bussate nuove.
  */
 export function scegliIlMotore(motore: NonNullable<ReturnType<typeof leggi>['motore']>, patch: Partial<ReturnType<typeof leggi>> = {}): void {
   const c = leggi()
   Object.assign(c, patch, { motore })
   delete c.motorePrima
   scriviConfig(c, { togli: ['motorePrima'] })
+  visti.get(chi.adesso() ?? '')?.delete(motore as Via)
 }
 
 // — vivo o no —
@@ -240,23 +245,24 @@ export const BUSSATE_PER_MORTO = 2
  * salute dei motori (`salute-teste.ts`), che bussa; qui lo si legge per
  * decidere chi lavora.
  */
-const visti = new Map<string, Map<Via, { vivo: boolean; quando: string; volte: number; codice?: number }>>()
+const visti = new Map<string, Map<Via, { vivo: boolean; quando: string; volte: number; codice?: number; mese?: boolean }>>()
 
 /**
  * Una bussata, col suo esito. `certo` dice che una sola basta: un account da
- * cui si è usciti non torna dentro alla seconda domanda.
+ * cui si è usciti non torna dentro alla seconda domanda. `mese` dice che la
+ * dose finita (429) è quella del mese, non quella di oggi.
  */
-export function segnaVia(via: Via, vivo: boolean, o: { certo?: boolean; codice?: number; adesso?: Date } = {}): void {
+export function segnaVia(via: Via, vivo: boolean, o: { certo?: boolean; codice?: number; mese?: boolean; adesso?: Date } = {}): void {
   const k = chi.adesso() ?? ''
   const m = visti.get(k) ?? new Map()
   const prima = m.get(via)
   const volte = vivo ? 0 : o.certo ? Math.max(BUSSATE_PER_MORTO, (prima?.volte ?? 0) + 1) : (prima?.volte ?? 0) + 1
-  m.set(via, { vivo, quando: (o.adesso ?? new Date()).toISOString(), volte, ...(o.codice ? { codice: o.codice } : {}) })
+  m.set(via, { vivo, quando: (o.adesso ?? new Date()).toISOString(), volte, ...(o.codice ? { codice: o.codice } : {}), ...(o.mese ? { mese: true } : {}) })
   visti.set(k, m)
 }
 
 /** L'ultima bussata a un motore, per questa persona. */
-export function statoVia(via: Via): { vivo: boolean; quando: string; volte: number; codice?: number } | null {
+export function statoVia(via: Via): { vivo: boolean; quando: string; volte: number; codice?: number; mese?: boolean } | null {
   return visti.get(chi.adesso() ?? '')?.get(via) ?? null
 }
 
@@ -391,7 +397,7 @@ function notaDalPonte(e: unknown): void {
   if (s === 429) {
     let corpo = ''
     try { corpo = JSON.stringify((e as { error?: unknown }).error ?? '') + (e instanceof Error ? e.message : '') } catch { /* resta vuoto */ }
-    if (/budget_exhausted/.test(corpo)) segnaVia('incluso', true, { codice: 429 })
+    if (/budget_exhausted/.test(corpo)) segnaVia('incluso', true, { codice: 429, mese: /month/i.test(corpo) })
     return
   }
   if (s === 401 || s === 402) return segnaVia('incluso', false, { codice: s, certo: true })
@@ -416,12 +422,15 @@ function notaDalPonte(e: unknown): void {
  * e Opus 5.5 lo rifiutano con un 400 a ogni sforzo: lì un lavoro che non
  * ragiona non manda il campo, e lo sforzo basso fa il resto. Haiku 5.5 lo
  * accetta fino a `high`, e i lavori che non ragionano stanno sotto.
+ * `traStrumenti`: Sonnet 5.5 lo spegne a modo suo, con `{ type: 'between_tools' }`
+ * (fino a `high`, senza altri campi). Senza, la cernita, le domande e la
+ * valutazione su Sonnet pensavano lo stesso, e i token di uscita li pagava lei.
  */
-type Capacita = { adattivo: boolean; sforzo: boolean; spegne: boolean }
+type Capacita = { adattivo: boolean; sforzo: boolean; spegne: boolean; traStrumenti?: boolean }
 
 const CAPACITA: Record<string, Capacita> = {
   'claude-haiku-5-5': { adattivo: true, sforzo: true, spegne: true },
-  'claude-sonnet-5-5': { adattivo: true, sforzo: true, spegne: false },
+  'claude-sonnet-5-5': { adattivo: true, sforzo: true, spegne: false, traStrumenti: true },
   'claude-opus-5-5': { adattivo: true, sforzo: true, spegne: false },
   'claude-haiku-4-5': { adattivo: false, sforzo: false, spegne: true },
   'claude-sonnet-5': { adattivo: true, sforzo: true, spegne: true },
@@ -1278,6 +1287,9 @@ export function parametri(lavoro: Lavoro, max_tokens: number, formato?: object):
     // mandare un budget che il server rifiuta
   } else if (cap.adattivo && cap.spegne) {
     fuori.thinking = { type: 'disabled' }
+  } else if (cap.adattivo && cap.traStrumenti) {
+    // gli sforzi dei lavori arrivano fino a `high`: il limite di `between_tools`
+    fuori.thinking = { type: 'between_tools' }
   }
   // sui modelli senza pensiero adattivo, «non pensare» è il comportamento di
   // serie: non si manda niente
@@ -1456,12 +1468,21 @@ export function ultimeMancate(): ({ lavoro: string } & Mancata)[] {
 }
 
 export async function chiedi(o: Domanda): Promise<Esito> {
+  return conEsito(o.lavoro, () => chiediAdesso(o))
+}
+
+/**
+ * Una chiamata al motore fatta da fuori `chiedi` (la lettura del feed, la
+ * chat senza streaming), con il suo esito nella serie: senza, il feed che
+ * non riusciva a leggere da un'ora non contava per «non riesco a pensare».
+ */
+export async function conEsito<T>(lavoro: string, fai: () => Promise<T>): Promise<T> {
   try {
-    const r = await chiediAdesso(o)
-    segnaEsitoDi(o.lavoro)
+    const r = await fai()
+    segnaEsitoDi(lavoro)
     return r
   } catch (e) {
-    segnaEsitoDi(o.lavoro, e)
+    segnaEsitoDi(lavoro, e)
     throw e
   }
 }

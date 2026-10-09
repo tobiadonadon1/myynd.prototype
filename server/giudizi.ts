@@ -365,7 +365,7 @@ export async function peso(docs: readonly Documento[], tetto = 60): Promise<Map<
     else oltre++
   }
   if (!daChiedere.length || !jev.collegato()) return fuori
-  const risposte = await jev.giudicaTanti(daChiedere, scheda, { peso: PESO })
+  const risposte = await jev.giudicaTanti(daChiedere, scheda, conPersona({ peso: PESO }))
   let giudicati = 0
   for (const [d, r] of risposte) {
     if (!r) continue

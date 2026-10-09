@@ -1,0 +1,14 @@
+[
+  { "aspetta": 2500 },
+  { "js": "location.reload(); 1" },
+  { "aspetta": 3000 },
+  { "scatta": "riga" },
+  { "testo": "riga" },
+  { "clicca": "Your account" },
+  { "vai": "Preferences" },
+  { "clicca": "AI and costs" },
+  { "aspetta": 1200 },
+  { "passa": "Included with Myynd" },
+  { "scatta": "preferenze" },
+  { "testo": "preferenze" }
+]

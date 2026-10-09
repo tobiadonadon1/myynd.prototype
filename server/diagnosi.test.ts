@@ -25,13 +25,17 @@ const SPORCO = [
   'calendario https://p01-caldav.icloud.com/published/2/MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkw?token=XYZ987&lang=it',
   'leggo /Users/tobia/Desktop/Progetti segreti/Contratto Rossi.pdf e /Users/altra/Documents/x.txt',
   'gettone di sessione 9f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a4',
-  'la casa di tobia è piena di cose'
+  'la casa di tobia è piena di cose',
+  'agenda https://calendar.google.com/calendar/ical/giulia.bianchi%40example.org/public/basic.ics',
+  'cartella ~/Progetti/Fusione Orsini/nota.md, letta',
+  'MYYND_SMTP_PASS=pwd-di-posta MYYND_GOOGLE_CLIENT_SECRET=gocspx-prova'
 ].join('\n')
 
 test('oscura: email, chiavi, gettoni, query, percorsi nella casa e il nome utente', () => {
   const s = diagnosi.oscura(SPORCO, { casa: '/Users/tobia', utente: 'tobia' })
   for (const vietato of ['marta.rossi', 'example.com>', 'sk-ant-api03', 'AbCdEf123456', 'sk-proj', 'ghp_', 'eyJhbGci', 'segretissimo', 't0k3n', 'hunter2',
-    'XYZ987', 'MTIzNDU2', 'Progetti segreti', 'Contratto Rossi', '/Users/', 'altra', '9f8e7d6c5b4a', 'tobia']) {
+    'XYZ987', 'MTIzNDU2', 'Progetti segreti', 'Contratto Rossi', '/Users/', 'altra', '9f8e7d6c5b4a', 'tobia',
+    'giulia.bianchi', 'Fusione Orsini', 'pwd-di-posta', 'gocspx-prova']) {
     assert.ok(!s.includes(vietato), `«${vietato}» è rimasto:\n${s}`)
   }
   assert.match(s, /\[email\] a imap\.example\.com/, 'l’indirizzo del server resta: dice dove si è rotto')
@@ -39,6 +43,9 @@ test('oscura: email, chiavi, gettoni, query, percorsi nella casa e il nome utent
   assert.match(s, /Bearer \[secret\]/)
   assert.match(s, /leggo ~\/\[path\]/)
   assert.match(s, /la casa di \[user\]/)
+  assert.match(s, /ical\/\[email\]\/public/)
+  assert.match(s, /cartella ~\/\[path\], letta/)
+  assert.match(s, /MYYND_SMTP_PASS=\[secret\]/)
   // le righe normali restano leggibili
   for (const normale of [
     '[2026-10-09T10:00:00.000Z] myynd · uso · titolo · entrata 120 · uscita 8',
@@ -79,7 +86,7 @@ test('il rapporto: versione, sistema, motore, guasti, fonti, righe; tutto copert
   assert.match(testo, /Models: casa claude-haiku-5-5/)
   assert.match(testo, /priorita: 3x since/)
   assert.match(testo, /posta \(credenziale\)/)
-  assert.match(testo, /Last 9 log lines:/)
+  assert.match(testo, /Last 12 log lines:/)
   assert.ok(!/marta|sk-ant|hunter2|\/Users\//.test(testo))
   const scrivania = join(CASA, 'Desktop')
   const a = diagnosi.salva(scrivania, testo, new Date(2026, 9, 9, 14, 32))

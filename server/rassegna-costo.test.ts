@@ -110,3 +110,18 @@ test('in un giorno di giornali ogni venti minuti il modello parte al massimo dod
   assert.ok(chiamate <= 12, `${chiamate} chiamate in un giorno`)
   assert.ok(chiamate >= 11, `${chiamate}: ogni due ore una`)
 })
+
+test('un rilascio entrato gratis mentre il modello aspetta entra una volta sola: il pallino non si riaccende a ogni giro', async () => {
+  invecchia(21, 0.5)
+  pubblica(voce('Anthropic launches Claude Opus 9 for everyone', 'opus9', 2))
+  const primo = await rassegna.aggiorna()
+  assert.ok(primo.notizie.some(n => n.titolo.startsWith('Anthropic launches')))
+  const quando = new Set([primo.quando])
+  for (let i = 0; i < 4; i++) {
+    await new Promise(r => setTimeout(r, 5))
+    invecchia(21, 0.5)
+    quando.add((await rassegna.aggiorna()).quando)
+  }
+  assert.equal(quando.size, 1, 'l’ora dell’infornata resta quella del primo giro')
+  assert.ok(edizione().valutate.some(id => store.notizie().find(n => n.id === id)?.titolo.startsWith('Anthropic launches')), 'il rilascio è segnato come guardato')
+})

@@ -338,6 +338,7 @@ test('ogni motore ha la sua frase e il suo posto: il modello sul Mac, ChatGPT, l
     [{ id: 'incluso', via: 'incluso', rimedio: 'accedi' }, 'Devo accedere di nuovo al tuo conto Myynd per l’AI inclusa.', 'I need to sign in to your Myynd account again for the included AI.', 'preferenze'],
     [{ id: 'incluso', via: 'incluso', rimedio: 'pagamento' }, 'L’AI inclusa è ferma: il piano va rinnovato.', 'The included AI is paused: the plan needs renewing.', 'preferenze'],
     [{ id: 'incluso', via: 'incluso', rimedio: 'finito' }, 'Hai finito l’AI inclusa di oggi. Si riparte domani.', 'You’ve used today’s included AI. It starts again tomorrow.', 'preferenze'],
+    [{ id: 'incluso', via: 'incluso', rimedio: 'finitoMese' }, 'Hai finito l’AI inclusa di questo mese. Si riparte il primo del mese.', 'You’ve used this month’s included AI. It starts again on the first of the month.', 'preferenze'],
     [{ id: 'incluso', via: 'incluso', rimedio: 'ponte' }, 'L’AI inclusa non risponde.', 'The included AI isn’t answering.', 'preferenze'],
     [{ id: 'claude', via: 'claude', rimedio: 'fermo', minuti: 14 }, 'Non riesco a pensare da 14 minuti.', 'I haven’t been able to think for 14 minutes.', 'fonti:claude'],
     [{ id: 'claude', via: 'claude', rimedio: 'fermo', minuti: 200 }, 'Non riesco a pensare da 3 ore.', 'I haven’t been able to think for 3 hours.', 'fonti:claude'],

@@ -1102,7 +1102,7 @@ export type Abbonamento = {
 }
 
 /** F8 · l'AI inclusa: «pronto» solo dopo una risposta vera del ponte. */
-export type Incluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; scelto: boolean }
+export type Incluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; mese?: boolean; scelto: boolean }
 
 export type ChatGPT = {
   installato: boolean
@@ -1150,7 +1150,7 @@ export type ViaMotore = 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'inclu
  */
 export type TestaGuasta = {
   id: 'claude' | 'openai' | 'compatibile' | 'incluso'
-  rimedio: 'accedi' | 'credenziale' | 'spento' | 'ponte' | 'pagamento' | 'finito' | 'fermo'
+  rimedio: 'accedi' | 'credenziale' | 'spento' | 'ponte' | 'pagamento' | 'finito' | 'finitoMese' | 'fermo'
   via?: ViaMotore; nome?: string; locale?: boolean; minuti?: number
   intanto?: { via: ViaMotore; nome?: string; locale?: boolean }
 }

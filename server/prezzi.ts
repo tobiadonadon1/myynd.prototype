@@ -12,8 +12,8 @@
 // nel file (`config.SUCCESSORI` li porta ai nuovi). Haiku 5.5 costa così fino
 // a centomila token di entrata; sopra ne costa cinque volte tanto, e Myynd
 // non gli manda mai tanto.
-// La cache letta costa un decimo dell'entrata, quella scritta un quarto in
-// più. Un modello che non è qui non ha un prezzo: si contano i token e basta,
+// La cache letta costa un decimo dell'entrata (Opus 5.5 la mette a 0,20, un
+// ventesimo), quella scritta un quarto in più. Un modello che non è qui non ha un prezzo: si contano i token e basta,
 // meglio una riga senza cifra che una cifra inventata.
 
 export type Prezzo = { entrata: number; uscita: number; cacheLettura: number; cacheScrittura: number }
@@ -25,7 +25,7 @@ const listino = (entrata: number, uscita: number): Prezzo =>
 export const PREZZI: Record<string, Prezzo> = {
   'claude-haiku-5-5': listino(0.1, 0.5),
   'claude-sonnet-5-5': listino(2, 10),
-  'claude-opus-5-5': listino(4, 20),
+  'claude-opus-5-5': { ...listino(4, 20), cacheLettura: 0.2 },
   'claude-haiku-4-5': listino(1, 5),
   'claude-sonnet-5': listino(2, 10),
   'claude-opus-5': listino(5, 25)

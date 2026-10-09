@@ -77,7 +77,7 @@ export function segnaTesta(_esito?: 'ok'): void {
 // — ogni motore —
 
 /** Come si sistema il guaio di un motore: rientrare, la chiave, acceso, il ponte, il piano, la dose, o niente risposte. */
-export type Guaio = 'accedi' | 'credenziale' | 'spento' | 'ponte' | 'pagamento' | 'finito' | 'fermo'
+export type Guaio = 'accedi' | 'credenziale' | 'spento' | 'ponte' | 'pagamento' | 'finito' | 'finitoMese' | 'fermo'
 /** La scheda in cui si sistema: `openai` è anche l'account ChatGPT. */
 export type Scheda = 'claude' | 'openai' | 'compatibile' | 'incluso'
 
@@ -123,8 +123,8 @@ export function guaioDi(via: mod.Via): Guaio | null {
   const s = mod.statoVia(via)
   if (!s) return null
   if (via === 'incluso') {
-    // la dose finita è un «sì» del ponte: lavora, domani
-    if (s.codice === 429) return 'finito'
+    // la dose finita è un «sì» del ponte: lavora, domani (o il primo del mese)
+    if (s.codice === 429) return s.mese ? 'finitoMese' : 'finito'
     if (s.vivo) return null
     return s.codice === 401 ? 'accedi' : s.codice === 402 ? 'pagamento' : 'ponte'
   }
@@ -193,7 +193,7 @@ async function bussa(via: mod.Via): Promise<void> {
   if (via === 'incluso') {
     if (!mod.fornitoreIncluso(c)) return
     const s = await ferri.saluteIncluso({ url: process.env.MYYND_INCLUSO_URL, gettone: c.incluso?.token })
-    notaPonte(s.stato === 'pronto' ? 200 : s.stato === 'finito' ? 429 : (s.codice ?? 0))
+    notaPonte(s.stato === 'pronto' ? 200 : s.stato === 'finito' ? 429 : (s.codice ?? 0), s.mese)
   }
 }
 
@@ -201,9 +201,9 @@ async function bussa(via: mod.Via): Promise<void> {
  * Quello che il ponte ha appena detto, da una bussata o da una chiamata vera:
  * 401 e 402 bastano una volta, un 5xx o la rete giù vogliono la conferma.
  */
-export function notaPonte(codice: number): void {
+export function notaPonte(codice: number, mese = false): void {
   if (codice >= 200 && codice < 300) return mod.segnaVia('incluso', true)
-  if (codice === 429) return mod.segnaVia('incluso', true, { codice: 429 })
+  if (codice === 429) return mod.segnaVia('incluso', true, { codice: 429, mese })
   mod.segnaVia('incluso', false, { codice, certo: codice === 401 || codice === 402 })
 }
 

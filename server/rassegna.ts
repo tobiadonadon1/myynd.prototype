@@ -1105,7 +1105,9 @@ async function giro(focus: Fuoco[]): Promise<Esito> {
   const arrivate = mazzo.filter(n => nuoveIds.includes(n.id))
   const e = salvaEdizione(focus, mazzo.map(n => n.id), {
     ...(!arrivate.length && precedente ? { quando: precedente.quando } : {}),
-    valutate: aspetta ? [...valutate] : [...valutate, ...candidate.map(n => n.id)],
+    // in attesa si segnano come guardati solo i rilasci passati per la regola:
+    // senza, lo stesso rilascio rientrava a ogni giro e riaccendeva il pallino
+    valutate: aspetta ? [...valutate, ...selezionate.map(s => s.n.id)] : [...valutate, ...candidate.map(n => n.id)],
     // l'ora dell'ultima chiamata resta anche se questa è andata male: un
     // modello che non risponde non si richiama ogni venti minuti
     modello: chiamato ? new Date().toISOString() : precedente?.modello

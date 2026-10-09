@@ -107,16 +107,16 @@ test('i lavori delle fondamenta: l’esame e la verifica di frontiera, il collau
   assert.equal(mod.attesaDi('verifica'), 120_000)
   // la verifica pensa, l'esame e il collaudo no
   assert.ok(mod.parametri('verifica', 4000).thinking?.type !== 'disabled')
-  // Sonnet 5.5 rifiuta `disabled` con un 400: chi non pensa non manda il campo, e va a sforzo basso
-  assert.equal(mod.parametri('esame', 4000).thinking, undefined)
-  assert.equal(mod.parametri('collaudo', 4000).thinking, undefined)
+  // Sonnet 5.5 rifiuta `disabled` con un 400: chi non pensa lo spegne con `between_tools`, a sforzo basso
+  assert.deepEqual(mod.parametri('esame', 4000).thinking, { type: 'between_tools' })
+  assert.deepEqual(mod.parametri('collaudo', 4000).thinking, { type: 'between_tools' })
   assert.equal((mod.parametri('collaudo', 4000).output_config as { effort?: string }).effort, 'low')
 })
 
-test('il pensiero si spegne solo dove il modello lo accetta: Haiku 5.5 sì, Sonnet 5.5 e Opus 5.5 no', () => {
+test('il pensiero si spegne solo dove il modello lo accetta: Haiku 5.5 con `disabled`, Sonnet 5.5 con `between_tools`, Opus 5.5 no', () => {
   cfg.scrivi({ modelli: { casa: 'claude-haiku-5-5', media: 'claude-sonnet-5-5', frontiera: 'claude-opus-5-5' } })
   assert.equal(mod.parametri('titolo', 400).thinking?.type, 'disabled')
-  assert.equal(mod.parametri('cernita', 400).thinking, undefined)
+  assert.deepEqual(mod.parametri('cernita', 400).thinking, { type: 'between_tools' })
   assert.equal(mod.parametri('email', 400).thinking, undefined)
   assert.equal(mod.parametri('risposta', 8000).thinking?.type, 'adaptive')
   // un modello che non conosciamo: niente `disabled`, che i modelli nuovi rifiutano

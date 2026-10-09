@@ -152,6 +152,7 @@ export function fraseMotore(g: TestaGuasta): { frase: string; controllo: Control
     case 'ponte': frase = t('L’AI inclusa non risponde.'); break
     case 'pagamento': frase = t('L’AI inclusa è ferma: il piano va rinnovato.'); break
     case 'finito': frase = t('Hai finito l’AI inclusa di oggi. Si riparte domani.'); break
+    case 'finitoMese': frase = t('Hai finito l’AI inclusa di questo mese. Si riparte il primo del mese.'); break
     default: {
       const n = Math.max(1, g.minuti ?? 0)
       frase = n < 60 ? riempi(t('Non riesco a pensare da {n} minuti.'), { n })
