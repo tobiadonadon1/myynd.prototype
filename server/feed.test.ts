@@ -308,8 +308,15 @@ test('nessun numero: dodici voci valide passano tutte, sedici si fermano a quind
   const sistema = sistemaDi(ricevute[0])
   assert.doesNotMatch(sistema, numero, 'il prompt dice un numero di carte')
   assert.match(sistema, /passano l'asticella/)
-  assert.match(sistema, /zero è una risposta giusta/i)
-  assert.match(sistema, /Nel dubbio, fuori\./)
+  assert.match(sistema, /zero è la risposta giusta/i)
+  /*
+   * «Nel dubbio, fuori» due volte faceva lasciare fuori le cose ovvie: sul
+   * modello vero, con sette mail che chiedevano di lei, ne passavano due
+   * (9 ottobre 2026). Le cose che passano sempre sono scritte, e il dubbio no.
+   */
+  assert.doesNotMatch(sistema, /Nel dubbio, fuori/)
+  assert.match(sistema, /Passano sempre l'asticella/)
+  assert.match(sistema, /coordinate bancarie/)
   // le uniche cifre del prompt sono negli esempi citati
   const cifre = [...sistema.matchAll(/\d+/g)].map(m => m[0])
   // 9:30, 3 ottobre, venerdì 26, «September 20», «da 12 a 500»: tutte dentro esempi citati

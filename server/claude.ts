@@ -2394,7 +2394,12 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
       max_tokens: 16000,
       formato: schemaFeed(docs.map(d => d.id)),
       attesa: attesaDi('lettura'),
-      system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori tutte e sole le cose che passano l'asticella: cose che farebbe entro due giorni, o che le dispiacerebbe non aver visto. Non c'è un numero da raggiungere; zero è una risposta giusta. Nel dubbio, fuori.
+      system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori tutte e sole le cose che passano l'asticella: cose che farebbe entro due giorni, o che le dispiacerebbe non aver visto. Non c'è un numero da raggiungere: se niente chiede di lei, zero è la risposta giusta.
+
+Passano sempre l'asticella, se lei non ha già risposto:
+- un messaggio in cui una persona, non un sistema, le chiede direttamente qualcosa: una risposta, una decisione, un'approvazione, un documento, una data, un incontro, un pagamento;
+- un cambio di coordinate bancarie o di istruzioni di pagamento: va verificato prima di pagare;
+- un avviso con una scadenza che tocca a lei (un rinnovo, una disdetta, un adempimento), anche se la data è fra settimane.
 
 ${indicazioni}
 
@@ -2452,7 +2457,6 @@ da 12 a 500 caratteri, nella lingua originale. Se non puoi citarla, lascia
 fuori la voce. Non inventare scadenze, nomi, obiettivi, obblighi o urgenza.
 
 Sii concreto: nomi, cifre e date che hai letto davvero. Niente inventato.
-Nel dubbio, fuori.
 Scrivi in ${nellaLingua()}.`),
       messages: [{
         role: 'user',

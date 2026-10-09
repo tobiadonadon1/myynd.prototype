@@ -44,6 +44,15 @@ test('a forwarded problem from a person is a request even without "please"', () 
   assert.equal(validaVoceFeed(voce, mail({ corpo: d.corpo, autore: 'Alerts <alerts@nextas.example>' })), false)
 })
 
+test('a card about a VAT or tax return is not a «return (send back)» card: the verb is the first word', () => {
+  const prova = 'I need your approval by Friday to file on time.'
+  const d = mail({ titolo: 'Q3 VAT return ready for approval', corpo: `Hello,\n\nThe Q3 VAT return is ready. ${prova}\n\nGiulia` })
+  const voce = { titolo: 'Approve the Q3 VAT return for Giulia', testo: 'Giulia needs your approval of the VAT return to file it on time.', perche: 'Giulia needs approval to file on time.', prova }
+  assert.equal(validaVoceFeed(voce, d), true)
+  // the guard still holds where the verb really is «return»: no quote asks to send anything back
+  assert.equal(validaVoceFeed({ ...voce, titolo: 'Return the signed VAT form to Giulia' }, d), false)
+})
+
 test('service updates belong to Brief even with bulk headers; promotions never become work', () => {
   for (const titolo of ['Your package was delivered', 'Your order has arrived', 'Your subscription renews tomorrow', 'Your receipt from Apple']) {
     assert.equal(classifica(mail({ titolo, corpo: titolo, autore: 'Service <no-reply@service.example>', massa: true })), 'brief', titolo)

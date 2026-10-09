@@ -202,7 +202,11 @@ export function validaVoceFeed(
       /\b(?:update|fix|resolve|aggiorn(?:a|are)|corregg(?:i|ere)|risolv(?:i|ere)|issues?|problems?|bugs?|errors?|broken|not working|fail(?:s|ed|ing)?|problem[ai]|error[ei]|non funziona|guast[oa])\b/i,
       /\b(?:send|share|provide|submit|return|invi(?:a|are)|mand(?:a|are)|condivid(?:i|ere)|restitui(?:sci|re))\b/i
     ]
-    if (famiglie.some(f => f.test(titolo) && !f.test(prova))) return false
+    // il verbo è in testa al titolo («Approve the VAT return»): guardare tutto il
+    // titolo leggeva «return», la dichiarazione, come «restituisci», e ogni carta
+    // su una dichiarazione IVA o dei redditi finiva scartata
+    const verbo = titolo.split(/\s+/).slice(0, 2).join(' ')
+    if (famiglie.some(f => f.test(verbo) && !f.test(prova))) return false
   }
   // Concrete identities/numbers mentioned in the card must be present in
   // the source. The exact request remains available to audit semantic fit.
