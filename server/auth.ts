@@ -18,7 +18,7 @@ import * as gettoni from './gettoni.ts'
 import * as davanti from './davanti.ts'
 import * as gettoniEmail from './gettoniEmail.ts'
 import * as postaUscita from './postaUscita.ts'
-import { REGISTRAZIONE, INVITO, DOMINI_AMMESSI, type Registrazione } from './ospitato.ts'
+import { REGISTRAZIONE, INVITO, DOMINI_AMMESSI, OSPITATO, type Registrazione } from './ospitato.ts'
 
 
 
@@ -325,6 +325,50 @@ export async function reimposta(gettone: string, nuova: string):
   return { ok: true, token: await conti.apri(utente), utente }
 }
 
+// ——— la password dimenticata sul Mac ———
+//
+// In casa non c'è nessuna posta del server che possa mandare un collegamento,
+// e «ho dimenticato la password» finiva in un vicolo: la riga di comando. Sul
+// Mac c'è un'altra prova di chi sei, più forte di una casella di posta: chi è
+// davanti al Mac e lo dimostra al Mac stesso (Touch ID, o la password del Mac).
+// Quella prova la chiede il guscio, non la pagina, e il server la riconosce da
+// un segreto che il guscio gli passa alla partenza e che nessun altro conosce:
+// la pagina non lo vede mai, e una richiesta da un'altra app su questo computer
+// senza quel segreto riceve un no.
+
+/** Il segreto del guscio, letto una volta e tolto dall'ambiente: i processi figli (Claude Code, Codex) non lo ereditano. */
+const SEGRETO_GUSCIO = process.env.MYYND_GUSCIO_SEGRETO ?? ''
+delete process.env.MYYND_GUSCIO_SEGRETO
+
+/** La richiesta porta il segreto del guscio: è il guscio che parla, dopo aver chiesto al Mac chi c'è davanti. */
+export function dalGuscio(portato: unknown): boolean {
+  if (OSPITATO || SEGRETO_GUSCIO.length < 32 || typeof portato !== 'string') return false
+  const a = Buffer.from(portato), b = Buffer.from(SEGRETO_GUSCIO)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/** Il segreto per le prove: in un processo di prova non c'è nessun guscio a passarlo. */
+export function segretoPerProva(): string { return SEGRETO_GUSCIO }
+
+/**
+ * La password nuova, dopo che il Mac ha detto chi c'è davanti.
+ *
+ * Qui dire «nessun conto con questo indirizzo» non racconta niente a un
+ * estraneo: chi chiede ha appena dimostrato di essere il padrone di questo
+ * Mac, e i conti sono nella sua cartella. Come col collegamento per posta,
+ * tutte le sessioni si chiudono e se ne apre una per chi ha appena premuto.
+ */
+export async function reimpostaDalMac(email: string, nuova: string):
+  Promise<{ ok: true; token: string; utente: string } | { ok: false; errore: string }> {
+  if (OSPITATO) return { ok: false, errore: 'Su un server la password si rimette dalla posta.' }
+  const c = await conti.aQuestoIndirizzo(email)
+  if (!c) return { ok: false, errore: 'Su questo Mac non c’è un conto con questo indirizzo.' }
+  const e = await conti.cambiaPassword(c.id, nuova)
+  if (!e.ok) return e
+  await conti.segnaVerificato(c.id)
+  return { ok: true, token: await conti.apri(c.id), utente: c.id }
+}
+
 /** Serve la conferma dell'indirizzo, qui? Lo chiede la schermata d'accesso. */
 export function verificaAttiva(): boolean {
   return postaUscita.verificaObbligatoria()
@@ -395,7 +439,7 @@ function estrai(req: Request): string | undefined {
 const PRIMA_DELL_ACCESSO = new Set([
   '/api/auth', '/api/auth/registra', '/api/auth/entra', '/api/auth/esci',
   '/api/auth/verifica', '/api/auth/verifica/manda',
-  '/api/auth/reimposta', '/api/auth/reimposta/chiedi'
+  '/api/auth/reimposta', '/api/auth/reimposta/chiedi', '/api/auth/reimposta/mac'
 ])
 
 /**

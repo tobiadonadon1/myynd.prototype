@@ -534,6 +534,18 @@ app.post('/api/auth/reimposta', async (req, res) => {
 })
 
 /*
+ * La password dimenticata sul Mac: la chiama solo il guscio, dopo Touch ID o
+ * la password del Mac, con il segreto che ha dato al server alla partenza.
+ * Senza quel segreto è un 403, sempre: la pagina non lo conosce.
+ */
+app.post('/api/auth/reimposta/mac', async (req, res) => {
+  if (!auth.dalGuscio(req.headers['x-myynd-guscio'])) return res.status(403).json({ errore: 'Solo l’app sul Mac può farlo, dopo aver chiesto chi sei.' })
+  const e = await auth.reimpostaDalMac(String(req.body?.email ?? ''), String(req.body?.password ?? ''))
+  if (!e.ok) return res.status(400).json({ errore: e.errore })
+  chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
+})
+
+/*
  * Il ponte dell'AI inclusa (F8), sopra la guardia: chi lo chiama è l'app sul
  * Mac di qualcuno, con il gettone del suo conto al posto di una chiave, e il
  * ponte lo controlla da sé (`incluso.ts`). Senza la chiave del conto

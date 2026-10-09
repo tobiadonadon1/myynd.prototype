@@ -974,6 +974,20 @@ const EN: Record<string, string> = {
   'Questo collegamento non vale più: chiedine un altro dalla schermata d’accesso.':
     'This link is no longer valid: ask for another one from the sign-in screen.',
   'La posta di questo server non è configurata.': 'This server has no outgoing mail configured.',
+  // — la password dimenticata sul Mac: Touch ID, o la password del Mac —
+  'Scegli una password nuova, poi conferma che sei tu su questo Mac.': 'Choose a new password, then confirm it is you on this Mac.',
+  'Conferma con Touch ID': 'Confirm with Touch ID',
+  'Conferma con la password del Mac': 'Confirm with your Mac password',
+  'Usa la password del Mac': 'Use your Mac password instead',
+  'Touch ID non ha confermato.': 'Touch ID did not confirm it.',
+  'Annullato.': 'Cancelled.',
+  'Il Mac non ha confermato la password.': 'The Mac did not confirm the password.',
+  'Scrivi il tuo indirizzo.': 'Type your address.',
+  'Myynd non è ancora partito. Riprova fra un momento.': 'Myynd has not started yet. Try again in a moment.',
+  'Non sono riuscito a cambiare la password.': 'I could not change the password.',
+  'Su un server la password si rimette dalla posta.': 'On a server, the password is reset by email.',
+  'Su questo Mac non c’è un conto con questo indirizzo.': 'There is no account with this address on this Mac.',
+  'Solo l’app sul Mac può farlo, dopo aver chiesto chi sei.': 'Only the Mac app can do this, after asking who you are.',
 
   // — chi sei: nome e ruolo, che prima li chiedeva solo il primo avvio —
   'Chi sei': 'Who you are',

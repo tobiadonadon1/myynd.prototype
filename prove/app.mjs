@@ -29,6 +29,7 @@ const CHIAVI = [
   'aggiornamenti', 'naviga', 'notifica', 'dentroIlRichiamo', 'richiamo', 'osservatore', 'compagno'
 ]
 CHIAVI.push('riavvia') // P8
+CHIAVI.push('touchId', 'reimpostaPassword') // la password dimenticata sul Mac
 const CHIAVI_RICHIAMO = ['chiudi', 'apri', 'misura', 'mostrato']
 const CHIAVI_AGGIORNAMENTI = ['attuale', 'controlla', 'installa', 'stato']
 

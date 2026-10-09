@@ -13,6 +13,7 @@
 
 import { app, utilityProcess, type UtilityProcess } from 'electron'
 import { execFile } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -116,6 +117,20 @@ export type Ascolto = {
   suTurno?: (m: unknown) => void
 }
 
+/**
+ * Il segreto fra guscio e server, nuovo a ogni apertura.
+ *
+ * Il server lo riceve nell'ambiente e lo toglie subito (`server/auth.ts`):
+ * con lui il guscio dice «ho chiesto al Mac chi c'è davanti» quando rimette
+ * una password dimenticata. La pagina non lo vede mai.
+ */
+const SEGRETO = randomBytes(32).toString('hex')
+export function segretoGuscio(): string { return SEGRETO }
+
+/** La porta su cui il server ascolta adesso, o null finché non l'ha detta. */
+let portaAttuale: number | null = null
+export function porta(): number | null { return portaAttuale }
+
 const RIAVVII_MASSIMI = 3
 const FINESTRA_RIAVVII = 60_000
 const ATTESA_USCITA = 10_000
@@ -173,7 +188,7 @@ export async function avvia(ascolto: Ascolto, opzioni: { script?: string } = {})
   // utilityProcess non lo è, e con questa variabile Electron farebbe pasticci
   delete env.ELECTRON_RUN_AS_NODE
   // la versione: il server sa dire «dall'aggiornamento» quando le Note perdono il permesso
-  Object.assign(env, { PATH, MYYND_PORT: String(portaChiesta), NODE_ENV: 'production', MYYND_APP: '1', MYYND_VERSIONE: app.getVersion() })
+  Object.assign(env, { PATH, MYYND_PORT: String(portaChiesta), NODE_ENV: 'production', MYYND_APP: '1', MYYND_VERSIONE: app.getVersion(), MYYND_GUSCIO_SEGRETO: SEGRETO })
   // MYYND_DEV acceso in produzione fa uscire il server con un errore: meglio
   // toglierlo qui che vedere la finestra di errore
   delete env.MYYND_DEV
@@ -198,6 +213,7 @@ export async function avvia(ascolto: Ascolto, opzioni: { script?: string } = {})
     const porta = (m as { porta?: unknown })?.porta
     if (typeof porta === 'number') {
       portaDetta = true
+      portaAttuale = porta
       if (porta !== ricordata) impostazioni.scrivi({ porta })
       scriviRegistro(`guscio · il server ascolta su ${porta}`)
       ascolto.suPorta(porta)
@@ -206,6 +222,7 @@ export async function avvia(ascolto: Ascolto, opzioni: { script?: string } = {})
   p.on('exit', codice => {
     if (figlio !== p) return
     figlio = null
+    portaAttuale = null
     ascolto.suLavoro?.({tipo:'lavoro-background',attivo:false})
     scriviRegistro(`guscio · il server è uscito con ${codice}`)
     if (fermando) return

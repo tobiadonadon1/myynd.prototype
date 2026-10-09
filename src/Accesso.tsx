@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useState } from 'react'
 import { LightField } from './onboarding/LightField'
-import { api, DaVerificare, type Accesso as TipoAccesso } from './api'
+import { api, DaVerificare, sessione, type Accesso as TipoAccesso } from './api'
+import { desktop } from './desktop'
 import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { Marchio } from './components/Marchio'
 import { Hov, useLarghezza } from './ui'
@@ -13,7 +14,7 @@ const ACCESO = '#f6f2eb'
 /** Il colore di una cosa che non va, sotto al campo che non va. */
 const SBAGLIATO = '#f3b49d'
 
-type Modo = 'entra' | 'crea' | 'scordata' | 'nuova'
+type Modo = 'entra' | 'crea' | 'scordata' | 'nuova' | 'mac'
 
 /**
  * Un indirizzo che sembri un indirizzo.
@@ -63,7 +64,8 @@ export function Accesso({ accesso, entrato }: {
    *
    * `scordata` la si chiede; `nuova` ci si arriva **solo** da un collegamento
    * arrivato per posta, che è quello che rende sicuro cambiare una password
-   * senza sapere quella di prima.
+   * senza sapere quella di prima. `mac` è la stessa cosa nell'app sul Mac,
+   * dove la posta non c'è: la prova è il Mac che dice chi c'è davanti.
    */
   const [modo, setModo] = useState<Modo>('entra')
   const registrato = modo === 'entra'
@@ -109,14 +111,31 @@ export function Accesso({ accesso, entrato }: {
   const [occupato, setOccupato] = useState(false)
   /** Una cosa andata bene, da dire qui: «guarda la posta», «te l'ho rimandata». */
   const [detto, setDetto] = useState('')
-  /** La password nuova, dopo un collegamento: si chiede due volte come dappertutto. */
-  const [ripeti, setRipeti] = useState('')
   /** Il gettone arrivato per posta. Sta qui e non nell'indirizzo: vedi sotto. */
   const [gettone, setGettone] = useState('')
   /** L'indirizzo esiste ma non è confermato: si può chiedere di rimandarla. */
   const [daConfermare, setDaConfermare] = useState(false)
   /** Si è usciti dal campo dell'indirizzo: da lì in poi, se non sembra un indirizzo, lo si dice sotto. */
   const [emailToccata, setEmailToccata] = useState(false)
+  /*
+   * La password dimenticata sul Mac.
+   *
+   * Nell'app non c'è nessuna posta del server che mandi un collegamento: il
+   * collegamento lo sostituisce il Mac, che dice chi c'è davanti con Touch ID
+   * o con la sua password. Lo chiede il guscio, non questa pagina, e solo
+   * dopo un sì il guscio cambia la password (`desktop/proprietario.ts`).
+   */
+  const guscio = desktop()
+  const dalMac = !ospitato && !!guscio?.reimpostaPassword
+  const [conTouchId, setConTouchId] = useState(false)
+  useEffect(() => {
+    if (!dalMac) return
+    let vivo = true
+    guscio?.touchId?.().then(s => { if (vivo) setConTouchId(!!s) }).catch(() => {})
+    return () => { vivo = false }
+    // il guscio non cambia mentre la pagina è aperta
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dalMac])
 
   /*
    * I due collegamenti che arrivano per posta.
@@ -147,12 +166,18 @@ export function Accesso({ accesso, entrato }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const invia = async () => {
+  const invia = async (via: 'touchid' | 'password' = conTouchId ? 'touchid' : 'password') => {
     // si guarda l'indirizzo prima di partire: la riga sotto al campo dice cosa non va
-    if (modo !== 'nuova' && modo !== 'entra' && !indirizzoValido(email)) { setEmailToccata(true); return }
-    if (modo === 'crea' && password !== ripeti) return
+    if (modo !== 'nuova' && modo !== 'entra' && modo !== 'mac' && !indirizzoValido(email)) { setEmailToccata(true); return }
     setOccupato(true); setErr(''); setDetto(''); setDaConfermare(false)
     try {
+      if (modo === 'mac') {
+        const r = await guscio!.reimpostaPassword!(email, password, via)
+        sessione.imposta(r.token)
+        entrato(r.account)
+        setOccupato(false)
+        return
+      }
       if (modo === 'scordata') {
         await api.chiediReimpostazione(email)
         // la stessa frase sempre, che l'indirizzo esista o no: è la stessa
@@ -162,7 +187,6 @@ export function Accesso({ accesso, entrato }: {
         return
       }
       if (modo === 'nuova') {
-        if (password !== ripeti) { setErr(t('Le due password non coincidono.')); setOccupato(false); return }
         const r = await api.reimposta(gettone, password)
         entrato(r.account)
         setOccupato(false)
@@ -191,7 +215,7 @@ export function Accesso({ accesso, entrato }: {
         } else {
           setDetto(t('Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo.'))
         }
-        setPassword(''); setRipeti('')
+        setPassword('')
         setOccupato(false)
         return
       }
@@ -223,23 +247,29 @@ export function Accesso({ accesso, entrato }: {
   }
 
   /** Da qui si passa fra le quattro schermate senza portarsi dietro un errore vecchio. */
-  const vaiA = (m: Modo) => { setModo(m); setErr(''); setDetto(''); setDaConfermare(false); setRipeti(''); setEmailToccata(false) }
+  const vaiA = (m: Modo) => { setModo(m); setErr(''); setDetto(''); setDaConfermare(false); setEmailToccata(false); if (m === 'mac' || m === 'nuova') setPassword('') }
 
   /*
    * Per entrare basta che l'indirizzo non sia vuoto: un conto nato con le
    * regole di prima potrebbe avere un indirizzo che quelle di adesso non
    * accettano, e la porta di casa non si chiude per un punto in più. Per
    * crearne uno, o chiedere il collegamento, l'indirizzo deve sembrare un
-   * indirizzo, e la password deve essere scritta due volte uguale.
+   * indirizzo.
+   *
+   * La password si scrive una volta sola. Il secondo campo «conferma» era
+   * l'unico modo di vedere un errore di battitura; adesso c'è l'occhio, che
+   * la mostra, e una password sbagliata si rimette (dal Mac, o dalla posta).
+   * Un campo in meno sulla prima schermata che si vede.
    */
   const pronto =
     modo === 'scordata' ? indirizzoValido(email) :
-    modo === 'nuova' ? password.length >= 8 && ripeti === password :
+    modo === 'nuova' ? password.length >= 8 :
+    modo === 'mac' ? !!email.trim() && password.length >= 8 :
     registrato
       ? !!email.trim() && password.length > 0
-      : !!nome.trim() && indirizzoValido(email) && password.length >= 8 && ripeti === password && (registrazione !== 'invito' || !!invito.trim())
+      : !!nome.trim() && indirizzoValido(email) && password.length >= 8 && (registrazione !== 'invito' || !!invito.trim())
 
-  const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) invia() }
+  const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) void invia() }
 
   const schede = ([['entra', 'Accedi'], ['crea', 'Crea un account']] as const)
     .filter(([id]) => id === 'entra' || registrazione !== 'chiusa')
@@ -301,7 +331,7 @@ export function Accesso({ accesso, entrato }: {
             */}
             {/* le due strade che arrivano da una mail non sono schede: ci si è
                 dentro, e l'unica altra cosa che si può fare è tornare indietro */}
-            {modo !== 'nuova' && (
+            {modo !== 'nuova' && modo !== 'mac' && (
               <div style={su(.1)}>
                 <Schede schede={schede} modo={modo} vai={vaiA} />
               </div>
@@ -316,13 +346,14 @@ export function Accesso({ accesso, entrato }: {
               prima tester le ha lette come rumore. Le due strade che arrivano
               da una mail invece la tengono: lì la riga dice cosa succede.
             */}
-            {(modo === 'scordata' || modo === 'nuova') && (
+            {(modo === 'scordata' || modo === 'nuova' || modo === 'mac') && (
               <div style={{
                 fontSize: '13px', lineHeight: 1.55, color: '#bdb0a4',
                 marginBottom: 22, textWrap: 'pretty', ...su(.14)
               }}>
                 {modo === 'scordata'
                   ? t('Scrivi il tuo indirizzo: se è qui, ti mandiamo un collegamento per scegliere una password nuova.')
+                  : modo === 'mac' ? t('Scegli una password nuova, poi conferma che sei tu su questo Mac.')
                   : t('Scegli una password nuova. Le sessioni aperte altrove si chiudono tutte.')}
               </div>
             )}
@@ -358,7 +389,7 @@ export function Accesso({ accesso, entrato }: {
               )}
               {modo !== 'nuova' && (
                 <Casella key={modo === 'crea' ? 'crea' : 'accesso'} etichetta={t('Email')} value={email} onChange={e => setEmail(e.target.value)}
-                  onKeyDown={tasto} onBlur={() => setEmailToccata(true)} type="email" autoComplete="username" autoFocus={modo !== 'crea'}
+                  onKeyDown={tasto} onBlur={() => setEmailToccata(true)} type="email" autoComplete="username" autoFocus={modo !== 'crea' && !(modo === 'mac' && email)}
                   placeholder={modo === 'crea' && accesso.domini?.length ? `${t('nome')}@${accesso.domini[0]}` : t('nome@esempio.it')}
                   /*
                    * «tu@tuodominio.it» ha fatto credere alla prima tester che
@@ -370,26 +401,17 @@ export function Accesso({ accesso, entrato }: {
                   nota={modo !== 'crea' ? undefined
                     : accesso.domini?.length ? frasi.soloDomini(accesso.domini)
                     : t('Va bene qualsiasi indirizzo, di lavoro o personale.')}
-                  errore={modo !== 'entra' && emailToccata && !!email.trim() && !indirizzoValido(email) ? t('Questo non sembra un indirizzo email.') : undefined} />
+                  errore={modo !== 'entra' && modo !== 'mac' && emailToccata && !!email.trim() && !indirizzoValido(email) ? t('Questo non sembra un indirizzo email.') : undefined} />
               )}
 
               {modo !== 'scordata' && (
-                <Casella etichetta={modo === 'nuova' ? t('Password nuova') : t('Password')}
+                <Casella etichetta={modo === 'nuova' || modo === 'mac' ? t('Password nuova') : t('Password')}
                   value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
                   type={vedi ? 'text' : 'password'}
                   autoComplete={registrato ? 'current-password' : 'new-password'}
-                  autoFocus={modo === 'nuova'}
+                  autoFocus={modo === 'nuova' || (modo === 'mac' && !!email)}
                   placeholder={registrato ? '' : t('otto caratteri')}
                   coda={<Occhiello vedi={vedi} cambia={() => setVedi(x => !x)} />} />
-              )}
-
-              {/* due volte, qui come dove si cambia: e se non tornano lo si vede mentre si scrive */}
-              {(modo === 'nuova' || modo === 'crea') && (
-                <Casella etichetta={t('Conferma la password')} value={ripeti}
-                  onChange={e => setRipeti(e.target.value)} onKeyDown={tasto}
-                  type={vedi ? 'text' : 'password'} autoComplete="new-password"
-                  coda={<Occhiello vedi={vedi} cambia={() => setVedi(x => !x)} />}
-                  errore={ripeti && password !== ripeti ? t('Le due password non coincidono.') : undefined} />
               )}
 
               {!registrato && registrazione === 'invito' && modo === 'crea' && (
@@ -403,8 +425,9 @@ export function Accesso({ accesso, entrato }: {
             {detto && <Riga colore="#c1d2b9" ruolo="status">{detto}</Riga>}
 
             <div style={su(.26)}>
-              <Bottone pronto={pronto} occupato={occupato} premi={invia}>
+              <Bottone pronto={pronto} occupato={occupato} premi={() => void invia()}>
                 {modo === 'scordata' ? t('Mandami il collegamento')
+                  : modo === 'mac' ? (conTouchId ? t('Conferma con Touch ID') : t('Conferma con la password del Mac'))
                   : modo === 'nuova' ? t('Salva ed entra')
                     : registrato ? t('Accedi')
                       : t('Crea il tuo Myynd')}
@@ -420,9 +443,16 @@ export function Accesso({ accesso, entrato }: {
               arriverà mai è peggio di nessun bottone.
             */}
             <div style={{ display: 'flex', gap: 16, marginTop: 16, flexWrap: 'wrap', ...su(.3) }}>
-              {registrato && accesso.reimpostazione && (
-                <button type="button" onClick={() => vaiA('scordata')} style={SOTTILE}>
+              {/* sul Mac la prova è il Mac stesso; su un server con la posta, il collegamento */}
+              {registrato && (dalMac || accesso.reimpostazione) && (
+                <button type="button" onClick={() => vaiA(dalMac ? 'mac' : 'scordata')} style={SOTTILE}>
                   {t('Ho dimenticato la password')}
+                </button>
+              )}
+              {/* Touch ID non va (il dito bagnato, il coperchio chiuso): la password del Mac, apposta */}
+              {modo === 'mac' && conTouchId && (
+                <button type="button" onClick={() => void invia('password')} disabled={!pronto || occupato} style={SOTTILE}>
+                  {t('Usa la password del Mac')}
                 </button>
               )}
               {daConfermare && (
@@ -430,7 +460,7 @@ export function Accesso({ accesso, entrato }: {
                   {t('Non è arrivata? Rimandamela')}
                 </button>
               )}
-              {(modo === 'scordata' || modo === 'nuova') && (
+              {(modo === 'scordata' || modo === 'nuova' || modo === 'mac') && (
                 <button type="button" onClick={() => vaiA('entra')} style={SOTTILE}>
                   {t('Torna all’accesso')}
                 </button>
@@ -480,7 +510,7 @@ export function Accesso({ accesso, entrato }: {
 
 function titoloAccesso(modo: Modo) {
   return modo === 'crea' ? t('Crea il tuo Myynd')
-    : modo === 'scordata' ? t('Capita.')
+    : modo === 'scordata' || modo === 'mac' ? t('Capita.')
       : modo === 'nuova' ? t('Una password nuova.')
         : t('Bentornato.')
 }
