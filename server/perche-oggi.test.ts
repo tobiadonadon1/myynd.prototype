@@ -96,3 +96,13 @@ test('passa: il giorno che «tonight» e «yesterday» volevano dire nella fonte
     assert.equal(giornoFondato(`Chiama ${giorno}`, { titolo: 'x', corpo: `Puoi chiamarmi ${parola}?`, autore: null, quando: LUNEDI }), true, parola)
   }
 })
+
+test('la data della mail e un «domani» risolto non sono numeri inventati; una data lontana sì (9 ottobre 2026)', () => {
+  const fonte = { titolo: 'Interview for the junior designer role', testo: 'Would any time next week work for the interview? I am free every day after 2pm.', autore: 'Marco Bellini <m@mail.test>', quando: '2026-10-09T10:00:00Z' }
+  // il giorno della mail: da quando aspetta
+  assert.equal(percheFondato('Marco has been waiting since 9 October for a slot.', fonte), null)
+  // «by tomorrow» riscritto da `assoluto`
+  assert.equal(percheFondato('Sam needs the decision by 10 October to keep the handoff.', { ...fonte, testo: 'I need a decision by tomorrow.' }), null)
+  // una data che la fonte non dice e che non sta vicino alla mail resta un numero inventato
+  assert.equal(percheFondato('Marco needs an answer by 30 November.', fonte), 'numero')
+})

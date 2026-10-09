@@ -200,7 +200,8 @@ export function validaVoceFeed(
       /\b(?:pay|payment|pag(?:a|are)|pagamento)\b/i,
       // a reported problem grounds a «fix» card: «there is an issue with X» is how people ask for one
       /\b(?:update|fix|resolve|aggiorn(?:a|are)|corregg(?:i|ere)|risolv(?:i|ere)|issues?|problems?|bugs?|errors?|broken|not working|fail(?:s|ed|ing)?|problem[ai]|error[ei]|non funziona|guast[oa])\b/i,
-      /\b(?:send|share|provide|submit|return|invi(?:a|are)|mand(?:a|are)|condivid(?:i|ere)|restitui(?:sci|re))\b/i
+      // una disdetta scritta si manda: «written notice is required» regge «Send written notice»
+      /\b(?:send|share|provide|submit|return|notice|notify|invi(?:a|are)|mand(?:a|are)|condivid(?:i|ere)|restitui(?:sci|re)|disdetta|preavviso)\b/i
     ]
     // il verbo è in testa al titolo («Approve the VAT return»): guardare tutto il
     // titolo leggeva «return», la dichiarazione, come «restituisci», e ogni carta

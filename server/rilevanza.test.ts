@@ -166,3 +166,9 @@ test('le sue chat, i suoi post e le sue cartelle non sono richieste: al massimo 
     assert.notEqual(r.destinazione, 'feed', d.fonte)
   }
 })
+
+test('«Send written notice» regge sulla citazione «written notice is required»', () => {
+  const prova = 'If you wish to renew or terminate, written notice is required by 31 October.'
+  const d = mail({ titolo: 'Lease renewal: action required', corpo: `Dear tenant,\n\nYour lease for Unit 4B ends on 31 December. ${prova}\n\nStudio Spaces` })
+  assert.equal(validaVoceFeed({ titolo: 'Send written notice on the Unit 4B lease', testo: 'Without written notice by 31 October the lease for Unit 4B renews automatically.', perche: 'Written notice is required by 31 October.', prova }, d), true)
+})
