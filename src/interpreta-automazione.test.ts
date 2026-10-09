@@ -36,3 +36,20 @@ test('le fonti nominate, per etichetta o per come le chiama la gente', () => {
   assert.deepEqual(fontiDette('let Claude Code plan the fix', CATALOGO), ['claude.lavora'])
   assert.deepEqual(fontiDette('nessuna fonte qui', CATALOGO), [])
 })
+
+test('il mese: un numero che conta le cose non è un giorno, e la fine del mese è la fine', () => {
+  assert.deepEqual(quandoDetto('Every month, chase the 5 biggest unpaid invoices'), { ogni: 'mese', giorno: 1, ora: 8 })
+  assert.deepEqual(quandoDetto('Monthly, email the 3 clients who have not paid'), { ogni: 'mese', giorno: 1, ora: 8 })
+  assert.deepEqual(quandoDetto('At the end of each month, list the unpaid invoices and chase the 5 biggest'), { ogni: 'mese', giorno: 31, ora: 8 })
+  assert.deepEqual(quandoDetto('A fine mese elenca le fatture non pagate'), { ogni: 'mese', giorno: 31, ora: 8 })
+  assert.deepEqual(quandoDetto('Every month on the 15th at 9 send the report'), { ogni: 'mese', giorno: 15, ora: 9 })
+  assert.deepEqual(quandoDetto('Ogni mese, il 10, sollecita le 5 fatture più grosse'), { ogni: 'mese', giorno: 10, ora: 8 })
+  assert.deepEqual(quandoDetto('il 15 di ogni mese paga l’affitto'), { ogni: 'mese', giorno: 15, ora: 8 })
+})
+
+test('quello che un ordine fisso non sa tenere non si legge: due giorni, o un’ora e mezza', () => {
+  assert.equal(quandoDetto('Every Tuesday and Thursday at 9 check the quotes'), null)
+  assert.equal(quandoDetto('Ogni martedì e giovedì guarda i preventivi'), null)
+  assert.equal(quandoDetto('Every Monday at 16:30 summarise the week'), null)
+  assert.deepEqual(quandoDetto('Every Monday at 16:00 summarise the week'), { ogni: 'settimana', giorno: 1, ora: 16 })
+})

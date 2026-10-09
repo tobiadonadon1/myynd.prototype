@@ -287,6 +287,33 @@ test('un ordine fisso può proporre risposte fra le bozze: da indirizzi veri, se
   assert.ok(!store.azioni(50).some(a => a.compito === riga.id && /manda|invio|send/i.test(a.tipo)), 'non deve partire niente')
 })
 
+test('una mail che ha già la sua bozza (della notte, salvata nella casella) non ne riceve una seconda da un ordine fisso', async () => {
+  store.salvaDocumenti([
+    { id: 'posta:q-1', fonte: 'posta', tipo: 'email', titolo: 'Richiesta preventivo tetto', corpo: 'Mi manda il preventivo del tetto?', autore: 'Nora <nora@harbor.example>', quando: new Date().toISOString(), messageId: '<q1@harbor>' },
+    { id: 'posta:q-2', fonte: 'posta', tipo: 'email', titolo: 'Richiesta preventivo scala', corpo: 'E quello della scala?', autore: 'Leo <leo@studio.example>', quando: new Date().toISOString(), messageId: '<q2@studio>' }
+  ] as never)
+  // la bozza della notte per Nora: una riga sul suo messaggio, già nella casella
+  store.scriviCompito({ id: 'n-notte', testo: 'Draft a reply: Richiesta preventivo tetto', quando: 'oggi', ordine: 'a0', origine: 'iniziativa', doc: 'posta:q-1' })
+  store.risultatoCompito('n-notte', 'Gentile Nora, eccolo.', [], 'pronto')
+  const r = auto.scrivi(ricetta('bozze-doppie', { proponi: 'posta.bozza', attrezzi: ['posta.leggi'], guarda: { cerca: 'Richiesta preventivo' } }))
+  let ids: string[] = []
+  auto.perProva({
+    collegato: () => true,
+    uso: () => ({ tetto: 0, entrata: 0, uscita: 0 }),
+    chiediJSON: async o => {
+      ids = (o.formato as { properties: { voci: { items: { properties: { doc: { enum: string[] } } } } } }).properties.voci.items.properties.doc.enum
+      return { voci: ids.filter(Boolean).map(doc => ({ doc, oggetto: 'Re', corpo: 'Eccolo.', perche: 'chiede il preventivo' })) }
+    }
+  })
+  try { await auto.fai(r) } finally { auto.perProva(null) }
+  assert.ok(!ids.includes('posta:q-1'), 'Nora ha già la sua bozza: non la si riscrive')
+  assert.ok(ids.includes('posta:q-2'))
+  const riga = store.elencoCompiti().find(c => c.origine === 'auto:bozze-doppie')!
+  const p = riga.proposta as Extract<import('./store.ts').Proposta, { azione: 'posta.bozza' }>
+  assert.ok(!p.bozze.some(b => b.doc === 'posta:q-1'))
+  assert.ok(p.bozze.some(b => b.doc === 'posta:q-2'))
+})
+
 test('se la casella non salva nessuna bozza, la riga resta lì con la sua proposta', async () => {
   const id = 'c-casella-giu'
   store.scriviCompito({ id, testo: 'Risposte', quando: 'oggi', ordine: 'a0', origine: 'auto:x' })
@@ -369,6 +396,7 @@ test('in agenda solo con una data scritta; una nota e un file sono una cosa sola
   try { await proposte.esegui(riga, file as never) } finally { proposte.perProva(null) }
   assert.deepEqual(scritti, [{ titolo: 'Preventivi fermi', testo: 'Bianchi, 1200 euro.', luogo: 'scrivania' }])
   assert.equal(store.compito(riga.id)?.consegna?.percorso, '/Users/x/Desktop/Preventivi fermi.docx', 'il file si ritrova dalla riga')
+  assert.equal(store.compito(riga.id)?.consegna?.dove, 'scrivania', 'e dice dove: la ricevuta scrive «sulla Scrivania»')
 
   const rigaNota = store.elencoCompiti().find(c => c.origine === 'auto:in-nota')!
   const fatte: unknown[] = []

@@ -100,10 +100,31 @@ export function Tavola({ l, oggi, modifica, apri }: {
     else if (dove === 'tue' && (c.stato !== 'aperto' || (c.modo && c.modo !== 'io'))) l.richiama(id)
   }
 
+  /*
+   * Stretta, la bacheca mostra tre corsie e le altre scorrono di lato: a
+   * 1100 pixel si vedevano «Tue», «Pronte», «Al lavoro» a zero, e sopra
+   * «Stanotte: 1 aspetta te», con la corsia che aspettava fuori dal bordo.
+   * Quando qualcosa aspetta lui, la bacheca si apre con quella corsia in
+   * vista. Una volta sola: dopo, lo scorrimento è suo.
+   */
+  const fila = useRef<HTMLDivElement>(null)
+  const vista = useRef(false)
+  const aspettano = corsie.attende.length
+  useEffect(() => {
+    const f = fila.current
+    if (vista.current || !f || !aspettano) return
+    vista.current = true
+    if (f.scrollWidth <= f.clientWidth + 1) return
+    const corsia = f.querySelector<HTMLElement>('[data-corsia=attende]')
+    if (!corsia) return
+    const oltre = corsia.getBoundingClientRect().right - f.getBoundingClientRect().right
+    if (oltre > 1) f.scrollLeft += oltre
+  }, [aspettano])
+
   return (
     <section className="tavola" aria-label={t('Bacheca')}>
       {l.turno && <RigaTurno s={l.turno} l={l} />}
-      <div className="tavola-corsie">
+      <div className="tavola-corsie" ref={fila}>
         {CORSIE.map(corsia => {
           const carte = corsia === 'fatte' ? corsie.fatte : corsie[corsia]
           const accetta = SI_LASCIA.includes(corsia)

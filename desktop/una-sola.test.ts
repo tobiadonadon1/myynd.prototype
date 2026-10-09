@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const { registrate, daTogliere, unaSola, INSTALLATA } = createRequire(import.meta.url)('../build/una-sola.cjs')
+const { registrate, daTogliere, unaSola, INSTALLATA, INSTALLATE } = createRequire(import.meta.url)('../build/una-sola.cjs')
 
 const blocco = (percorso: string, id: string) => [
   '--------------------------------------------------------------------------------',
@@ -49,6 +49,14 @@ test('every copy goes except the one in /Applications', () => {
     '/Volumes/Myynd 0.2.40-arm64/Myynd.app'
   ])
   assert.equal(INSTALLATA, '/Applications/Myynd.app')
+})
+
+test('one installed in ~/Applications stays registered too', () => {
+  const dump = DUMP + '\n' + blocco('/Users/x/Applications/Myynd.app', 'com.myynd.app')
+  const tolte = daTogliere(registrate(dump), INSTALLATE('/Users/x'))
+  assert.ok(!tolte.includes('/Users/x/Applications/Myynd.app'))
+  assert.ok(!tolte.includes('/Applications/Myynd.app'))
+  assert.ok(tolte.includes('/Users/x/myynd/dist-app/mac-arm64/Myynd.app'))
 })
 
 test('after a build: build outputs are unregistered and dist-app is never indexed; a dry run touches nothing', () => {

@@ -81,6 +81,9 @@ test('quello che ha ragionato oggi, con e senza cache', () => {
   assert.equal(in_('en', () => frasi.usoOggi(1, '5.6k', '0')), '1 call today · 5.6k tokens')
   assert.match(in_('en', () => frasi.usoOggi(4, '20k', '9k')), /4 calls today · 20k tokens \(9k from cache\)/)
   assert.equal(in_('it', () => frasi.usoOggi(1, '5.6k', '0')), '1 chiamata oggi · 5.6k token')
+  assert.equal(in_('en', () => frasi.spesaOggi(41_800)), 'about $0.04 at list price')
+  assert.equal(in_('en', () => frasi.spesaOggi(900)), 'under $0.01 at list price')
+  assert.equal(in_('it', () => frasi.spesaOggi(1_250_000)), 'circa 1,25 $ a listino')
   assert.match(in_('it', () => frasi.usoOggi(4, '20k', '9k')), /4 chiamate oggi/)
 })
 

@@ -92,7 +92,8 @@ export async function esegui(c: store.Compito, p: Proposta): Promise<Fatto> {
   if (!f) throw new Error('Non c\'è niente da eseguire.')
   const scritto = ferri.salvaConsegna({ titolo: f.titolo, testo: f.testo, luogo: ferri.luogo() })
   store.registraAzione({ tipo: 'documento', verso: scritto.percorso, cosa: scritto.nome, compito: c.id, esito: 'fatta' })
-  store.scriviConsegnaCompito(c.id, { app: 'File', titolo: scritto.nome, percorso: scritto.percorso })
+  // col luogo, come i file della notte: la ricevuta dice «sulla Scrivania», non solo il nome
+  store.scriviConsegnaCompito(c.id, { app: 'File', titolo: scritto.nome, percorso: scritto.percorso, dove: scritto.luogo })
   chiudi(c.id, `${scritto.nome}.`)
   return { spostati: 1, dove: scritto.nome }
 }

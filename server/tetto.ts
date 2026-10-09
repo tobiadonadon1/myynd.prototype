@@ -64,15 +64,21 @@ export function tettoDelMeseSulServer(): number {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 1_000_000) : 0
 }
 
-/** Quanto si è speso oggi, e se il tetto è stato raggiunto. */
-export function usoDiOggi(): store.Totale & { tetto: number; raggiunto: boolean } {
+/**
+ * Quanto si è speso oggi, e se il tetto è stato raggiunto. `spesa` sono i
+ * micro-dollari a listino delle chiamate che un prezzo ce l'hanno: la scheda
+ * «AI e costi» li dice in dollari, non solo in token.
+ */
+export function usoDiOggi(): store.Totale & { tetto: number; raggiunto: boolean; spesa: number } {
   const t = tetto()
   let oggi: store.Totale = { chiamate: 0, entrata: 0, cache: 0, uscita: 0 }
-  try { oggi = store.usoDal(inizioDiOggi()) } catch { /* senza indice non si conta */ }
-  return { ...oggi, tetto: t, raggiunto: t > 0 && oggi.entrata + oggi.uscita >= t }
+  let spesa = 0
+  try { oggi = store.usoDal(inizioDiOggi()); spesa = store.spesaDal(inizioDiOggi()) } catch { /* senza indice non si conta */ }
+  return { ...oggi, tetto: t, raggiunto: t > 0 && oggi.entrata + oggi.uscita >= t, spesa }
 }
 
-export const TETTO_RAGGIUNTO = 'Hai raggiunto il tetto di token di oggi. Si riparte domani, o lo alzi nelle preferenze.'
+// nelle preferenze non c'è un controllo per alzarlo: la frase non lo promette
+export const TETTO_RAGGIUNTO = 'Hai raggiunto il tetto di token di oggi. Si riparte domani.'
 /** F8 · la dose dell'AI inclusa: non si alza dalle preferenze, e lo si dice. */
 export const INCLUSO_FINITO = 'Hai finito l’AI inclusa di oggi. Si riparte domani.'
 /** La dose del mese, detta dal ponte: si riparte il primo, non domani. */

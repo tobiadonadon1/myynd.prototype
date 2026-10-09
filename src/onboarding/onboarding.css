@@ -16,6 +16,8 @@
 /* Le pastiglie: la scelta del fornitore e i giorni della prima attività. */
 .onboard-provider-choice button,.onboard-chip{display:inline-flex;align-items:center;min-height:30px;padding:0 12px;border-radius:99px;border:1px solid #ffffff30;background:transparent;color:#cbbdb1;font-size:11px;cursor:pointer;transition:background .2s,border-color .2s,color .2s}.onboard-provider-choice button:hover,.onboard-chip:hover{color:#fff;border-color:#ffffff60}.onboard-provider-choice button[aria-pressed=true],.onboard-chip[aria-pressed=true],.onboard-chip.is-on{color:#fff;background:#ffffff18;border-color:#ffffff8a}.onboard-chips{display:flex;flex-wrap:wrap;gap:6px}
 .onboard-chip-date{padding:0 8px 0 12px}.onboard-chip-date:focus-within{border-color:#fff;color:#fff}.onboard-chip-date input{width:auto;min-width:0;margin:0;border:0!important;padding:0!important;font-size:11px;line-height:1;color:inherit;background:transparent!important;box-shadow:none!important;color-scheme:dark;font-family:inherit}.onboard-chip-date input:focus{box-shadow:none!important}.onboard-chip-date input::-webkit-calendar-picker-indicator{opacity:.75;cursor:pointer;margin-left:2px}
+/* vuota: il nome al posto del segnaposto del sistema, che segue la lingua del Mac e non quella dell'app */
+.onboard-chip-date.is-vuota:not(:focus-within) input::-webkit-datetime-edit{display:none}.onboard-chip-date-nome{white-space:nowrap}.onboard-chip-date.is-vuota:focus-within .onboard-chip-date-nome{display:none}
 /* Le due opzioni dell'attività — il giorno e la fonte — sono righe del modulo,
    con la loro etichetta a sinistra come i campi sopra, non note a piè di pagina.
    La fonte è un bottone intero: si illumina, e la freccia in fondo dice che porta da qualche parte. */

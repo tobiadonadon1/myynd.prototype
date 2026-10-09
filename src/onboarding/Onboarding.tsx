@@ -641,7 +641,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
               <span className="onboard-option-label" id="onboard-giorno">{t('Per che giorno')}</span>
               <div className="onboard-chips" role="group" aria-labelledby="onboard-giorno">
                 {([[t('Oggi'), oggi], [t('Domani'), domani]] as [string, string][]).map(([etichetta, data]) => <button type="button" key={data} className="onboard-chip" disabled={occupato} aria-pressed={giorno === data} onClick={() => setGiorno(giorno === data ? '' : data)}>{etichetta}</button>)}
-                <label className={`onboard-chip onboard-chip-date${altroGiorno ? ' is-on' : ''}`}><input type="date" disabled={occupato} value={giorno} aria-label={t('Data')} onInput={e => setGiorno(e.currentTarget.value)} onChange={e => setGiorno(e.target.value)} /></label>
+                {/* vuota, la data non mostra il segnaposto del Mac («gg/mm/aaaa» anche con l'app in inglese): dice «Un altro giorno», e apre il calendario */}
+                <label className={`onboard-chip onboard-chip-date${altroGiorno ? ' is-on' : ''}${giorno ? '' : ' is-vuota'}`}>{!giorno && <span className="onboard-chip-date-nome">{t('Un altro giorno')}</span>}<input type="date" disabled={occupato} value={giorno} aria-label={t('Data')} onClick={e => { try { e.currentTarget.showPicker?.() } catch { /* il campo resta scrivibile */ } }} onInput={e => setGiorno(e.currentTarget.value)} onChange={e => setGiorno(e.target.value)} /></label>
               </div>
             </div>
             {/* le fonti vengono prima, adesso: qui si vede quali ha letto, e si torna a cambiarle */}

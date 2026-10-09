@@ -197,6 +197,31 @@ function CartaNotizie({ v }: { v: Vals }) {
   )
 }
 
+/**
+ * Per chi è Myynd: si diceva una volta sola, al primo avvio, e un conto di
+ * prima contava per sempre come «solo per me». Cambia l'ordine delle fonti,
+ * gli esempi e l'ordine fisso di partenza; mai quello che si può fare.
+ */
+function PerChi({ avvisa }: { avvisa: (m: string) => void }) {
+  const [scelta, setScelta] = useState<'persona' | 'azienda' | null>(null)
+  useEffect(() => {
+    let vivo = true
+    api.stato().then(s => { if (vivo) setScelta(s.config?.pubblico === 'azienda' ? 'azienda' : 'persona') }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  const scegli = (id: string) => {
+    const p = id === 'azienda' ? 'azienda' : 'persona'
+    const prima = scelta
+    setScelta(p)
+    api.profilo({ pubblico: p }).catch(e => { setScelta(prima); avvisa(e instanceof Error ? e.message : String(e)) })
+  }
+  return (
+    <Scelte etichetta={t('Per chi è Myynd?')} mostraEtichetta attivazione="automatica"
+      opzioni={[{ id: 'persona', nome: t('Solo per me') }, { id: 'azienda', nome: t('Per la mia squadra o azienda') }]}
+      scelta={scelta} scegli={scegli} />
+  )
+}
+
 /** Quanto è costato ragionare: la scheda c'è subito, i numeri arrivano. */
 function Uso() {
   const [u, setU] = useState<Awaited<ReturnType<typeof api.uso>> | null>(null)
@@ -213,7 +238,7 @@ function Uso() {
     <Carta titolo={t('Consumo')} id="consumo">
       <div className={`f-stato${guaio ? ' rame' : ''}`}>
         {guaio || (!u ? '…' : u.oggi.chiamate
-          ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache))
+          ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache)) + (u.oggi.spesa ? ` · ${frasi.spesaOggi(u.oggi.spesa)}` : '')
           : t('Oggi ancora niente.'))}
       </div>
       {giorni.length > 1 && (
@@ -758,6 +783,7 @@ export function Preferenze({ v }: { v: Vals }) {
             <Scelte etichetta={t('Giorni accanto al feed')} mostraEtichetta attivazione="automatica"
               opzioni={[1, 2, 3, 4, 5, 6, 7].map(n => ({ id: String(n), nome: String(n) }))}
               scelta={String(v.giorniLato)} scegli={id => v.scegliGiorniLato(Number(id))} />
+            <PerChi avvisa={v.mostraToast} />
           </Carta>
           {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
           {d && <LApp ospitato={v.ospitato} />}

@@ -30,7 +30,7 @@
 // tell me». Quanto è stato via lo sa il server, perché è con quello che
 // decide da dove ripartire a guardare; non è una cosa da dire a lui.
 
-import { useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { frasi, loc, t, tradotta } from '../lingua'
 import { Hov, LABEL, useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
@@ -251,7 +251,8 @@ function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
 
         {(fatte.length > 0 || n) && (
           <Sezione etichetta={t('Fatto')}>
-            {n && notte && <p className="stanotte-conto">{rigaDellaNotte(notte.l.turno, n)}</p>}
+            {/* sotto «Fatto» la notte conta le fatte: quelle che aspettano lui hanno la loro sezione, col loro numero */}
+            {n && notte && <p className="stanotte-conto">{rigaDellaNotte(notte.l.turno, { ...n, attende: [] })}</p>}
             {fatte.length > 0 && <RigheFatte xs={fatte} l={notte?.l} apri={apriCarta} disfa />}
           </Sezione>
         )}
@@ -332,12 +333,22 @@ export function Punto({ v, mattina: m, ricevuta, notte }: {
   const p = usePunto(v.claudeOn)
   const [aperto, setAperto] = useState(false)
   const chiudi = () => { setAperto(false); if (p.daVedere) p.nascondi() }
-  // da solo si apre quando la ricevuta è arrivata: prima il titolo cambiava sotto gli occhi
-  if (aperto || (p.daVedere && m)) {
-    return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={chiudi} m={m} ricevuta={ricevuta} notte={notte} />
-  }
   const fatte = m?.done ?? []
   const nelPunto = p.punto ? righeDelPunto(p.punto) : 0
+  /*
+   * Da solo si apre quando la ricevuta è arrivata (prima il titolo cambiava
+   * sotto gli occhi), e solo se il foglio dice più della carta: il punto, o
+   * righe oltre le prime. Il primo giorno si apriva sfocando la pagina per
+   * ripetere la sola riga che la carta, lì sotto, diceva già.
+   */
+  const piuDellaCarta = nelPunto > 0 || fatte.length > RIGHE_IN_CARTA || ricevuta.length > RIGHE_IN_CARTA
+  // saltata l'apertura di oggi, resta saltata: non deve aprirsi a metà pomeriggio quando arriva una riga in più
+  const saltaOggi = p.daVedere && !aperto && !!m && !piuDellaCarta
+  const nascondi = p.nascondi
+  useEffect(() => { if (saltaOggi) nascondi() }, [saltaOggi, nascondi])
+  if (aperto || (p.daVedere && m && piuDellaCarta)) {
+    return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={chiudi} m={m} ricevuta={ricevuta} notte={notte} />
+  }
   const qualcosa = fatte.length > 0 || ricevuta.length > 0
   const settimana = m && m.week.mandate > 0 ? frasi.bozzePartite(m.week.mandate, m.week.comeEra, m.week.ritoccate) : null
   const prossima = prossimaCosa(m)

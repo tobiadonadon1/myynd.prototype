@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 
 // `impostaLingua` scrive `document.documentElement.lang`, e qui il documento non c'è
 ;(globalThis as unknown as { document: unknown }).document = { documentElement: { lang: '' } }
-import { imparatoDellaBozza, notaPerLei } from './lavoro-affidato.ts'
+import { imparatoDellaBozza, notaDaSalvare, notaPerLei } from './lavoro-affidato.ts'
 import { frasi, impostaLingua } from './lingua.ts'
 import { fraseSeguita } from './gemello-frasi.ts'
 import type { RegolaSeguita } from './api.ts'
@@ -74,4 +74,12 @@ test('la bozza che segue una regola per la prima volta lo tiene scritto: la rego
   assert.equal(imparatoDellaBozza({ stato: 'pronto', voceScritta: { regole: [SALUTO, CORTA] } }, fraseSeguita)!.nuova, false)
   impostaLingua('it')
   assert.equal(frasi.imparatoPrimaVolta('Mette la decisione in testa', 0), 'Imparato, usato per la prima volta: Mette la decisione in testa')
+})
+
+test('la riga di un ordine fisso mostra l’istruzione, non l’elenco «Da guardare» con gli id', () => {
+  const nota = 'Compare the bank details with the earlier invoices.\n\nDa guardare:\n— [posta:v-1] Site visit on Tuesday'
+  const c = { origine: 'auto:iban', nota }
+  assert.equal(notaPerLei(c), 'Compare the bank details with the earlier invoices.')
+  assert.equal(notaDaSalvare(c, 'Only the supplier ones.'), 'Only the supplier ones.\n\nDa guardare:\n— [posta:v-1] Site visit on Tuesday', 'cambiata da lei, l’elenco resta per chi lavora')
+  assert.equal(notaPerLei({ origine: 'auto:x', nota: 'Just the instruction' }), 'Just the instruction')
 })

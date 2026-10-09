@@ -81,7 +81,20 @@ const DA_SOLO = new Set(['iniziativa', 'primo-giorno', 'guadagnata'])
  * compito lascerebbe chi lavora senza sapere cosa fare.
  */
 const SUA = '\n\nNOTE FROM THE USER:\n'
+/**
+ * Le righe di un ordine fisso: la nota è l'istruzione e poi l'elenco «Da
+ * guardare» con gli id dei documenti, per chi lavora. Sotto il titolo, sulla
+ * prima pagina, si leggeva «Da guardare: — [posta:v-1] …» anche in inglese:
+ * a lei si mostra l'istruzione, e l'elenco resta in coda quando la cambia.
+ */
+const DA_GUARDARE = '\n\nDa guardare:\n'
+const dellOrdine = (c: Pick<Compito, 'origine'>) => !!c.origine?.startsWith('auto:')
 export function notaPerLei(c: Pick<Compito, 'origine' | 'nota'>): string {
+  if (dellOrdine(c)) {
+    const n = c.nota ?? ''
+    const i = n.indexOf(DA_GUARDARE)
+    return i >= 0 ? n.slice(0, i) : n
+  }
   if (!(c.origine && DA_SOLO.has(c.origine))) return c.nota || ''
   const n = c.nota ?? ''
   const i = n.lastIndexOf(SUA)
@@ -89,6 +102,12 @@ export function notaPerLei(c: Pick<Compito, 'origine' | 'nota'>): string {
 }
 /** La nota da salvare: su una riga che Myynd si è preparato, il compito resta e la sua nota va in coda. */
 export function notaDaSalvare(c: Pick<Compito, 'origine' | 'nota'>, sua: string): string | null {
+  if (dellOrdine(c)) {
+    const n = c.nota ?? ''
+    const i = n.indexOf(DA_GUARDARE)
+    const coda = i >= 0 ? n.slice(i) : ''
+    return `${sua}${coda}` || null
+  }
   if (!(c.origine && DA_SOLO.has(c.origine))) return sua || null
   const n = c.nota ?? ''
   const i = n.lastIndexOf(SUA)

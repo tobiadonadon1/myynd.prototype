@@ -112,10 +112,26 @@ export function fraseOgniSettimana(testo: string): string {
  * anche senza niente da leggere. Niente fonti e niente consegna lette dal
  * testo: «il report mensile» non è un ritmo, «in agenda» non è un evento.
  */
-export function ricettaDaCarta(testo: string): Pick<RicettaComposta, 'nome' | 'fai' | 'quando' | 'guarda' | 'metti' | 'attrezzi' | 'proponi'> {
+/**
+ * Un nome dalla frase: la prima frase, al più `max` caratteri, tagliata fra
+ * due parole e mai a metà di una. «…for each quote r» era il nome di un
+ * ordine sulla prima pagina; le paroline che restano appese in fondo («for»,
+ * «the», «per», «e») se ne vanno con il taglio.
+ */
+const APPESE = /(?:\s+(?:a|an|and|or|the|to|for|of|in|on|at|with|by|from|each|every|e|o|ed|il|lo|la|i|gli|le|un|una|uno|di|del|della|dei|delle|da|per|con|su|in|a|al|alla|ogni))+$/iu
+export function nomeDallaFrase(frase: string, max = 60): string {
+  const prima = frase.replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s|\n/)[0].replace(/[.!?:;,]+$/, '').trim()
+  if (prima.length <= max) return prima
+  const taglio = prima.slice(0, max + 1)
+  const spazio = taglio.lastIndexOf(' ')
+  const corto = (spazio > max / 2 ? taglio.slice(0, spazio) : prima.slice(0, max)).replace(/[\s,;:–-]+$/, '')
+  return corto.replace(APPESE, '').replace(/[\s,;:–-]+$/, '') || corto
+}
+
+export function ricettaDaCarta(testo: string): Pick<RicettaComposta, 'nome' | 'spiega' | 'fai' | 'quando' | 'guarda' | 'metti' | 'attrezzi' | 'proponi'> {
   const corpo = testo.replace(/\s+/g, ' ').trim()
   return {
-    nome: corpo.slice(0, 60), fai: corpo, quando: { ogni: 'settimana', giorno: 1, ora: 8 },
+    nome: nomeDallaFrase(corpo), spiega: corpo, fai: corpo, quando: { ogni: 'settimana', giorno: 1, ora: 8 },
     guarda: { ogniVolta: true }, metti: { inLista: 'oggi', modo: 'io' }, attrezzi: [], proponi: undefined
   }
 }

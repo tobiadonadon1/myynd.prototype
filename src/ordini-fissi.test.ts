@@ -157,3 +157,12 @@ test('la riga fissa del motore dice l\'ordine fisso che non è riuscito, e porta
   const insieme = in_('en', () => sf.rigaFonti({ ...BASE, ragiona: false, automazioni: [{ nome: 'x', riprova: null }] }))
   assert.equal(insieme?.controllo.tipo, 'fonti')
 })
+
+test('il nome dalla frase si taglia fra due parole, mai a metà di una', () => {
+  assert.equal(q.nomeDallaFrase('Every weekday at 9 put a reply in my drafts for each quote request that is still waiting'), 'Every weekday at 9 put a reply in my drafts for each quote')
+  assert.equal(q.nomeDallaFrase('When an invoice arrives from a supplier, check whether the bank details changed'), 'When an invoice arrives from a supplier, check whether')
+  assert.equal(q.nomeDallaFrase('Preventivi fermi'), 'Preventivi fermi')
+  assert.equal(q.nomeDallaFrase('Chase the invoices. Then tell me.'), 'Chase the invoices')
+  for (const f of ['Every weekday at 9 put a reply in my drafts for each quote request that is still waiting', 'x'.repeat(90)]) assert.ok(q.nomeDallaFrase(f).length <= 60)
+  assert.equal(q.ricettaDaCarta('Send the weekly status update to the Harbor team with the open risks and blockers').nome, 'Send the weekly status update to the Harbor team', 'le paroline appese in fondo se ne vanno')
+})

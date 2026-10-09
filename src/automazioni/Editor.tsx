@@ -33,7 +33,7 @@ import { Cestino, Hov, LABEL, useFocoDialogo } from '../ui'
 import { Glifo } from '../components/Stato'
 import { IconCroce, IconGiro } from '../icons'
 import { Casella, RIGO } from './Chiocciola'
-import { consegnaPossibile, mesePrima, quandoData, quandoGira, ricettaDaCarta, ricevuta } from './quando'
+import { consegnaPossibile, mesePrima, nomeDallaFrase, quandoData, quandoGira, ricettaDaCarta, ricevuta } from './quando'
 import { eOspitato } from '../tempi'
 
 const PIENO: React.CSSProperties = {
@@ -600,6 +600,8 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta, daCarta = null }: {
   const [creo, setCreo] = useState(false)
   const [guaio, setGuaio] = useState('')
   const [detto, setDetto] = useState('')
+  /** Il quando l'ha messo il lettore della frase, non una mano: si può ritirare. */
+  const quandoLetto = useRef(false)
   const finestra = useRef<HTMLDivElement>(null)
   const occupato = compongo || creo
   useFocoDialogo(finestra, () => { if (!occupato) chiudi() })
@@ -608,9 +610,16 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta, daCarta = null }: {
   const scrivi = (testo: string) => {
     setFrase(testo)
     const letta = interpreta(testo, catalogo)
+    /*
+     * Un quando letto dalla frase e poi non più («Every Tuesday» che diventa
+     * «Every Tuesday and Thursday») torna quello di partenza: restava il
+     * martedì letto a metà, e l'ordine nasceva col giorno sbagliato.
+     */
+    const prima = quandoLetto.current
+    quandoLetto.current = !!letta.quando
     setR(x => ({
       ...x,
-      ...(letta.quando ? { quando: letta.quando } : {}),
+      ...(letta.quando ? { quando: letta.quando } : prima ? { quando: { quandoArriva: true } } : {}),
       ...(letta.proponi && consegnaPossibile(letta.proponi, eOspitato()) ? { proponi: letta.proponi } : {}),
       attrezzi: [...new Set([...(x.attrezzi ?? []), ...letta.attrezzi])]
     }))
@@ -634,6 +643,7 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta, daCarta = null }: {
     try {
       const { ricetta } = await api.componiAutomazione(frase, r.attrezzi?.length ? r.attrezzi : undefined)
       // cosa consegna resta quello letto dalla frase: il modello compone una riga
+      quandoLetto.current = false
       setR(x => ({ nome: ricetta.nome, spiega: ricetta.spiega, quando: ricetta.quando, guarda: ricetta.guarda, fai: ricetta.fai, passi: ricetta.passi ?? [], metti: ricetta.metti, attrezzi: ricetta.attrezzi ?? [], ...(ricetta.cartella ? { cartella: ricetta.cartella } : {}), ...(x.proponi ? { proponi: x.proponi } : {}) }))
       setDetto(t('Composta. Guarda i binari: se dicono quello che volevi, creala.'))
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
@@ -641,11 +651,12 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta, daCarta = null }: {
   }
 
   // un nome, se non gliel'ha dato nessuno: la frase stessa, corta
-  const nomeProposto = r.nome.trim() || frase.trim().split(/[.\n]/)[0].slice(0, 60).trim()
+  const nomeProposto = r.nome.trim() || nomeDallaFrase(frase)
   const pronta = nomeProposto.length >= 3 && r.fai.trim().length >= 8
 
   const campi = {
-    nome: nomeProposto, spiega: r.spiega, fai: r.fai, cerca: r.guarda.cerca ?? '', quando: r.quando,
+    // la riga che lo spiega è la frase intera, non il nome ripetuto (il server ripiegava sul nome)
+    nome: nomeProposto, spiega: r.spiega.trim() || frase.replace(/\s+/g, ' ').trim(), fai: r.fai, cerca: r.guarda.cerca ?? '', quando: r.quando,
     metti: r.metti, attrezzi: r.attrezzi ?? [], cartella: r.cartella ?? '', passi: r.passi ?? [], proponi: r.proponi ?? null,
     ogniVolta: !!r.guarda.ogniVolta
   }
@@ -733,7 +744,7 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta, daCarta = null }: {
             <input value={r.nome} onChange={e => setR({ ...r, nome: e.target.value })} placeholder={nomeProposto || t('Preventivi fermi')} />
           </label>
 
-          <Costruttore r={r} cambia={setR} catalogo={catalogo} cartelle={cartelle} />
+          <Costruttore r={r} cambia={x => { if (JSON.stringify(x.quando) !== JSON.stringify(r.quando)) quandoLetto.current = false; setR(x) }} catalogo={catalogo} cartelle={cartelle} />
           {pronta && <Mese dati={mese} guardo={guardoMese} guaio="" catalogo={catalogo} />}
         </div>
 

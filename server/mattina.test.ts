@@ -155,3 +155,15 @@ test('mattina(): dal database di chi chiede, con le bozze partite questa settima
   assert.equal(m.week.mandate, 1)
   assert.equal(m.week.comeEra, 1)
 })
+
+test('la proposta di un ordine fisso aspetta il suo «Approva»: è fra le cose che aspettano lui', () => {
+  const proposta = { azione: 'posta.bozza', bozze: [{ doc: 'posta:INBOX:202', a: 'nora@harbor.example', oggetto: 'Re: quote', corpo: 'Thanks' }] } as unknown as C['proposta']
+  const m = mattina.componi({
+    ...vuoto,
+    compiti: [
+      carta({ id: 'ordine', stato: 'pronto', modo: 'io', origine: 'auto:replies-in-drafts', proposta }),
+      carta({ id: 'mia', stato: 'pronto', modo: 'io' })
+    ]
+  }, { dal: DAL, mattina: true })
+  assert.deepEqual(m.needsYou.map(a => [a.id, a.genere === 'carta' ? a.motivo : '']), [['ordine', 'approva']], 'la riga sua, senza proposta, non aspetta nessuno')
+})

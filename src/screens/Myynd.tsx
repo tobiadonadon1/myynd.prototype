@@ -621,7 +621,11 @@ function corpo(c: Compito): string {
   // su un file scritto da sé resta la riga per lei, se c'era: le ipotesi
   // fatte, la scelta presa. Il documento sta nel file, non qui.
   // («Done: … is on your Desktop» non si ripete: lo dice la scheda del file, sotto)
-  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c) : ''
+  if (c.consegna) {
+    // dopo «Cambia» le due consegne stanno vicine con lo stesso titolo: la nuova dice che è lei a valere
+    const nuova = c.id.startsWith('rev-') && c.madre ? t('Nuova versione: sostituisce quella di prima.') : ''
+    return [nuova, c.consegna.app === 'File' ? dopoLaChiusura(c) : ''].filter(Boolean).join(' ')
+  }
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
   if (c.stato === 'chiede') return domande(c).visto
   // una figlia di revisione non mostra mai la sua nota: è il blocco di
@@ -1723,7 +1727,8 @@ function Vuoto({ v }: { v: Vals }) {
   }
   // il motore che manca lo dice la riga fissa in cima (`Avviso`): qui non si ripete
   const manca = senzaFonti ? { frase: t('Non hai collegato niente.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
-    : senzaDocumenti ? { frase: t('Non ho ancora letto niente.'), gesto: null, vai: null }
+    // niente letto: le Fonti dicono quale manca (un ordine fisso acceso senza la posta non gira)
+    : senzaDocumenti ? { frase: t('Non ho ancora letto niente.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
     : !conProgetti ? { frase: t('Nessun progetto attivo.'), gesto: t('Apri la memoria'), vai: v.goMemoria }
     : null
   return (

@@ -208,13 +208,14 @@ export const GUADAGNATE_PER_GIRO = 8
  * Per chi è salito di un gradino non si aspetta: ogni sua mail che chiede una
  * risposta ha la sua riga, con la bozza in coda per la notte, anche con le
  * proposte spente e oltre il loro ritmo. Il permesso l'ha dato lei, mandando
- * le bozze a quella persona com'erano. Restano fermi due interruttori: la
- * pausa («chiedere») e un motore che non c'è. Le stesse candidate delle
+ * le bozze a quella persona com'erano. Restano fermi tre interruttori: la
+ * pausa («chiedere»), il turno spento e un motore che non c'è. Le stesse candidate delle
  * proposte, libere allo stesso modo: una mail già sua, scartata o con una
  * risposta mandata non ne fa nascere una.
  */
 export function guadagnate(adesso = Date.now(), esegui: (id: string, modo: string, nativa: boolean) => void = inCodaPerIlTurno(), pronto = collegato): string[] {
-  if (cfg.autonomia() === 'chiedere' || !pronto()) return []
+  // col turno spento la riga resterebbe in coda per sempre, e la nota del contratto costerebbe una chiamata
+  if (cfg.autonomia() === 'chiedere' || !pronto() || turnoSpento()) return []
   const su = new Set(gradino.guadagnati().map(g => g.indirizzo))
   if (!su.size) return []
   const scelte = liberi(candidatiDettagli(store.recenti(250), adesso).filter(x => x.tipo === 'risposta' && su.has(store.indirizzoDi(x.doc.autore) ?? '')))

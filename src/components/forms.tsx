@@ -806,7 +806,7 @@ function ConAccountChatGPT({ tema, chatgpt, errore, inUso, ok, ricarica }: Props
     <Strada tema={tema} titolo={t('Con il tuo account ChatGPT')} stato={stato}>
       <div style={{ ...nota(tema), marginTop: 6 }}>{t('Entri dal browser e usi i limiti del tuo piano. Non serve una chiave, e non si passa mai a una chiave a pagamento da soli.')}</div>
       {chatgpt?.entrato && <div style={{ ...nota(tema), marginTop: 8 }}>{[chatgpt.email || t('Account ChatGPT collegato'), piano].filter(Boolean).join(' · ')}</div>}
-      {manca && <div style={{ ...nota(tema), marginTop: 8 }}>{t('La connessione ChatGPT non è disponibile in questa installazione. Aggiorna Myynd e riprova.')}</div>}
+      {manca && <div style={{ ...nota(tema), marginTop: 8 }}>{t('La connessione ChatGPT non è disponibile in questa installazione: usa una delle altre strade.')}</div>}
       {attesa && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{t('Completa l’accesso nel browser e torna qui.')}</div>}
       {avviso && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{avviso}</div>}
       <Errore testo={err || (chatgpt?.errore ?? '') || errore} />

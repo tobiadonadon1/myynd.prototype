@@ -102,6 +102,10 @@ test('di notte, ogni mail di chi è salito che chiede una risposta ha la sua rig
   assert.deepEqual(iniziativa.guadagnate(ORA, () => assert.fail('in pausa'), () => true), [])
   cfg.aggiorna({ autonomia: 'preparare' })
   assert.deepEqual(iniziativa.guadagnate(ORA, () => assert.fail('senza motore'), () => false), [])
+  // col turno spento nessuno la farebbe partire: non nasce
+  cfg.aggiorna({ turno: { spento: true } })
+  assert.deepEqual(iniziativa.guadagnate(ORA, () => assert.fail('turno spento'), () => true), [])
+  cfg.aggiorna({ turno: { spento: false } })
   // ripreso: la riga non lo dice più, e la riga nata da lì non è più valida
   gradino.ritira(NORA)
   assert.equal(attenzione.compitiAttuali().find(c => c.id === nate[0])!.guadagnato, null)

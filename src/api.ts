@@ -1837,7 +1837,8 @@ export const api = {
 
   /** Quanto è costato ragionare: oggi, e giorno per giorno. */
   uso: () => json<{
-    oggi: { chiamate: number; entrata: number; cache: number; uscita: number; tetto: number; raggiunto: boolean }
+    /** `spesa`: micro-dollari a listino, delle chiamate che hanno un prezzo. */
+    oggi: { chiamate: number; entrata: number; cache: number; uscita: number; tetto: number; raggiunto: boolean; spesa?: number }
     giorni: { giorno: string; chiamate: number; entrata: number; cache: number; uscita: number }[]
   }>('/api/uso'),
 

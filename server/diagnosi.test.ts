@@ -55,6 +55,11 @@ test('oscura: email, chiavi, gettoni, query, percorsi nella casa e il nome utent
   ]) assert.equal(diagnosi.oscura(normale, { casa: '/Users/tobia', utente: 'tobia' }), normale)
   assert.equal(diagnosi.oscura('leggo /Users/tobia/Desktop/Progetti segreti/Contratto Rossi.pdf, poi basta', { casa: '/Users/tobia', utente: 'tobia' }),
     'leggo ~/[path], poi basta')
+  // la parola sola, senza separatore
+  assert.equal(diagnosi.oscura('LOGIN failed for [email] with password hunter2hunter2', { casa: '/Users/tobia', utente: 'tobia' }),
+    'LOGIN failed for [email] with password [secret]')
+  assert.equal(diagnosi.oscura('the password is s3cr3t!', { casa: '/Users/tobia', utente: 'tobia' }), 'the password is [secret]')
+  assert.equal(diagnosi.oscura('imap: password rifiutata dal server', { casa: '/Users/tobia', utente: 'tobia' }), 'imap: password rifiutata dal server')
 })
 
 test('le ultime cinquecento righe: dal file del guscio e dalla sua copia, o da quelle tenute in memoria', () => {

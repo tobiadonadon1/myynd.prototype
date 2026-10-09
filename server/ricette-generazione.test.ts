@@ -47,7 +47,8 @@ test('one schema repair retains the original request and saves only a valid reci
 test('invalid repair cannot silently drop invented tools or save a partial recipe', async () => {
   let calls = 0
   auto.perProva({ collegato: () => true, chiediJSON: async () => { calls++; return bozza({ attrezzi: ['posta.manda'] }) } })
-  await assert.rejects(auto.daUnaFrase(richiesta, ['posta.leggi']), /unknown source or tool/)
+  // il perché tecnico resta nel registro: a lei una frase sua, mai «attrezzi: unknown source or tool»
+  await assert.rejects(auto.daUnaFrase(richiesta, ['posta.leggi']), { message: auto.NON_COMPOSTA })
   assert.equal(calls, 2); assert.equal(fileCount(), 0)
   await assert.rejects(auto.daUnaFrase(richiesta, ['posta.manda']), /unknown source or tool/)
   assert.equal(calls, 2, 'invalid user tool identifiers fail before contacting the model')

@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
-import { frasi, loc, t } from '../lingua'
+import { frasi, lingua, loc, t } from '../lingua'
 import { IconGiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { MenuGiu } from '../components/MenuGiu'
@@ -224,7 +224,13 @@ function Ferma({ guaio, carta }: { guaio: string; carta?: boolean }) {
  * chi non ha la colonna sotto mano.
  */
 function Portami({ c, l }: { c: Compito; l: Lista }) {
-  if (!c.porta) return null
+  /*
+   * Un file consegnato apre il file: il server non gli dà una `porta` (non
+   * viene da un documento), ma la rotta lo apre lo stesso. Senza questo il
+   * foglio della ricevuta e la lista lo dicevano fatto e non lo aprivano.
+   */
+  if (!c.porta && !c.consegna) return null
+  const nome = etichettaPortami(c)
   const vai = async () => {
     const r = await l.portami(c.id)
     // quello che non è andato l'ha già detto la lista, con un avviso
@@ -235,14 +241,20 @@ function Portami({ c, l }: { c: Compito; l: Lista }) {
   return (
     <Hov as="button" type="button"
       onClick={(e: React.MouseEvent) => { e.stopPropagation(); void vai() }}
-      title={nomePorta(c.porta)}
+      title={nome}
       style={{
         flex: 'none', whiteSpace: 'nowrap', padding: '4px 11px', borderRadius: 99,
         border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.7)',
         color: 'rgba(var(--inchiostro-rgb),.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
       }}
-      hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>{nomePorta(c.porta)}</Hov>
+      hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>{nome}</Hov>
   )
+}
+
+/** La parola del bottone: il file consegnato si apre, un documento nella sua app, il resto al suo posto. */
+export function etichettaPortami(c: Pick<Compito, 'porta' | 'consegna'>): string {
+  if (c.consegna) return c.consegna.app === 'File' ? t('Apri') : `${lingua() === 'en' ? 'Open in' : 'Apri in'} ${c.consegna.app}`
+  return c.porta ? nomePorta(c.porta) : ''
 }
 
 function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: boolean; modifica: (c: Compito) => void }) {

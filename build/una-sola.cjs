@@ -19,11 +19,17 @@
 const { spawnSync } = require('node:child_process')
 const { existsSync, mkdirSync, readdirSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
+const { homedir } = require('node:os')
 
 const LSREGISTER = '/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister'
 const ID = 'com.myynd.app'
 /** L'unica copia che resta registrata: quella installata. */
 const INSTALLATA = '/Applications/Myynd.app'
+/**
+ * Anche quella in ~/Applications è installata: chi non è amministratore la
+ * mette lì, e ogni pacchetto la toglieva da Launch Services.
+ */
+const INSTALLATE = (casa = homedir()) => [INSTALLATA, join(casa, 'Applications', 'Myynd.app')]
 
 /**
  * Le Myynd che Launch Services conosce, dal testo di `lsregister -dump`.
@@ -46,9 +52,10 @@ function registrate(dump) {
   return [...trovate]
 }
 
-/** Quelle da togliere: tutte tranne l'installata. */
-function daTogliere(percorsi, installata = INSTALLATA) {
-  return percorsi.filter(p => p !== installata)
+/** Quelle da togliere: tutte tranne le installate. */
+function daTogliere(percorsi, installate = INSTALLATE()) {
+  const restano = new Set(Array.isArray(installate) ? installate : [installate])
+  return percorsi.filter(p => !restano.has(p))
 }
 
 /** Le app che un pacchetto ha appena lasciato in dist-app (`mac`, `mac-arm64`, …). */
@@ -72,15 +79,16 @@ function nonIndicizzare(radice) {
  * Il giro intero. `esegui` è chi chiama lsregister: di serie il vero, nelle
  * prove uno finto che risponde e segna, così il Mac di chi prova non si tocca.
  */
-function unaSola({ radice = join(__dirname, '..'), prova = false, esegui = (args) => spawnSync(LSREGISTER, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }) } = {}) {
+function unaSola({ radice = join(__dirname, '..'), prova = false, casa = homedir(), esegui = (args) => spawnSync(LSREGISTER, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }) } = {}) {
   if (!prova) nonIndicizzare(radice)
   const dump = esegui(['-dump'])
   const viste = registrate(dump?.stdout ?? '')
+  const installate = INSTALLATE(casa)
   // quelle di dist-app si tolgono anche se il dump non le nomina ancora: la
   // registrazione arriva in ritardo, e un pacchetto appena fatto la riceve dopo
-  const tutte = [...new Set([...daTogliere(viste), ...inDistApp(radice)])]
+  const tutte = [...new Set([...daTogliere(viste, installate), ...inDistApp(radice)])]
   if (!prova) for (const p of tutte) esegui(['-u', p])
-  return { tolte: tutte, resta: viste.includes(INSTALLATA) ? INSTALLATA : null }
+  return { tolte: tutte, resta: installate.find(p => viste.includes(p)) ?? null }
 }
 
 if (require.main === module) {
@@ -89,11 +97,11 @@ if (require.main === module) {
   try {
     const r = unaSola({ prova })
     for (const p of r.tolte) console.log(`myynd · una sola · ${prova ? 'toglierei' : 'tolta'} ${p}`)
-    console.log(`myynd · una sola · ${r.resta ? `resta ${r.resta}` : 'nessuna Myynd installata in /Applications'}`)
+    console.log(`myynd · una sola · ${r.resta ? `resta ${r.resta}` : 'nessuna Myynd installata in Applicazioni'}`)
   } catch (e) {
     // non ferma mai il pacchetto: è pulizia, non costruzione
     console.error(`myynd · una sola · ${e instanceof Error ? e.message : e}`)
   }
 }
 
-module.exports = { registrate, daTogliere, inDistApp, nonIndicizzare, unaSola, INSTALLATA, LSREGISTER }
+module.exports = { registrate, daTogliere, inDistApp, nonIndicizzare, unaSola, INSTALLATA, INSTALLATE, LSREGISTER }

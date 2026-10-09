@@ -77,6 +77,9 @@ export function oscura(testo: string, o: { casa?: string; utente?: string } = {}
   // chiave=valore, "chiave": "valore", con i nomi che di solito tengono un segreto;
   // anche in coda a un nome d'ambiente (MYYND_SMTP_PASS=…), dove `\b` non c'è
   s = s.replace(/(?<![A-Za-z0-9])((?:x-)?api[_-]?key|apikey|token|access[_-]?token|refresh[_-]?token|id[_-]?token|secret|client[_-]?secret|password|passwd|pass|chiave|gettone|authorization|cookie|session|sessione)(["']?\s*[:=]\s*["']?)(?!(?:Bearer|Basic)\s)([^\s"',;&}]+)/gi, `$1$2${segreto}`)
+  // la parola sola, senza «:» né «=»: «with password hunter2hunter2». Solo se quello che
+  // segue ha una cifra o un segno: «password rifiutata» resta leggibile
+  s = s.replace(/(?<![A-Za-z0-9])(password|passwd|passphrase|pwd)(\s+(?:is\s+|è\s+|was\s+)?)(?!\[)(?=[^\s"',;]*[^A-Za-zÀ-ÿ\s"',;])([^\s"',;]{4,})/gi, `$1$2${segreto}`)
   // i valori nelle query degli indirizzi: l'iCal privato, un codice OAuth
   s = s.replace(/([?&][A-Za-z0-9_.-]+=)[^\s&#"')]+/g, `$1${segreto}`)
   // indirizzi email, anche scritti dentro un indirizzo web (tobia%40… nell'iCal di Google)

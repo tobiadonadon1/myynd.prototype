@@ -27,10 +27,15 @@ const GIORNI: [RegExp, number][] = [
   [parola('domenica|sunday|sundays'), 0]
 ]
 
-/** «alle 9», «at 9», «at 4pm», «alle 16:30» → l'ora intera. Niente = non detta. */
+/**
+ * «alle 9», «at 9», «at 4pm», «alle 16:00» → l'ora intera. Niente = non detta.
+ * «alle 16:30» è un'ora che un ordine fisso non sa tenere (gira all'ora
+ * intera): `NaN`, e chi chiama non legge la frase invece di scrivere le 16.
+ */
 function ora(frase: string): number | null {
-  const m = frase.match(/\b(?:alle|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i)
+  const m = frase.match(/\b(?:alle|at)\s+(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\b/i)
   if (m) {
+    if (m[2] && Number(m[2]) !== 0) return NaN
     let h = Number(m[1])
     if (m[3]?.toLowerCase() === 'pm' && h < 12) h += 12
     if (m[3]?.toLowerCase() === 'am' && h === 12) h = 0
@@ -48,6 +53,7 @@ export function quandoDetto(frase: string): Quando | null {
     return { quandoArriva: true }
   }
   const h = ora(frase)
+  if (Number.isNaN(h)) return null
   // dal lunedì al venerdì: prima dei giorni, perché «dal lunedì» nomina un giorno
   if (/\b(?:giorn[io] (?:feriali|lavorativi|feriale|lavorativo)|nei feriali|weekdays?|working days?|every workday|monday (?:to|through) friday)\b|\bdal luned[iì] al venerd[iì](?![\p{L}])/iu.test(frase)) {
     return { ogni: 'feriali', ora: h ?? 8 }
@@ -59,16 +65,33 @@ export function quandoDetto(frase: string): Quando | null {
    * al mese era il guaio di «Fallo ogni settimana» su ogni carta che diceva
    * «mensile». Prima «ogni <giorno>» e «ogni giorno», attaccati; poi il mese.
    */
+  /*
+   * Due giorni o più («ogni martedì e giovedì», «every Tuesday and Thursday»):
+   * un ordine fisso ne tiene uno solo. Leggerne il primo era sbagliare in
+   * silenzio; meglio non leggere, e lasciare che lo scelga lui.
+   */
+  if (GIORNI.filter(([re]) => re.test(frase)).length > 1 && /(?<![\p{L}])(?:ogni|every|each|tutti i|on)(?![\p{L}])/iu.test(frase)) return null
   const detto = GIORNI.find(([re]) => new RegExp(`(?<![\\p{L}])(?:ogni|every|each|tutti i|on)\\s+${re.source}`, 'iu').test(frase))
   if (detto) return { ogni: 'settimana', giorno: detto[1], ora: h ?? 8 }
   if (/\b(?:ogni (?:giorno|mattina|sera|pomeriggio)|every (?:day|morning|evening|afternoon)|daily|tutti i giorni)\b/i.test(frase)) {
     return { ogni: 'giorno', ora: h ?? 8 }
   }
+  // la fine del mese: l'ultimo giorno che il mese ha (il 31, che in aprile gira il 30)
+  if (/\b(?:(?:alla |a )?fine (?:del |di ogni |di )?mese|ultimo giorno del mese|(?:the )?end of (?:the|each|every) month|last day of (?:the|each|every) month|month[- ]end)\b/i.test(frase)) {
+    return { ogni: 'mese', giorno: 31, ora: h ?? 8 }
+  }
   // una volta al mese: il giorno detto («il 15 di ogni mese», «on the 1st of the month»), o il primo.
   // «al mese» e «mensile» da soli no: sono quasi sempre un prezzo o un aggettivo.
   const giornoDelMese = frase.match(/\b(?:il|on the|the)\s+(\d{1,2})(?:st|nd|rd|th)?\s+(?:di ogni mese|del mese|of (?:the|each|every) month)\b/i)
   if (giornoDelMese || /\b(?:ogni mese|una volta al mese|tutti i mesi|every month|monthly|once a month|each month|mensilmente)\b/i.test(frase)) {
-    const g = giornoDelMese ?? frase.match(/\b(?:il|on the|the)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i)
+    /*
+     * Fuori da «del mese», un numero è un giorno solo se lo dice: «on the
+     * 15th», «il 15» da solo. «Chase the 5 biggest invoices», «email the 3
+     * clients», «le 5 fatture» sono quantità, e diventavano il 5 e il 3.
+     */
+    const g = giornoDelMese
+      ?? frase.match(/\b(?:on the|the)\s+(\d{1,2})(?:st|nd|rd|th)\b/i)
+      ?? frase.match(/(?<![\p{L}])il\s+(\d{1,2})(?!\s*(?:[\p{L}\d]|%|€|\$))/iu)
     const giorno = g ? Number(g[1]) : 1
     return { ogni: 'mese', giorno: giorno >= 1 && giorno <= 31 ? giorno : 1, ora: h ?? 8 }
   }

@@ -176,6 +176,7 @@ const EN: Record<string, string> = {
   'Sto aggiornando il documento': 'Revising your document',
   'Sto aggiornando la bozza': 'Revising your draft',
   'Applico le tue indicazioni. La versione precedente è al sicuro.': 'Applying your feedback. The previous version is safe.',
+  'Nuova versione: sostituisce quella di prima.': 'New version: replaces the earlier one.',
   'È pronto.': "It's done.",
   'Salvato sulla scrivania. Guardalo e dimmi cosa ne pensi in chat.': 'Saved to your desktop. Take a look and tell me what you think in chat.',
   'Il documento è salvato. Guardalo e dimmi cosa ne pensi in chat.': 'Your document is saved. Take a look and tell me what you think in chat.',
@@ -445,6 +446,7 @@ const EN: Record<string, string> = {
   'Data non valida.': 'Invalid date.',
   'Dettagli attività': 'Task details',
   'Domani': 'Tomorrow',
+  'Un altro giorno': 'Another day',
   'Lunedì prossimo': 'Next Monday',
   'Sposta a un altro giorno': 'Move to another day',
   'Dopodomani': 'Day after tomorrow',
@@ -627,7 +629,7 @@ const EN: Record<string, string> = {
   'La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.':
     'Your mail, your files and your automations stay yours: every account has its own memory, separate from anyone else\u2019s.',
   'C’è già un account con questo indirizzo: entra con la tua password.': 'There is already an account with this address: sign in with your password.',
-  'Hai raggiunto il tetto di token di oggi. Si riparte domani, o lo alzi nelle preferenze.': 'You have reached today’s token limit. It resets tomorrow, or raise it in Preferences.',
+  'Hai raggiunto il tetto di token di oggi. Si riparte domani.': 'You have reached today’s token limit. It resets tomorrow.',
   'Il tetto è un numero di token al giorno, o zero per nessun tetto.': 'The limit is a number of tokens per day, or zero for no limit.',
   'Indirizzo o password non corretti.': 'Address or password is not right.',
 
@@ -1251,6 +1253,7 @@ const EN: Record<string, string> = {
   'Come funziona': 'How it works',
   // — quello che dice il server: arriva in italiano e si traduce qui —
   'Collega Claude e potrò lavorarci.': 'Connect Claude and I can work on it.',
+  'Non sono riuscito a comporla. Riprova, o riempi i binari a mano.': 'I could not compose it. Try again, or fill in the steps by hand.',
   'Il lavoro si è interrotto. Riaffidamelo quando vuoi.': 'The work was cut off. Hand it back to me whenever.',
   'Non ho trovato niente nel tuo materiale su cui basare questo. Dimmi qualcosa in più, o collega la fonte che serve.':
     'I found nothing in your material to base this on. Tell me a bit more, or connect the source it needs.',
@@ -2239,7 +2242,7 @@ const EN: Record<string, string> = {
   'Documento selezionato': 'Selected document',
   'ChatGPT, con il tuo piano': 'ChatGPT, with your plan',
   'Collega il tuo account dal browser e usa i limiti del tuo piano ChatGPT. Non serve una chiave API e non viene attivato un fornitore API a pagamento.': 'Connect your account in your browser and use your ChatGPT plan limits. No API key is needed, and no paid API provider is enabled.',
-  'La connessione ChatGPT non è disponibile in questa installazione. Aggiorna Myynd e riprova.': 'The ChatGPT connection is unavailable in this installation. Update Myynd and try again.',
+  'La connessione ChatGPT non è disponibile in questa installazione: usa una delle altre strade.': 'The ChatGPT connection is unavailable in this installation: use one of the other ways.',
   'Premi Accedi con ChatGPT, completa l’accesso nel browser e torna qui.': 'Choose Sign in with ChatGPT, finish signing in in your browser, then return here.',
   'Collega un altro account ChatGPT': 'Connect another ChatGPT account',
   'Accesso in corso': 'Signing in',
@@ -3766,6 +3769,13 @@ export const frasi = {
   usoOggi: (chiamate: number, token: string, cache: string) => corrente === 'en'
     ? `${chiamate} call${chiamate === 1 ? '' : 's'} today · ${token} tokens${cache !== '0' ? ` (${cache} from cache)` : ''}`
     : `${chiamate} chiamat${chiamate === 1 ? 'a' : 'e'} oggi · ${token} token${cache !== '0' ? ` (${cache} dalla cache)` : ''}`,
+  /** I dollari di oggi, a listino: una stima del conto, detta come tale. */
+  spesaOggi: (micro: number) => {
+    const usd = micro / 1_000_000
+    const cifra = usd > 0 && usd < 0.01 ? (corrente === 'en' ? 'under $0.01' : 'meno di 0,01 $')
+      : corrente === 'en' ? `about $${usd.toFixed(2)}` : `circa ${usd.toFixed(2).replace('.', ',')} $`
+    return corrente === 'en' ? `${cifra} at list price` : `${cifra} a listino`
+  },
 
   // — il ballo via web, ospitati —
   viaWeb: (nome: string) => corrente === 'en'
