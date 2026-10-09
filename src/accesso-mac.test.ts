@@ -16,7 +16,7 @@ const accesso = readFileSync(new URL('./Accesso.tsx', import.meta.url), 'utf8')
 
 test('on the Mac, "forgot password" exists without any server mail, and goes through the shell', () => {
   assert.match(accesso, /registrato && \(dalMac \|\| accesso\.reimpostazione\)/)
-  assert.match(accesso, /const dalMac = !ospitato && !!guscio\?\.reimpostaPassword/)
+  assert.match(accesso, /const dalMac = !ospitato && guscio\?\.piattaforma === .darwin. && !!guscio\?\.reimpostaPassword/)
   // la pagina non cambia la password da sé: chiede al guscio, che chiede al Mac
   assert.match(accesso, /guscio!\.reimpostaPassword!\(email, password, via\)/)
   assert.doesNotMatch(accesso, /reimposta\/mac/)
