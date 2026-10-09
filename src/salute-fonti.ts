@@ -12,7 +12,7 @@
 // le prove girano in italiano e in inglese.
 
 import { lingua, t } from './lingua.ts'
-import type { Rimedio, RispostaSalute, Silenzio, Stato } from './api.ts'
+import type { Rimedio, RispostaSalute, Silenzio, Stato, TestaGuasta, ViaMotore } from './api.ts'
 
 /** Una fonte da dire nella riga fissa, col nome che ha la sua scheda. */
 export type Mancanza = { id: string; nome: string; motivo: 'non-disponibile' | 'incompleta'; rimedio: Rimedio; dal: string; dopoAggiornamento: boolean }
@@ -24,6 +24,7 @@ export type Controllo =
   | { tipo: 'riapri' }
   | { tipo: 'accedi-claude' }
   | { tipo: 'fonti'; id: string | null }
+  | { tipo: 'preferenze' }
 
 /** Sostituisce `{chiave}` con i valori, dopo la traduzione della frase intera. */
 export function riempi(testo: string, v: Record<string, string | number>): string {
@@ -116,6 +117,52 @@ function fraseUna(m: Mancanza, adesso: Date): string {
   }
 }
 
+/** Il nome di un motore dentro una frase: «Anthropic», «ChatGPT», «il modello sul tuo Mac», «l’AI inclusa». */
+export function nomeMotore(m: { via: ViaMotore; nome?: string; locale?: boolean }): string {
+  switch (m.via) {
+    case 'claude': return 'Anthropic'
+    case 'openai': return 'OpenAI'
+    case 'chatgpt': return 'ChatGPT'
+    case 'incluso': return t('l’AI inclusa')
+    default: return m.locale ? t('il modello sul tuo Mac') : (m.nome || t('il modello collegato'))
+  }
+}
+
+/**
+ * La frase del motore, e il posto dove si sistema.
+ *
+ * L'AI inclusa si sistema nelle Preferenze, dove si sceglie; Anthropic uscito
+ * rientra da qui; tutti gli altri dalla loro scheda nelle Fonti. Dopo un
+ * cambio fatto da Myynd la frase dice anche chi lavora intanto.
+ */
+export function fraseMotore(g: TestaGuasta): { frase: string; controllo: Controllo } {
+  const via: ViaMotore = g.via ?? g.id
+  const nome = nomeMotore({ via, nome: g.nome, locale: g.locale })
+  const dove: Controllo = via === 'incluso' ? { tipo: 'preferenze' } : { tipo: 'fonti', id: g.id }
+  let frase: string
+  let controllo: Controllo = dove
+  switch (g.rimedio) {
+    case 'accedi':
+      if (via === 'claude') { frase = t('Anthropic si è scollegato.'); controllo = { tipo: 'accedi-claude' } }
+      else if (via === 'incluso') frase = t('Devo accedere di nuovo al tuo conto Myynd per l’AI inclusa.')
+      else frase = riempi(t('Devo accedere di nuovo a {nome}.'), { nome })
+      break
+    case 'credenziale': frase = riempi(t('{nome} non accetta più la chiave.'), { nome }); break
+    case 'spento': frase = riempi(t('{nome} non risponde.'), { nome }); break
+    case 'ponte': frase = t('L’AI inclusa non risponde.'); break
+    case 'pagamento': frase = t('L’AI inclusa è ferma: il piano va rinnovato.'); break
+    case 'finito': frase = t('Hai finito l’AI inclusa di oggi. Si riparte domani.'); break
+    default: {
+      const n = Math.max(1, g.minuti ?? 0)
+      frase = n < 60 ? riempi(t('Non riesco a pensare da {n} minuti.'), { n })
+        : n < 120 ? t('Non riesco a pensare da un’ora.')
+        : riempi(t('Non riesco a pensare da {n} ore.'), { n: Math.floor(n / 60) })
+    }
+  }
+  if (g.intanto) frase += ' ' + riempi(t('Intanto lavoro con {nome}.'), { nome: nomeMotore(g.intanto) })
+  return { frase, controllo }
+}
+
 /**
  * La riga fissa: fino a tre frasi, e un controllo solo.
  *
@@ -130,7 +177,7 @@ function fraseUna(m: Mancanza, adesso: Date): string {
  */
 export function rigaFonti(o: {
   ragiona: boolean
-  testa: { id: 'claude' | 'openai'; rimedio: 'accedi' | 'credenziale' } | null
+  testa: TestaGuasta | null
   guastoLettura: string | null
   chiedeClaude: string
   mancanze: Mancanza[]
@@ -147,16 +194,11 @@ export function rigaFonti(o: {
   let controllo: Controllo | null = null
   const primo = (c: Controllo) => { if (!controllo) controllo = c }
 
-  // 1. il motore
+  // 1. il motore: qualunque motore, non solo Anthropic
   if (o.testa) {
-    const nomeTesta = o.testa.id === 'claude' ? 'Anthropic' : 'OpenAI'
-    if (o.testa.rimedio === 'accedi') {
-      frasi.push(o.testa.id === 'claude' ? t('Anthropic si è scollegato.') : riempi(t('Devo accedere di nuovo a {nome}.'), { nome: nomeTesta }))
-      primo(o.testa.id === 'claude' ? { tipo: 'accedi-claude' } : { tipo: 'fonti', id: o.testa.id })
-    } else {
-      frasi.push(riempi(t('{nome} non accetta più la chiave.'), { nome: nomeTesta }))
-      primo({ tipo: 'fonti', id: o.testa.id })
-    }
+    const m = fraseMotore(o.testa)
+    frasi.push(m.frase)
+    primo(m.controllo)
   } else if (!o.ragiona) {
     frasi.push(t('Serve Claude per scegliere cosa conta.'))
     primo({ tipo: 'fonti', id: null })

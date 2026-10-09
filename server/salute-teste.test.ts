@@ -78,7 +78,7 @@ test('uscito dall’account: «accedi», e si mostra solo se è Claude a lavorar
   await abbonamento.entrato()
   assert.equal(abbonamento.uscito(), true)
   assert.deepEqual(teste.problemaTesta('claude'), { rimedio: 'accedi' })
-  assert.deepEqual(teste.testaDaMostrare(), { id: 'claude', rimedio: 'accedi' })
+  assert.deepEqual(teste.testaDaMostrare(), { id: 'claude', via: 'claude', rimedio: 'accedi' })
   // con il modello sul computer al lavoro, l'account uscito non è la riga fissa
   usa({ claudeCon: 'abbonamento', motore: 'compatibile', compatibile: { url: 'http://127.0.0.1:1/v1', modello: 'locale' } })
   assert.equal(teste.testaDaMostrare(), null)
@@ -92,7 +92,7 @@ test('una chiave rifiutata dal motore è «credenziale»; incollarne un’altra 
   usa({ claude: { apiKey: 'sk-ant-vecchia' } })
   mod.notaRifiuto(respinta(), 'claude')
   assert.deepEqual(teste.problemaTesta('claude'), { rimedio: 'credenziale' })
-  assert.deepEqual(teste.testaDaMostrare(), { id: 'claude', rimedio: 'credenziale' })
+  assert.deepEqual(teste.testaDaMostrare(), { id: 'claude', via: 'claude', rimedio: 'credenziale' })
   usa({ claude: { apiKey: 'sk-ant-nuova' } })
   assert.equal(teste.problemaTesta('claude'), null)
   usa({ claude: { apiKey: 'sk-ant-vecchia' } })
@@ -118,7 +118,7 @@ test('il motore vero segna il rifiuto; la prova di una chiave nuova no (counter-
 test('OpenAI con la chiave: un 401 del fornitore è «credenziale»', () => {
   usa({ motore: 'openai', openai: { chiave: 'sk-o', modello: 'gpt-5' } })
   mod.notaRifiuto(Object.assign(new Error('La chiave del fornitore non è valida.'), { status: 401 }), 'openai')
-  assert.deepEqual(teste.testaDaMostrare(), { id: 'openai', rimedio: 'credenziale' })
+  assert.deepEqual(teste.testaDaMostrare(), { id: 'openai', via: 'openai', rimedio: 'credenziale' })
   mod.notaRifiuto(Object.assign(new Error('Il fornitore ha un problema. Riprova fra poco.'), { status: 500 }), 'openai')
   usa({ motore: 'openai', openai: { chiave: 'sk-o2', modello: 'gpt-5' } })
   assert.equal(teste.testaDaMostrare(), null)

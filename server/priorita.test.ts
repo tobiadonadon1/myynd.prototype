@@ -1,6 +1,6 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -434,5 +434,22 @@ test('il giro toglie le sue carte superate, e solo le sue: la carta di una mail 
   assert.equal(store.voceFeed(mia.id)?.stato, 'scaduto', 'scaduta, non fatta: non l’ha fatta lui')
   assert.equal(store.voceFeed(mia.id)?.ragione, 'superata', 'la ragione dice che l’ha tolta il giro, non il tempo')
   assert.ok(dopo.some(v => v.id === posta.id), 'la carta di una mail la toglie solo lui')
+  priorita.perProva(null)
+})
+
+test('un giro in cui il modello non risponde non si segna come fatto: si riprova dopo un quarto d’ora, non fra dodici ore', async () => {
+  priorita.dimentica()
+  let chiamate = 0
+  priorita.perProva({ collegato: () => true, chiediJSON: (async () => { chiamate++; return null }) as never })
+  assert.equal(await priorita.forse(true), 0)
+  assert.equal(chiamate, 1)
+  const letto = () => JSON.parse(readFileSync(join(dati, 'priorita.json'), 'utf8')) as { ultimo: string | null; fallito?: string }
+  assert.equal(letto().ultimo, null, '«ultimo» resta quello di prima: niente è stato fatto')
+  assert.ok(letto().fallito, 'il giro andato a vuoto si ricorda')
+  assert.equal(priorita.pronta(true), false, 'subito dopo non si martella')
+  // un quarto d'ora dopo si riprova
+  writeFileSync(join(dati, 'priorita.json'), JSON.stringify({ ...letto(), fallito: new Date(Date.now() - (priorita.MINUTI_RIPROVA + 1) * 60_000).toISOString() }))
+  assert.equal(priorita.pronta(true), true)
+  priorita.dimentica()
   priorita.perProva(null)
 })

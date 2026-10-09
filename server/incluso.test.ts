@@ -198,8 +198,8 @@ test('la salute del ponte: «pronto» solo dopo un 200, «finito» a dose usata,
   assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(200, { usati: 41_000, tetto: 200_000 }) }), { stato: 'pronto', usati: 41_000, tetto: 200_000 })
   assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(200, { usati: 200_000, tetto: 200_000 }) }), { stato: 'finito', usati: 200_000, tetto: 200_000 })
   assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(429, {}) }), { stato: 'finito' })
-  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(503, { error: { type: 'not_configured' } }) }), { stato: 'assente' })
-  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: (async () => { throw new Error('giù') }) as typeof fetch }), { stato: 'assente' })
+  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: risposta(503, { error: { type: 'not_configured' } }) }), { stato: 'assente', codice: 503 })
+  assert.deepEqual(await incluso.salute({ url: 'https://p.test', gettone: 'g', rete: (async () => { throw new Error('giù') }) as typeof fetch }), { stato: 'assente', codice: 0 })
 })
 
 before(() => { cfg.scrivi({ lingua: 'en' }) })

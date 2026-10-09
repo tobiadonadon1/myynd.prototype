@@ -251,7 +251,7 @@ export function statoDelPonte(f: FerriPonte = PONTE_VERO): express.RequestHandle
  * la rete giù. `pronto` solo dopo un 200 del ponte. `finito` quando la dose
  * di oggi è usata.
  */
-export type StatoIncluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number }
+export type StatoIncluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; codice?: number }
 
 export async function salute(o: { url?: string; gettone?: string; rete?: typeof fetch; attesa?: number }): Promise<StatoIncluso> {
   const url = (o.url ?? '').trim().replace(/\/+$/, '')
@@ -260,12 +260,13 @@ export async function salute(o: { url?: string; gettone?: string; rete?: typeof 
   try {
     const r = await (o.rete ?? fetch)(`${url}/api/incluso/stato`, { headers: { 'x-api-key': g }, signal: AbortSignal.timeout(o.attesa ?? 8000) })
     if (r.status === 429) return { stato: 'finito' }
-    if (!r.ok) return { stato: 'assente' }
+    // il codice serve alla salute dei motori: 401 rientrare, 402 il piano, 5xx il ponte giù
+    if (!r.ok) return { stato: 'assente', codice: r.status }
     const d = await r.json() as { usati?: unknown; tetto?: unknown }
     const usati = n(d.usati), tetto = n(d.tetto)
     if (!tetto) return { stato: 'assente' }
     return { stato: usati >= tetto ? 'finito' : 'pronto', usati, tetto }
-  } catch { return { stato: 'assente' } }
+  } catch { return { stato: 'assente', codice: 0 } }
 }
 
 /**

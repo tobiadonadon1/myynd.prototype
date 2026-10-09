@@ -738,6 +738,8 @@ app.get('/api/stato', async (_req, res) => {
    * senza aspettarla: se cambia, lo dice il filo.
    */
   mod.riparaIlMotore()
+  // la bussata al motore scelto, al massimo ogni pochi minuti: la risposta arriva alla pagina dopo
+  void saluteTeste.sonda().catch(e => console.warn('myynd · la salute dei motori non ha bussato:', e instanceof Error ? e.message : e))
   abbonamento.riguarda()
   // il giorno del motore si scrive anche senza chiamate: un account da cui si
   // è usciti non chiama nessuno, e il suo giorno non deve sembrare spento
@@ -1114,7 +1116,8 @@ app.post('/api/modello/chatgpt', async (req, res) => {
     if (attivo) {
       const stato = await chatgpt.stato()
       if (!stato.entrato) return res.status(400).json({ errore: stato.errore || 'Sign in with ChatGPT first.' })
-      cfg.aggiorna({ motore: 'chatgpt', chatgpt: { attivo: true, email: stato.email } })
+      mod.scegliIlMotore('chatgpt', { chatgpt: { attivo: true, email: stato.email } })
+      mod.segnaVia('chatgpt', true)
     } else {
       // This is only Myynd's selection. Never log out the user's Codex apps.
       cfg.aggiorna({ chatgpt: { attivo: false } })
@@ -1709,7 +1712,9 @@ app.post('/api/connettori/compatibile', async (req, res) => {
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     // A reused key may have been rotated during the provider check. Only an
     // explicitly entered replacement may overwrite the latest stored value.
-    cfg.aggiorna({ compatibile: { ...f, chiave: nuovaChiave || undefined }, motore: 'compatibile' })
+    // scelto da lei: un cambio fatto prima da Myynd non lo rimette com'era
+    mod.scegliIlMotore('compatibile', { compatibile: { ...f, chiave: nuovaChiave || undefined } })
+    mod.segnaVia('compatibile', true)
     // la latenza misurata dal server: è quella che la chat sentirà davvero
     res.json({ ok: true, motore: 'compatibile', ...('latenzaMs' in esito && esito.latenzaMs !== undefined ? { latenzaMs: esito.latenzaMs } : {}) })
   } catch (e) { errore(res, e) }
@@ -1733,7 +1738,7 @@ app.post('/api/connettori/openai', async (req, res) => {
   try {
     const esito = await compatibile.prova(f)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    cfg.aggiorna({ openai: { modello, chiave }, motore: 'openai' })
+    mod.scegliIlMotore('openai', { openai: { modello, chiave } })
     res.json({ ok: true, motore: 'openai', ...('latenzaMs' in esito && esito.latenzaMs !== undefined ? { latenzaMs: esito.latenzaMs } : {}) })
   } catch (e) { errore(res, e) }
 })
@@ -1822,13 +1827,15 @@ app.post('/api/modello/motore', async (req, res) => {
   if (scelto === 'chatgpt') {
     const s = await chatgpt.stato()
     if (!s.entrato) return res.status(400).json({ errore: s.errore || 'Connect ChatGPT in Sources first.' })
-    cfg.aggiorna({ motore: 'chatgpt', chatgpt: { attivo: true, email: s.email } })
+    mod.scegliIlMotore('chatgpt', { chatgpt: { attivo: true, email: s.email } })
+    mod.segnaVia('chatgpt', true)
     return res.json({ ok: true, motore: scelto })
   }
   if (scelto === 'compatibile' && !cfg.leggi().compatibile) {
     return res.status(400).json({ errore: 'Prima collega un fornitore compatibile.' })
   }
-  cfg.aggiorna({ motore: scelto })
+  // la scelta sua: da qui Myynd non torna più al motore di prima da solo
+  mod.scegliIlMotore(scelto)
   res.json({ ok: true, motore: scelto })
 })
 
@@ -5947,6 +5954,10 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   turno.avvia()
   // F9 · il Mac sveglio per la notte, l'avviso prima di uscire, «Stop» nella barra dei menu
   turnoGuscio.avvia()
+  // la salute dei motori: ogni minuto si guarda, ogni pochi minuti si bussa al motore scelto (`saluteTeste.sonda`)
+  const sondaMotori = perOgnuno('la salute dei motori non ha bussato', () => saluteTeste.sonda())
+  setTimeout(sondaMotori, 30_000)
+  setInterval(sondaMotori, 60_000)
   const giroDelTurno = perOgnuno('il turno non ha finito il giro', async () => { await store.senzaToccare(() => turno.giro()) })
   setTimeout(giroDelTurno, 45_000)
   setInterval(giroDelTurno, 60_000)

@@ -329,3 +329,29 @@ test('la parola della scheda con un guaio', () => {
   assert.equal(in_('en', () => sf.parolaProblema('slack', 'attendi')), 'Not read')
   assert.equal(in_('en', () => sf.parolaProblema('note', 'aggiorna')), 'Not read')
 })
+
+test('ogni motore ha la sua frase e il suo posto: il modello sul Mac, ChatGPT, l’AI inclusa, il pensiero fermo, il cambio fatto da Myynd', () => {
+  const casi: [Parameters<typeof sf.fraseMotore>[0], string, string, string][] = [
+    [{ id: 'compatibile', via: 'compatibile', rimedio: 'spento', locale: true }, 'Il modello sul tuo Mac non risponde.', 'The model on your Mac isn’t answering.', 'fonti:compatibile'],
+    [{ id: 'compatibile', via: 'compatibile', rimedio: 'spento', nome: 'OpenRouter', locale: false }, 'OpenRouter non risponde.', 'OpenRouter isn’t answering.', 'fonti:compatibile'],
+    [{ id: 'openai', via: 'chatgpt', rimedio: 'accedi' }, 'Devo accedere di nuovo a ChatGPT.', 'I need to sign in to ChatGPT again.', 'fonti:openai'],
+    [{ id: 'incluso', via: 'incluso', rimedio: 'accedi' }, 'Devo accedere di nuovo al tuo conto Myynd per l’AI inclusa.', 'I need to sign in to your Myynd account again for the included AI.', 'preferenze'],
+    [{ id: 'incluso', via: 'incluso', rimedio: 'pagamento' }, 'L’AI inclusa è ferma: il piano va rinnovato.', 'The included AI is paused: the plan needs renewing.', 'preferenze'],
+    [{ id: 'incluso', via: 'incluso', rimedio: 'finito' }, 'Hai finito l’AI inclusa di oggi. Si riparte domani.', 'You’ve used today’s included AI. It starts again tomorrow.', 'preferenze'],
+    [{ id: 'incluso', via: 'incluso', rimedio: 'ponte' }, 'L’AI inclusa non risponde.', 'The included AI isn’t answering.', 'preferenze'],
+    [{ id: 'claude', via: 'claude', rimedio: 'fermo', minuti: 14 }, 'Non riesco a pensare da 14 minuti.', 'I haven’t been able to think for 14 minutes.', 'fonti:claude'],
+    [{ id: 'claude', via: 'claude', rimedio: 'fermo', minuti: 200 }, 'Non riesco a pensare da 3 ore.', 'I haven’t been able to think for 3 hours.', 'fonti:claude'],
+    [{ id: 'compatibile', via: 'compatibile', rimedio: 'spento', locale: true, intanto: { via: 'claude' } },
+      'Il modello sul tuo Mac non risponde. Intanto lavoro con Anthropic.', 'The model on your Mac isn’t answering. Meanwhile I’m working with Anthropic.', 'fonti:compatibile']
+  ]
+  for (const [g, it, en, c] of casi) {
+    for (const [l, atteso] of [['it', it], ['en', en]] as const) {
+      const r = riga(l, () => [], { testa: g })
+      assert.equal(r?.frase, atteso)
+      const cc = r!.controllo
+      assert.equal(cc.tipo === 'fonti' ? `fonti:${cc.id}` : cc.tipo, c, atteso)
+    }
+  }
+  // senza lineette
+  for (const [g] of casi) assert.doesNotMatch(in_('en', () => sf.fraseMotore(g).frase), /—/)
+})

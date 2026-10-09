@@ -185,23 +185,95 @@ export function scegliClaudeSeServe(): boolean {
  */
 export function riparaIlMotore(): boolean {
   if (tornaAlMotoreDiPrima()) return true
-  if (collegato()) return false
+  /*
+   * Scritto bene ma morto: il modello sul Mac che non risponde a due bussate,
+   * ChatGPT da cui si è usciti, il ponte che rifiuta, la chiave respinta. Lì
+   * si passa a un altro motore solo se *lavora* davvero: per quelli che si
+   * possono bussare serve una risposta recente, non un indirizzo scritto.
+   */
+  const ferma = collegato() && morta((leggi().motore ?? 'claude') as Via)
+  if (collegato() && !ferma) return false
   const prima = leggi().motore ?? 'claude'
-  if (scegliClaudeSeServe()) return true
+  if (!ferma && scegliClaudeSeServe()) return true
   const c = leggi()
-  const candidati: ['incluso' | 'compatibile' | 'openai' | 'chatgpt', boolean][] = [
+  const provata = (m: Via) => !ferma || m === 'claude' || m === 'openai' || statoVia(m)?.vivo === true
+  const candidati: [Via, boolean][] = [
+    // Claude scritto ma non scelto: con il motore scelto morto è il primo, come in `scegliClaudeSeServe`
+    ...(ferma ? [['claude', conClaude()] as [Via, boolean]] : []),
     // F8 · l'AI inclusa non costa niente a chi la usa: subito dopo Claude
     ['incluso', !!fornitoreIncluso(c)],
     ['compatibile', !!(c.compatibile?.url && c.compatibile.modello)],
     ['openai', !!fornitoreOpenAI(c)],
     ['chatgpt', c.chatgpt?.attivo === true && !!chatgpt.installato()]
   ]
-  const via = candidati.find(([m, puo]) => puo && m !== c.motore)?.[0]
+  const via = candidati.find(([m, puo]) => puo && m !== c.motore && !morta(m) && provata(m))?.[0]
   if (!via) return false
   // scelto da Myynd, non da lei: si ricorda da dove si veniva, per tornarci
   aggiorna({ motore: via, ...(c.motorePrima ? {} : { motorePrima: prima }) })
+  if (ferma) console.log(`myynd · il motore ${prima} non risponde: lavora ${via} finché non torna`)
   return true
 }
+
+/**
+ * La scelta sua, dalle Fonti o dalle preferenze: si scrive, e si dimentica da
+ * dove Myynd era venuto. Senza, un motore scelto a mano dopo un cambio fatto
+ * da Myynd veniva rimesso com'era al primo ritorno di quello di prima.
+ */
+export function scegliIlMotore(motore: NonNullable<ReturnType<typeof leggi>['motore']>, patch: Partial<ReturnType<typeof leggi>> = {}): void {
+  const c = leggi()
+  Object.assign(c, patch, { motore })
+  delete c.motorePrima
+  scriviConfig(c, { togli: ['motorePrima'] })
+}
+
+// — vivo o no —
+
+/** I motori come li scrive la configurazione: `chatgpt` è l'account, `openai` la chiave. */
+export type Via = 'claude' | 'compatibile' | 'chatgpt' | 'openai' | 'incluso'
+
+/** Quante bussate a vuoto di fila fanno un motore morto: una sola può essere un attimo. */
+export const BUSSATE_PER_MORTO = 2
+
+/*
+ * Cosa si sa di ogni motore che si può bussare, per persona: l'ultima volta
+ * che ha risposto o no, e quante volte di fila non ha risposto. Lo scrive la
+ * salute dei motori (`salute-teste.ts`), che bussa; qui lo si legge per
+ * decidere chi lavora.
+ */
+const visti = new Map<string, Map<Via, { vivo: boolean; quando: string; volte: number; codice?: number }>>()
+
+/**
+ * Una bussata, col suo esito. `certo` dice che una sola basta: un account da
+ * cui si è usciti non torna dentro alla seconda domanda.
+ */
+export function segnaVia(via: Via, vivo: boolean, o: { certo?: boolean; codice?: number; adesso?: Date } = {}): void {
+  const k = chi.adesso() ?? ''
+  const m = visti.get(k) ?? new Map()
+  const prima = m.get(via)
+  const volte = vivo ? 0 : o.certo ? Math.max(BUSSATE_PER_MORTO, (prima?.volte ?? 0) + 1) : (prima?.volte ?? 0) + 1
+  m.set(via, { vivo, quando: (o.adesso ?? new Date()).toISOString(), volte, ...(o.codice ? { codice: o.codice } : {}) })
+  visti.set(k, m)
+}
+
+/** L'ultima bussata a un motore, per questa persona. */
+export function statoVia(via: Via): { vivo: boolean; quando: string; volte: number; codice?: number } | null {
+  return visti.get(chi.adesso() ?? '')?.get(via) ?? null
+}
+
+/**
+ * Questo motore è morto adesso? Claude con la chiave respinta e senza un
+ * account che lo tenga in piedi; OpenAI con la chiave respinta; gli altri
+ * dopo `BUSSATE_PER_MORTO` bussate a vuoto.
+ */
+export function morta(via: Via): boolean {
+  if (via === 'claude') return !!rifiutata('claude') && !abbonamento.pronto()
+  if (via === 'openai') return !!rifiutata('openai')
+  const s = statoVia(via)
+  return !!s && !s.vivo && s.volte >= BUSSATE_PER_MORTO
+}
+
+/** Solo per le prove: si dimentica cosa si è visto. */
+export function perProvaVisti() { visti.clear(); fileFerme.clear(); mancate.clear() }
 
 /**
  * Il motore di prima può di nuovo lavorare: si torna lì.
@@ -222,7 +294,8 @@ export function tornaAlMotoreDiPrima(): boolean {
     : prima === 'openai' ? !!fornitoreOpenAI(c)
     : prima === 'incluso' ? !!fornitoreIncluso(c)
     : !!(c.compatibile?.url && c.compatibile.modello)
-  if (!puo) return false
+  // il motore di prima che è ancora morto non torna: tornerebbe a non rispondere
+  if (!puo || morta(prima)) return false
   c.motore = prima
   delete c.motorePrima
   scriviConfig(c, { togli: ['motorePrima'] })
@@ -307,6 +380,23 @@ function dalPonte(e: unknown): Error | null {
   return null
 }
 export const INCLUSO_ASSENTE = 'L’AI inclusa con Myynd non è ancora disponibile.'
+
+/**
+ * Quello che una chiamata vera ha saputo del ponte, per la salute dei motori:
+ * 401 (rientrare) e 402 (il piano) bastano una volta; un 5xx o la rete giù
+ * vogliono la conferma; la dose finita è un ponte che lavora.
+ */
+function notaDalPonte(e: unknown): void {
+  const s = Number((e as { status?: unknown } | null)?.status)
+  if (s === 429) {
+    let corpo = ''
+    try { corpo = JSON.stringify((e as { error?: unknown }).error ?? '') + (e instanceof Error ? e.message : '') } catch { /* resta vuoto */ }
+    if (/budget_exhausted/.test(corpo)) segnaVia('incluso', true, { codice: 429 })
+    return
+  }
+  if (s === 401 || s === 402) return segnaVia('incluso', false, { codice: s, certo: true })
+  if (!Number.isFinite(s) || s >= 500) segnaVia('incluso', false, { codice: Number.isFinite(s) ? s : 0 })
+}
 
 // — cosa accetta ogni modello —
 
@@ -647,6 +737,9 @@ export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, 
   const t = testaAlLavoro()
   if (t === 'claude' || t === 'openai') rifiuti.get(chi.adesso() ?? '')?.delete(t)
   avvisaUsato()
+  // e il motore che si bussa ha appena risposto: per la salute dei motori è vivo
+  const via = leggi().motore
+  if (via === 'compatibile' || via === 'incluso' || via === 'chatgpt') segnaVia(via, true)
   const cache = u.cache_read_input_tokens ?? 0
   const scritti = u.cache_creation_input_tokens ?? 0
   // nel registro e nel database di chi ha chiesto: la riga di stampa la legge
@@ -997,7 +1090,7 @@ export function motore(): Motore | null {
   // F8 · con l'AI inclusa la chiave non è sua: un rifiuto non si segna sulla sua, e il ponte ha i suoi no
   const incluso = leggi().motore === 'incluso'
   const guaio = (e: unknown): Error => {
-    if (incluso) return dalPonte(e) ?? inItaliano(e)
+    if (incluso) { notaDalPonte(e); return dalPonte(e) ?? inItaliano(e) }
     notaRifiuto(e, 'claude')
     return inItaliano(e)
   }
@@ -1296,7 +1389,7 @@ export async function cediAChiGuarda(lavoro: Lavoro): Promise<void> {
 /** Per le prove: lo stato di chi guarda. */
 export const perProvaCalma = { guardato }
 
-export async function chiedi(o: {
+type Domanda = {
   lavoro: Lavoro
   system: string
   messages: Messaggio[]
@@ -1305,7 +1398,75 @@ export async function chiedi(o: {
   attesa?: number
   /** Il system va in cache dal fornitore: per i lavori con un'istruzione lunga che non cambia. */
   cache?: boolean
-}): Promise<Esito> {
+}
+
+// — quando non ha risposto —
+
+/*
+ * «Niente da dire» e «non ce l'ho fatta» si somigliavano troppo. `chiediJSON`
+ * trasforma un guasto in `null`, e chi chiama legge `null` come «nessuna
+ * priorità oggi»: con il motore giù da ore, la prima pagina diceva che andava
+ * tutto bene. Qui ogni lavoro tiene il suo ultimo guasto, e ogni persona la
+ * sua serie: dal primo guasto all'ultimo, senza una risposta buona in mezzo.
+ * Una risposta qualunque chiude la serie. Il tetto non è un guasto, e
+ * nemmeno chi ha smesso di ascoltare.
+ */
+type Mancata = { dal: string; ultima: string; volte: number; perche: string }
+const mancate = new Map<string, Map<string, Mancata>>()
+const fileFerme = new Map<string, { dal: string; ultima: string; volte: number }>()
+
+/** Minuti di guasti di fila prima di dirlo: un attimo di rete non è «non riesco a pensare». */
+export const MINUTI_FERMO = 10
+/** Una serie più vecchia di così, senza altri tentativi, non dice niente di adesso. */
+const ORE_FERMO_VIVO = 2
+
+function segnaEsitoDi(lavoro: string, e?: unknown, adesso = new Date()): void {
+  const k = chi.adesso() ?? ''
+  if (e === undefined) {
+    mancate.get(k)?.delete(lavoro)
+    fileFerme.delete(k)
+    return
+  }
+  if (tettoDiOggi.delTetto(e) || (e instanceof Error && e.name === 'AbortError')) return
+  const ora = adesso.toISOString()
+  const perche = (e instanceof Error ? e.message : String(e)).slice(0, 200)
+  const m = mancate.get(k) ?? new Map<string, Mancata>()
+  const prima = m.get(lavoro)
+  m.set(lavoro, { dal: prima?.dal ?? ora, ultima: ora, volte: (prima?.volte ?? 0) + 1, perche })
+  mancate.set(k, m)
+  const f = fileFerme.get(k)
+  fileFerme.set(k, { dal: f?.dal ?? ora, ultima: ora, volte: (f?.volte ?? 0) + 1 })
+}
+
+/**
+ * Da quanto Myynd non riesce a pensare: la serie di guasti di questa persona,
+ * se dura da almeno `MINUTI_FERMO` minuti e l'ultimo tentativo è recente.
+ */
+export function pensieroFermo(adesso = Date.now()): { dal: string; minuti: number; volte: number } | null {
+  const f = fileFerme.get(chi.adesso() ?? '')
+  if (!f) return null
+  const minuti = Math.floor((adesso - Date.parse(f.dal)) / 60_000)
+  if (minuti < MINUTI_FERMO || adesso - Date.parse(f.ultima) > ORE_FERMO_VIVO * 3_600_000) return null
+  return { dal: f.dal, minuti, volte: f.volte }
+}
+
+/** L'ultimo guasto di ogni lavoro, per il rapporto di diagnosi. */
+export function ultimeMancate(): ({ lavoro: string } & Mancata)[] {
+  return [...(mancate.get(chi.adesso() ?? '') ?? new Map<string, Mancata>()).entries()].map(([lavoro, m]) => ({ lavoro, ...m }))
+}
+
+export async function chiedi(o: Domanda): Promise<Esito> {
+  try {
+    const r = await chiediAdesso(o)
+    segnaEsitoDi(o.lavoro)
+    return r
+  } catch (e) {
+    segnaEsitoDi(o.lavoro, e)
+    throw e
+  }
+}
+
+async function chiediAdesso(o: Domanda): Promise<Esito> {
   const p = LAVORI[o.lavoro]
   const attesa = o.attesa ?? p.attesa
   // prima di qualsiasi strada, la lingua è quella dell'app
