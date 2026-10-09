@@ -1,0 +1,38 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Run a two-week AI pilot with the Harbor finance team" }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:801", "fonte": "posta", "tipo": "email", "titolo": "Pilot scope", "corpo": "Hi Alex, can you confirm the pilot scope by Thursday? We would start with supplier invoices. Best, Nora", "autore": "Nora Vance <nora@harbor.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-3h", "messageId": "nv801@harbor.example", "filo": "nv801@harbor.example" },
+    { "id": "posta:INBOX:802", "fonte": "posta", "tipo": "email", "titolo": "Offsite budget", "corpo": "Here is the offsite budget draft the team worked on. Have a look when you get a chance.", "autore": "Tom Reed <tom@reed.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-5h", "messageId": "tr802@reed.example", "filo": "tr802@reed.example" }
+  ],
+  "compiti": [
+    { "id": "g-nora", "testo": "Draft a reply: Pilot scope", "quando": "oggi", "progetto": "hb", "doc": "posta:INBOX:801", "origine": "guadagnata", "stato": "pronto", "modo": "bozza",
+      "risultato": "Nora, confirmed: we start with supplier invoices on Tuesday 14 October, and I will send the supplier list by Friday.\n\nBest,\nAlex",
+      "voceScritta": { "destinatario": "Nora", "lingua": "en", "quanti": 0, "esempi": [], "regole": [
+        { "chiave": "bozza.tono:saluto-via", "genere": "bozza.tono", "casi": 3, "dati": { "tratto": "saluto-via" } },
+        { "chiave": "bozza.tono:corta", "genere": "bozza.tono", "casi": 2, "dati": { "tratto": "corta", "rapporto": 0.62 } }
+      ] } },
+    { "id": "tom-q", "testo": "Review Tom's offsite budget draft", "quando": "oggi", "doc": "posta:INBOX:802", "stato": "chiede", "modo": "bozza",
+      "risultato": "I read Tom's mail and the budget draft.\nWhich budget line should I check first?",
+      "chieste": [{ "domanda": "Which budget line should I check first?", "opzioni": ["Venue", "Travel"], "multipla": false }] },
+    { "id": "q-venue", "testo": "Pick the offsite venue", "quando": "settimana", "stato": "chiede", "modo": "bozza",
+      "risultato": "I compared the two venues the team shortlisted.\nWhich matters more for the offsite?",
+      "chieste": [{ "domanda": "Which matters more for the offsite?", "opzioni": ["Price", "Distance"], "multipla": false }] },
+    { "id": "doc-plan", "testo": "Write the kickoff plan for the Harbor pilot", "quando": "oggi", "progetto": "hb", "stato": "pronto", "modo": "bozza",
+      "risultato": "Decision: the pilot starts on Tuesday 14 October with supplier invoices.\n\nThe plan in three short parts: who does what, the budget, and the two goals of the pilot." },
+    { "id": "doc-edit", "testo": "Write the supplier onboarding note", "quando": "oggi", "stato": "pronto", "modo": "bozza",
+      "risultato": "The onboarding note for Brightline and Keel.\n\nDecision: both suppliers send invoices through the shared inbox from Monday." }
+  ],
+  "abitudini": [
+    { "chiave": "bozza.tono:saluto-via", "genere": "bozza.tono", "dati": { "tratto": "saluto-via", "da": "Dear {nome},", "chi": "nora@harbor.example,leo@studio.example" }, "casi": 3,
+      "esempi": [{ "quando": "-1d", "testo": "«Dear Nora,» → «Nora, confirmed»" }], "visto": "-4d", "dal": "-3d" },
+    { "chiave": "bozza.tono:corta", "genere": "bozza.tono", "dati": { "tratto": "corta", "rapporto": 0.62, "chi": "nora@harbor.example,sam@lumen.example" }, "casi": 2,
+      "esempi": [{ "quando": "-1d", "testo": "118 → 71" }], "visto": "-2d", "dal": "-1d" }
+  ],
+  "gradini": [{ "indirizzo": "nora@harbor.example", "nome": "Nora", "distanze": [0, 0.05, 0.4, 0, 0] }],
+  "imparate": [{ "compito": "doc-plan", "enunciato": "Puts the decision in the first line of every document" }]
+}

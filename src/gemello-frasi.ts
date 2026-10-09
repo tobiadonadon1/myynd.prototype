@@ -6,7 +6,7 @@
 // Le parole sole e i bottoni passano da `t()`.
 
 import { lingua, loc, t } from './lingua.ts'
-import type { AbitudineVista, Gemello, PrevisioneVista } from './api.ts'
+import type { AbitudineVista, Gemello, PrevisioneVista, RegolaSeguita } from './api.ts'
 import { nomeFonteDoc } from './citazioni.ts'
 
 const en = () => lingua() === 'en'
@@ -128,6 +128,16 @@ function rigaFiltro(d: AbitudineVista['dati']): string {
     case 'tema': return String(d.frase || d.tema || '')
     default: return ''
   }
+}
+
+/**
+ * Una cosa imparata che una bozza segue, detta come nella Memoria: una regola
+ * sul tono nella lingua dell'app (o nelle sue parole, se l'ha corretta), una
+ * convinzione con le parole con cui è scritta.
+ */
+export function fraseSeguita(r: Pick<RegolaSeguita, 'genere' | 'dati' | 'testo'>): string {
+  if (r.testo) return r.testo
+  return r.genere === 'bozza.tono' && r.dati ? rigaImparata({ genere: r.genere, dati: r.dati }) : ''
 }
 
 /** La riga dell'avviso: la regola appena entrata in vigore, detta come nella Memoria. */

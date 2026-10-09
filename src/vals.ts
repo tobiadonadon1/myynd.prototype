@@ -36,7 +36,8 @@ import { rigaImparata } from './gemello-frasi.ts'
  * «l'ultima» fosse un'altra, o non ci fosse più. Adesso il gesto se lo porta
  * dietro l'avviso: chi lo mostra sa cosa ha fatto, e sa come disfarlo.
  */
-type Toast = { text: string; undo?: () => void } | null
+/** `etichetta`: il bottone dice un'altra cosa che «Annulla» (il «Sempre» di un documento corretto). */
+type Toast = { text: string; undo?: () => void; etichetta?: string } | null
 
 const COLORE_FONTE: Record<string, string> = {
   posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A'
@@ -473,11 +474,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const cvB = useRef<HTMLCanvasElement>(null)
   const tt = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const mostraToast = useCallback((text: string, undo?: () => void) => {
+  const mostraToast = useCallback((text: string, undo?: () => void, etichetta?: string) => {
     clearTimeout(tt.current)
-    setToast({ text, undo })
-    // cinque secondi: «sparisce dopo un secondo, a malapena» — il tempo di leggerla
-    tt.current = setTimeout(() => setToast(null), 5000)
+    setToast({ text, undo, etichetta })
+    // cinque secondi: «sparisce dopo un secondo, a malapena» — il tempo di leggerla;
+    // una domanda da un tocco ne ha dieci, perché prima si legge e poi si decide
+    tt.current = setTimeout(() => setToast(null), etichetta ? 10000 : 5000)
   }, [])
   useEffect(() => () => clearTimeout(tt.current), [])
 
@@ -987,6 +989,15 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // F7 · una regola nata altrove (una bozza corretta partita dalla sua posta): l'avviso la dice anche qui
   useEffect(() => api.flussoCompiti(e => {
     if (e.fase === 'imparato') mostraToast(frasi.imparato(rigaImparata(e.regola)))
+    // un documento corretto: la convinzione appena nata si tiene con un tocco, senza andare in Memoria
+    if (e.fase === 'sempre') {
+      const id = e.convinzione.id
+      mostraToast(frasi.sempreChiesta(e.convinzione.enunciato), () => {
+        api.confermaConvinzione(id)
+          .then(() => mostraToast(t('Tenuta: da ora la seguo.')))
+          .catch(() => mostraToast(t('Non sono riuscito a salvarla.')))
+      }, t('Sì, sempre'))
+    }
   }), [mostraToast])
 
   // la lettura sul filo: il passo che cambia, la fine, il guaio
@@ -1645,7 +1656,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     chiudiDoc: () => setDoc(null),
 
     // — toast —
-    toastOn: !!toast, toastText: toast?.text ?? '', toastUndo: !!toast?.undo,
+    toastOn: !!toast, toastText: toast?.text ?? '', toastUndo: !!toast?.undo, toastEtichetta: toast?.etichetta ?? null,
     /*
      * «Annulla» disfa il gesto che ha acceso questo avviso, e nient'altro.
      *

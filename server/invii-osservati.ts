@@ -28,6 +28,8 @@ import * as store from './store.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as regoleTono from './regole-tono.ts'
 import * as compiti from './compiti.ts'
+import * as gradino from './gradino.ts'
+import * as segnali from './segnali.ts'
 import { classe, parole, ritocco } from './ritocco.ts'
 import { corpoAttuale } from './rilevanza.ts'
 import { destinatarioDi, senzaFirma, type Destinatario } from './voce.ts'
@@ -128,6 +130,13 @@ export async function osservaUno(c: store.Compito): Promise<Visto> {
   if (!lavoroDati.segnaMandata(c.id, { doc: inviata.id, quando, certezza, ritocco: r })) return null
   const cl = classe(r)
   lavoroDati.registraInvio(c.id, { via: 'casella', inviato: quando, distanza: r, parole: parole(corpo).length, classe: cl })
+  // il primo gradino: la risposta a chi aveva scritto, partita dalla sua posta, conta come una partita da «Manda»
+  try {
+    const a = gradino.mittenteDi(c)
+    // a chi è andata: se la posta non lo dice, il filo basta (è la risposta a quella mail)
+    const a2 = segnali.indirizziDi(inviata.destinatari)
+    if (a && (!a2.length || a2.includes(a))) gradino.registraInvio({ compito: c.id, indirizzo: a, nome: destinatarioDi(c)?.nome, distanza: r, quando })
+  } catch { /* la fiducia è un di più */ }
   // la coppia che si impara è pari: la firma tolta da tutte e due le parti,
   // o la memoria imparava che lei cancella il suo nome
   if (cl === 'ritocco' || cl === 'modificato') {

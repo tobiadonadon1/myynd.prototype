@@ -694,5 +694,34 @@ process.stdin.on('end', async () => {
 }
 // — F8: fine —
 
+// — D: inizio —
+// Quello che si vede di quello che ha imparato: il primo gradino (le risposte
+// partite com'erano, una per segnale) e una convinzione tenuta da un lavoro
+// corretto, con la riga che la segue (l'id si sa solo dopo averla scritta).
+//   "gradini": [{ "indirizzo": "nora@harbor.example", "nome": "Nora", "distanze": [0, 0.1, 0, 0] }]
+//   "imparate": [{ "compito": "c-doc", "enunciato": "…", "ambito": "persona" }]
+type ScenaD = {
+  gradini?: { indirizzo: string; nome: string; distanze: number[] }[]
+  imparate?: { compito: string; enunciato: string; ambito?: string }[]
+}
+const sd = scena as unknown as ScenaD
+if (sd.gradini || sd.imparate) {
+  const gradinoD = await import(join(SERVER, 'gradino.ts'))
+  chi.dentro(conto.id, () => {
+    for (const g of sd.gradini ?? []) {
+      g.distanze.forEach((distanza, i) => gradinoD.registraInvio({ compito: `semina-${g.indirizzo}-${i}`, indirizzo: g.indirizzo, nome: g.nome, distanza, quando: tempo(`-${g.distanze.length - i}d`) }))
+    }
+    for (const k of sd.imparate ?? []) {
+      const id = store.ricorda({ enunciato: k.enunciato, ambito: k.ambito ?? 'persona', genere: 'indotta', fiducia: 0.6, origine: 'correzione' })
+      store.confermaConvinzione(id)
+      const c = store.compito(k.compito)
+      const regole = [...(c?.voceScritta?.regole ?? []), { chiave: id, genere: 'convinzione', casi: 1, testo: k.enunciato }]
+      store.default.prepare('UPDATE compiti SET voceScritta = ? WHERE id = ?').run(JSON.stringify({ ...(c?.voceScritta ?? {}), regole }), k.compito)
+    }
+  })
+  console.log(`semina · D: ${sd.gradini?.length ?? 0} gradini, ${sd.imparate?.length ?? 0} convinzioni seguite`)
+}
+// — D: fine —
+
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

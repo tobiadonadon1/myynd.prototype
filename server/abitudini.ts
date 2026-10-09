@@ -45,9 +45,10 @@ export type Stato = 'osservata' | 'tenuta' | 'corretta' | 'tolta' | 'superata'
 export type Esempio = { quando: string; testo: string; doc: string | null; trattenuta?: boolean }
 /**
  * `soglia`, `mostra` e `dal` sono delle regole nate dai suoi gesti (F7): da
- * quanti casi vale, da quanti si vede, e quando è entrata in vigore.
+ * quanti casi vale, da quanti si vede, e quando è entrata in vigore. `usata`
+ * è la prima volta che una bozza l'ha seguita: l'avviso «la uso» si dice una volta.
  */
-export type Prova = { casi: number; su: number | null; esempi: Esempio[]; soglia?: number; mostra?: number; dal?: string }
+export type Prova = { casi: number; su: number | null; esempi: Esempio[]; soglia?: number; mostra?: number; dal?: string; usata?: string }
 export type Abitudine = {
   chiave: string; genere: string; dati: Record<string, string | number>; prova: Prova; fiducia: number
   stato: Stato; testoSuo: string | null; visto: string; aggiornato: string; tolta: string | null
@@ -648,7 +649,45 @@ function scarti(adesso: Date): Scarto[] {
     if (!indirizzo || !mittenteAutomatico(autore)) continue
     fuori.push({ titolo: r.testo, quando: /^\d{4}-/.test(r.q) ? r.q : adesso.toISOString(), fonte: null, tipo: null, indirizzo, nome: nomeDi(autore, indirizzo), automatico: true, fatto: false, da: 'compiti' })
   }
+  /*
+   * E le righe della lista lasciate con una delle ragioni del feed (vedi
+   * `ragioneDelCompito`). «Non è mia» su una riga nata dalla mail di una
+   * persona conta come lo stesso gesto su una carta: tre, e la sua posta entra
+   * solo se chiede qualcosa. «Già fatta» è un fatto, come «Fatto» sul feed: la
+   * sua posta a volte è sua. Si legge lo stato di adesso: una riga riaperta
+   * smette di contare. Le macchine le conta già il giro qui sopra.
+   */
+  const conRagione = db.prepare(`SELECT c.testo, c.doc, c.contesto, c.stato, s.quando AS q, json_extract(s.dati, '$.ragione') AS ragione
+    FROM segnali s JOIN compiti c ON c.id = s.ref
+    WHERE s.genere = ? AND c.doc IS NOT NULL AND c.sparito IS NULL AND s.quando >= ?
+      AND s.quando = (SELECT MAX(x.quando) FROM segnali x WHERE x.genere = s.genere AND x.ref = s.ref)`).all(GENERE_RAGIONE, da) as
+    { testo: string; doc: string; contesto: string | null; stato: string; q: string; ragione: string | null }[]
+  for (const r of conRagione) {
+    const giusta = (r.ragione === 'non_mia' && r.stato === 'lasciato') || (r.ragione === 'fatta' && r.stato === 'fatto')
+    if (!giusta) continue
+    const autore = autoreDi(r.doc, r.contesto)
+    const indirizzo = indirizzoAttenzione(autore)
+    if (!indirizzo || mittenteAutomatico(autore)) continue
+    fuori.push({ titolo: r.testo, quando: r.q, fonte: null, tipo: null, indirizzo, nome: nomeDi(autore, indirizzo), automatico: false, fatto: r.ragione === 'fatta', da: 'compiti' })
+  }
   return fuori
+}
+
+const GENERE_RAGIONE = 'compito.ragione'
+/** Le quattro ragioni del feed, le stesse per una riga della lista. */
+export const RAGIONI = ['vecchia', 'fatta', 'non_mia', 'non_chiara'] as const
+export type Ragione = typeof RAGIONI[number]
+
+/**
+ * La ragione con cui ha lasciato una riga della lista («Non mi serve»), come
+ * un segnale: il conto dei filtri la legge come uno scarto del feed, e la
+ * ragione più recente vale per quella riga. Niente colonne nuove: è un fatto
+ * datato, come tutti i segnali.
+ */
+export function ragioneDelCompito(id: string, ragione: Ragione, adesso = new Date()): void {
+  if (!RAGIONI.includes(ragione)) throw new Error('Ragione sconosciuta.')
+  const quando = adesso.toISOString()
+  segnali.scrivi({ id: `${GENERE_RAGIONE}|${id}|${quando}`, genere: GENERE_RAGIONE, quando, ref: id, dati: { ragione } })
 }
 
 const esempiDi = (xs: Scarto[]): Esempio[] => xs.slice().sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, 5).map(x => ({ quando: x.quando, testo: x.titolo.slice(0, 80), doc: null }))
@@ -738,6 +777,13 @@ export function chiaviDellaCarta(id: string): string[] {
     ...(a ? [`feed.filtro:mittente:${a}`, `feed.filtro:dominio:${a.slice(a.indexOf('@') + 1)}`] : []),
     ...(r.fonte && r.tipo ? [`feed.filtro:tipo:${r.fonte}|${r.tipo}`] : [])
   ]
+}
+
+/** Lo stesso per una riga della lista lasciata con una ragione: il suo mittente, e il suo dominio. */
+export function chiaviDelCompito(id: string): string[] {
+  const r = db.prepare('SELECT doc, contesto FROM compiti WHERE id = ?').get(id) as { doc: string | null; contesto: string | null } | undefined
+  const a = r ? indirizzoAttenzione(autoreDi(r.doc, r.contesto)) : null
+  return a ? [`feed.filtro:mittente:${a}`, `feed.filtro:dominio:${a.slice(a.indexOf('@') + 1)}`] : []
 }
 
 /** La deduzione di `domande.ts` sui temi scartati: una regola in vigore subito, che spinge in fondo. */
@@ -842,7 +888,9 @@ export function aggiungiCaso(c: { chiave: string; genere: string; dati: Record<s
   // una persona sola, e con un nome: la regola vale per lei
   if (chi.length === 1 && chi[0] !== '*') { dati.soloA = chi[0]!; if (c.chi?.nome) dati.nome = c.chi.nome }
   else { delete dati.soloA; delete dati.nome }
-  const prova: Prova = { casi: (e?.prova.casi ?? 0) + 1, su: null, esempi: [c.esempio, ...(e?.prova.esempi ?? [])].slice(0, 5), ...(c.mostra ? { mostra: c.mostra } : {}) }
+  const prova: Prova = { casi: (e?.prova.casi ?? 0) + 1, su: null, esempi: [c.esempio, ...(e?.prova.esempi ?? [])].slice(0, 5), ...(c.mostra ? { mostra: c.mostra } : {}),
+    // la prima volta che una bozza l'ha seguita resta quella: un caso in più non la fa ridire
+    ...(e?.prova.usata ? { usata: e.prova.usata } : {}) }
   const stato: Stato = !e || e.stato === 'superata' ? 'osservata' : e.stato
   const dopo = inVigore({ genere: c.genere, stato, prova })
   if (dopo) prova.dal = prima && e?.prova.dal ? e.prova.dal : ora
@@ -879,11 +927,51 @@ function fraseTonoIt(a: Pick<Abitudine, 'dati'>): string {
  * smette alla bozza dopo. Le parole di lei, se l'ha corretta, al posto delle nostre.
  */
 export function regoleTono(indirizzo?: string | null): string {
+  return testoTono(regoleToneValide(indirizzo))
+}
+
+/**
+ * Le regole sul tono che una bozza per chi riceve segue davvero, nell'ordine
+ * del prompt e con lo stesso tetto: quelle che la bozza può dire di aver
+ * usato («Learned: …»), né una di più né una di meno di quelle che il
+ * modello ha letto.
+ */
+export function regoleToneValide(indirizzo?: string | null): Abitudine[] {
   const a = indirizzo?.trim().toLowerCase() ?? ''
-  const valide = righe().filter(r => r.genere === 'bozza.tono' && inVigore(r) && (!r.dati.soloA || r.dati.soloA === a))
+  return righe().filter(r => r.genere === 'bozza.tono' && inVigore(r) && (!r.dati.soloA || r.dati.soloA === a))
     .sort((x, y) => y.prova.casi - x.prova.casi || x.chiave.localeCompare(y.chiave))
-  const frasi = valide.map(r => senzaTrattini(r.stato === 'corretta' && r.testoSuo ? r.testoSuo : fraseTonoIt(r)).trim()).filter(Boolean).slice(0, RIGHE_TONO)
+    .filter(r => !!fraseTonoIt(r) || (r.stato === 'corretta' && !!r.testoSuo))
+    .slice(0, RIGHE_TONO)
+}
+
+/** Il blocco del prompt, dalle regole già scelte. */
+export function testoTono(valide: Abitudine[]): string {
+  const frasi = valide.map(r => senzaTrattini(r.stato === 'corretta' && r.testoSuo ? r.testoSuo : fraseTonoIt(r)).trim()).filter(Boolean)
   return frasi.length ? `Come corregge le tue bozze, da seguire:\n${frasi.map(f => `· ${f}`).join('\n')}` : ''
+}
+
+/**
+ * Le regole appena seguite da una bozza: segna la prima volta, e torna solo
+ * quelle che non erano mai state usate. È il «la uso per la prima volta»
+ * dell'avviso, detto una volta per regola, mai a ogni bozza.
+ */
+export function segnaUsate(chiavi: string[], adesso = new Date()): Abitudine[] {
+  const nuove: Abitudine[] = []
+  for (const k of new Set(chiavi)) {
+    const r = riga(k)
+    if (!r || r.stato === 'tolta' || r.prova.usata) continue
+    const prova: Prova = { ...r.prova, usata: adesso.toISOString() }
+    db.prepare('UPDATE abitudini SET prova = ? WHERE chiave = ?').run(JSON.stringify(prova), k)
+    nuove.push({ ...r, prova })
+  }
+  return nuove
+}
+
+/** Quelle di queste chiavi che valgono ancora: una regola tolta non si dice più sotto una bozza. */
+export function ancoraValide(chiavi: string[]): Set<string> {
+  const vive = new Set<string>()
+  for (const k of new Set(chiavi)) { const r = riga(k); if (r && r.stato !== 'tolta' && inVigore(r)) vive.add(k) }
+  return vive
 }
 
 /** Le regole dai gesti entrate in vigore dopo quel momento: il punto accanto a «Memoria». */

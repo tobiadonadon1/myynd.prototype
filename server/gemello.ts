@@ -36,6 +36,7 @@ import * as fuso from './fuso.ts'
 import * as ospitato from './ospitato.ts'
 import * as segnali from './segnali.ts'
 import * as abitudini from './abitudini.ts'
+import * as gradino from './gradino.ts'
 import * as osservatore from './osservatore.ts'
 import * as previsioni from './previsioni.ts'
 import * as progetti from './progetti.ts'
@@ -62,6 +63,8 @@ export type Gemello = {
   ieri: { giorno: string; chiuso: boolean; giuste: number; totale: number; base: number; previsioni: PrevisioneVista[] } | null
   fiducia: { genere: string; giuste: number; totale: number }[]
   abitudini: abitudini.AbitudineVista[]
+  /** Il primo gradino: le persone a cui ogni risposta parte già scritta, con «Take it back». */
+  guadagnati: gradino.Gradino[]
   guai: 'posta-inviata'[]
 }
 type RigaPrev = { id: string; giorno: string; genere: string; ref: string; probabilita: number; dati: string; fatta: string; esito: EsitoPrev | null; verificata: string | null; prova: string | null }
@@ -584,7 +587,9 @@ export function vista(adesso = new Date()): Gemello {
     .filter(r => !r.genere.startsWith('previsione.') && r.giuste + r.sbagliate >= 10).map(r => ({ genere: r.genere, giuste: r.giuste, totale: r.giuste + r.sbagliate }))
   // «non vedo la posta che mandi» solo a registro in pari: mentre il primo ripasso cammina, la cartella Sent può non essere ancora arrivata
   const guai: 'posta-inviata'[] = fontePosta() && !segnali.postaDaRipassare() && !segnali.coperturaInviata(adesso) ? ['posta-inviata'] : []
-  return { punteggio, oggi: { quante: diOggi.length, sigillate, previsioni: previsioniOggi }, ieri: vistaIeri, fiducia, abitudini: abitudini.tutte(), guai }
+  let guadagnati: gradino.Gradino[] = []
+  try { guadagnati = gradino.guadagnati() } catch { guadagnati = [] }
+  return { punteggio, oggi: { quante: diOggi.length, sigillate, previsioni: previsioniOggi }, ieri: vistaIeri, fiducia, abitudini: abitudini.tutte(), guadagnati, guai }
 }
 
 /** Per il resoconto (P9): giuste, sbagliate, base e giorni fra due date comprese. */

@@ -44,6 +44,7 @@ import * as lavoroDati from './lavoro-dati.ts'
 import * as voce from './voce.ts'
 import * as abitudini from './abitudini.ts'
 import * as regoleTono from './regole-tono.ts'
+import * as gradino from './gradino.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi, type Stesa } from './stesura.ts'
 import { conCompito, fuoriDalCompito } from './etichetta-uso.ts'
@@ -72,6 +73,10 @@ export type Evento =
   | { fase: 'lettura'; stato: 'corre' | 'fine' | 'guaio'; lettura: Lettura; nuove?: number; errore?: string }
   /** F7 · una regola nata da un gesto è appena entrata in vigore: «Learned: …». */
   | { fase: 'imparato'; regola: abitudini.Imparata }
+  /** Una cosa imparata che una bozza (la riga `id`) segue per la prima volta: l'avviso lo dice, una volta. */
+  | { fase: 'usata'; id: string; regola: store.RegolaSeguita }
+  /** Un documento corretto ha fatto nascere una convinzione che aspetta il suo sì: «Lo faccio sempre?». */
+  | { fase: 'sempre'; convinzione: { id: string; enunciato: string } }
 
 /*
  * Ogni ascoltatore sa di chi vuole sentire.
@@ -189,8 +194,7 @@ export function annunciaPronto(id: string) {
 
 const passiAttivi = new Map<string, { di: string | null; evento: Extract<Evento, { fase: 'lavoro' }> }>()
 
-function annuncia(e: Evento) {
-  const di = chi.adesso()
+function annuncia(e: Evento, di = chi.adesso()) {
   if (e.fase === 'lavoro') passiAttivi.set(chiave(e.id, di), { di, evento: e })
   else if ('id' in e) passiAttivi.delete(chiave(e.id, di))
   if (e.fase === 'lettura') {
@@ -381,6 +385,10 @@ type Ferri = {
   voce: { perRiga: typeof voce.perRiga }
   /** Il contratto della carta (F1), la base se manca: nelle prove si sostituisce. */
   contratto: (id: string) => store.Contratto | null
+  /** Le convinzioni tenute da un lavoro corretto, che ogni lavoro segue: la riga «Learned» le nomina. */
+  imparateDaCorrezioni: typeof memoria.imparateDaCorrezioni
+  /** Un documento corretto: la convinzione che ne nasce, da tenere con un tocco. Chiama il modello. */
+  imparaDalDocumento: typeof memoria.imparaDalDocumento
 }
 const VERI: Ferri = {
   salvaBozzaCasella,
@@ -391,6 +399,8 @@ const VERI: Ferri = {
   pesaLaDomanda: (...a) => claude.pesaLaDomanda(...a),
   voce: { perRiga: c => voce.perRiga(c) },
   contratto: id => contratto.subito(id),
+  imparateDaCorrezioni: () => memoria.imparateDaCorrezioni(),
+  imparaDalDocumento: (...a) => memoria.imparaDalDocumento(...a),
   giudica: (...a) => giudica(...a),
   salvaConsegna: (...a) => mani.salvaConsegna(...a),
   prossimoPasso: (...a) => prossimoPasso(...a),
@@ -472,7 +482,7 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     // Il permesso viaggia con la riga: qui non si va a rileggere niente, si
     // usa quello che c'era scritto quando la riga è nata. Un compito scritto a
     // mano non ne ha, e lavora come ha sempre lavorato.
-    if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
+    if ((c.origine === 'iniziativa' && !fonteValida(c.doc)) || (c.origine === gradino.ORIGINE && !gradino.rigaValida(c))) {
       // Withdraw automatic work without inventing user dismissal feedback.
       store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
       annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
@@ -864,6 +874,11 @@ export async function dopoLaStesura(
     store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
     annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
   }
+  // una risposta guadagnata (il primo gradino) vale finché la fonte regge e il gradino c'è: «Take it back» la ritira
+  if (c.origine === gradino.ORIGINE && !gradino.rigaValida(c)) {
+    store.cambiaStatoCompito(id, 'ritirato', 'Source changed or trust taken back')
+    annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
+  }
 
   await verificaBaseRevisione(c)
 
@@ -901,7 +916,7 @@ export async function dopoLaStesura(
     // arriva con dentro a chi va — un gesto solo, non due attese
     const riga = rigaIpotesi(testo)
     lavoroDati.scriviIpotesi(id, riga ? [riga] : null)
-    lavoroDati.scriviVoceScritta(id, v?.scritta ?? null)
+    scriviLeRegole(id, v, messaggio)
     lavoroDati.registraEsito(id, { mossa, genere, tipo, consegnato: new Date().toISOString() })
     await preparaLaMail(c, testo, fonti, { consegna: v?.consegna, candidati: claude.candidatiAllegato(lette, fonti) })
   } else {
@@ -910,6 +925,7 @@ export async function dopoLaStesura(
     // Bocciata dalla revisione visiva, resta «chiede» e senza ipotesi
     const riga = chiedeNativo ? null : rigaIpotesi(testo)
     lavoroDati.scriviIpotesi(id, riga ? [riga] : null)
+    if (!chiedeNativo) scriviLeRegole(id, v, messaggio)
     lavoroDati.registraEsito(id, { mossa: 'produci', genere: null, tipo, ...(chiedeNativo ? {} : { consegnato: new Date().toISOString() }) })
   }
 
@@ -1051,6 +1067,50 @@ export function rispostaCheChiude(testo: string): 'lasciato' | 'fatto' | null {
   if (forme.some(f => GIA_FATTO.test(f))) return 'fatto'
   if (forme.some(f => LASCIA.test(f))) return 'lasciato'
   return null
+}
+
+/**
+ * Quello che ha imparato e che questa bozza ha seguito: la riga «Learned: …
+ * (n edits) · Undo» sotto il lavoro.
+ *
+ * Un messaggio segue le regole sul tono che la sua voce ha letto (le stesse,
+ * con lo stesso tetto: `voce.perRiga`); un documento segue le convinzioni
+ * tenute da un lavoro corretto, che stanno nel ritratto in cima al prompt.
+ * Niente di più: una riga che dice «ho seguito questo» deve essere vera.
+ */
+export function regoleSeguite(v: voce.Voce | null, messaggio: boolean): store.RegolaSeguita[] {
+  if (messaggio) {
+    return (v?.regole ?? []).map(r => ({ chiave: r.chiave, genere: 'bozza.tono' as const, casi: r.prova.casi, dati: r.dati, testo: r.stato === 'corretta' ? r.testoSuo : null }))
+  }
+  let tenute: store.Convinzione[] = []
+  try { tenute = ferri.imparateDaCorrezioni() } catch { tenute = [] }
+  return tenute.map(k => ({ chiave: k.id, genere: 'convinzione' as const, casi: 1, testo: k.enunciato }))
+}
+
+const USATA = 'convinzione.usata:'
+
+/**
+ * Scrive sulla riga la voce e le regole seguite, e la prima volta che una
+ * regola entra in una bozza lo dice: «Ho usato per la prima volta: …». Una
+ * volta per regola, mai a ogni bozza. Non lancia: è un di più della bozza.
+ */
+function scriviLeRegole(id: string, v: voce.Voce | null, messaggio: boolean) {
+  try {
+    const regole = regoleSeguite(v, messaggio)
+    const scritta = v?.scritta || regole.length ? { ...(v?.scritta ?? {}), ...(regole.length ? { regole } : {}) } : null
+    lavoroDati.scriviVoceScritta(id, scritta)
+    const nuove = new Set(abitudini.segnaUsate(regole.filter(r => r.genere === 'bozza.tono').map(r => r.chiave)).map(r => r.chiave))
+    for (const r of regole) {
+      if (r.genere !== 'convinzione' || store.cursore(USATA + r.chiave)) continue
+      store.segnaCursore(USATA + r.chiave, new Date().toISOString())
+      nuove.add(r.chiave)
+    }
+    const prima = regole.find(r => nuove.has(r.chiave))
+    if (prima) annuncia({ fase: 'usata', id, regola: prima })
+  } catch (e) {
+    console.warn(`myynd · regole · ${id}:`, e instanceof Error ? e.message : e)
+    lavoroDati.scriviVoceScritta(id, v?.scritta ?? null)
+  }
 }
 
 /** La riga che dice cosa manca, in fondo a un lavoro con un posto vuoto: «Manca…» o «Missing…». */
@@ -1375,7 +1435,14 @@ export function imparaSeCorretto(bozza: string | null, tenuto: string, o: { emai
     }
     catch (e) { console.warn('myynd · la correzione non è diventata una regola:', e instanceof Error ? e.message : e); return null }
   }
-  memoria.imparaDallaCorrezione(bozza, tenuto)
+  /*
+   * Un documento corretto: la convinzione che ne nasce è indotta, e prima
+   * aspettava in silenzio un «Tienila» in Memoria. Adesso, appena nata, il
+   * filo la porta a chi guarda con un tocco solo: «Lo faccio sempre?».
+   */
+  const di = chi.adesso()
+  ferri.imparaDalDocumento(bozza, tenuto)
+    .then(k => { if (k) annuncia({ fase: 'sempre', convinzione: k }, di) })
     .catch(e => console.warn('myynd · la correzione non è arrivata alla memoria:', e instanceof Error ? e.message : e))
   return null
 }

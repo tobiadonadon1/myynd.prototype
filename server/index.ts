@@ -144,6 +144,7 @@ import * as sveglia from './sveglia.ts'
 import * as osservatore from './osservatore.ts'
 import * as gemello from './gemello.ts'
 import * as abitudini from './abitudini.ts'
+import * as gradino from './gradino.ts'
 import * as memoriaNuove from './memoria-nuove.ts'
 import * as oauth from './connettori/oauth.ts'
 import { riflua, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
@@ -4053,6 +4054,8 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
   compiti.annunciaCambio()
   const r = ritocco(bozza, d.m.corpo)
   lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: new Date().toISOString(), distanza: r, parole: paroleDi(d.m.corpo).length, classe: classeRitocco(r) })
+  // il primo gradino: una risposta a chi aveva scritto, partita com'era o quasi, è una prova di fiducia
+  try { if (gradino.mittenteDi(c) === a) gradino.registraInvio({ compito: c.id, indirizzo: a, nome: dest?.nome, distanza: r }) } catch { /* la fiducia è un di più */ }
 })
 
 /**
@@ -5172,6 +5175,55 @@ app.post('/api/gemello/abitudini/:chiave', (req, res) => {
   }
 })
 
+// — D: rotte, inizio —
+/**
+ * «Non mi serve», con una delle quattro ragioni del feed (vecchia, già fatta,
+ * non è mia, non si capisce). Prima mandava «not relevant»: due parole, sotto
+ * la soglia di `imparaDallaChiusura`, e non insegnava niente. Adesso la
+ * ragione è un fatto (`abitudini.ragioneDelCompito`) che il conto dei filtri
+ * legge come uno scarto del feed, e la frase che la dice va alla memoria con
+ * la domanda accanto. «Già fatta» chiude come fatta. Se nasce una regola,
+ * torna: l'avviso la dice.
+ */
+app.post('/api/compiti/:id/lascia', (req, res) => {
+  const c = store.compito(req.params.id)
+  if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  const ragione = String(req.body?.ragione ?? '') as abitudini.Ragione
+  if (!abitudini.RAGIONI.includes(ragione)) return res.status(400).json({ errore: 'Ragione sconosciuta.' })
+  const esito = String(req.body?.esito ?? '').trim().slice(0, 240)
+  const stato = ragione === 'fatta' ? 'fatto' : 'lasciato'
+  stopProjectWork(c.id)
+  let imparato: abitudini.Imparata | undefined
+  try {
+    store.cambiaStatoCompito(c.id, stato, esito || undefined)
+    store.scordaChieste(c.id)
+    abitudini.ragioneDelCompito(c.id, ragione)
+    const chiavi = new Set(abitudini.chiaviDelCompito(c.id))
+    imparato = abitudini.ricalcolaFiltri().find(r => chiavi.has(r.chiave))
+  } catch (e) { return errore(res, e) }
+  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi(), chiuso: stato, ...(imparato ? { imparato } : {}) })
+  compiti.annunciaCambio()
+  // dopo la risposta: la domanda che le aveva fatto sta accanto al suo perché
+  compiti.imparaDallaChiusura(c, stato, esito, c.stato === 'chiede' ? c.risultato : null)
+  if (stato === 'fatto') void dopoFatto.registraFatto({ genere: 'compito', id: c.id })
+})
+
+/** «Take it back»: la persona scende dal primo gradino, e le sue risposte tornano a chiedere. */
+app.post('/api/gradino/ritira', (req, res) => {
+  const indirizzo = String(req.body?.indirizzo ?? '').trim()
+  if (!indirizzo.includes('@')) return res.status(400).json({ errore: 'Non conosco questa persona.' })
+  try { gradino.ritira(indirizzo) } catch (e) { return errore(res, e) }
+  res.json({ ok: true, compiti: compitiAttuali() })
+  compiti.annunciaCambio()
+})
+
+/** La preparazione discreta di ogni quarto d'ora: prima le risposte guadagnate, poi le proposte. */
+function preparazione() {
+  try { iniziativa.guadagnate() } catch (e) { console.warn('myynd · le risposte guadagnate non sono partite:', e instanceof Error ? e.message : e) }
+  return iniziativa.giro()
+}
+// — D: rotte, fine —
+
 const senzaOsservatore = (res: express.Response) => res.status(404).json({ disponibile: false })
 
 app.get('/api/osservatore', (_req, res) => {
@@ -5930,7 +5982,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     await rileggiDaSola()
     await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
     await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
-    await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro()))
+    await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(preparazione))
     await runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro()))
     await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
   }
@@ -5973,7 +6025,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   setInterval(vassoioDiProva, 15 * 60_000)
   // le prove d'idea dei suggerimenti già sul foglio, dieci minuti dopo l'avvio
   setTimeout(perOgnuno('le prove d\'idea non sono partite', async () => { store.senzaToccare(() => scoperte.provaLeIdee()) }), 10 * 60_000)
-  const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro())))
+  const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(preparazione)))
   setTimeout(preparaInAnticipo, 150_000)
   setInterval(preparaInAnticipo, 15 * 60_000)
   // il gemello (P1B): raccoglie, chiude i giorni, di notte rifà le righe, la mattina prevede

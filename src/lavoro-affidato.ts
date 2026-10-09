@@ -7,7 +7,7 @@
 // La cornice (l'ipotesi, il segnaposto, il corpo per chi riceve) è la stessa
 // del server: `server/cornice.ts`, senza import, letta da tutte e due le parti.
 
-import type { Compito } from './api'
+import type { Compito, RegolaSeguita } from './api'
 import { haSegnaposto, MANCA, testoMostrato } from '../server/cornice.ts'
 
 export { corpoPerChiRiceve, haSegnaposto, rigaIpotesi, senzaRigaIpotesi, testoMostrato } from '../server/cornice.ts'
@@ -51,6 +51,20 @@ export function rigaDellaVoce(c: Pick<Compito, 'voceScritta'>): { n: number; nom
   const v = c.voceScritta
   if (!v || !v.destinatario || !v.quanti || v.quanti < VOCE_MINIMA || !v.esempi?.length) return null
   return { n: v.quanti, nome: v.destinatario, apri: v.esempi[0].id }
+}
+
+/**
+ * Quello che ha imparato e che questa bozza segue, per la riga «Learned: …
+ * (n edits) · Undo»: la regola più forte (più correzioni), e quante altre.
+ * Solo su una riga pronta: sotto una domanda o un lavoro in corso non c'è
+ * ancora niente che l'abbia seguita. Le regole senza una frase si saltano.
+ */
+export function imparatoDellaBozza(c: Pick<Compito, 'stato' | 'voceScritta'>, frase: (r: RegolaSeguita) => string): { regola: RegolaSeguita; frase: string; altre: RegolaSeguita[] } | null {
+  if (c.stato !== 'pronto') return null
+  const regole = (c.voceScritta?.regole ?? []).filter(r => !!frase(r).trim())
+  if (!regole.length) return null
+  const [prima, ...altre] = regole.slice().sort((a, b) => b.casi - a.casi)
+  return { regola: prima, frase: frase(prima), altre }
 }
 
 /** La riga è ferma su una fonte che manca: il guaio è una delle quattro frasi fisse. */

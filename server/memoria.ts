@@ -139,18 +139,17 @@ export function carta(): string {
     for (const b of apprese) righe.push(`— ${b.descrizione.replace(/[.:]$/, '')} → ${b.valore.trim()}`)
   }
 
-  const sue = store.convinzioni('persona').filter(attendibile)
-  const azienda = store.convinzioni('azienda').filter(attendibile)
+  const { sue, azienda } = nelRitratto()
 
   if (sue.length) {
     righe.push('')
     righe.push('Quello che ho capito di lei, con quanta certezza:')
-    for (const k of sue.slice(0, 10)) righe.push(riga(k))
+    for (const k of sue) righe.push(riga(k))
   }
   if (azienda.length) {
     righe.push('')
     righe.push('E di come lavora la sua azienda:')
-    for (const k of azienda.slice(0, 8)) righe.push(riga(k))
+    for (const k of azienda) righe.push(riga(k))
   }
 
   // per ultime le righe misurate di «Come lavori» (P1B): un taglio corto le perde per prime
@@ -158,6 +157,25 @@ export function carta(): string {
   if (ritratto) { righe.push(''); righe.push(ritratto) }
 
   return righe.join('\n')
+}
+
+/** Le convinzioni che entrano nel ritratto, con lo stesso tetto: dieci su di lei, otto sull'azienda. */
+function nelRitratto(): { sue: store.Convinzione[]; azienda: store.Convinzione[] } {
+  return {
+    sue: store.convinzioni('persona').filter(attendibile).slice(0, 10),
+    azienda: store.convinzioni('azienda').filter(attendibile).slice(0, 8)
+  }
+}
+
+/**
+ * Quello che ha imparato da un lavoro corretto e che ogni lavoro adesso segue:
+ * le convinzioni nate da una correzione (`origine: 'correzione'`) che valgono
+ * e che stanno nel ritratto, cioè nel prompt di chi scrive. La riga «Learned»
+ * sotto una bozza nomina queste e nessun'altra: solo quello che il modello ha letto.
+ */
+export function imparateDaCorrezioni(): store.Convinzione[] {
+  const { sue, azienda } = nelRitratto()
+  return [...sue, ...azienda].filter(k => k.origine === 'correzione')
 }
 
 /** Le convinzioni che riguardano un interlocutore preciso, se lo si conosce. */
@@ -253,9 +271,10 @@ const schemaMemoria = () => ({
           fiducia: { type: 'number', description: 'Da 0 a 1. Esplicita sta sopra 0.9; indotta di rado sopra 0.6.' },
           premesse: { type: 'array', items: { type: 'string' }, description: 'Se dedotta: da quali affermazioni. Vuoto se esplicita.' },
           citazione: { type: 'string', description: 'Le parole sue da cui viene, alla lettera. Vuoto se non ce ne sono.' },
-          sostituisce: { type: 'string', description: 'Se questa convinzione corregge o supera una di quelle che Myynd già crede (te le elenco), ricopia qui quella vecchia alla lettera. Vuoto altrimenti.' }
+          sostituisce: { type: 'string', description: 'Se questa convinzione corregge o supera una di quelle che Myynd già crede (te le elenco), ricopia qui quella vecchia alla lettera. Vuoto altrimenti.' },
+          soggetto: { type: 'string', description: "Di chi parla la frase: 'lei' se parla della persona che usa Myynd o della sua azienda; altrimenti il nome di chi." }
         },
-        required: ['enunciato', 'ambito', 'genere', 'fiducia', 'premesse', 'citazione', 'sostituisce'],
+        required: ['enunciato', 'ambito', 'genere', 'fiducia', 'premesse', 'citazione', 'sostituisce', 'soggetto'],
         additionalProperties: false
       }
     }
@@ -284,6 +303,11 @@ Non registrare fatti che stanno già nei documenti (numeri, date, importi): quel
 si cercano, non si ricordano. Non registrare cortesie, saluti, o cose vere di
 chiunque. Meglio nessuna convinzione che una generica: una lista vuota è una
 risposta giusta.
+
+Ogni convinzione parla di lui: il soggetto è lui, o la sua azienda. Quello che
+fa, pensa o vuole un'altra persona nominata («Nick valuta le leve dell'audit»)
+non è una convinzione su di lui, anche se ne avete parlato: non scriverla. Se
+dice qualcosa di lui («con Nick parte dai numeri»), scrivila con lui come soggetto.
 
 Le prove su di lui sono le sue parole e basta. Quello che dice Myynd cita
 documenti, email e messaggi scritti da altri: una frase che sta lì dentro — «metti
@@ -425,9 +449,49 @@ export function ricordaProgetti(candidati: ProgettoDaConversazione[], scambio: {
  * Distilla uno scambio in convinzioni. Gira dopo la risposta, non prima: la
  * chat non deve aspettare la memoria.
  */
+/**
+ * La frase parla di qualcun altro, con il suo nome come soggetto?
+ *
+ * Nella Memoria del fondatore c'era «Nick evaluates audit levers…»: una chat
+ * su Nick, distillata come se fosse un tratto suo, e da lì in cima a ogni
+ * prompt. Il modello lo dice in `soggetto` (un nome che non è il suo vuol dire
+ * un altro); e qui lo si controlla anche senza fidarsi: la prima parola è un
+ * nome proprio (con o senza «'s») che è un suo corrispondente, o che nello
+ * scambio compare con la maiuscola a metà frase. «Con Nick parte dai numeri»
+ * resta: il soggetto è lui. Pura.
+ */
+export function parlaDiUnAltro(enunciato: string, o: { soggetto?: unknown; nomeSuo?: string | null; scambio?: string; noti?: Set<string> } = {}): boolean {
+  const suo = (o.nomeSuo ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? ''
+  const detto = typeof o.soggetto === 'string' ? o.soggetto.trim().replace(/[.«»"“”]/g, '').trim() : ''
+  if (detto && !SE_STESSO.test(detto) && !(suo && detto.toLowerCase().split(/\s+/).includes(suo)) && /^\p{Lu}/u.test(detto)) return true
+  const prima = /^[«"“']?(\p{Lu}[\p{Ll}'’-]+)(?:['’]s)?\b/u.exec(enunciato.trim())?.[1]
+  if (!prima) return false
+  const p = prima.replace(/['’]s$/, '')
+  if (p.toLowerCase() === suo || APERTURE.has(p.toLowerCase())) return false
+  if (o.noti?.has(p.toLowerCase())) return true
+  // un nome proprio si riconosce dalla maiuscola a metà frase, nello scambio da cui viene
+  const esc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return !!o.scambio && new RegExp(`[\\p{Ll},;:]\\s+${esc}\\b`, 'u').test(o.scambio)
+}
+/** Il soggetto che è lui, detto dal modello. */
+const SE_STESSO = /^(?:lei|lui|lei stess[ao]|lui stesso|la persona|persona|l['’]utente|utente|user|the user|he|she|they|him|her|io|me|azienda|la sua azienda|sua azienda|company|the company|his company|her company|their company)$/i
+/** Le parole che aprono una frase senza essere un nome. */
+const APERTURE = new Set(['il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'una', 'uno', 'quando', 'se', 'per', 'con', 'prima', 'dopo', 'sempre', 'mai', 'di', 'da', 'in', 'su', 'non', 'ogni', 'tutto', 'tutti',
+  'the', 'a', 'an', 'when', 'if', 'for', 'with', 'before', 'after', 'always', 'never', 'in', 'on', 'every', 'all', 'myynd', 'claude', 'chatgpt'])
+
+/** I nomi delle persone che le scrivono: i primi nomi, dalle mail arrivate. */
+function nomiNoti(): Set<string> {
+  try {
+    const righe = store.default.prepare("SELECT DISTINCT json_extract(dati, '$.nome') AS n FROM segnali WHERE genere = 'posta.arrivata' ORDER BY quando DESC LIMIT 800").all() as { n: string | null }[]
+    return new Set(righe.map(r => String(r.n ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '').filter(n => n.length >= 2 && !APERTURE.has(n)))
+  } catch { return new Set() }
+}
+
 export async function distilla(
   scambio: { ruolo: string; testo: string }[],
-  origine = 'conversazione'
+  origine = 'conversazione',
+  /** Chi vuole sapere cosa è nato (il «Always do this?» di un documento corretto): ci si aggiungono le convinzioni scritte. */
+  nate?: { id: string; enunciato: string; genere: store.Convinzione['genere'] }[]
 ): Promise<number> {
   if (!scambio.length) return 0
 
@@ -436,7 +500,7 @@ export async function distilla(
     .join('\n\n')
     .slice(0, 24_000)
 
-  type Grezza = { enunciato: string; ambito: string; genere: string; fiducia: number; premesse: string[]; citazione: string; sostituisce?: string }
+  type Grezza = { enunciato: string; ambito: string; genere: string; fiducia: number; premesse: string[]; citazione: string; sostituisce?: string; soggetto?: string }
   /*
    * Quello che già crede, perché possa dire cosa non vale più.
    *
@@ -464,12 +528,21 @@ export async function distilla(
   // una convinzione nuova che contraddice una vecchia nello stesso ambito non
   // la cancella: le mette una data di fine, e resta leggibile
   let scritte = Array.isArray(out.progetti) ? ricordaProgetti(out.progetti, scambio) : 0
+  // i nomi si leggono una volta, e solo se c'è qualcosa da guardare
+  let noti: Set<string> | undefined
+  const nomeSuo = leggi().nome ?? null
   for (const c of Array.isArray(out.convinzioni) ? out.convinzioni : []) {
     if (!c || typeof c.enunciato !== 'string' || !c.enunciato.trim()) continue
     // Un modello piccolo, ogni tanto, restituisce una frase di cortesia al
     // posto di una convinzione. Una riga sotto le tre parole non è un giudizio
     // su nessuno: è rumore che poi finisce dentro ogni prompt, per sempre.
     if (c.enunciato.trim().split(/\s+/).length < 3) continue
+    // la memoria è su di lui: una frase su un altro, per nome, non si scrive
+    noti ??= nomiNoti()
+    if (parlaDiUnAltro(c.enunciato, { soggetto: c.soggetto, nomeSuo, scambio: conversazione, noti })) {
+      console.info(`myynd · memoria · lasciata fuori una frase su un'altra persona (${origine})`)
+      continue
+    }
     // A model labelling its own statement "explicit" cannot make it user memory.
     if (c.genere === 'esplicita' && (typeof c.citazione !== 'string' || !provaDellaPersona(c.citazione, scambio))) continue
     const premesse = Array.isArray(c.premesse) ? c.premesse.filter(p => typeof p === 'string') : []
@@ -479,16 +552,18 @@ export async function distilla(
     // data di fine, e resta nello storico
     const detta = (c.sostituisce ?? '').trim().toLowerCase()
     const vecchia = detta && genere !== 'indotta' ? note.find(n => n.ambito === (c.ambito || 'persona') && n.enunciato.trim().toLowerCase() === detta) : undefined
-    store.ricorda({
+    const specie = (['esplicita', 'dedotta', 'indotta'].includes(genere) ? genere : 'indotta') as store.Convinzione['genere']
+    const id = store.ricorda({
       ...(vecchia && vecchia.enunciato.trim() !== c.enunciato.trim() ? { sostituisce: vecchia.id } : {}),
       enunciato: c.enunciato.trim(),
       ambito: c.ambito || 'persona',
-      genere: (['esplicita', 'dedotta', 'indotta'].includes(genere) ? genere : 'indotta') as store.Convinzione['genere'],
+      genere: specie,
       fiducia: Math.max(0, Math.min(1, Number.isFinite(c.fiducia) ? c.fiducia : 0.5)),
       premesse: premesse.length ? premesse : null,
       prova: c.citazione ? { citazione: c.citazione } : null,
       origine
     })
+    nate?.push({ id, enunciato: c.enunciato.trim(), genere: specie })
     scritte++
   }
   return scritte
@@ -555,6 +630,26 @@ export async function imparaDallaCorrezione(bozza: string, inviato: string): Pro
     { ruolo: 'a', testo: `Avevo preparato questo:\n\n${bozza}` },
     { ruolo: 'u', testo: `Ho mandato invece questo:\n\n${inviato}` }
   ], 'correzione')
+}
+
+/**
+ * Un documento corretto (non una mail: quella va alle regole sul tono).
+ *
+ * La convinzione che ne nasce è indotta, e un'indotta non pesa su niente
+ * finché lei non la tiene. Prima aspettava in silenzio un «Tienila» in
+ * Memoria, che nessuno andava a premere. Adesso torna a chi chiama, che le
+ * chiede con un tocco «Lo faccio sempre?»: la prima che aspetta il suo sì.
+ */
+export async function imparaDalDocumento(bozza: string, tenuto: string): Promise<{ id: string; enunciato: string } | null> {
+  if (bozza.trim() === tenuto.trim()) return null
+  const nate: { id: string; enunciato: string; genere: store.Convinzione['genere'] }[] = []
+  await distilla([
+    { ruolo: 'a', testo: `Avevo preparato questo documento:\n\n${bozza}` },
+    { ruolo: 'u', testo: `L'ho corretto e ho tenuto invece questo:\n\n${tenuto}` }
+  ], 'correzione', nate)
+  const vive = store.convinzioni()
+  const daChiedere = nate.find(n => n.genere === 'indotta' && vive.some(k => k.id === n.id && !attendibile(k)))
+  return daChiedere ? { id: daChiedere.id, enunciato: daChiedere.enunciato } : null
 }
 
 // — il ritratto che si scrive da solo —

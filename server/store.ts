@@ -3699,9 +3699,11 @@ export type Compito = {
   /**
    * Come scrive a chi riceve la bozza, dalle mail che gli ha mandato (P3).
    * Sta in `compiti.voceScritta` perché `voce` è la voce del feed da cui la
-   * riga è nata.
+   * riga è nata. `regole`: quello che ha imparato e che questa bozza segue
+   * (le regole sul tono, le convinzioni tenute da un documento corretto),
+   * per la riga «Learned: … · Undo».
    */
-  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[] } | null
+  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[]; regole?: RegolaSeguita[] } | null
   /**
    * La bozza è partita dalla sua posta (P9): quale messaggio, quando, con che
    * certezza e quanto l'ha ritoccata. Si scrive una volta e non si riscrive.
@@ -4686,6 +4688,13 @@ export function chiudiDomanda(id: string, stato: 'risposta' | 'ignorata', rispos
 }
 
 // — memoria: quello che Myynd sa di te —
+
+/**
+ * Una cosa imparata che una bozza ha seguito: una regola sul tono (`dati`
+ * per dirla nella lingua dell'app, `testo` se l'ha scritta lei) o una
+ * convinzione tenuta (`testo`). `casi`: da quante correzioni viene.
+ */
+export type RegolaSeguita = { chiave: string; genere: 'bozza.tono' | 'convinzione'; casi: number; dati?: Record<string, string | number>; testo?: string | null }
 
 export type Convinzione = {
   id: string

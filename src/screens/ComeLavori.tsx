@@ -207,7 +207,8 @@ export function ComeLavori() {
 
   if (!d) return null
   const righe = d.abitudini
-  const vuota = !righe.length && !d.oggi.quante && !d.ieri && !d.guai.length
+  const guadagnati = d.guadagnati ?? []
+  const vuota = !righe.length && !guadagnati.length && !d.oggi.quante && !d.ieri && !d.guai.length
   if (vuota) return null
 
   const aggiornaRiga = (chiave: string, cambio: Partial<AbitudineVista>) =>
@@ -245,6 +246,15 @@ export function ComeLavori() {
     setTolte(m => { const n = new Map(m); n.delete(a.chiave); return n })
     try { await gemelloApi.abitudine(a.chiave, 'ripristina', undefined, v.stato) }
     catch { setGuaio(t('Non sono riuscito a rimetterla.')); void carica() }
+  }
+
+  // il primo gradino: «Take it back» la fa scendere subito, e la riga se ne va
+  const ritira = (indirizzo: string) => async () => {
+    setGuaio('')
+    try {
+      await api.ritiraGradino(indirizzo)
+      setD(v => v ? { ...v, guadagnati: (v.guadagnati ?? []).filter(x => x.indirizzo !== indirizzo) } : v)
+    } catch { setGuaio(t('Non sono riuscito a salvarlo.')) }
   }
 
   const vive = righe.filter(a => a.stato !== 'superata')
@@ -296,6 +306,18 @@ export function ComeLavori() {
       {d.fiducia.length > 0 && (
         <div className="cl-blocco cl-fiducia">
           {d.fiducia.map(f => { const r = g.rigaFiducia(f); return r ? <div key={f.genere} title={r}>{r}</div> : null })}
+        </div>
+      )}
+
+      {guadagnati.length > 0 && (
+        <div className="cl-blocco">
+          <div className="cl-gruppo">{t('Risposte')}</div>
+          <div className="cl-griglia">
+            {guadagnati.map(x => (
+              <RigaAbitudine key={x.indirizzo} testo={frasi.rispondoIo(x.nome)} prova={{ riga: frasi.provaGradino(x.su, x.leggere), esempi: [] }}
+                inAttesa={false} scorda={ritira(x.indirizzo)} />
+            ))}
+          </div>
         </div>
       )}
 

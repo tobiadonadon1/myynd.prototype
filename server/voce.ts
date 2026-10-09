@@ -44,6 +44,8 @@ export type Voce = {
   /** Il profilo usato, per il controllo. */
   profilo: Profilo
   destinatario: Destinatario | null
+  /** Le regole sul tono che questa bozza segue: quelle che può dire di aver usato. */
+  regole?: abitudini.Abitudine[]
 }
 
 /** Sotto questo numero di mail a quella persona si usa la voce di tutti i giorni. */
@@ -320,11 +322,13 @@ export function perRiga(c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>): Voce 
    * tutte e due, e una regola tolta dalla Memoria smette alla bozza dopo.
    */
   const v = voceDi(c)
-  let regole = ''
-  try { regole = abitudini.regoleTono(v?.destinatario?.indirizzo ?? destinatarioDi(c)?.indirizzo) } catch { regole = '' }
+  // le regole scelte una volta: il blocco che legge il modello e quelle che la bozza dirà di aver seguito sono le stesse
+  let valide: abitudini.Abitudine[] = []
+  try { valide = abitudini.regoleToneValide(v?.destinatario?.indirizzo ?? destinatarioDi(c)?.indirizzo) } catch { valide = [] }
+  const regole = abitudini.testoTono(valide)
   if (!regole) return v
-  if (!v) return { blocco: regole, profilo: profilo([]), destinatario: null, scritta: null }
-  return { ...v, blocco: v.blocco ? `${v.blocco}\n${regole}` : regole }
+  if (!v) return { blocco: regole, profilo: profilo([]), destinatario: null, scritta: null, regole: valide }
+  return { ...v, blocco: v.blocco ? `${v.blocco}\n${regole}` : regole, regole: valide }
 }
 
 function voceDi(c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>): Voce | null {

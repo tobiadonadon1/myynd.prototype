@@ -180,7 +180,7 @@ function classifica(m: Materiale, fuso: string, min: Minuti): { uscite: Uscita[]
   for (const [r, membri] of catene) {
     const root = per.get(r)!
     const origine = root.origine ?? ''
-    const preparata = origine === 'iniziativa' || origine.startsWith('auto:')
+    const preparata = origine === 'iniziativa' || origine === 'guadagnata' || origine.startsWith('auto:')
     const automazione = origine.startsWith('auto:') ? origine.slice(5) : null
     const tutte = membri.flatMap(c => azioniDi.get(c.id) ?? [])
     const chiaveDi = (c: RigaCompito) => `compito:${c.id}`

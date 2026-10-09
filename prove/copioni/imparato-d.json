@@ -1,0 +1,11 @@
+{
+  "modello": "finto",
+  "risposte": [
+    { "se": "Stai tenendo la memoria di Myynd", "in": "system", "json": { "progetti": [], "convinzioni": [
+      { "enunciato": "Opens every note with the decision, then the details", "ambito": "persona", "genere": "indotta", "fiducia": 0.5, "premesse": [], "citazione": "", "sostituisce": "", "soggetto": "lei" }
+    ] } },
+    { "se": "capo di gabinetto", "in": "system", "json": { "priorita": [], "domande": [], "superate": [] } },
+    { "se": "MESSAGGIO CORRENTE", "in": "utente", "json": { "voci": [] } }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}
