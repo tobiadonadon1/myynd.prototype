@@ -793,8 +793,10 @@ export function pronta(forza = false): boolean {
   const a = leggiArchivio()
   const da = a.ultimo ? Date.now() - Date.parse(a.ultimo) : Infinity
   if (da < MINUTI_MINIMI * 60_000) return false
-  if (a.fallito && Date.now() - Date.parse(a.fallito) < MINUTI_RIPROVA * 60_000) return false
+  // il giro a vuoto aspetta un quarto d'ora, ma non «Leggi adesso»: chi ha
+  // appena sistemato il motore e lo preme vuole il giro adesso
   if (forza) return true
+  if (a.fallito && Date.now() - Date.parse(a.fallito) < MINUTI_RIPROVA * 60_000) return false
   // un quadro scritto da un ragionamento vecchio si rifà al primo giro utile, senza aspettare le ore;
   // una volta sola per conto e per avvio, così un modello che non risponde non lo fa ripartire ogni dieci minuti
   if (!rifattiPerVersione.has(cartella()) && Object.values(quadro.leggiQuadri()).some(q => q.versione !== quadro.VERSIONE)) {

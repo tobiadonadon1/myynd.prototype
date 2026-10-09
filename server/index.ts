@@ -764,10 +764,8 @@ app.get('/api/stato', async (_req, res) => {
   const guai = new Map(saluteFonti.fontiIncomplete().map(f => [f.fonte, f.rimedio]))
   const silenzi = saluteFonti.silenzi()
   const problemaDi = (id: string) => {
-    if (id === 'claude' || id === 'openai') {
-      const p = saluteTeste.problemaTesta(id)
-      return p && p.rimedio !== 'credito' ? p.rimedio : undefined
-    }
+    if (id === 'claude' || id === 'openai') return saluteTeste.problemaScheda(id) ?? undefined
+    if (id === 'compatibile') return saluteTeste.problemaScheda(id) ?? guai.get(id)
     return guai.get(id)
   }
   res.json({

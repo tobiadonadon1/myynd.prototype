@@ -1102,7 +1102,8 @@ export type Abbonamento = {
 }
 
 /** F8 · l'AI inclusa: «pronto» solo dopo una risposta vera del ponte. */
-export type Incluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; mese?: boolean; scelto: boolean }
+/** `codice` è l'ultima risposta del ponte quando non è un sì: 401 rientrare, 402 il piano, il resto giù. */
+export type Incluso = { stato: 'assente' | 'pronto' | 'finito'; usati?: number; tetto?: number; mese?: boolean; codice?: number; scelto: boolean }
 
 export type ChatGPT = {
   installato: boolean

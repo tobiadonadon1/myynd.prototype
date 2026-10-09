@@ -1,0 +1,8 @@
+{
+  "modello": "finto",
+  "incluso": { "stato": 402 },
+  "risposte": [
+    { "in": "tutto", "se": ".", "stato": 402, "json": { "type": "error", "error": { "type": "payment_required", "message": "The plan needs renewing." } } }
+  ],
+  "predefinita": "Done."
+}

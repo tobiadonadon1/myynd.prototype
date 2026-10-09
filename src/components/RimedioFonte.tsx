@@ -124,7 +124,7 @@ export function RimedioFonte({ controllo, v, quandoImpostazioni, quandoTitoli }:
   }
 
   if (controllo.tipo === 'preferenze') {
-    return <Hov as="a" href="#" onClick={(e: { preventDefault: () => void }) => { e.preventDefault(); v.goPref() }}
+    return <Hov as="a" href="#" onClick={(e: { preventDefault: () => void }) => { e.preventDefault(); v.apri('pref', 'intelligenza', 'motore') }}
       style={STILE_LINK} hover={{ color: 'var(--inchiostro)' }}>{t('Vai alle Preferenze')}</Hov>
   }
   if (controllo.tipo === 'fonti') {

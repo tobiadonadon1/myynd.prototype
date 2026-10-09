@@ -446,10 +446,11 @@ test('un giro in cui il modello non risponde non si segna come fatto: si riprova
   const letto = () => JSON.parse(readFileSync(join(dati, 'priorita.json'), 'utf8')) as { ultimo: string | null; fallito?: string }
   assert.equal(letto().ultimo, null, '«ultimo» resta quello di prima: niente è stato fatto')
   assert.ok(letto().fallito, 'il giro andato a vuoto si ricorda')
-  assert.equal(priorita.pronta(true), false, 'subito dopo non si martella')
-  // un quarto d'ora dopo si riprova
+  assert.equal(priorita.pronta(), false, 'subito dopo il giro di fondo non martella')
+  assert.equal(priorita.pronta(true), true, '«Leggi adesso» invece riprova subito: il motore può essere appena tornato')
+  // un quarto d'ora dopo anche il giro di fondo riprova
   writeFileSync(join(dati, 'priorita.json'), JSON.stringify({ ...letto(), fallito: new Date(Date.now() - (priorita.MINUTI_RIPROVA + 1) * 60_000).toISOString() }))
-  assert.equal(priorita.pronta(true), true)
+  assert.equal(priorita.pronta(), true)
   priorita.dimentica()
   priorita.perProva(null)
 })

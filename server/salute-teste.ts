@@ -30,6 +30,7 @@ import { leggi } from './config.ts'
 import { giornoIn } from './fuso.ts'
 import { peggiore, type Rimedio } from './connettori/guaio.ts'
 import { versioneApp } from './salute-fonti.ts'
+import { OSPITATO } from './ospitato.ts'
 
 export type Testa = 'claude' | 'openai'
 
@@ -134,6 +135,27 @@ export function guaioDi(via: mod.Via): Guaio | null {
 }
 
 /**
+ * Il guaio da dire sulla scheda del motore nelle Fonti, con la parola delle
+ * fonti. La riga fissa porta lì: «Accedi di nuovo a ChatGPT» apriva una
+ * scheda che diceva «Collegato, con il tuo account ChatGPT», e la scheda
+ * smentiva la riga. Solo per il motore scelto (o lasciato da Myynd): una
+ * bussata vecchia a un motore che non lavora non dice niente di adesso.
+ */
+export function problemaScheda(id: 'claude' | 'openai' | 'compatibile'): Rimedio | null {
+  if (id === 'claude' || id === 'openai') {
+    const p = problemaTesta(id)
+    if (p && p.rimedio !== 'credito') return p.rimedio
+    if (id === 'claude') return null
+  }
+  const c = leggi()
+  const scelti = new Set([viaScelta(c.motore), ...(c.motorePrima ? [viaScelta(c.motorePrima)] : [])])
+  if (id === 'openai') return scelti.has('chatgpt') && guaioDi('chatgpt') === 'accedi' ? 'accedi' : null
+  if (!scelti.has('compatibile') || guaioDi('compatibile') !== 'spento') return null
+  // sul Mac si riapre l'app del modello; un fornitore lontano si guarda e basta
+  return chiE('compatibile').locale ? 'apri-app' : 'guarda'
+}
+
+/**
  * La riga fissa del motore: prima quello che lei ha scelto e che Myynd ha
  * dovuto lasciare, poi il motore al lavoro, poi «non riesco a pensare».
  */
@@ -166,7 +188,10 @@ type Ferri = {
 const VERI: Ferri = {
   risponde: f => compatibile.risponde(f, 5_000),
   statoChatGPT: () => chatgpt.stato(),
-  saluteIncluso: o => incluso.salute(o)
+  // ospitati il ponte è questo server: niente indirizzo né gettone da chiedere,
+  // la dose si legge dal registro (`statoQui`). Chiedere `salute` lì diceva
+  // «assente» a ogni bussata, e l'AI inclusa che lavora sembrava morta
+  saluteIncluso: o => incluso.statoQui({ ospitato: OSPITATO, motore: 'incluso', ...o })
 }
 let ferri: Ferri = VERI
 /** Solo per le prove: le bussate finte. */

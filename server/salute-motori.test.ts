@@ -73,9 +73,13 @@ test('il modello sul Mac spento: la riga lo dice al primo «no», col posto nell
   vivo = false
   await teste.sonda({ forza: true })
   assert.deepEqual(teste.testaDaMostrare(), { id: 'compatibile', via: 'compatibile', rimedio: 'spento', locale: true })
+  // e la sua scheda nelle Fonti: sul Mac si riapre l'app del modello
+  assert.equal(teste.problemaScheda('compatibile'), 'apri-app')
+  assert.equal(teste.problemaScheda('openai'), null)
   vivo = true
   await teste.sonda({ forza: true })
   assert.equal(teste.testaDaMostrare(), null)
+  assert.equal(teste.problemaScheda('compatibile'), null)
 })
 
 test('si bussa al massimo ogni tre minuti, e solo al motore scelto', async () => {
@@ -110,6 +114,41 @@ test('morto alla seconda bussata, con Claude collegato: lavora Claude, e la riga
   assert.equal(cfg.leggi().motore, 'compatibile')
   assert.equal(cfg.leggi().motorePrima, undefined)
   assert.equal(teste.testaDaMostrare(), null)
+})
+
+test('dopo un riavvio il cambio resta: si torna solo quando il motore di prima ha risposto', async () => {
+  usa({ motore: 'compatibile', compatibile: LOCALE, claude: { apiKey: 'sk-ant-a' } })
+  vivo = false
+  await teste.sonda({ forza: true }); await teste.sonda({ forza: true })
+  assert.equal(cfg.leggi().motore, 'claude')
+  // il riavvio: niente bussate in memoria, la configurazione scritta resta
+  teste.perProva(); mod.perProvaVisti()
+  assert.equal(mod.riparaIlMotore(), false, 'il primo /api/stato non rimette il motore spento')
+  assert.equal(cfg.leggi().motore, 'claude')
+  assert.equal(cfg.leggi().motorePrima, 'compatibile')
+  // ancora spento alla prima bussata: si resta
+  await teste.sonda({ forza: true })
+  assert.equal(cfg.leggi().motore, 'claude')
+  // risponde: si torna alla bussata dopo
+  vivo = true
+  await teste.sonda({ forza: true })
+  assert.equal(cfg.leggi().motore, 'compatibile')
+})
+
+test('il motore scelto morto: non si passa a uno che si bussa e non ha mai risposto', async () => {
+  // il locale morto, ChatGPT acceso in Myynd ma mai bussato con un «sì»
+  usa({ motore: 'compatibile', compatibile: LOCALE, chatgpt: { attivo: true, email: 'a@example.com' } })
+  teste.perProvaFerri({ risponde: async () => false, statoChatGPT: async () => ({ installato: true, entrato: false, errore: 'giù' }) })
+  await teste.sonda({ forza: true }); await teste.sonda({ forza: true })
+  assert.equal(mod.morta('compatibile'), true)
+  assert.notEqual(mod.statoVia('chatgpt')?.vivo, true)
+  assert.equal(cfg.leggi().motore, 'compatibile', 'nessuno ha risposto: resta il suo, e la riga lo dice')
+  assert.equal(mod.riparaIlMotore(), false)
+  // ChatGPT risponde: adesso sì
+  teste.perProvaFerri({ risponde: async () => false, statoChatGPT: async () => ({ installato: true, entrato: true }) })
+  await teste.sonda({ forza: true })
+  assert.equal(cfg.leggi().motore, 'chatgpt')
+  assert.equal(cfg.leggi().motorePrima, 'compatibile')
 })
 
 test('un motore che lavora non si tocca, e senza un altro che risponda non si cambia', async () => {
@@ -170,9 +209,12 @@ test('ChatGPT da cui si è usciti: «accedi», sulla scheda di OpenAI', async ()
   teste.perProvaFerri({ statoChatGPT: async () => ({ installato: true, entrato: false }) })
   await teste.sonda({ forza: true })
   assert.deepEqual(teste.testaDaMostrare(), { id: 'openai', via: 'chatgpt', rimedio: 'accedi' })
+  // la scheda dove porta la riga dice lo stesso, non «Collegato»
+  assert.equal(teste.problemaScheda('openai'), 'accedi')
   teste.perProvaFerri({ statoChatGPT: async () => ({ installato: true, entrato: true }) })
   await teste.sonda({ forza: true })
   assert.equal(teste.testaDaMostrare(), null)
+  assert.equal(teste.problemaScheda('openai'), null)
 })
 
 test('il ponte dell’AI inclusa: 401 rientrare, 402 il piano, 429 la dose, 5xx giù; anche da una chiamata vera', async () => {

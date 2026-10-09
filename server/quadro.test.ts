@@ -6,7 +6,7 @@
 
 import { test, after, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -174,4 +174,28 @@ test('quello che ha scritto lui regge una mossa solo dentro una riga', () => {
   const base = { genere: 'sblocco', titolo: 'Send Apple the recording on Friday', testo: 'Apple waits for the recording before the review of Evermute continues.', leva: 3, urgenza: 'settimana', offerta: 'I draft the reply to Apple with the recording.', fonte: 'riferimento' }
   assert.ok(quadro.ripulisciMossa({ ...base, prova: 'The recording goes out on Friday.' }, fonti, []))
   assert.equal(quadro.ripulisciMossa({ ...base, prova: 'waiting on Apple. The recording goes out' }, fonti, []), null, 'a cavallo di due righe il feed la nasconderebbe subito')
+})
+
+test('un quadro senza risposta non segna il giro delle priorità come fatto: si riprova presto', async () => {
+  rifinitura.perProva({ collegato: () => false })
+  // il materiale cambia per tutti: ogni quadro va richiesto, e il modello non risponde
+  const archivio = quadro.leggiQuadri()
+  for (const id of Object.keys(archivio)) archivio[id]!.quando = new Date(Date.now() - 30 * 3_600_000).toISOString()
+  writeFileSync(join(dati, 'quadri.json'), JSON.stringify({ quadri: archivio }))
+  let chiesti = 0
+  quadro.perProva({ collegato: () => true, guarda: async () => '', leggi: async () => 'README:\nnew line ' + Date.now(), chiediJSON: (async () => { chiesti++; return null }) as never })
+  // le priorità rispondono: è solo il quadro a mancare
+  priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [], domande: [], superate: [] })) as never })
+  priorita.dimentica()
+  await priorita.forse(true)
+  assert.ok(chiesti > 0, 'il quadro è stato chiesto')
+  assert.equal(quadro.senzaRispostaAlGiro(), true)
+  const letto = JSON.parse(readFileSync(join(dati, 'priorita.json'), 'utf8')) as { ultimo: string | null; fallito?: string }
+  assert.equal(letto.ultimo, null, 'il giro non si segna come fatto')
+  assert.ok(letto.fallito, 'si segna come andato a vuoto, e il giro di fondo riprova fra un quarto d’ora')
+  // il quadro risponde al giro dopo: la serie si chiude
+  quadro.perProva({ collegato: () => true, guarda: async () => '', leggi: async () => 'README:\nnew line ' + Date.now(), chiediJSON: (async () => ({ stato: 'Quiet.', traguardo: '', blocco: '', mosse: [] })) as never })
+  await priorita.forse(true)
+  assert.equal(quadro.senzaRispostaAlGiro(), false)
+  assert.ok(JSON.parse(readFileSync(join(dati, 'priorita.json'), 'utf8')).ultimo, 'adesso sì, il giro è fatto')
 })

@@ -302,6 +302,14 @@ export function tornaAlMotoreDiPrima(): boolean {
     : !!(c.compatibile?.url && c.compatibile.modello)
   // il motore di prima che è ancora morto non torna: tornerebbe a non rispondere
   if (!puo || morta(prima)) return false
+  /*
+   * Quelli che si bussano tornano solo con una risposta vista: «non ancora
+   * morto» non basta. Dopo un riavvio non si è bussato a nessuno, e al primo
+   * /api/stato si tornava sul motore spento per i quattro minuti delle due
+   * bussate che servono a dirlo morto di nuovo. La bussata del giro
+   * (`salute-teste.sonda`) va sempre al motore scelto: appena risponde, si torna.
+   */
+  if (prima !== 'claude' && prima !== 'openai' && statoVia(prima)?.vivo !== true) return false
   c.motore = prima
   delete c.motorePrima
   scriviConfig(c, { togli: ['motorePrima'] })

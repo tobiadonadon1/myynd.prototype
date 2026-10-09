@@ -324,10 +324,23 @@ test('la parola della scheda con un guaio', () => {
   assert.equal(in_('en', () => sf.parolaProblema('note', 'permesso-disco')), 'Needs access')
   assert.equal(in_('en', () => sf.parolaProblema('claude', 'accedi')), 'Sign in again')
   assert.equal(in_('en', () => sf.parolaProblema('granola', 'accedi')), 'Needs access')
+  // la riga fissa porta lì: la scheda dice la stessa cosa, non «Collegato»
+  assert.equal(in_('en', () => sf.parolaProblema('openai', 'accedi')), 'Sign in again')
+  assert.equal(in_('en', () => sf.parolaProblema('compatibile', 'apri-app')), 'Not answering')
+  assert.equal(in_('en', () => sf.parolaProblema('compatibile', 'guarda')), 'Not answering')
   assert.equal(in_('en', () => sf.parolaProblema('calendario', 'credenziale')), 'Needs fixing')
   assert.equal(in_('it', () => sf.parolaProblema('posta', 'amministratore')), 'Da sistemare')
   assert.equal(in_('en', () => sf.parolaProblema('slack', 'attendi')), 'Not read')
   assert.equal(in_('en', () => sf.parolaProblema('note', 'aggiorna')), 'Not read')
+})
+
+test('l’AI inclusa nelle Preferenze dice il perché del ponte, come la riga fissa', () => {
+  assert.equal(in_('en', () => sf.fraseDelPonte(undefined)), '', 'senza un codice il ponte non c’è ancora')
+  assert.equal(in_('en', () => sf.fraseDelPonte(401)), in_('en', () => sf.fraseMotore({ id: 'incluso', via: 'incluso', rimedio: 'accedi' }).frase))
+  assert.equal(in_('en', () => sf.fraseDelPonte(402)), in_('en', () => sf.fraseMotore({ id: 'incluso', via: 'incluso', rimedio: 'pagamento' }).frase))
+  assert.equal(in_('en', () => sf.fraseDelPonte(503)), in_('en', () => sf.fraseMotore({ id: 'incluso', via: 'incluso', rimedio: 'ponte' }).frase))
+  assert.equal(in_('en', () => sf.fraseDelPonte(0)), in_('en', () => sf.fraseDelPonte(503)), 'la rete giù è «non risponde»')
+  assert.notEqual(in_('en', () => sf.fraseDelPonte(401)), in_('en', () => sf.fraseDelPonte(402)))
 })
 
 test('ogni motore ha la sua frase e il suo posto: il modello sul Mac, ChatGPT, l’AI inclusa, il pensiero fermo, il cambio fatto da Myynd', () => {

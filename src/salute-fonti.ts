@@ -165,6 +165,17 @@ export function fraseMotore(g: TestaGuasta): { frase: string; controllo: Control
 }
 
 /**
+ * La frase dell'AI inclusa nelle Preferenze, dall'ultimo «no» del ponte: la
+ * stessa della riga fissa che porta lì. Vuota senza un codice: lì il ponte non
+ * c'è ancora, e «Non ancora disponibile» è la verità.
+ */
+export function fraseDelPonte(codice: number | undefined): string {
+  if (codice == null) return ''
+  const rimedio = codice === 401 ? 'accedi' : codice === 402 ? 'pagamento' : 'ponte'
+  return fraseMotore({ id: 'incluso', via: 'incluso', rimedio }).frase
+}
+
+/**
  * La riga fissa: fino a tre frasi, e un controllo solo.
  *
  * Prima il motore che lavora (uscito dall'account, chiave rifiutata; o, senza
@@ -358,14 +369,17 @@ export function mancanzeDi(s: Stato): Mancanza[] {
  * La parola della scheda con un guaio, al posto di «Collegato».
  *
  * Il permesso del disco è «Serve l’accesso» come per le Note da sempre; un
- * nuovo accesso ad Anthropic è «Accedi di nuovo», il bottone che servirà;
+ * nuovo accesso ad Anthropic o a ChatGPT è «Accedi di nuovo», il bottone che servirà;
+ * il modello collegato che tace è «Non risponde»;
  * password, token e il via libera dell'amministratore sono «Da sistemare»;
  * tutto il resto «Non letta». Il credito non è mai un guaio di scheda.
  */
 export function parolaProblema(id: string, r: Rimedio): string {
+  // il modello collegato non si «legge»: quando ha un guaio è che non risponde
+  if (id === 'compatibile') return t('Non risponde')
   switch (r) {
     case 'permesso-disco': return t('Serve l’accesso')
-    case 'accedi': return id === 'claude' ? t('Accedi di nuovo') : t('Serve l’accesso')
+    case 'accedi': return id === 'claude' || id === 'openai' ? t('Accedi di nuovo') : t('Serve l’accesso')
     case 'credenziale': case 'amministratore': return t('Da sistemare')
     default: return t('Non letta')
   }

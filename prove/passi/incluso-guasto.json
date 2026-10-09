@@ -1,0 +1,12 @@
+[
+  { "aspetta": 2500 },
+  { "js": "location.reload(); 1" },
+  { "aspetta": 3000 },
+  { "scatta": "riga" },
+  { "testo": "riga" },
+  { "clicca": "Go to Preferences" },
+  { "aspetta": 1500 },
+  { "passa": "Included with Myynd" },
+  { "scatta": "preferenze" },
+  { "testo": "preferenze" }
+]

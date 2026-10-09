@@ -24,6 +24,7 @@ import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, si
 import { PreferenzeOsservatore, useOsservatoreDisponibile } from './PreferenzeOsservatore'
 import './preferenze.css'
 import { nomePianoChatGPT } from '../chatgpt-accesso.ts'
+import { fraseDelPonte } from '../salute-fonti.ts'
 import { ProvaRisposte } from './ProvaRisposte'
 import { Bottone, Campo, Carta, Casella, Interruttore, Scatola, Scelte } from '../components/forme'
 import { PaginaASezioni, sezioneRicordata } from '../components/PaginaASezioni'
@@ -35,7 +36,7 @@ const detto = (e: unknown) => (e instanceof Error ? t(e.message) : String(e))
  * L'app da scrivania: quello che sa fare il guscio e il sito no. Si vede solo
  * dentro l'app. La scorciatoia si cambia premendola, non scrivendola.
  */
-function LApp() {
+function LApp({ ospitato }: { ospitato: boolean }) {
   const d = desktop()
   const [acc, setAcc] = useState('')
   const [registro, setRegistro] = useState(false)
@@ -153,13 +154,14 @@ function LApp() {
         <Interruttore acceso={avvisi} cambia={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} etichetta={t('Notifiche')} />
       </div>
 
-      <div className="f-riga">
+      {/* su un server non c'è una Scrivania: la riga non si offre */}
+      {!ospitato && <div className="f-riga">
         <div>
           <div className="f-nome">{t('Rapporto di diagnosi')}</div>
           {diagnosi === 'salvato' && <div className="f-stato verde">{t('Salvato sulla Scrivania.')}</div>}
         </div>
         <Bottone onClick={salvaDiagnosi} occupato={diagnosi === 'salvo'} etichettaOccupato={t('Salvo…')}>{t('Salva')}</Bottone>
-      </div>
+      </div>}
 
       {/* il mostriciattolo (P1B): resta in questa scheda */}
       <PreferenzeOsservatore parte="schermo" />
@@ -473,9 +475,15 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
     ].filter(Boolean).join(' · ')
   }
 
+  /*
+   * Il ponte ha risposto di no: la stessa frase della riga fissa che porta
+   * qui, non un «Non ancora disponibile» che non dice cosa fare.
+   */
+  const guastoIncluso = incluso?.stato === 'assente' ? fraseDelPonte(incluso.codice) : ''
+
   /** Cosa manca a questa strada per poter lavorare adesso. Vuoto = niente. */
   const manca = (via: Via): string => {
-    if (via === 'incluso') return incluso?.stato === 'finito' ? (incluso.mese ? t('La dose del mese è finita.') : t('La dose di oggi è finita.')) : ''
+    if (via === 'incluso') return incluso?.stato === 'finito' ? (incluso.mese ? t('La dose del mese è finita.') : t('La dose di oggi è finita.')) : guastoIncluso
     if (via === 'claude') return claudeCollegato ? '' : t('Non ancora collegato.')
     if (via === 'openai') return openaiCollegato || !chatgpt ? '' : t('Non ancora collegato.')
     return f ? '' : t('Non ancora collegato.')
@@ -529,7 +537,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
           const guaio = manca(x.id)
           const riga = dettaglio(x.id)
           const spento = x.id === 'openai' && scelto && v.motore === 'chatgpt' && chatgpt && !chatgpt.acceso
-          const nonAncora = x.id === 'incluso' && (!incluso || incluso.stato === 'assente')
+          const nonAncora = x.id === 'incluso' && (!incluso || incluso.stato === 'assente') && !guastoIncluso
           return (
             // dentro c'è il bottone «Gestisci»: la riga tiene il ruolo, non il tag
             <div key={x.id} className="prefs-via" role="radio" aria-checked={scelto} tabIndex={0}
@@ -539,7 +547,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                 <div className="prefs-via-cima">
                   <span>{x.titolo}</span>
                   <span className={`prefs-status ${guaio || spento || nonAncora ? 'needs-attention' : 'ready'}`}>
-                    {spento ? t('Disattivato in Myynd') : nonAncora ? t('Non ancora disponibile') : x.id === 'incluso' && guaio ? (incluso?.mese ? t('Finita per il mese') : t('Finita per oggi')) : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
+                    {spento ? t('Disattivato in Myynd') : nonAncora ? t('Non ancora disponibile') : x.id === 'incluso' && guastoIncluso ? t('Da sistemare') : x.id === 'incluso' && guaio ? (incluso?.mese ? t('Finita per il mese') : t('Finita per oggi')) : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
                   </span>
                   {x.apri && <Bottone piccolo onClick={e => { e.stopPropagation(); x.apri?.() }}>{x.collegato ? t('Gestisci') : t('Collega')}</Bottone>}
                 </div>
@@ -734,7 +742,7 @@ export function Preferenze({ v }: { v: Vals }) {
               scelta={String(v.giorniLato)} scegli={id => v.scegliGiorniLato(Number(id))} />
           </Carta>
           {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
-          {d && <LApp />}
+          {d && <LApp ospitato={v.ospitato} />}
           <Conto />
           <Fascicolo v={v} />
           {/* ultima di tutte: l'unica cosa qui che non si può annullare */}

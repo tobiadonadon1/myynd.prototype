@@ -185,7 +185,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
       : scelta.id === 'claude'
         ? (s?.config.claude?.via === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
       : scelta.id === 'openai'
-        ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
+        // «Accedi di nuovo» qui è sempre l'account ChatGPT, anche se intanto lavora un altro motore
+        ? ((s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo) || problema === 'accedi' ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
       : [
         // ogni fonte conta con il suo nome: email, eventi, file, riunioni (P4)
         scelta.documenti ? contaGenere(genereDi(scelta.id), scelta.documenti) : null,
