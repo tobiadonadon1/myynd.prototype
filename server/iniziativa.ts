@@ -35,6 +35,9 @@ export function inCodaPerIlTurno(subito = false) {
  * suo tetto di carte: qui resta solo quanto spesso nasce una proposta, e
  * quante ne possono aspettare insieme.
  */
+/** Il turno spento a mano (Preferenze › Turno): chi lo legge da `turno.ts` farebbe un giro di import. */
+export const turnoSpento = () => cfg.leggi().turno?.spento === true
+
 export const LIMITE = 6
 export const PAUSA = 30 * 60_000
 /** Le proposte di Myynd vive insieme (in coda, al lavoro, da guardare): oltre, non ne nascono altre. */
@@ -170,7 +173,8 @@ export async function giro(adesso = Date.now(), esegui: (id: string, modo: strin
   occupati.add(conto)
   try {
     const s = leggi()
-    if (!s.attiva || cfg.autonomia() === 'chiedere' || !pronto()) return null
+    // col turno spento una proposta in coda non parte mai: resterebbe una riga ferma sulla lista
+    if (!s.attiva || cfg.autonomia() === 'chiedere' || !pronto() || turnoSpento()) return null
     const tentativi = s.tentativi.filter(t => t > adesso - 86400_000)
     if (tentativi.length >= LIMITE || tentativi.some(t => t > adesso - PAUSA)) return null
     const vivi = store.elencoCompiti()

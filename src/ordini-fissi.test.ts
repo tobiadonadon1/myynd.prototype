@@ -86,6 +86,8 @@ test('da una carta: «Fallo ogni settimana» scrive la frase che il costruttore 
 test('la frase letta prima del modello: i giorni feriali, il mese, e cosa consegna', () => {
   assert.deepEqual(quandoDetto('Every weekday at 9 chase the quotes'), { ogni: 'feriali', ora: 9 })
   assert.deepEqual(quandoDetto('Nei giorni lavorativi alle 8 guarda la posta'), { ogni: 'feriali', ora: 8 })
+  // al singolare: «ogni giorno lavorativo» leggeva «ogni giorno», sabato e domenica compresi
+  assert.deepEqual(quandoDetto('Ogni giorno lavorativo alle 9 guarda i preventivi'), { ogni: 'feriali', ora: 9 })
   assert.deepEqual(quandoDetto('Dal lunedì al venerdì alle 9 dimmi chi aspetta'), { ogni: 'feriali', ora: 9 })
   assert.deepEqual(quandoDetto('Once a month list the renewals'), { ogni: 'mese', giorno: 1, ora: 8 })
   assert.deepEqual(quandoDetto('Il 15 di ogni mese alle 9 controlla le fatture'), { ogni: 'mese', giorno: 15, ora: 9 })

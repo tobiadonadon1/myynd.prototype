@@ -2885,7 +2885,8 @@ export function inMano(): string {
   // riga vecchia a chi aveva Gmail si diceva «la posta NON è collegata», e il
   // modello — obbediente — rispondeva «collegami la casella» invece di scrivere.
   const fonti: [boolean, string][] = [
-    [!!(c.posta || c.google || c.microsoft?.parti.includes('posta')), 'la posta'],
+    // e via Mail del Mac: chi ha solo quella si sentiva dire che la posta non c'era
+    [!!(c.posta || c.google || c.postamac || c.microsoft?.parti.includes('posta')), 'la posta'],
     [!!c.desktop?.cartelle?.length, 'i file sul disco'],
     [!!c.notion, 'Notion'],
     [!!c.slack, 'Slack'],

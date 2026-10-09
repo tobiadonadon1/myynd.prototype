@@ -122,7 +122,8 @@ test('le mancate: dalla tabella e dalle extra, senza doppioni, per fase; la manc
   assert.equal(m.mancanzaCompiti, 0.4)
   // con la posta inviata: 3 / (3 + 3)
   store.salvaDocumenti([{ id: 'posta:Sent:1', fonte: 'posta', tipo: 'email', titolo: 'Re', corpo: 'x', inviato: true, quando: fa(1), autore: 'io <io@ex>' }])
-  const con = misuraFeed.misura(14, Date.now(), { mancate: [extra, extra2] })
+  // dalla stessa ora della semina: con Date.now() la finestra di 14 giorni scivolava oltre i dati, e la prova cadeva col calendario
+  const con = misuraFeed.misura(14, ADESSO, { mancate: [extra, extra2] })
   assert.equal(con.copertura.postaInviata, true)
   assert.equal(con.mancanza, 0.5)
 })

@@ -162,8 +162,15 @@ function Voce({ nome, testo, doc, apriDoc }: {
   )
 }
 
-/** Il titolo della ricevuta: dopo la notte, o da quando se n'è andato. */
-export const titoloRicevuta = (m: Mattina | null) => m?.mattina ? t('Fatto mentre dormivi.') : t('Da quando sei uscito.')
+/**
+ * Il titolo della ricevuta: dice quello che c'è, mai di più.
+ *
+ * «Fatto mentre dormivi» sopra una ricevuta senza niente di fatto prometteva
+ * un lavoro che non c'era, e «Da quando sei uscito» al primo avvio parlava di
+ * un'uscita mai avvenuta. Senza niente di fatto il titolo è il giorno.
+ */
+export const titoloRicevuta = (m: Mattina | null) => !m?.done.length ? t('Oggi.')
+  : m.mattina ? t('Fatto mentre dormivi.') : t('Da quando sei uscito.')
 
 /**
  * Le domande stanno nella loro carta, sotto i blocchi: una riga della
@@ -208,15 +215,16 @@ function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
   const settimana = m && m.week.mandate > 0 ? frasi.bozzePartite(m.week.mandate, m.week.comeEra, m.week.ritoccate) : null
   // F9 · la mattina, la riga della notte: quanto è costata, cosa l'ha fermata, quando il Mac dormiva
   const n = m?.mattina && notte ? laNotte(notte.l) : null
-  const quante = fatte.length + ricevuta.length + (punto ? righeDelPunto(punto) : 0)
   const data = new Date(punto?.quando ?? Date.now()).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
   /*
    * La data e il conto. Quanto sei stato via, no.
    *
    * «Remove the time that I was away for. I don't care to know, and I don't
-   * want him to tell me.» Quello che è successo lo dicono le righe.
+   * want him to tell me.» Quello che è successo lo dicono le righe. E il
+   * conto nemmeno: contava fatte, attese e novità insieme, e diceva un numero
+   * diverso dal titolo della pagina sotto.
    */
-  const sotto = [data, quante ? frasi.coseNelPunto(quante) : ''].filter(Boolean).join(' · ')
+  const sotto = data
 
   return (
     <div style={VELO} onMouseDown={e => { if (e.target === e.currentTarget) chiudi() }}>
@@ -259,7 +267,7 @@ function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
           </Sezione>
         )}
 
-        {quante === 0 && !n && (
+        {fatte.length + ricevuta.length + (punto ? righeDelPunto(punto) : 0) === 0 && !n && (
           <div style={{ ...LINEA, marginTop: 26 }}>
             <span style={TESTO}>{prossimaCosa(m) ?? t('Niente di nuovo da quando ci siamo visti.')}</span>
           </div>
@@ -324,7 +332,8 @@ export function Punto({ v, mattina: m, ricevuta, notte }: {
   const p = usePunto(v.claudeOn)
   const [aperto, setAperto] = useState(false)
   const chiudi = () => { setAperto(false); if (p.daVedere) p.nascondi() }
-  if (aperto || p.daVedere) {
+  // da solo si apre quando la ricevuta è arrivata: prima il titolo cambiava sotto gli occhi
+  if (aperto || (p.daVedere && m)) {
     return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={chiudi} m={m} ricevuta={ricevuta} notte={notte} />
   }
   const fatte = m?.done ?? []

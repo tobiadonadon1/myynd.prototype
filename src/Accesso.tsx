@@ -126,7 +126,8 @@ export function Accesso({ accesso, entrato }: {
    * dopo un sì il guscio cambia la password (`desktop/proprietario.ts`).
    */
   const guscio = desktop()
-  const dalMac = !ospitato && !!guscio?.reimpostaPassword
+  // solo sul Mac: Touch ID e la password del Mac non ci sono altrove, e il link finirebbe in un errore
+  const dalMac = !ospitato && guscio?.piattaforma === 'darwin' && !!guscio?.reimpostaPassword
   const [conTouchId, setConTouchId] = useState(false)
   useEffect(() => {
     if (!dalMac) return

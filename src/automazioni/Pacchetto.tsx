@@ -6,13 +6,15 @@ import type { Vals } from '../vals'
 import './automazioni.css'
 
 /** Le righe delle quattro di partenza: il nome, cosa fa, quando, e il suo interruttore. */
-export function RighePacchetto({ righe, occupato, prendi }: {
+export function RighePacchetto({ righe, occupato, prendi, corte = false }: {
   righe: DelPacchetto[]
   occupato: boolean
   prendi: (id: string, accesa: boolean) => void
+  /** Sulla prima pagina: il nome e quando, senza la riga che spiega (sta nella pagina degli ordini fissi). */
+  corte?: boolean
 }) {
   return <ul>{righe.map(p => <li key={p.id}>
-    <div className="auto-pacchetto-testo"><b>{p.nome}</b><span>{p.spiega}</span>
+    <div className="auto-pacchetto-testo"><b>{p.nome}</b>{!corte && <span>{p.spiega}</span>}
       <small>{quandoGira(p.quando)}{p.staccati.length ? ` · ${t('manca una fonte')}` : ''}</small></div>
     <button className="auto-switch" role="switch" aria-checked={p.accesa} aria-label={`${p.accesa ? t('Mettila in pausa') : t('Accendila')}: ${p.nome}`}
       disabled={occupato} onClick={() => prendi(p.id, !p.accesa)}><span /></button>
@@ -60,7 +62,7 @@ export function CartaPacchetto({ v }: { v: Vals }) {
           ? <button type="button" className="auto-link" onClick={() => v.goAuto()}>{t('Vai agli ordini fissi')}</button>
           : <button type="button" className="auto-link" disabled={occupato} onClick={() => { setRighe(null); api.pacchettoVisto().catch(() => {}) }}>{t('Non ora')}</button>}
       </div>
-      <RighePacchetto righe={righe} occupato={occupato} prendi={prendi} />
+      <RighePacchetto righe={righe} occupato={occupato} prendi={prendi} corte />
       {guaio && <p role="alert" className="auto-error">{t(guaio)}</p>}
     </section>
   )

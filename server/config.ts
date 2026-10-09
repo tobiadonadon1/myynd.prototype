@@ -772,7 +772,7 @@ export type Config = {
   /** Calendario del Mac (P4): i calendari di Calendario su questo Mac, letti e basta. */
   agendamac?: { attiva: true }
   /** Mail del Mac (P4): le email di Mail su questo Mac, lette dal disco e basta. */
-  postamac?: { attiva: true }
+  postamac?: { attiva: true; /** una bozza è già passata da Mail: il permesso di Automazione c'è (`bozza-mail-mac.ts`) */ bozzeProvate?: true }
   claude?: ConfigClaude
   jev?: ConfigJev
   tono?: string

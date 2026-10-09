@@ -111,7 +111,7 @@ test('senza nessun guaio di P8 la riga è quella di prima (counter-case)', () =>
   for (const l of ['it', 'en'] as const) {
     for (const [ragiona, guasto] of [[true, null], [false, null], [true, 'La lettura non è riuscita.'], [false, 'CHIEDE'], [true, 'CHIEDE'], [false, 'Rotto.']] as const) {
       const nuova = riga(l, () => [], { ragiona, guastoLettura: guasto })
-      const vecchia = in_(l, () => rigaDelleMancanze({ ragiona, serveClaude: t('Serve Claude per scegliere cosa conta.'), guastoLettura: guasto, chiedeClaude: 'CHIEDE', fontiNonLette: null }))
+      const vecchia = in_(l, () => rigaDelleMancanze({ ragiona, serveClaude: t('Collega un’intelligenza per scegliere cosa conta.'), guastoLettura: guasto, chiedeClaude: 'CHIEDE', fontiNonLette: null }))
       assert.equal(nuova?.frase ?? null, vecchia)
       if (nuova) assert.deepEqual(nuova.controllo, { tipo: 'fonti', id: null })
     }

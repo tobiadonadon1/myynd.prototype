@@ -4046,7 +4046,8 @@ app.post('/api/compiti/:id/prepara-email', async (req, res) => {
   if (c.email) return res.json(c.email)
   if (!c.risultato?.trim()) return res.status(400).json({ errore: 'Non c\'è ancora niente da mandare.' })
   const conf = cfg.leggi()
-  if (!(conf.posta || conf.google || conf.microsoft?.parti.includes('posta'))) {
+  // Mail del Mac compresa: la bozza va nelle Bozze di Mail (`bozza-mail-mac.ts`)
+  if (!(conf.posta || conf.google || conf.postamac || conf.microsoft?.parti.includes('posta'))) {
     return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
   }
 
@@ -6011,7 +6012,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     // e solo per un conto che ha già una fonte sua: i conti di prova di
     // questa installazione non devono leggersi le sue chat e i suoi post
     const c0 = cfg.leggi()
-    const conFonti = !!(c0.desktop || c0.posta || c0.note || c0.google || c0.microsoft || c0.granola || c0.notion)
+    const conFonti = !!(c0.desktop || c0.posta || c0.postamac || c0.note || c0.google || c0.microsoft || c0.granola || c0.notion)
     if (!ospitato.OSPITATO && conFonti) {
       const accesi = [...(c0.accesiDaSoli ?? [])]
       if (!c0.conversazioni && !accesi.includes('conversazioni') && conversazioni.agentiPossibili()) {

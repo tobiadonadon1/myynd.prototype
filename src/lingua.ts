@@ -1241,7 +1241,7 @@ const EN: Record<string, string> = {
   'Niente da segnalare.': 'Nothing to flag.',
   'Non hai collegato niente.': 'You have connected nothing.',
   'Non ho ancora letto niente.': 'I have not read anything yet.',
-  'Serve Claude per scegliere cosa conta.': 'Claude is needed to pick what matters.',
+  'Collega un’intelligenza per scegliere cosa conta.': 'Connect an AI to pick what matters.',
   // — la lista —
   'ti chiede': 'asks you',
   'Rispondigli': 'Answer it',
@@ -2315,6 +2315,7 @@ const EN: Record<string, string> = {
   'Note non ha creato la nota. Controlla che sia installata e che non ci sia una finestra di permesso aperta.': 'Notes did not create the note. Check that it is installed and that no permission dialog is open.',
   // la bozza nelle Bozze di Mail del Mac (server/bozza-mail-mac.ts), sotto una carta
   'Permetti a Myynd di controllare Mail in Impostazioni di Sistema, Privacy e sicurezza, Automazione.': 'Allow Myynd to control Mail in System Settings, Privacy & Security, Automation.',
+  'La prima bozza in Mail la salvo quando sei al Mac: macOS chiede il permesso una volta sola.': 'I’ll save the first draft in Mail when you’re at your Mac: macOS asks for permission once.',
   'Mail non ha salvato la bozza. Controlla che sia aperta e che non ci sia una finestra di permesso.': 'Mail did not save the draft. Check that it is open and that no permission dialog is showing.',
   'Mail non ha confermato la bozza.': 'Mail did not confirm the draft.',
   'Le bozze di Mail si salvano solo da Myynd sul Mac.': 'Mail drafts can only be saved from Myynd on the Mac.',
@@ -3540,6 +3541,7 @@ const EN: Record<string, string> = {
   // — la ricevuta in cima alla prima pagina: cosa è stato fatto, cosa aspetta te —
   'Fatto mentre dormivi.': 'Done while you slept.',
   'Da quando sei uscito.': 'Since you left.',
+  'Oggi.': 'Today.',
   'Da approvare': 'Ready for your OK',
   'Disfa': 'Undo',
   'Disfatta: il file è nel Cestino, la bozza resta in Bozze. La carta è di nuovo tua.': 'Undone: the file is in the Trash, the draft stays in Drafts. The card is yours again.',

@@ -40,6 +40,16 @@ test('a new account drafts a reply to a message that needs one without anyone tu
   // e la fonte resta valida per la consegna nella casella: fonteValida legge lo stesso default
   assert.equal(initiative.fonteValida('nuova', ora), true)
 })
+test('col turno spento non nasce nessuna proposta: in coda non partirebbe mai', async () => {
+  store.salvaDocumenti([email('spento')])
+  cfg.aggiorna({ turno: { spento: true } })
+  let calls = 0
+  assert.equal(await initiative.giro(ora, () => { calls++ }, () => true), null)
+  assert.equal(calls, 0)
+  assert.equal(store.elencoCompiti().length, 0, 'una riga ferma sulla lista, mai lavorata')
+  cfg.aggiorna({ turno: { spento: false } })
+  assert.ok(await initiative.giro(ora, () => { calls++ }, () => true), 'riacceso il turno, la proposta nasce')
+})
 test('eligibility rejects promotions, receipts, stale, sent, technical and quoted-only requests', () => {
   assert.deepEqual(initiative.candidati([
     email('good'), email('old', { quando: new Date(ora - 4 * 86400_000).toISOString() }),

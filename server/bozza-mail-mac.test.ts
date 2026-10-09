@@ -24,8 +24,8 @@ const contratto = await import('./contratto.ts')
 
 const email = { a: 'maya@northwind-studio.test', oggetto: 'Re: Menu wording', corpo: 'The wording is confirmed.\n\nAlex', conosciuto: true }
 let chiamate: string[][] = []
-const sulMac = (uscita = 'salvata\nalex@example.com\n') => mailDelMac.perProva({
-  piattaforma: () => 'darwin', ospitato: () => false,
+const sulMac = (uscita = 'salvata\nalex@example.com\n', presente = true) => mailDelMac.perProva({
+  piattaforma: () => 'darwin', ospitato: () => false, presente: () => presente,
   osascript: async argomenti => { chiamate.push(argomenti); return uscita }
 })
 
@@ -44,6 +44,23 @@ test('Mail riceve un messaggio nuovo invisibile, salvato e mai mandato, con gli 
   assert.deepEqual([a, oggetto, corpo], [email.a, email.oggetto, email.corpo])
   assert.deepEqual(suoi, ['alex@example.com'], 'solo indirizzi veri, in minuscolo, per trovare il conto')
   assert.deepEqual(r, { id: 'mail-del-mac:alex@example.com', url: '' })
+})
+
+test('la prima bozza aspetta che lei sia al Mac: il permesso di Automazione di notte resterebbe senza risposta', async () => {
+  const cfg = await import('./config.ts')
+  cfg.scrivi({ postamac: { attiva: true } }, { togli: ['postamac'] })
+  cfg.aggiorna({ postamac: { attiva: true } })
+  sulMac(undefined, false)
+  await assert.rejects(mailDelMac.salva(email), (e: Error & { primaDelSalvataggio?: boolean }) => e.primaDelSalvataggio === true && /quando sei al Mac/.test(e.message))
+  assert.equal(chiamate.length, 0, 'di notte, la prima volta, niente arriva a Mail')
+  sulMac(undefined, true)
+  await mailDelMac.salva(email)
+  assert.equal(chiamate.length, 1)
+  assert.equal(cfg.leggi().postamac?.bozzeProvate, true)
+  // passata una, il permesso c'è: anche senza nessuno davanti
+  sulMac(undefined, false)
+  await mailDelMac.salva(email)
+  assert.equal(chiamate.length, 2)
 })
 
 test('un destinatario storto, o fuori dal Mac, non arriva a Mail', async () => {

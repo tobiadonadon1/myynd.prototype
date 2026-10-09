@@ -306,7 +306,7 @@ export async function stesura(
   )
   const posta = () => {
     const x = cfg.leggi()
-    return !!(x.posta || x.google || x.microsoft?.parti.includes('posta'))
+    return !!(x.posta || x.google || x.postamac || x.microsoft?.parti.includes('posta'))
   }
   return stendi({
     c: { id: c.id, testo: c.testo, modo: c.modo, domandeFatte: 0 },

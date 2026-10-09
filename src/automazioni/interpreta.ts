@@ -49,7 +49,7 @@ export function quandoDetto(frase: string): Quando | null {
   }
   const h = ora(frase)
   // dal lunedì al venerdì: prima dei giorni, perché «dal lunedì» nomina un giorno
-  if (/\b(?:giorni (?:feriali|lavorativi)|nei feriali|weekdays?|working days?|every workday|monday (?:to|through) friday)\b|\bdal luned[iì] al venerd[iì](?![\p{L}])/iu.test(frase)) {
+  if (/\b(?:giorn[io] (?:feriali|lavorativi|feriale|lavorativo)|nei feriali|weekdays?|working days?|every workday|monday (?:to|through) friday)\b|\bdal luned[iì] al venerd[iì](?![\p{L}])/iu.test(frase)) {
     return { ogni: 'feriali', ora: h ?? 8 }
   }
   /*

@@ -297,7 +297,7 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
               {proposta && lista ? <>{affidalo}{fatto}</> : <>{fatto}{affidalo}</>}
               <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>
               {/* una cosa che torna diventa un ordine fisso, già scritto (E) */}
-              {siPuoFareOgniSettimana() && <Hov as="button" type="button" onClick={fermo(() => portaAllOrdineFisso({ frase: fraseOgniSettimana(carta.titolo), testo: carta.titolo }))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Ogni settimana')}</Hov>}
+              {siPuoFareOgniSettimana() && <Hov as="button" type="button" onClick={fermo(() => portaAllOrdineFisso({ frase: fraseOgniSettimana(carta.titolo), testo: carta.titolo }))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Fallo ogni settimana')}</Hov>}
               <Hov as="button" type="button" ref={nonUtile} onClick={fermo(chiedi)} title={t('Toglila dal feed')} aria-label={`${t('Non utile')}: ${carta.titolo}`} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non utile')}</Hov>
             </>
           )} />

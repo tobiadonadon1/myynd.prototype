@@ -216,7 +216,7 @@ export function rigaFonti(o: {
     frasi.push(m.frase)
     primo(m.controllo)
   } else if (!o.ragiona) {
-    frasi.push(t('Serve Claude per scegliere cosa conta.'))
+    frasi.push(t('Collega un’intelligenza per scegliere cosa conta.'))
     primo({ tipo: 'fonti', id: null })
   }
 

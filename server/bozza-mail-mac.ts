@@ -19,6 +19,7 @@ import { execFile } from 'node:child_process'
 import { osascriptInProva } from './senza-open.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as cfg from './config.ts'
+import * as presenza from './presenza.ts'
 
 export const SCRIPT_BOZZA = `on run argv
   set destinatario to item 1 of argv
@@ -47,7 +48,7 @@ function sicuro(messaggio: string): Error {
 }
 
 type Esecutore = (argomenti: string[]) => Promise<string>
-type Ferri = { osascript: Esecutore; piattaforma: () => string; ospitato: () => boolean }
+type Ferri = { osascript: Esecutore; piattaforma: () => string; ospitato: () => boolean; presente: () => boolean }
 const VERI: Ferri = {
   osascript: argomenti => new Promise((ok, no) => {
     // nelle scene e sotto `node --test`: si scrive cosa sarebbe partito, e Mail resta com'è
@@ -61,7 +62,11 @@ const VERI: Ferri = {
     })
   }),
   piattaforma: () => process.platform,
-  ospitato: () => OSPITATO
+  ospitato: () => OSPITATO,
+  presente: () => {
+    const u = presenza.ultimaNotizia()
+    return !!u && Date.now() - u.quando <= 3 * 60_000 && u.inattivo < 120
+  }
 }
 let ferri: Ferri = VERI
 /** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
@@ -87,9 +92,21 @@ export async function salva(e: { a: string; oggetto: string; corpo: string }, su
   const corpo = String(e.corpo ?? '').replace(/\r\n?/g, '\n')
   if (!corpo.trim() || corpo.length > 100_000 || corpo.includes('\0') || oggetto.includes('\0') || oggetto.length > 500) throw sicuro('Il testo della bozza non si può salvare in Mail.')
   const conti = [...new Set(suoi.map(s => s.trim().toLowerCase()).filter(s => INDIRIZZO.test(s)))].slice(0, 20)
+  /*
+   * La prima volta, solo con lei davanti al Mac.
+   *
+   * Il primo evento verso Mail fa apparire il permesso di Automazione di
+   * macOS. Di notte non c'è nessuno a dire sì: osascript resta fermo sul
+   * dialogo, scade dopo trenta secondi, e la bozza resta «in dubbio» per
+   * sempre. Finché una bozza non è passata, si aspetta che lei ci sia; il no
+   * è sicuro (niente è arrivato a Mail) e il giro dopo ci riprova.
+   */
+  const c = cfg.leggi()
+  if (!c.postamac?.bozzeProvate && !ferri.presente()) throw sicuro('La prima bozza in Mail la salvo quando sei al Mac: macOS chiede il permesso una volta sola.')
   const uscita = await ferri.osascript(['-e', SCRIPT_BOZZA, '--', a, oggetto, corpo, ...conti])
   const [esito, mittente = ''] = uscita.replace(/\r/g, '').split('\n').map(r => r.trim())
   if (esito !== 'salvata') throw new Error('Mail non ha confermato la bozza.')
+  if (!c.postamac?.bozzeProvate) cfg.aggiorna({ postamac: { ...(cfg.leggi().postamac ?? { attiva: true }), bozzeProvate: true } })
   // Mail non dice l'identità della bozza: si ricorda da quale conto è partita, e nessun link
   return { id: `mail-del-mac:${mittente || 'predefinito'}`, url: '' }
 }
