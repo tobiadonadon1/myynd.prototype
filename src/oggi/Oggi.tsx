@@ -36,6 +36,7 @@ import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 import { RigaIpotesi } from './RigaIpotesi'
+import { LasciaConRagione, RigaGuadagnata, RigaImparato } from './Imparato'
 import { bloccoDi, haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
@@ -614,6 +615,8 @@ function Domanda({ c, l, soloDomanda = false }: { c: Compito; l: Lista; soloDoma
         così vuol dire rimandarla a lavorare su un obiettivo, e torna un altro
         piano. Di là si parla, e da una conversazione escono cose da fare vere.
       */}
+      {/* lasciarla perdere, con il perché: la stessa scelta della prima pagina, e insegna allo stesso modo */}
+      {!soloDomanda && <div style={{ marginTop: 10 }}><LasciaConRagione c={c} l={l} /></div>}
       {siPuoParlarne() && (
         <Hov as="button" type="button"
           onClick={() => portaInChat(frasi.scomponi(c.testo))}
@@ -820,6 +823,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
       )}
       {siCambia(c) && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
       <RigaProva c={c} />
+      <RigaImparato c={c} l={l} /><RigaGuadagnata c={c} l={l} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
         {/* il gesto principale di un prompt è copiarlo: «Va bene» si fa di contorno */}

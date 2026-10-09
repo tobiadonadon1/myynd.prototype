@@ -28,6 +28,8 @@ import * as store from './store.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as regoleTono from './regole-tono.ts'
 import * as compiti from './compiti.ts'
+import * as gradino from './gradino.ts'
+import * as segnali from './segnali.ts'
 import { classe, parole, ritocco } from './ritocco.ts'
 import { corpoAttuale } from './rilevanza.ts'
 import { destinatarioDi, senzaFirma, type Destinatario } from './voce.ts'
@@ -123,11 +125,15 @@ export async function osservaUno(c: store.Compito): Promise<Visto> {
     // già segnata come sua al giro prima: niente di nuovo
     if (propria) return null
     if (!lavoroDati.registraInvio(c.id, { via: 'propria', inviato: quando, classe: 'riscritto' })) return null
+    // per il primo gradino è una bozza riscritta da capo: la più forte delle due che lo fanno scendere
+    alGradino(c, inviata, r, quando, true)
     return { mandata: false, via: 'propria' }
   }
   if (!lavoroDati.segnaMandata(c.id, { doc: inviata.id, quando, certezza, ritocco: r })) return null
   const cl = classe(r)
   lavoroDati.registraInvio(c.id, { via: 'casella', inviato: quando, distanza: r, parole: parole(corpo).length, classe: cl })
+  // il primo gradino: la risposta a chi aveva scritto, partita dalla sua posta, conta come una partita da «Manda»
+  alGradino(c, inviata, r, quando, false)
   // la coppia che si impara è pari: la firma tolta da tutte e due le parti,
   // o la memoria imparava che lei cancella il suo nome
   if (cl === 'ritocco' || cl === 'modificato') {
@@ -137,6 +143,16 @@ export async function osservaUno(c: store.Compito): Promise<Visto> {
     } catch { /* la memoria è un di più */ }
   }
   return { mandata: true, certezza, ritocco: r }
+}
+
+/** Il primo gradino: la risposta a chi aveva scritto, vista partire dalla sua posta. */
+function alGradino(c: store.Compito, inviata: { destinatari?: string | null }, distanza: number, quando: string, propria: boolean) {
+  try {
+    const a = gradino.mittenteDi(c)
+    // a chi è andata: se la posta non lo dice, il filo basta (è la risposta a quella mail)
+    const a2 = segnali.indirizziDi(inviata.destinatari)
+    if (a && (!a2.length || a2.includes(a))) gradino.registraInvio({ compito: c.id, indirizzo: a, nome: destinatarioDi(c)?.nome, distanza, quando, propria })
+  } catch { /* la fiducia è un di più */ }
 }
 
 /** Tutte le righe che possono essere partite. Torna quante ha segnate, e annuncia una volta se ha scritto. */

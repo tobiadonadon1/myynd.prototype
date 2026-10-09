@@ -1,0 +1,36 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Run a two-week AI pilot with the Harbor finance team" }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:901", "fonte": "posta", "tipo": "email", "titolo": "Supplier list for the pilot", "corpo": "Hi Alex, could you send me the supplier list for the pilot? Thanks, Nora", "autore": "Nora Vance <nora@harbor.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-2h", "messageId": "nv901@harbor.example", "filo": "nv901@harbor.example" },
+    { "id": "posta:INBOX:902", "fonte": "posta", "tipo": "email", "titolo": "Kickoff call time", "corpo": "Can we move the kickoff call to Wednesday at 10? Nora", "autore": "Nora Vance <nora@harbor.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-4h", "messageId": "nv902@harbor.example", "filo": "nv902@harbor.example" },
+    { "id": "posta:INBOX:903", "fonte": "posta", "tipo": "email", "titolo": "Logo files", "corpo": "Can you send me the logo files in all formats? Leo", "autore": "Leo Marsh <leo@studio.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-5h", "messageId": "lm903@studio.example", "filo": "lm903@studio.example" }
+  ],
+  "compiti": [
+    { "id": "guadagnata-a1", "testo": "Draft a reply: Supplier list for the pilot", "quando": "oggi", "progetto": "hb", "doc": "posta:INBOX:901", "origine": "guadagnata", "stato": "aperto", "modo": "bozza",
+      "nota": "PROACTIVE PREPARATION TYPE: risposta. Prepare an unsent email reply for review. Match relevant sent-mail style where evidence exists. Use the current source and latest relevant user memory." },
+    { "id": "guadagnata-a2", "testo": "Draft a reply: Kickoff call time", "quando": "oggi", "progetto": "hb", "doc": "posta:INBOX:902", "origine": "guadagnata", "stato": "pronto", "modo": "bozza",
+      "nota": "PROACTIVE PREPARATION TYPE: risposta. Prepare an unsent email reply for review.",
+      "risultato": "Nora, Wednesday at 10 works. I moved the kickoff call and sent the new invite.\n\nBest,\nAlex",
+      "voceScritta": { "destinatario": "Nora", "lingua": "en", "quanti": 0, "esempi": [], "primaVolta": "bozza.tono:corta", "regole": [
+        { "chiave": "bozza.tono:saluto-via", "genere": "bozza.tono", "casi": 3, "dati": { "tratto": "saluto-via" } },
+        { "chiave": "bozza.tono:corta", "genere": "bozza.tono", "casi": 2, "dati": { "tratto": "corta", "rapporto": 0.62 } }
+      ] } },
+    { "id": "leo-r", "testo": "Reply to Leo about the logo files", "quando": "oggi", "doc": "posta:INBOX:903", "stato": "pronto", "modo": "bozza",
+      "risultato": "Leo, here are the logo files in all three formats.\n\nBest,\nAlex" }
+  ],
+  "abitudini": [
+    { "chiave": "bozza.tono:saluto-via", "genere": "bozza.tono", "dati": { "tratto": "saluto-via", "da": "Dear {nome},", "chi": "nora@harbor.example,leo@studio.example" }, "casi": 3,
+      "esempi": [{ "quando": "-1d", "testo": "«Dear Nora,» → «Nora, confirmed»" }], "visto": "-4d", "dal": "-3d" },
+    { "chiave": "bozza.tono:corta", "genere": "bozza.tono", "dati": { "tratto": "corta", "rapporto": 0.62, "chi": "nora@harbor.example,sam@lumen.example" }, "casi": 2,
+      "esempi": [{ "quando": "-1d", "testo": "118 → 71" }], "visto": "-2d", "dal": "-1d" }
+  ],
+  "gradini": [
+    { "indirizzo": "nora@harbor.example", "nome": "Nora", "distanze": [0, 0.05, 0, 0, 0] },
+    { "indirizzo": "sam@lumen.example", "nome": "Sam Okafor", "distanze": [0, 0, 0.1, 0] }
+  ]
+}

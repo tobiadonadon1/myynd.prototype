@@ -681,8 +681,10 @@ export type Compito = {
   ipotesi?: string[] | null
   /** Quante domande ha fatto questa riga: mai più di una. */
   domandeFatte?: number
-  /** Come scrive a chi riceve la bozza, dalle mail che gli ha mandato. */
-  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[] } | null
+  /** Nata dal primo gradino: a chi risponde, finché la persona resta su («Earned: …»). */
+  guadagnato?: { indirizzo: string; nome: string } | null
+  /** Come scrive a chi riceve la bozza, dalle mail che gli ha mandato; e quello che ha imparato e che questa bozza segue. */
+  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[]; regole?: RegolaSeguita[]; primaVolta?: string } | null
   /** La bozza è partita dalla sua posta: quale messaggio, quando, e quanto l'ha ritoccata. */
   mandata?: { doc: string; quando: string; certezza: 'id' | 'filo'; ritocco: number } | null
   /** F1 · cosa vuol dire «fatto», con che mani e in quanto tempo. Se l'ha scritto lei, resta suo. */
@@ -840,6 +842,10 @@ export type EventoCompito =
   | { fase: 'collegamento' }
   /** F7 · una regola nata da un gesto visto altrove (una bozza partita dalla sua posta) è entrata in vigore. */
   | { fase: 'imparato'; regola: RegolaImparata }
+  /** Una cosa imparata che una bozza (la riga `id`) segue per la prima volta: arriva prima del suo «pronto». */
+  | { fase: 'usata'; id: string; regola: RegolaSeguita }
+  /** Un documento corretto ha fatto nascere una convinzione: «Lo faccio sempre?» con un tocco. */
+  | { fase: 'sempre'; convinzione: { id: string; enunciato: string } }
   | EventoLettura
 
 export type Accesso = {
@@ -1267,6 +1273,15 @@ export const api = {
     json<{ ok: true; compiti: Compito[]; chiuso?: 'lasciato' | 'fatto' | null }>(`/api/compiti/${encodeURIComponent(id)}/rispondi`,
       { method: 'POST', body: JSON.stringify({ testo }) }),
 
+  /** «Non mi serve», con una delle ragioni del feed: la ragione insegna, e se nasce una regola torna qui. */
+  lasciaCompito: (id: string, ragione: 'vecchia' | 'fatta' | 'non_mia' | 'non_chiara', esito: string) =>
+    json<{ ok: true; compiti: Compito[]; chiusi: Compito[]; chiuso: 'lasciato' | 'fatto'; imparato?: RegolaImparata }>(`/api/compiti/${encodeURIComponent(id)}/lascia`,
+      { method: 'POST', body: JSON.stringify({ ragione, esito }) }),
+
+  /** «Take it back»: la persona scende dal primo gradino. */
+  ritiraGradino: (indirizzo: string) =>
+    json<{ ok: true; compiti: Compito[] }>('/api/gradino/ritira', { method: 'POST', body: JSON.stringify({ indirizzo }) }),
+
   /**
    * Da una bozza pronta a un'email pronta.
    *
@@ -1659,7 +1674,10 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ etichetta, testo }) }),
 
   scordaConvinzione: (id: string) =>
-    json<{ ok: true }>(`/api/memoria/convinzione/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    json<{ ok: true; tolta?: Record<string, unknown> | null }>(`/api/memoria/convinzione/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** «Undo» subito dopo averla scordata: la riga che il server ha restituito torna com'era. */
+  rimettiConvinzione: (id: string, riga: Record<string, unknown>) =>
+    json<{ ok: true }>(`/api/memoria/convinzione/${encodeURIComponent(id)}/rimetti`, { method: 'POST', body: JSON.stringify({ riga }) }),
 
   /** «Tienila»: da qui in poi Myynd può ragionarci sopra. */
   confermaConvinzione: (id: string) =>
@@ -2217,6 +2235,11 @@ export type AbitudineVista = {
 }
 /** F7 · una regola nata da un gesto, appena entrata in vigore: l'avviso dice «Learned: …». */
 export type RegolaImparata = { chiave: string; genere: string; dati: Record<string, string | number> }
+/**
+ * Una cosa imparata che una bozza ha seguito: una regola sul tono, o una
+ * convinzione tenuta da un documento corretto. `casi`: da quante correzioni.
+ */
+export type RegolaSeguita = { chiave: string; genere: 'bozza.tono' | 'convinzione'; casi: number; dati?: Record<string, string | number>; testo?: string | null }
 export type Gemello = {
   /** Gli ultimi trenta giorni, solo le affermazioni verificate; null senza. */
   punteggio: { giuste: number; totale: number; base: number } | null
@@ -2226,6 +2249,8 @@ export type Gemello = {
   /** Solo i generi con almeno dieci giudizi: le bozze, i documenti, le carte (le previsioni stanno nel punteggio). */
   fiducia: { genere: string; giuste: number; totale: number }[]
   abitudini: AbitudineVista[]
+  /** Il primo gradino: le persone a cui ogni risposta parte già scritta. `su` di `leggere` bozze partite intatte o quasi. */
+  guadagnati?: { indirizzo: string; nome: string; dal: string; leggere: number; su: number }[]
   /** Una casella collegata ma niente posta mandata in trenta giorni. */
   guai: 'posta-inviata'[]
 }

@@ -10,6 +10,8 @@ import { pillolaDi } from './data-carta.ts'
 import { risposteFuori } from './feed-dati.ts'
 import * as regole from './turno-regole.ts'
 import * as presenza from './presenza.ts'
+import * as abitudini from './abitudini.ts'
+import * as gradino from './gradino.ts'
 
 function pertinente(d: store.Documento, adesso: number) {
   return classificaAttenzione(d, {
@@ -58,7 +60,8 @@ export type VoceInPagina = Record<string, unknown> & { id: string; titolo: strin
  * Keep the stored evidence and feedback intact; this is only a view. */
 export function feedAttuale(adesso = Date.now()): VoceInPagina[] {
   // una carta preparata da Myynd (una proposta, o una del primo giorno) prende il posto della carta del feed sulla stessa cosa
-  const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa' || c.origine === 'primo-giorno').map(c => c.doc))
+  // e una risposta guadagnata (il primo gradino): la sua riga è già la risposta a quella mail
+  const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa' || c.origine === 'primo-giorno' || c.origine === gradino.ORIGINE).map(c => c.doc))
   // le righe con i campi che la pagina legge sempre: l'id, il titolo, la nascita
   type Riga = Record<string, string | null> & { id: string; titolo: string; quando: string; tipo: string; offerta: string | null }
   const voci = (store.elencoFeed('aperto') as Riga[]).filter(v => !preparati.has(v.doc))
@@ -135,7 +138,25 @@ export function feedAttuale(adesso = Date.now()): VoceInPagina[] {
 
 /** User-owned tasks stay on the list. Only untouched suggestions created by
  * the Brief are re-evaluated; moving, editing or delegating one adopts it. */
-export function compitiAttuali(adesso = Date.now()): (store.Compito & { puoInviare: boolean; tocca: regole.Tocca | null })[] {
+/**
+ * Quello che una riga dice di aver imparato, com'è adesso: una regola tolta
+ * dalla Memoria (o con «Undo» sotto un'altra bozza) non si dice più sotto
+ * nessuna, e una convinzione scordata nemmeno.
+ */
+function conRegoleVive<T extends store.Compito>(cs: T[]): T[] {
+  const tutte = cs.flatMap(c => c.voceScritta?.regole ?? [])
+  if (!tutte.length) return cs
+  const toni = abitudini.ancoraValide(tutte.filter(r => r.genere === 'bozza.tono').map(r => r.chiave))
+  const tenute = new Set(store.convinzioni().map(k => k.id))
+  return cs.map(c => {
+    const r = c.voceScritta?.regole
+    if (!r?.length) return c
+    const vive = r.filter(x => (x.genere === 'bozza.tono' ? toni.has(x.chiave) : tenute.has(x.chiave)))
+    return vive.length === r.length ? c : { ...c, voceScritta: { ...c.voceScritta, regole: vive } }
+  })
+}
+
+export function compitiAttuali(adesso = Date.now()): (store.Compito & { puoInviare: boolean; tocca: regole.Tocca | null; guadagnato: { indirizzo: string; nome: string } | null })[] {
   const compiti = store.elencoCompiti()
   // F2 · quando tocca a una carta in coda: la bacheca lo scrive sulla carta
   const conf = leggi()
@@ -148,13 +169,15 @@ export function compitiAttuali(adesso = Date.now()): (store.Compito & { puoInvia
   const fonti = compiti.flatMap(c => c.origine === 'punto' && c.doc ? store.documento(c.doc) ?? [] : [])
   const ignorati = store.docsIgnoratiDalFeed(fonti)
   // F9 · e il conto di ogni carta che ha lavorato: «Cosa ha fatto · $0.12» nel dettaglio
-  return store.conCosti(compiti.filter(c => {
+  // il primo gradino: «Earned: …» sotto una riga nata da lì, finché la persona resta su
+  const guadagnato = (c: store.Compito) => { try { return gradino.perRiga(c) } catch { return null } }
+  return conRegoleVive(store.conCosti(compiti.filter(c => {
     if (c.origine !== 'punto' || c.stato !== 'aperto' || c.versione > 1) return true
     const d = c.doc ? store.documento(c.doc) : null
     return !!d && !ignorati.has(d.id) && pertinente(d, adesso) && validaVoceFeed({
       titolo: c.testo, testo: c.nota ?? '', perche: (c.nota ?? '').slice(0, 200)
     }, d, { richiediProva: false })
-  }).map(c => ({ ...c, puoInviare: !!conf.posta, tocca: regole.tocca(c, ctx) })))
+  }).map(c => ({ ...c, puoInviare: !!conf.posta, tocca: regole.tocca(c, ctx), guadagnato: guadagnato(c) }))))
 }
 
 /**

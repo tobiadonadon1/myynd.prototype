@@ -12,7 +12,8 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, apiP10, correggiCompito, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest, type StatoTurno } from '../api'
+import { api, apiP10, correggiCompito, DaCollegare, gemelloApi, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest, type RegolaSeguita, type StatoTurno } from '../api'
+import type { RagioneNonUtile } from '../feed-carta'
 import { appenaFinite as appenaFiniteFra, siRivede, testoMostrato } from '../lavoro-affidato'
 import { quanteAspettano } from '../blocchi-feed'
 import { frasi, t } from '../lingua'
@@ -22,7 +23,7 @@ import { segna } from '../tempi'
 import { giornoLocale } from './giorni'
 import { secchioVivo } from './secchi'
 import { preparaApertura } from '../navigazione.ts'
-import { rigaImparata } from '../gemello-frasi.ts'
+import { fraseSeguita, rigaImparata } from '../gemello-frasi.ts'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -146,6 +147,8 @@ export function useCompiti(
       if (e.fase === 'lavoro') {
         setPassi(p => ({ ...p, [e.id]: e.passo }))
       }
+      // la prima bozza che segue una cosa imparata: si dice insieme al suo «Fatto», che arriva subito dopo
+      if (e.fase === 'usata') usate.current.set(e.id, fraseSeguita(e.regola))
       // finito, in qualunque modo: la frase di lavoro non ha più niente da dire
       if (e.fase === 'pronto' || e.fase === 'chiede' || e.fase === 'guaio' || e.fase === 'richiamato') {
         setPassi(p => {
@@ -175,6 +178,8 @@ export function useCompiti(
         setAperti(a => (a.has(e.id) ? a : new Set(a).add(e.id)))
       }
       if (e.fase === 'pronto') {
+        // una riga nata altrove e finita prima che la lista la rileggesse: senza, restava «al lavoro» fino al giro dopo
+        if (!compitiRef.current.some(c => c.id === e.id)) { clearTimeout(attesa); attesa = setTimeout(rileggi, 160) }
         setCompiti(cs => cs.map(c => (c.id === e.id ? e.compito : c)))
         setAperti(a => (a.has(e.id) ? a : new Set(a).add(e.id)))
       }
@@ -201,6 +206,8 @@ export function useCompiti(
    * passaggio: è come stanno le cose, e non si annuncia niente.
    */
   const statiVisti = useRef<Record<string, string> | null>(null)
+  /** Le righe la cui bozza segue per la prima volta una cosa imparata: la frase aspetta il loro «Fatto». */
+  const usate = useRef(new Map<string, string>())
   /**
    * Le righe che hanno appena finito: per un attimo restano dove stavano.
    *
@@ -240,7 +247,11 @@ export function useCompiti(
     for (const id of pronte) {
       const c = compiti.find(x => x.id === id)
       // una carta che non regge il suo «fatto» (F1) non si annuncia come fatta
-      if (c) mostraToast(c.prova?.esito === 'fail' ? frasi.compitoDaFinire(titoloCorto(c.testo)) : frasi.compitoFinito(titoloCorto(c.testo)))
+      if (!c) continue
+      const usata = usate.current.get(id)
+      usate.current.delete(id)
+      const detto = c.prova?.esito === 'fail' ? frasi.compitoDaFinire(titoloCorto(c.testo)) : frasi.compitoFinito(titoloCorto(c.testo))
+      mostraToast(usata ? `${detto} ${frasi.usataPrimaVolta(usata)}` : detto)
     }
     if (!finite.length) return
     setAppenaFinite(f => new Set([...f, ...finite]))
@@ -575,6 +586,68 @@ export function useCompiti(
   }, [indietro, mostraToast])
 
   /**
+   * «Non mi serve», con una delle ragioni del feed. Prima mandava «not
+   * relevant», due parole che non insegnavano niente; adesso la ragione è un
+   * fatto che il server conta come uno scarto del feed. La riga se ne va
+   * subito; se nasce una regola l'avviso la dice, e «Annulla» rimette la riga.
+   */
+  const lascia = useCallback(async (id: string, ragione: RagioneNonUtile) => {
+    const prima = compitiRef.current
+    setCompiti(cs => cs.filter(c => c.id !== id))
+    scorda(id)
+    try {
+      const r = await api.lasciaCompito(id, ragione, frasi.ragioneDelCompito(ragione))
+      setCompiti(r.compiti); setChiusi(r.chiusi)
+      const disfa = () => {
+        api.riapriCompito(id)
+          .then(x => { setCompiti(x.compiti); setChiusi(x.chiusi) })
+          .catch(() => mostraToast(t('Non sono riuscito a rimetterlo.')))
+      }
+      const detto = r.chiuso === 'fatto' ? t('Segnata come fatta.') : t('Lasciata, con il tuo perché: me lo ricordo.')
+      mostraToast(r.imparato ? frasi.imparato(rigaImparata(r.imparato), t('Via.')) : detto, disfa)
+    } catch { indietro(prima, id, t('Non sono riuscito a toglierlo.')) }
+  }, [indietro, mostraToast])
+
+  /**
+   * «Undo» sulla riga «Learned»: quello che ha imparato se ne va, da questa
+   * bozza e da tutte le altre, e la prossima non lo segue più. Una regola sul
+   * tono si può rimettere per dieci minuti, com'è in Memoria.
+   */
+  const togliRegola = useCallback(async (r: RegolaSeguita) => {
+    const prima = compitiRef.current
+    const senza = (cs: Compito[]) => cs.map(c => (c.voceScritta?.regole?.some(x => x.chiave === r.chiave)
+      ? { ...c, voceScritta: { ...c.voceScritta, regole: c.voceScritta.regole.filter(x => x.chiave !== r.chiave) } } : c))
+    setCompiti(senza)
+    try {
+      if (r.genere === 'bozza.tono') {
+        await gemelloApi.abitudine(r.chiave, 'togli')
+        mostraToast(t('Tolta: non la seguo più.'), () => {
+          gemelloApi.abitudine(r.chiave, 'ripristina', undefined, r.testo ? 'corretta' : 'osservata')
+            .then(() => setCompiti(cs => cs.map(c => { const p = prima.find(x => x.id === c.id); return p?.voceScritta ? { ...c, voceScritta: p.voceScritta } : c })))
+            .catch(() => mostraToast(t('Non sono riuscito a rimetterla.')))
+        })
+      } else {
+        // come per una regola sul tono: «Undo» la rimette com'era, tenuta
+        const { tolta } = await api.scordaConvinzione(r.chiave)
+        mostraToast(t('Tolta: non la seguo più.'), tolta ? () => {
+          api.rimettiConvinzione(r.chiave, tolta)
+            .then(() => setCompiti(cs => cs.map(c => { const p = prima.find(x => x.id === c.id); return p?.voceScritta ? { ...c, voceScritta: p.voceScritta } : c })))
+            .catch(() => mostraToast(t('Non sono riuscito a rimetterla.')))
+        } : undefined)
+      }
+    } catch { setCompiti(prima); mostraToast(t('Non sono riuscito a toglierla.')) }
+  }, [mostraToast])
+
+  /** «Take it back» sul primo gradino: le risposte a quella persona tornano ad aspettare che le chieda. */
+  const ritiraGradino = useCallback(async (indirizzo: string) => {
+    try {
+      const r = await api.ritiraGradino(indirizzo)
+      setCompiti(r.compiti)
+      mostraToast(t('Ripreso: le risposte tornano ad aspettare te.'))
+    } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
+  }, [mostraToast])
+
+  /**
    * «Cambia» sotto l'ipotesi (P3): quello che vale invece, e la riga si rifà.
    *
    * Subito, come `rispondi`: una riga semplice torna affidata all'istante;
@@ -881,7 +954,7 @@ export function useCompiti(
     pronte, chiedono,
     /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
     inAttesa,
-    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, fermaTurno, disfa, richiama, rispondi, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, fermaTurno, disfa, richiama, rispondi, lascia, togliRegola, ritiraGradino, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

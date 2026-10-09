@@ -3708,9 +3708,11 @@ export type Compito = {
   /**
    * Come scrive a chi riceve la bozza, dalle mail che gli ha mandato (P3).
    * Sta in `compiti.voceScritta` perché `voce` è la voce del feed da cui la
-   * riga è nata.
+   * riga è nata. `regole`: quello che ha imparato e che questa bozza segue
+   * (le regole sul tono, le convinzioni tenute da un documento corretto),
+   * per la riga «Learned: … · Undo».
    */
-  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[] } | null
+  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[]; regole?: RegolaSeguita[]; primaVolta?: string } | null
   /**
    * La bozza è partita dalla sua posta (P9): quale messaggio, quando, con che
    * certezza e quanto l'ha ritoccata. Si scrive una volta e non si riscrive.
@@ -4696,6 +4698,13 @@ export function chiudiDomanda(id: string, stato: 'risposta' | 'ignorata', rispos
 
 // — memoria: quello che Myynd sa di te —
 
+/**
+ * Una cosa imparata che una bozza ha seguito: una regola sul tono (`dati`
+ * per dirla nella lingua dell'app, `testo` se l'ha scritta lei) o una
+ * convinzione tenuta (`testo`). `casi`: da quante correzioni viene.
+ */
+export type RegolaSeguita = { chiave: string; genere: 'bozza.tono' | 'convinzione'; casi: number; dati?: Record<string, string | number>; testo?: string | null }
+
 export type Convinzione = {
   id: string
   enunciato: string
@@ -4850,15 +4859,35 @@ export function convinzioniStoriche(): Convinzione[] {
   return righe.map(daRigaConvinzione)
 }
 
-/** Cancellare a mano è un diritto: è la sua testa, deve poterci mettere le mani. */
-export function scordaConvinzione(id: string) {
+/** Cancellare a mano è un diritto: è la sua testa, deve poterci mettere le mani. Torna la riga com'era, per un «Undo» subito dopo. */
+export function scordaConvinzione(id: string): Record<string, unknown> | null {
   // la lapide prima: la stessa frase dedotta domani non deve tornare (P5)
   db.exec('BEGIN')
   try {
+    const riga = (db.prepare('SELECT * FROM convinzioni WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null
     db.prepare('INSERT OR REPLACE INTO convinzioni_tolte (id, quando) VALUES (?, ?)').run(id, new Date().toISOString())
     db.prepare('DELETE FROM convinzioni WHERE id = ?').run(id)
     db.exec('COMMIT')
+    return riga
   } catch (e) { db.exec('ROLLBACK'); throw e }
+}
+
+/**
+ * «Undo» dopo averla scordata: la riga torna com'era (tenuta, con la sua
+ * origine e la sua data), e la lapide se ne va. Solo le colonne della
+ * tabella, e solo se l'id è quello: non è un modo di scriverne una nuova.
+ */
+export function rimettiConvinzione(id: string, riga: Record<string, unknown>): boolean {
+  if (!riga || riga.id !== id || typeof riga.enunciato !== 'string' || !riga.enunciato.trim()) return false
+  const colonne = (db.prepare('PRAGMA table_info(convinzioni)').all() as { name: string }[]).map(c => c.name).filter(c => c in riga)
+  const valore = (v: unknown) => (v === undefined ? null : typeof v === 'object' && v !== null ? JSON.stringify(v) : v) as string | number | null
+  db.exec('BEGIN')
+  try {
+    db.prepare('DELETE FROM convinzioni_tolte WHERE id = ?').run(id)
+    db.prepare(`INSERT OR IGNORE INTO convinzioni (${colonne.join(', ')}) VALUES (${colonne.map(() => '?').join(', ')})`).run(...colonne.map(c => valore(riga[c])))
+    db.exec('COMMIT')
+  } catch (e) { db.exec('ROLLBACK'); throw e }
+  return !!db.prepare('SELECT 1 FROM convinzioni WHERE id = ?').get(id)
 }
 
 export function chiudiConvinzione(id: string) {

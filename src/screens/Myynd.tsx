@@ -32,8 +32,9 @@ import { velato } from '../colori-progetto'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
 import { CAMPO, Scatola } from '../oggi/Scatola'
 import { RigaIpotesi } from '../oggi/RigaIpotesi'
+import { LasciaConRagione, RigaGuadagnata, RigaImparato } from '../oggi/Imparato'
 import { Testo } from '../Testo'
-import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
+import { bloccoDi, mandataValida, notaPerLei, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
 export { CAMPO, Scatola }
 
 /*
@@ -625,8 +626,7 @@ function corpo(c: Compito): string {
   const revisione = presentazioneRevisione(c, lingua() === 'en')
   if (revisione) return revisione.descrizione
   // F6 · lo stesso per una carta che Myynd si è preparato da solo: la nota è per chi lavora, non per lei
-  if (c.origine === 'iniziativa' || c.origine === 'primo-giorno') return ''
-  return c.nota || ''
+  return notaPerLei(c)
 }
 
 /**
@@ -819,8 +819,8 @@ function Domande({ c, l }: { c: Compito; l: Lista }) {
       <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 14px', marginTop: 7 }}>
         {/* la risposta che chiude: il server la riconosce e la lascia perdere,
             senza rimandarla a lavorare su una cosa che non serve più */}
-        <Hov as="button" type="button" onClick={fermo(() => l.rispondi(c.id, 'not relevant'))}
-          style={LINK} hover={{ textDecorationColor: 'currentColor' }}>{t('Non mi serve, lasciala perdere')}</Hov>
+        {/* e il perché, con le ragioni del feed: «not relevant» da solo non insegnava niente */}
+        <LasciaConRagione c={c} l={l} />
         {/* l'altra strada: certe righe non si sbloccano con un dato, perché non
             sono compiti — vedi il bottone gemello in `Oggi` */}
         {siPuoParlarne() && (
@@ -914,6 +914,8 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           <Riletta c={c} chiaro />
           {attivo && <PassoAttivo passo={l.passi[c.id]} />}
           <ConsegnaPronta c={c} l={l} v={v} /><BozzaInPosta c={c} /><DaAllegare c={c} v={v} />
+          {/* quello che ha imparato e che questa bozza segue, e il gradino guadagnato: una riga quieta ciascuno */}
+          <RigaImparato c={c} l={l} /><RigaGuadagnata c={c} l={l} />
           {/* F4: un lavoro che non ha passato il suo «fatto» porta la domanda per finirlo */}
           {(chiede || (c.stato === 'pronto' && c.prova?.esito === 'fail' && !!c.chieste?.length)) && <Domande c={c} l={l} />}
         </div>

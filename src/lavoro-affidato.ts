@@ -7,7 +7,7 @@
 // La cornice (l'ipotesi, il segnaposto, il corpo per chi riceve) è la stessa
 // del server: `server/cornice.ts`, senza import, letta da tutte e due le parti.
 
-import type { Compito } from './api'
+import type { Compito, RegolaSeguita } from './api'
 import { haSegnaposto, MANCA, testoMostrato } from '../server/cornice.ts'
 
 export { corpoPerChiRiceve, haSegnaposto, rigaIpotesi, senzaRigaIpotesi, testoMostrato } from '../server/cornice.ts'
@@ -51,6 +51,49 @@ export function rigaDellaVoce(c: Pick<Compito, 'voceScritta'>): { n: number; nom
   const v = c.voceScritta
   if (!v || !v.destinatario || !v.quanti || v.quanti < VOCE_MINIMA || !v.esempi?.length) return null
   return { n: v.quanti, nome: v.destinatario, apri: v.esempi[0].id }
+}
+
+/**
+ * Quello che ha imparato e che questa bozza segue, per la riga «Learned: …
+ * (n edits) · Undo»: la regola più forte (più correzioni), e quante altre.
+ * Solo su una riga pronta: sotto una domanda o un lavoro in corso non c'è
+ * ancora niente che l'abbia seguita. Le regole senza una frase si saltano.
+ */
+export function imparatoDellaBozza(c: Pick<Compito, 'stato' | 'voceScritta'>, frase: (r: RegolaSeguita) => string): { regola: RegolaSeguita; frase: string; altre: RegolaSeguita[]; nuova: boolean } | null {
+  if (c.stato !== 'pronto') return null
+  const regole = (c.voceScritta?.regole ?? []).filter(r => !!frase(r).trim())
+  if (!regole.length) return null
+  // quella usata per la prima volta da questa bozza va in testa: è la notizia
+  const nuovaChiave = c.voceScritta?.primaVolta
+  const [prima, ...altre] = regole.slice().sort((a, b) => Number(b.chiave === nuovaChiave) - Number(a.chiave === nuovaChiave) || b.casi - a.casi)
+  return { regola: prima, frase: frase(prima), altre, nuova: prima.chiave === nuovaChiave }
+}
+
+/**
+ * Le righe che Myynd si è preparato da solo (le proposte, il primo giorno, le
+ * risposte guadagnate): la nota è il compito per chi lavora, in inglese e in
+ * maiuscolo («PROACTIVE PREPARATION TYPE…»), non una riga per lei.
+ */
+const DA_SOLO = new Set(['iniziativa', 'primo-giorno', 'guadagnata'])
+/**
+ * Su quelle righe una nota sua va in coda al compito, dopo questa riga: chi
+ * lavora la legge, e il dettaglio mostra solo lei. Scriverla al posto del
+ * compito lascerebbe chi lavora senza sapere cosa fare.
+ */
+const SUA = '\n\nNOTE FROM THE USER:\n'
+export function notaPerLei(c: Pick<Compito, 'origine' | 'nota'>): string {
+  if (!(c.origine && DA_SOLO.has(c.origine))) return c.nota || ''
+  const n = c.nota ?? ''
+  const i = n.lastIndexOf(SUA)
+  return i >= 0 ? n.slice(i + SUA.length) : ''
+}
+/** La nota da salvare: su una riga che Myynd si è preparato, il compito resta e la sua nota va in coda. */
+export function notaDaSalvare(c: Pick<Compito, 'origine' | 'nota'>, sua: string): string | null {
+  if (!(c.origine && DA_SOLO.has(c.origine))) return sua || null
+  const n = c.nota ?? ''
+  const i = n.lastIndexOf(SUA)
+  const compito = i >= 0 ? n.slice(0, i) : n
+  return sua ? `${compito}${SUA}${sua}` : compito || null
 }
 
 /** La riga è ferma su una fonte che manca: il guaio è una delle quattro frasi fisse. */

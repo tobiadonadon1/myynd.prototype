@@ -12,6 +12,7 @@ import { documentoVero } from './veri.ts'
 import * as progetti from './progetti.ts'
 import { FONTI_POSTA } from './connettori/registro.ts'
 import * as contratto from './contratto.ts'
+import * as gradino from './gradino.ts'
 
 /**
  * Di serie una proposta non parte: entra in coda per il turno (F2), con il
@@ -192,4 +193,47 @@ export async function giro(adesso = Date.now(), esegui: (id: string, modo: strin
     compiti.annunciaCambio()
     return id
   } finally { occupati.delete(conto) }
+}
+
+/** Quante risposte guadagnate nascono a ogni giro, al massimo: un filo intero non riempie la notte. */
+export const GUADAGNATE_PER_GIRO = 8
+
+/**
+ * Le risposte guadagnate (il primo gradino, `gradino.ts`).
+ *
+ * Per chi è salito di un gradino non si aspetta: ogni sua mail che chiede una
+ * risposta ha la sua riga, con la bozza in coda per la notte, anche con le
+ * proposte spente e oltre il loro ritmo. Il permesso l'ha dato lei, mandando
+ * le bozze a quella persona com'erano. Restano fermi due interruttori: la
+ * pausa («chiedere») e un motore che non c'è. Le stesse candidate delle
+ * proposte, libere allo stesso modo: una mail già sua, scartata o con una
+ * risposta mandata non ne fa nascere una.
+ */
+export function guadagnate(adesso = Date.now(), esegui: (id: string, modo: string, nativa: boolean) => void = inCodaPerIlTurno(), pronto = collegato): string[] {
+  if (cfg.autonomia() === 'chiedere' || !pronto()) return []
+  const su = new Set(gradino.guadagnati().map(g => g.indirizzo))
+  if (!su.size) return []
+  const scelte = liberi(candidatiDettagli(store.recenti(250), adesso).filter(x => x.tipo === 'risposta' && su.has(store.indirizzoDi(x.doc.autore) ?? '')))
+  const nate: string[] = []
+  for (const { doc: d, progetto } of scelte.slice(0, GUADAGNATE_PER_GIRO)) {
+    const id = `${gradino.ORIGINE}-${createHash('sha256').update(d.fonte + ':' + (d.messageId || d.id)).digest('hex').slice(0, 24)}`
+    if (store.compito(id)) continue
+    const scheda = schedaPer('risposta', d)
+    store.scriviCompito({ id, testo: scheda.testo, nota: scheda.nota,
+      doc: d.id, progetto: progetto?.id, origine: gradino.ORIGINE, quando: 'oggi', ordine: fra(store.ultimoOrdine('oggi'), '') })
+    esegui(id, 'bozza', false)
+    nate.push(id)
+  }
+  if (nate.length) compiti.annunciaCambio()
+  return nate
+}
+
+/**
+ * La preparazione discreta di ogni quarto d'ora: prima le risposte
+ * guadagnate, poi le proposte. Qui e non nella rotta, perché il giro della
+ * notte che chiama le guadagnate si possa provare senza aspettare il timer.
+ */
+export function preparazione(adesso = Date.now(), esegui: (id: string, modo: string, nativa: boolean) => void = inCodaPerIlTurno(), pronto = collegato): Promise<string | null> {
+  try { guadagnate(adesso, esegui, pronto) } catch (e) { console.warn('myynd · le risposte guadagnate non sono partite:', e instanceof Error ? e.message : e) }
+  return giro(adesso, esegui, pronto)
 }

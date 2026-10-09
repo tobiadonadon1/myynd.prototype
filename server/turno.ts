@@ -35,6 +35,7 @@ import * as presenza from './presenza.ts'
 import * as regole from './turno-regole.ts'
 import { fonteValida } from './iniziativa.ts'
 import * as primoGiorno from './primo-giorno.ts'
+import * as gradino from './gradino.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 import * as budgetNotte from './budget-notte.ts'
 import { conCompito } from './etichetta-uso.ts'
@@ -236,6 +237,8 @@ export function contesto(adesso = new Date(), imp = impostazioni(cfg.leggi(), ad
  */
 function ritirabile(c: store.Compito, adesso = new Date()): boolean {
   if (c.origine === 'iniziativa') return !fonteValida(c.doc, adesso.getTime())
+  // una risposta guadagnata: la fonte non regge più, o la persona è stata ripresa («Take it back»)
+  if (c.origine === gradino.ORIGINE) return !gradino.rigaValida(c)
   if (c.origine === primoGiorno.ORIGINE) return !primoGiorno.fonteValida(c, adesso.getTime())
   return false
 }

@@ -1239,6 +1239,7 @@ const EN: Record<string, string> = {
   'Non è partita: la posta di questo server non funziona. Dillo a chi lo gestisce.':
     'It did not go out: this server’s mail is not working. Tell whoever runs it.',
   'Questa convinzione non c’è più.': 'That belief is gone.',
+  'Questa convinzione non si può rimettere.': 'That belief can’t be put back.',
   'Tienila': 'Keep it',
   'Le ha notate da solo: non le usa per scrivere finché non gliele confermi.':
     'It noticed these on its own: it will not write with them until you confirm.',
@@ -1327,6 +1328,8 @@ const EN: Record<string, string> = {
   // le sue domande, in riga: si risponde lì, e si può anche lasciar perdere
   'Rispondi qui': 'Answer here',
   'Non mi serve, lasciala perdere': 'Not relevant, drop it',
+  // e il perché, con le stesse ragioni del feed: è il perché che insegna
+  'Perché non ti serve': 'Why you don\'t need it',
   // l'ordine dei blocchi: trascinando, o da tastiera («Sposta su» e «Sposta
   // giù» il dizionario le sa già, dalla lista)
   'Trascinalo per cambiare ordine': 'Drag it to reorder',
@@ -3072,6 +3075,12 @@ const EN: Record<string, string> = {
   'Non valgono più': 'No longer true',
   'Non sono riuscito a salvarla.': 'I couldn\'t save it.',
   'Tolta.': 'Removed.',
+  // quello che ha imparato, sotto la bozza che lo segue, e il primo gradino
+  'Tolta: non la seguo più.': 'Removed: I won\'t follow it anymore.',
+  'Tenuta: da ora la seguo.': 'Kept: I\'ll follow it from now on.',
+  'Sì, sempre': 'Always',
+  'Riprenditela': 'Take it back',
+  'Ripreso: le risposte tornano ad aspettare te.': 'Taken back: replies wait for you again.',
   'Ieri · ancora aperte': 'Yesterday · still open',
   // le preferenze: l'osservatore del Mac
   'Guarda come lavori': 'Watch how you work',
@@ -3109,6 +3118,7 @@ const EN: Record<string, string> = {
   'Perché non è utile': 'Why it is not useful',
   'Stato sconosciuto.': 'Unknown state.',
   'Ragione sconosciuta.': 'Unknown reason.',
+  'Non conosco questa persona.': 'I don\'t know this person.',
   'Mancano le voci.': 'The cards are missing.',
   'La misura non è pronta: prima caricaModuli().': 'The measure is not ready: call caricaModuli() first.',
   // — P2: fine —
@@ -3952,6 +3962,52 @@ export const frasi = {
    * «Non ho letto tutto: Note non si legge, Il mio Mac letto solo in parte.»
    * Il nome è quello della scheda nelle Fonti, che è dove porta il link accanto.
    */
+  /**
+   * Il perché di una riga lasciata, nelle sue parole: una frase vera (non
+   * «not relevant»), che la memoria legge accanto alla domanda.
+   */
+  ragioneDelCompito: (r: 'vecchia' | 'fatta' | 'non_mia' | 'non_chiara') => corrente === 'en'
+    ? ({ vecchia: 'Old: it no longer matters.', fatta: 'Already done, I handled it.', non_mia: 'Not mine: not my job.', non_chiara: 'Unclear: I can\'t tell what it asks.' })[r]
+    : ({ vecchia: 'Vecchia: ormai non conta più.', fatta: 'Già fatta, ci ho pensato io.', non_mia: 'Non è mia: non tocca a me.', non_chiara: 'Non si capisce cosa chiede.' })[r],
+  /**
+   * Sotto una bozza: quello che ha imparato e che segue, con quante correzioni
+   * l'hanno insegnato. Senza un conto vero (una convinzione tenuta) il numero
+   * non si scrive: «(1 edit)» su tutte sarebbe inventato.
+   */
+  imparatoSotto: (frase: string, casi: number) => {
+    const f = frase.trim().replace(/[.!?…]+$/, '')
+    if (!(casi >= 1)) return corrente === 'en' ? `Learned: ${f}` : `Imparato: ${f}`
+    return corrente === 'en'
+      ? `Learned: ${f} (${casi} ${casi === 1 ? 'edit' : 'edits'})`
+      : `Imparato: ${f} (${casi} ${casi === 1 ? 'correzione' : 'correzioni'})`
+  },
+  /**
+   * La stessa riga, sulla bozza che segue una regola per la prima volta: resta
+   * scritta, perché una bozza fatta di notte non ha visto l'avviso.
+   */
+  imparatoPrimaVolta: (frase: string, casi: number) => {
+    const f = frase.trim().replace(/[.!?…]+$/, '')
+    const conto = casi >= 1 ? (corrente === 'en' ? ` (${casi} ${casi === 1 ? 'edit' : 'edits'})` : ` (${casi} ${casi === 1 ? 'correzione' : 'correzioni'})`) : ''
+    return corrente === 'en' ? `Learned, first time used: ${f}${conto}` : `Imparato, usato per la prima volta: ${f}${conto}`
+  },
+  /** Quante altre cose imparate segue la stessa bozza: «+2». */
+  altreImparate: (n: number) => corrente === 'en' ? `${n} more` : `altre ${n}`,
+  /** La prima volta che una bozza segue una cosa imparata: lo si dice una volta. */
+  usataPrimaVolta: (frase: string) => {
+    const f = frase.trim().replace(/[.!?…]+$/, '')
+    return corrente === 'en' ? `First draft that follows what I learned: ${f}.` : `Prima bozza che segue quello che ho imparato: ${f}.`
+  },
+  /** Un documento corretto: la convinzione appena nata, e la domanda di un tocco. */
+  sempreChiesta: (frase: string) => {
+    const f = frase.trim().replace(/[.!?…]+$/, '')
+    return corrente === 'en' ? `From your edit: ${f}. Always do this?` : `Dalla tua correzione: ${f}. Lo faccio sempre?`
+  },
+  /** Il primo gradino, sotto una risposta nata da lì. */
+  guadagnato: (nome: string) => corrente === 'en' ? `Earned: I now draft every reply to ${nome}.` : `Guadagnato: ora preparo ogni risposta a ${nome}.`,
+  /** La stessa cosa, come riga di «Come lavori». */
+  rispondoIo: (nome: string) => corrente === 'en' ? `I draft every reply to ${nome}` : `Preparo ogni risposta a ${nome}`,
+  /** La prova del gradino: quante delle ultime bozze sono partite com'erano. */
+  provaGradino: (su: number, di: number) => corrente === 'en' ? `${su} of your last ${di} replies sent as drafted` : `${su} delle tue ultime ${di} risposte partite come le avevo scritte`,
   /** La voce usata per una bozza (P3): «come le tue 4 mail a Marco», nella fascia della riga. */
   comeLeTueMail: (n: number, nome: string) => corrente === 'en' ? `like your ${n} emails to ${nome}` : `come le tue ${n} mail a ${nome}`,
   /** Il verdetto sul lavoro consegnato, in una riga: chi l'ha riletta e com'è andata. */

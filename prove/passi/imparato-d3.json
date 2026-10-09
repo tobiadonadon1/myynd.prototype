@@ -1,0 +1,65 @@
+[
+  {
+    "aspetta": 1500
+  },
+  {
+    "js": "(() => { const r = [...document.querySelectorAll('span')].find(e => /^Learned: Puts the decision/.test(e.textContent || '')); if (r) r.scrollIntoView({ block: 'center' }); return r ? r.textContent : 'nessuna riga' })()"
+  },
+  {
+    "aspetta": 400
+  },
+  {
+    "scatta": "chip-doc"
+  },
+  {
+    "js": "(() => { const b = [...document.querySelectorAll('button')].find(x => /^Undo: Puts the decision/.test(x.getAttribute('aria-label') || '')); if (b) b.click(); return !!b })()"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "scatta": "tolta-doc"
+  },
+  {
+    "testo": "tolta-doc"
+  },
+  {
+    "js": "(() => { const b = document.querySelector('[role=status] button'); const t = b ? b.textContent : 'nessun Undo'; if (b) b.click(); return t })()"
+  },
+  {
+    "aspetta": 1200
+  },
+  {
+    "js": "(() => { const r = [...document.querySelectorAll('span')].find(e => /^Learned: Puts the decision/.test(e.textContent || '')); if (r) r.scrollIntoView({ block: 'center' }); return r ? r.textContent : 'nessuna riga' })()"
+  },
+  {
+    "aspetta": 400
+  },
+  {
+    "scatta": "rimessa-doc"
+  },
+  {
+    "testo": "rimessa-doc"
+  },
+  {
+    "js": "(() => { try { localStorage.setItem('myynd.vistaCompiti', 'lista') } catch {} return 'lista' })()"
+  },
+  {
+    "vai": "To do"
+  },
+  {
+    "aspetta": 900
+  },
+  {
+    "js": "(() => { const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').trim() === 'Draft a reply: Supplier list for the pilot'); if (b) b.click(); return !!b })()"
+  },
+  {
+    "aspetta": 700
+  },
+  {
+    "scatta": "dettaglio-guadagnata"
+  },
+  {
+    "testo": "dettaglio-guadagnata"
+  }
+]

@@ -13,6 +13,7 @@
 import type { Compito, Priorita } from '../api.ts'
 import { giornoCompito, secchioDelGiorno } from './giorni.ts'
 import { oraDi, oraValida } from '../agenda-ore.ts'
+import { notaDaSalvare, notaPerLei } from '../lavoro-affidato.ts'
 
 /** I campi del dettaglio come sono adesso: stringhe vuote per «niente», come nei campi. */
 export type ValoriDettaglio = { testo: string; nota: string; giorno: string; ora: string; progetto: string; priorita: Priorita | null }
@@ -24,7 +25,8 @@ export type CambiDettaglio = {
 
 /** I valori con cui il dettaglio si apre su una riga. */
 export function valoriDi(c: Compito, oggi: string): ValoriDettaglio {
-  return { testo: c.testo, nota: c.nota ?? '', giorno: giornoCompito(c, oggi) ?? '', ora: oraDi(c) ?? '', progetto: c.progetto ?? '', priorita: c.priorita ?? null }
+  // una riga che Myynd si è preparato ha per nota il compito di chi lavora: lei vede solo la sua
+  return { testo: c.testo, nota: notaPerLei(c), giorno: giornoCompito(c, oggi) ?? '', ora: oraDi(c) ?? '', progetto: c.progetto ?? '', priorita: c.priorita ?? null }
 }
 
 export function cambiDelDettaglio(c: Compito, v: ValoriDettaglio, oggi: string): CambiDettaglio {
@@ -35,7 +37,7 @@ export function cambiDelDettaglio(c: Compito, v: ValoriDettaglio, oggi: string):
   const giornoCambiato = v.giorno !== prima.giorno || (oraCambiata && !!v.giorno && !c.giorno)
   return {
     ...(v.testo.trim() !== prima.testo.trim() ? { testo: v.testo.trim() } : {}),
-    ...(v.nota.trim() !== prima.nota.trim() ? { nota: v.nota.trim() || null } : {}),
+    ...(v.nota.trim() !== prima.nota.trim() ? { nota: notaDaSalvare(c, v.nota.trim()) } : {}),
     ...(v.progetto !== prima.progetto ? { progetto: v.progetto || null } : {}),
     // solo se è cambiata: una modifica che non la tocca non deve riscriverla
     ...(v.priorita !== prima.priorita ? { priorita: v.priorita } : {}),

@@ -260,6 +260,10 @@ test('la rotta «invia» manda, registra l\'invio via smtp misurato sul corpo de
   await new Promise(x => setTimeout(x, 300))
   const registro = existsSync(join(casa, 'modello.jsonl')) ? readFileSync(join(casa, 'modello.jsonl'), 'utf8') : ''
   assert.ok(!registro.includes('Avevo preparato questo'), 'la correzione è ancora passata dal modello')
+  // il primo gradino: una risposta a chi aveva scritto (Leo), partita quasi com'era, è contata
+  const prove = leggi<{ ref: string; valore: number }>("SELECT ref, valore FROM segnali WHERE genere = 'myynd.risposta'")
+  assert.deepEqual(prove.map(x => x.ref), ['leo@studio.example'])
+  assert.ok(prove[0]!.valore <= 0.15, `distanza ${prove[0]!.valore}`)
 })
 
 test('l\'email ricavata dopo tiene la lingua di chi riceve e propone il file da allegare, come alla consegna', async () => {
@@ -287,6 +291,15 @@ test('l\'email ricavata dopo tiene la lingua di chi riceve e propone il file da 
 })
 
 /** Le misure di una riga, lette dall'indice del conto della prova (il server ha il suo processo: si rilegge da disco). */
+/** Una lettura dall'indice del suo conto, mentre il server lo tiene aperto. */
+function leggi<T>(sql: string): T[] {
+  const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite')
+  const file = readdirSync(join(casa, 'utenti')).map(u => join(casa, 'utenti', u, 'mente.db')).find(f => existsSync(f))
+  if (!file) return []
+  const d = new DatabaseSync(file, { readOnly: true })
+  try { return d.prepare(sql).all() as T[] } finally { d.close() }
+}
+
 function readMisure(id: string): { via: string | null; classe: string | null; distanza: number | null } | null {
   const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite')
   const file = readdirSync(join(casa, 'utenti')).map(u => join(casa, 'utenti', u, 'mente.db')).find(f => existsSync(f))
@@ -295,3 +308,19 @@ function readMisure(id: string): { via: string | null; classe: string | null; di
   try { return (d.prepare('SELECT via, classe, distanza FROM misure_compiti WHERE compito = ?').get(id) as { via: string | null; classe: string | null; distanza: number | null } | undefined) ?? null }
   finally { d.close() }
 }
+
+test('«Not relevant, drop it» con la ragione: la frase arriva alla memoria, con il compito accanto', async () => {
+  const r = await post('/api/compiti/c-a1/lascia', { ragione: 'non_mia', esito: 'Not mine: this is someone else\'s job.' })
+  assert.equal(r.stato, 200, JSON.stringify(r.corpo))
+  assert.equal(r.corpo.chiuso, 'lasciato')
+  // la distillazione parte dopo la risposta: si aspetta che arrivi al modello finto
+  const fine = Date.now() + 10000
+  let richiesta: string | undefined
+  while (!richiesta && Date.now() < fine) {
+    const registro = existsSync(join(casa, 'modello.jsonl')) ? readFileSync(join(casa, 'modello.jsonl'), 'utf8') : ''
+    richiesta = registro.split('\n').find(x => x.includes('lasciata perdere') && x.includes('An open task'))
+    if (!richiesta) await new Promise(x => setTimeout(x, 100))
+  }
+  assert.ok(richiesta, 'la ragione non è arrivata alla memoria')
+  assert.match(richiesta!, /someone else/)
+})
