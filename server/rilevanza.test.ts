@@ -58,6 +58,10 @@ test('a card may start with verify, renew or cancel: the bank change and the lea
   const d = mail({ titolo: 'Updated bank details for future payments', corpo: `Dear customer,\n\nOur bank details have changed. ${prova} (EUR 1,240.00).\n\nAccounts` })
   const voce = { titolo: 'Verify Printhouse Milano new bank details before paying', testo: 'Printhouse Milano says its bank details changed before invoice PH-2291 is paid.', perche: 'The new bank details apply before invoice PH-2291 is paid.', prova }
   assert.equal(validaVoceFeed(voce, d), true)
+  // e «Pick» per una scelta: la carta del carattere tipografico cadeva così
+  const sam = 'I need a decision on the typeface for the website relaunch by tomorrow'
+  const ds = mail({ titolo: 'Typeface for the relaunch', corpo: `Alex, ${sam}, otherwise we slip the handoff.` })
+  assert.equal(validaVoceFeed({ titolo: 'Pick the typeface for the website relaunch', testo: 'Sam needs your decision on the typeface or the developer handoff slips.', perche: 'Sam needs the decision to keep the handoff.', prova: sam }, ds), true)
 })
 
 test('service updates belong to Brief even with bulk headers; promotions never become work', () => {

@@ -266,6 +266,8 @@ test('il congedo incollato alla frase prima torna su una riga sua; un «thanks»
   assert.equal(congedoAParte('Hi Marco,\n\nTuesday works, whichever suits you better. Cheers,\nAlex'),
     'Hi Marco,\n\nTuesday works, whichever suits you better.\n\nCheers,\nAlex')
   assert.equal(congedoAParte('Ciao Giulia,\n\nva bene per venerdì. Un caro saluto,\nTobia'), 'Ciao Giulia,\n\nva bene per venerdì.\n\nUn caro saluto,\nTobia')
+  // dopo un punto di domanda, e col nome staccato da una riga vuota
+  assert.equal(congedoAParte('Hi Marco,\n\nLet us do Tuesday. Does that work? Cheers,\n\nAlex'), 'Hi Marco,\n\nLet us do Tuesday. Does that work?\n\nCheers,\nAlex')
   const giusto = 'Hi Nora,\n\nThe quote is attached.\n\nCheers,\nAlex'
   assert.equal(congedoAParte(giusto), giusto)
   const inMezzo = 'Done. Thanks for the notes, they helped a lot with the outline.\nNext we review the budget.'

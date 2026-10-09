@@ -717,6 +717,31 @@ export function verificaFontiSelezione(ids: string[], vincolo?: SelezioneLavoro 
 }
 
 /** Il materiale su cui rispondere, o niente se non c'è nulla di pertinente. */
+/** Le fonti fatte di file: dove sta un listino, un preventivo, una presentazione. */
+const FONTI_DI_FILE = new Set(['desktop', 'note', 'drive', 'notion', 'dropbox', 'microsoft'])
+/** Le parole che dicono cosa fare, non cosa: in una ricerca di file sono rumore. */
+const VERBI_DEL_COMPITO = /\b(?:send|reply|respond|answer|share|forward|attach|write|draft|prepare|give|email|mail|to|with|the|a|an|and|for|about|manda|mandagli|mandale|invia|rispondi|condividi|allega|scrivi|prepara|a|al|alla|con|il|lo|la|i|gli|le|per|su)\b/gi
+
+/**
+ * I file che una mail chiede, cercati fra i file.
+ *
+ * La ricerca per il materiale è stretta: vuole metà delle parole del compito
+ * nello stesso documento, e in «Send Jonas the pricing one-pager» una delle
+ * parole è Jonas, che nel listino non c'è. Qui si cerca la cosa chiesta, senza
+ * la persona e senza il verbo, solo fra i file, e si tengono i due migliori.
+ */
+export function fileChiesti(domanda: string, dalDoc: Documento, recinto?: string[] | null): Documento[] {
+  if (recinto && !recinto.length) return []
+  const nomi = `${dalDoc.autore ?? ''}`.replace(/<[^>]*>/g, ' ').split(/[\s,]+/).filter(p => p.length > 1)
+  let q = domanda.replace(VERBI_DEL_COMPITO, ' ')
+  for (const n of nomi) q = q.replace(new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ')
+  q = q.replace(/\s+/g, ' ').trim()
+  if (q.length < 3) return []
+  const fonti = [...FONTI_DI_FILE].filter(f => !recinto || recinto.includes(f))
+  if (!fonti.length) return []
+  return cerca(q, 6, fonti, false).filter(d => d.id !== dalDoc.id).slice(0, 2)
+}
+
 export function materiale(domanda: string, storico: Turno[], recinto?: string[] | null) {
   // Cerco anche con le parole dell'ultima domanda *dell'utente*: i seguiti tipo
   // "e la seconda?" da soli non troverebbero niente. Mai con il testo generato
@@ -3218,10 +3243,15 @@ export async function svolgi(
   if (dalla.length) passo({ passo: 'apro', dettaglio: dalla[0].titolo })
   const giaDentro = new Set(dalla.map(d => d.id))
   tracciaProduzione('material-start')
+  // il file che la mail chiede, cercato fra i file: «Send Jonas the pricing one-pager»
+  // voleva «Jonas» anche nel listino, e il listino non c'era mai
+  const chiesti = dalDoc && !selezioneAttiva ? perQuestoLavoro(fileChiesti(domanda, dalDoc, recinto)).filter(d => !giaDentro.has(d.id)) : []
+  for (const d of chiesti) giaDentro.add(d.id)
   const partenza = [
     ...dalla,
+    ...chiesti,
     ...perQuestoLavoro(materiale(domanda, [], recinto)).filter(d => !giaDentro.has(d.id))
-  ].slice(0, compatto ? Math.max(4, dalla.length) : Math.max(MATERIALE_MAX, dalla.length))
+  ].slice(0, compatto ? Math.max(4, dalla.length + chiesti.length) : Math.max(MATERIALE_MAX, dalla.length + chiesti.length))
 
   /**
    * Tutto quello che ha letto, in ordine di apparizione.
