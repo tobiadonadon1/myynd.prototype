@@ -53,6 +53,13 @@ test('a card about a VAT or tax return is not a «return (send back)» card: the
   assert.equal(validaVoceFeed({ ...voce, titolo: 'Return the signed VAT form to Giulia' }, d), false)
 })
 
+test('a card may start with verify, renew or cancel: the bank change and the lease were dropped for their verb', () => {
+  const prova = 'Please update your records before paying invoice PH-2291'
+  const d = mail({ titolo: 'Updated bank details for future payments', corpo: `Dear customer,\n\nOur bank details have changed. ${prova} (EUR 1,240.00).\n\nAccounts` })
+  const voce = { titolo: 'Verify Printhouse Milano new bank details before paying', testo: 'Printhouse Milano says its bank details changed before invoice PH-2291 is paid.', perche: 'The new bank details apply before invoice PH-2291 is paid.', prova }
+  assert.equal(validaVoceFeed(voce, d), true)
+})
+
 test('service updates belong to Brief even with bulk headers; promotions never become work', () => {
   for (const titolo of ['Your package was delivered', 'Your order has arrived', 'Your subscription renews tomorrow', 'Your receipt from Apple']) {
     assert.equal(classifica(mail({ titolo, corpo: titolo, autore: 'Service <no-reply@service.example>', massa: true })), 'brief', titolo)

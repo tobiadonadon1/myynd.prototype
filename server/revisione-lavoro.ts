@@ -141,7 +141,8 @@ type Uscita = {
 }
 
 /** Quanti documenti si rileggono, e quanto di ciascuno: il primo è quello della riga, e si legge di più. */
-const FONTI_MAX = 6
+// dieci: quello che chi scriveva aveva davanti (`stesura.davantiAlRevisore`), non solo le citate
+const FONTI_MAX = 10
 const ESTRATTO = 3000
 const ESTRATTO_PRIMO = 7000
 

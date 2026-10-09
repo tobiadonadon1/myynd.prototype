@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { congedoAParte, riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
+import { congedoAParte, ipotesiNellaLingua, riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -270,4 +270,11 @@ test('il congedo incollato alla frase prima torna su una riga sua; un «thanks»
   assert.equal(congedoAParte(giusto), giusto)
   const inMezzo = 'Done. Thanks for the notes, they helped a lot with the outline.\nNext we review the budget.'
   assert.equal(congedoAParte(inMezzo), inMezzo)
+})
+
+test('«Ho supposto» in una bozza inglese diventa «I assumed»; in una italiana resta', () => {
+  assert.equal(ipotesiNellaLingua('Cheers,\nAlex\n\nHo supposto that "by Thursday" means you can commit to it.'),
+    'Cheers,\nAlex\n\nI assumed that "by Thursday" means you can commit to it.')
+  const it = 'Un caro saluto\n\nHo supposto venerdì come scadenza.'
+  assert.equal(ipotesiNellaLingua(it), it)
 })

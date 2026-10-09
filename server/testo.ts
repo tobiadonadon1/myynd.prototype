@@ -112,6 +112,18 @@ export function congedoAParte(testo: string): string {
   return testo.replace(CONGEDO, '$1\n\n$2\n')
 }
 
+/**
+ * «Ho supposto» davanti a una frase inglese diventa «I assumed».
+ *
+ * Il prompt chiede la riga dell'ipotesi con «Ho supposto» («I assumed» in
+ * inglese), e a volte il modello copia la parola italiana dentro una bozza
+ * inglese: «Ho supposto that "by Thursday" means you can commit to it.» Solo
+ * all'inizio di una riga, e solo se quello che segue è inglese.
+ */
+export function ipotesiNellaLingua(testo: string): string {
+  return testo.replace(/^Ho supposto[ \t]+(.+)$/gm, (riga, resto: string) => sembraInglese(resto) || /^(?:that|the|you|your|it|this|we|they)\b/i.test(resto) ? `I assumed ${resto}` : riga)
+}
+
 /*
  * Via i trattini lunghi.
  *

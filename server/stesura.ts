@@ -15,7 +15,7 @@
 // `fermo()` si guarda dopo ogni attesa: un richiamo arrivato mentre il
 // modello scriveva butta via il lavoro, e da qui torna null.
 
-import { congedoAParte, senzaTrattini } from './testo.ts'
+import { congedoAParte, ipotesiNellaLingua, senzaTrattini } from './testo.ts'
 import * as mani from './mani.ts'
 import { corpoPerChiRiceve, haSegnaposto } from './cornice.ts'
 import { bloccoDalTesto, decidi, duroDalTesto, ipotesiDaDomanda, type Genere, type Mossa } from './domanda-sola.ts'
@@ -29,6 +29,24 @@ import * as voce from './voce.ts'
 import { giudica } from './revisione-lavoro.ts'
 
 /** Quello che torna da una stesura: la forma di `claude.svolgi`, con le letture. */
+/**
+ * Al revisore, tutto quello che chi scriveva aveva davanti.
+ *
+ * Gli arrivavano solo le fonti citate con [n] nel testo. Sul modello vero (9
+ * ottobre 2026) la bozza per Nora prendeva il totale e i termini di pagamento
+ * dal preventivo, senza scrivere [2] accanto alle cifre: il revisore, che vedeva
+ * solo la mail, le chiamava inventate, e la riscrittura le toglieva. Una bozza
+ * giusta tornava con «[to fill: revised total]». Adesso riceve le letture
+ * nell'ordine in cui le vedeva chi scriveva, così [2] è la stessa fonte per
+ * tutti e due; le citate passano sempre, le altre fino a sei.
+ */
+export function davantiAlRevisore(u: Pick<Uscita, 'fonti' | 'lette'>): { id: string }[] {
+  const lette = u.lette ?? []
+  if (!lette.length) return u.fonti
+  const citate = new Set(u.fonti.map(f => f.id))
+  return lette.filter((id, i) => citate.has(id) || i < 6).map(id => ({ id }))
+}
+
 export type Uscita = {
   testo: string
   fonti: Fonte[]
@@ -163,7 +181,7 @@ export async function stendi(o: {
   let uscita = await chiama(notaGiro)
   for (;;) {
     if (o.fermo()) return null
-    const testo0 = congedoAParte(senzaTrattini(uscita.testo))
+    const testo0 = ipotesiNellaLingua(congedoAParte(senzaTrattini(uscita.testo)))
     let testo = testo0
     const lette = uscita.lette ?? []
     const eseguito = !!uscita.eseguito
@@ -227,7 +245,7 @@ export async function stendi(o: {
     const criterio = typeof o.criterio === 'function' ? o.criterio() : o.criterio
     verdetto = await o.ferri.giudica({
       compito: c, nota: notaGiro, risultato: testo, doc: o.doc ?? null, progetto: o.progetto,
-      fonti: uscita.fonti, fatti: uscita.fatti ?? [], lingua: o.consegna, voce: o.voce,
+      fonti: davantiAlRevisore(uscita), fatti: uscita.fatti ?? [], lingua: o.consegna, voce: o.voce,
       ...(criterio ? { criterio } : {})
     })
     if (o.fermo()) return null

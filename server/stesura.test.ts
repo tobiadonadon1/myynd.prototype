@@ -17,7 +17,7 @@ import { join } from 'node:path'
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-stesura-'))
 process.env.MYYND_DATI = CASA
 delete process.env.ANTHROPIC_API_KEY
-const { stendi, STESURE_MAX, RILETTURE_MAX } = await import('./stesura.ts')
+const { stendi, STESURE_MAX, RILETTURE_MAX, davantiAlRevisore } = await import('./stesura.ts')
 const claude = await import('./claude.ts')
 type Ferri = Parameters<typeof stendi>[0]['ferri']
 type Uscita = Awaited<ReturnType<Parameters<typeof stendi>[0]['lavora']>>
@@ -253,4 +253,15 @@ test('un prompt non passa dalla rilettura e non prende la frase di chiusura', as
   assert.equal(giudicati.length, 0)
   assert.equal(s.testo, 'You are an assistant. Write the plan.')
   assert.equal(s.mossa, 'produci')
+})
+
+test('il revisore vede tutto quello che chi scriveva aveva davanti, non solo le fonti citate con [n]', () => {
+  // la bozza per Nora: il totale dal preventivo [2], senza «[2]» scritto accanto
+  const u = { fonti: [{ id: 'posta:1', label: '[1] Pilot quote' }], lette: ['posta:1', 'desktop:preventivo', 'desktop:appunti'] }
+  assert.deepEqual(davantiAlRevisore(u).map(f => f.id), ['posta:1', 'desktop:preventivo', 'desktop:appunti'])
+  // tante letture: le prime sei, e le citate anche se stanno più in fondo
+  const molte = { fonti: [{ id: 'd9', label: '[10] x' }], lette: Array.from({ length: 10 }, (_, i) => `d${i}`) }
+  assert.deepEqual(davantiAlRevisore(molte).map(f => f.id), ['d0', 'd1', 'd2', 'd3', 'd4', 'd5', 'd9'])
+  // senza letture, come prima
+  assert.deepEqual(davantiAlRevisore({ fonti: [{ id: 'a', label: '[1] a' }] }), [{ id: 'a', label: '[1] a' }])
 })
