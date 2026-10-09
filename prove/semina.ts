@@ -464,6 +464,8 @@ type ScenaP4 = {
   calendario?: { url: string; nome?: string }
   postaMac?: { caselle: number; inArrivo: number; inviate: number; vecchie: number; spazzatura: number; risposte?: number }
   fileDatati?: { nome: string; testo: string; giorni: number }[]
+  /** L'accesso completo al disco negato: un archivio delle Note che non si apre (permessi 000), così il server dice «no». */
+  discoChiuso?: boolean
 }
 const p4 = (scena as Record<string, unknown>).p4 as ScenaP4 | undefined
 if (p4) {
@@ -477,6 +479,12 @@ if (p4) {
     utimesSync(p, quando, quando)
   }
   if (p4.postaMac) costruisciMail(CASA, p4.postaMac)
+  if (p4.discoChiuso) {
+    // un file e non una cartella: chi pulisce la casa finta lo toglie anche con i permessi a zero
+    const note = join(CASA, 'Library', 'Group Containers', 'group.com.apple.notes')
+    mkdirSync(note, { recursive: true })
+    writeFileSync(join(note, 'NoteStore.sqlite'), '', { mode: 0o000 })
+  }
   chi.dentro(conto.id, () => {
     const c = cfg.leggi()
     if (p4.onboarding === false) { c.onboarding = false; c.giro = false }

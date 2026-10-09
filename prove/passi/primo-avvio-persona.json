@@ -1,0 +1,19 @@
+[
+  { "aspetta": 400 },
+  { "clicca": "Skip the intro" },
+  { "aspetta": 1200 },
+  { "scatta": "p1-obiettivo-persona" },
+  { "scrivi": "Launch the new website by October", "in": "Put the new website online by October" },
+  { "scrivi": "New website", "in": "New website" },
+  { "js": "(() => { const b = document.querySelector('.onboard-primary'); if (b && !b.disabled) { b.click(); return b.textContent } return 'nessuno' })()" },
+  { "aspetta": 1800 },
+  { "scatta": "p2-fonti-persona" },
+  { "testo": "p2-fonti-persona" },
+  { "clicca": "Sign in with Claude" },
+  { "aspetta": 1500 },
+  { "scatta": "p3-modello-claude" },
+  { "testo": "p3-modello-claude" },
+  { "clicca": "API key" },
+  { "aspetta": 1200 },
+  { "scatta": "p4-modello-chiave" }
+]

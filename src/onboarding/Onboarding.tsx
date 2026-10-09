@@ -6,27 +6,24 @@ import { aperta as rigaAperta, daGuardare, leggiPoiScegli, nonLette } from '../l
 import { trovato, trovatoDurante } from '../conta-fonti'
 import { letturaFonti, useLettura } from '../lettura-app'
 import { ConnectorIcon } from '../components/ConnectorIcon'
-import { Form } from '../components/forms'
+import { Form, FormStrada } from '../components/forms'
 import { RigheLettura } from '../components/RigheLettura'
 import { BottoneSicuro } from '../ui'
 import { IconFreccia } from '../icons'
 import { Scena, OnboardAttesa, OnboardErrore, type Momento } from './Scena'
 import { Introduzione } from './Introduzione'
 import { momentoAllaRipresa, riprendeLeggendo } from './passi'
+import { CONSIGLIATA, STRADE, esempi, prioritaFonti, pubblicoDi, type Pubblico, type Strada } from './primo-avvio'
 
 // i modelli non si leggono: OpenAI stava fra le fonti e il server lo rifiutava
 const NON_FONTI = new Set(['claude', 'openai', 'compatibile', 'mind2do'])
 /*
- * Le prime schede (P4). Su un Mac, nove: Mail e Calendario del Mac subito
- * dopo il Mac, senza niente da incollare; WhatsApp Business, Granola, Dropbox
- * e GitHub stanno dietro «Tutte le fonti» (spostate, non tolte). Altrove, sei.
+ * Le prime schede (P4): su un Mac nove, altrove sei, nell'ordine che dice
+ * `prioritaFonti` per chi è Myynd. Il resto sta dietro «Tutte le fonti»
+ * (spostate, non tolte).
  */
-const PRIORITA_MAC = ['desktop', 'postamac', 'agendamac', 'posta', 'calendario', 'notion', 'slack', 'note', 'conversazioni']
-const PRIORITA_FONTI = ['desktop', 'posta', 'notion', 'slack', 'calendario', 'github']
-/** I tre modi di collegare chi ragiona, quando nessuno è collegato: la stessa scheda delle Fonti. */
-const MODELLI: { id: string; etichetta: string }[] = [
-  { id: 'claude', etichetta: 'Anthropic' }, { id: 'openai', etichetta: 'OpenAI' }, { id: 'compatibile', etichetta: 'Altro modello' }
-]
+/** Le schede di chi ragiona: si leggono per sapere se uno è collegato, non si mostrano fra le fonti. */
+const MODELLI = ['claude', 'openai', 'compatibile']
 /** Quanto si aspetta prima che «Continua» si possa premere mentre legge. */
 const CONTINUA_DOPO_MS = 10_000
 /** Quanto aspetta al massimo la fine dell'avvio, con i conti che salgono, prima di entrare. */
@@ -75,7 +72,22 @@ function Risposta({ value, invio, onKeyDown, ...resto }: TextareaHTMLAttributes<
 }
 
 /**
+ * La prima cosa utile trovata, citata: una frase sua, la fonte, il documento.
+ *
+ * Senza modello e senza parafrasi: è la stessa frase che diventerà un
+ * estratto da scegliere. Sta dove prima c'era l'attesa.
+ */
+function Scoperta({ scoperta, fonte }: { scoperta: { testo: string; titolo: string }; fonte: string }) {
+  return <figure className="onboard-scoperta" role="status">
+    <figcaption>{t('Già trovato')} · {fonte}</figcaption>
+    <blockquote>{scoperta.testo}</blockquote>
+    <cite>{scoperta.titolo}</cite>
+  </figure>
+}
+
+/**
  * Tre schermate che si compilano, e nessuna che si guarda e basta.
+
  *
  * Il benvenuto passa da solo. Il progetto e l'obiettivo stanno sulla stessa
  * schermata — erano due domande, una per il nome e una per la meta, e la
@@ -128,6 +140,10 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const [fine, setFine] = useState<{ dal: number; eraPrima: boolean; finitaIl: number | null } | null>(null)
   /** Una lettura da riprendere al caricamento: il server la sta ancora facendo (P4). */
   const [riattacca, setRiattacca] = useState(false)
+  /** Per chi è Myynd: cambia gli esempi e l'ordine delle fonti, mai quello che si può fare. */
+  const [pubblico, setPubblico] = useState<Pubblico>(() => pubblicoDi(stato.config.pubblico))
+  /** La strada aperta per far ragionare Myynd, sul passo delle fonti. */
+  const [strada, setStrada] = useState<Strada | ''>('')
   /** «Continua» premuto durante la lettura: le fonti sono già salvate, la fine della lettura non le risalva. */
   const giaScelte = useRef(false)
   const entrato = useRef(false)
@@ -220,8 +236,15 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     } finally { lock.current = false; setOccupato(false) }
   }
   const vai = (dove: Momento) => { setErrore(''); setVistaLettura(false); setMomento(dove) }
+  /** Detto una volta, e salvato subito: un altro pezzo dell'app lo legge (`config.pubblico`). */
+  const scegliPubblico = (p: Pubblico) => {
+    setPubblico(p)
+    void api.profilo({ pubblico: p }).then(() => setS(x => ({ ...x, config: { ...x.config, pubblico: p } }))).catch(() => {})
+  }
   const salvaProgetto = () => fai(async () => {
     if (!avvio || !progetto.trim() || !obiettivo.trim()) return
+    // chi non ha toccato la domanda ha tenuto quello che vedeva scelto
+    if (!s.config.pubblico) { await api.profilo({ pubblico }); setS(x => ({ ...x, config: { ...x.config, pubblico } })) }
     const cambiato = progetto.trim() !== avvio.progetto?.nome || obiettivo.trim() !== avvio.progetto?.obiettivo
     const n = cambiato ? await api.avvioProgetto({ nome: progetto.trim(), obiettivo: obiettivo.trim(), revisione: avvio.revisione }) : avvio
     setAvvio(n); if (cambiato) setAzione(''); vai(1)
@@ -235,6 +258,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const apri = (id: string) => {
     const nuova = aperta === id ? '' : id
     setAperta(nuova); setErrore(''); setModifica(false)
+    if (nuova) setStrada('')
     if (avvio) try {
       if (nuova) localStorage.setItem(chiaveScheda(avvio.id), nuova)
       else localStorage.removeItem(chiaveScheda(avvio.id))
@@ -365,7 +389,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const fonti = s.connettori.filter(c => (c.pronto || c.collegato) && !NON_FONTI.has(c.id))
   // su un Mac (dove il server offre Calendario del Mac) nove schede, altrove sei
   const suMac = s.connettori.some(c => c.id === 'agendamac')
-  const priorita = suMac ? PRIORITA_MAC : PRIORITA_FONTI
+  const priorita = prioritaFonti(suMac, pubblico)
+  const esempio = esempi(pubblico)
   const quante = priorita.length
   const ordinate = [...fonti].sort((a, b) => {
     const ia = priorita.indexOf(a.id), ib = priorita.indexOf(b.id)
@@ -375,11 +400,12 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const collegate = ordinate.filter(collegata)
   // una fonte collegata resta in vista anche oltre le prime: è una di quelle che si leggeranno
   const visibili = (tutteFonti ? ordinate : ordinate.filter((c, i) => i < quante || c.collegato)).filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cercaFonte.toLocaleLowerCase()))
-  /** Chi ragiona, se sul passo delle fonti si chiede: le tre strade, con la loro scheda. */
-  const modelli = s.connettori.filter(c => MODELLI.some(m => m.id === c.id))
+  /** Chi ragiona, se sul passo delle fonti si chiede: le quattro strade, una scheda alla volta. */
+  const modelli = s.connettori.filter(c => MODELLI.includes(c.id))
   const modelloCollegato = modelli.find(collegata)
-  const scelta = fonti.find(c => c.id === aperta) ?? (chiediModello ? modelli.find(c => c.id === aperta) : undefined)
-  const eModello = !!scelta && MODELLI.some(m => m.id === scelta.id)
+  const scelta = fonti.find(c => c.id === aperta)
+  /** La strada si apre al posto della scheda di una fonte, e viceversa: un modulo aperto alla volta. */
+  const apriStrada = (id: Strada) => { setStrada(strada === id ? '' : id); if (aperta) apri(aperta) }
   const nomeFonte = (id: string) => t(s.connettori.find(c => c.id === id)?.nome ?? id)
   /** Le fonti che l'avvio ha già letto: sulla prima attività si mostrano quelle. */
   const lette = (avvio?.fonti ?? []).map(id => s.connettori.find(c => c.id === id)).filter(c => !!c)
@@ -405,6 +431,16 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     if (momento === 1 && accountConfermato && !carico && chiediModello === null) setChiediModello(!s.ragiona)
     if (momento !== 1 && chiediModello !== null) setChiediModello(null)
   }, [momento, accountConfermato, carico, chiediModello, s.ragiona])
+  // la scheda appena aperta si vede: sotto le nove fonti e le quattro strade finiva oltre il bordo, e il clic sembrava non fare niente
+  useEffect(() => {
+    if (!aperta && !strada) return
+    const x = setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(strada ? '.onboard-model .onboard-source-detail' : '.onboard-fieldset > .onboard-source-detail')
+      const r = el?.getBoundingClientRect()
+      if (el && r && r.bottom > window.innerHeight) el.scrollIntoView({ block: r.height > window.innerHeight - 120 ? 'start' : 'nearest', behavior: 'smooth' })
+    }, 80)
+    return () => clearTimeout(x)
+  }, [aperta, strada])
   // P4 · il bottone si sveglia a dieci secondi
   useEffect(() => {
     if (leggiDa === null) return
@@ -474,9 +510,17 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
         {/* cosa ci fa Myynd, detto da fuori: «serve a scegliere cosa conta» non diceva chi sceglie, né cosa */}
         <p className="onboard-why">{t('Myynd usa questo obiettivo per decidere cosa mostrarti per primo ogni mattina.')}</p>
         <fieldset disabled={occupato} className="onboard-fieldset">
+          {/* per chi è, una volta e all'inizio: cambia gli esempi qui sotto e l'ordine delle fonti, non quello che si può fare */}
+          <div className="onboard-pubblico" role="radiogroup" aria-labelledby="onboard-pubblico">
+            <span id="onboard-pubblico">{t('Per chi è Myynd?')}</span>
+            <div className="onboard-chips">
+              {([['persona', 'Solo per me'], ['azienda', 'Per la mia squadra o azienda']] as const).map(([id, nome]) =>
+                <button key={id} type="button" role="radio" className="onboard-chip" aria-checked={pubblico === id} aria-pressed={pubblico === id} onClick={() => scegliPubblico(id)}>{t(nome)}</button>)}
+            </div>
+          </div>
           {/* ogni campo la sua etichetta sopra, e nel segnaposto un esempio: l'obiettivo era l'unico senza */}
-          <label className="onboard-field onboard-answer"><span>{t('Obiettivo')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t('Mettere online il sito nuovo entro ottobre')} /></label>
-          <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t('Sito nuovo')} /></label>
+          <label className="onboard-field onboard-answer"><span>{t('Obiettivo')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t(esempio.obiettivo)} /></label>
+          <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t(esempio.progetto)} /></label>
           <OnboardErrore testo={errore} />
           <div className="onboard-actions"><button className="onboard-primary" disabled={!progetto.trim() || !obiettivo.trim() || occupato}>{occupato ? t('Salvo…') : t('Continua')}<Avanti /></button></div>
         </fieldset>
@@ -486,7 +530,10 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
         {!lettura && <p className="onboard-why">{t('Collegane quante vuoi. Myynd le legge tutte insieme.')}</p>}
         {/* quello che ha trovato finora, per genere: una riga di stato, e niente finché non c'è niente */}
         {lettura && trovatoDurante(pagina, inCoda) && <p className="onboard-why" role="status">{trovatoDurante(pagina, inCoda)}</p>}
-        {lettura ? <RigheLettura righe={lettura} classe="onboard" icona={18} nome={nomeFonte} corte /> : <fieldset disabled={occupato} className="onboard-fieldset">
+        {lettura && <RigheLettura righe={lettura} classe="onboard" icona={18} nome={nomeFonte} corte />}
+        {/* la prima cosa utile trovata, mentre legge: una frase sua sul progetto, citata, con la fonte */}
+        {lettura && pagina?.scoperta && <Scoperta scoperta={pagina.scoperta} fonte={nomeFonte(pagina.scoperta.fonte)} />}
+        {!lettura && <fieldset disabled={occupato} className="onboard-fieldset">
           {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca fonti…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca fonti…')} /></label>}
           {/* Le collegate si vedono da lontano: il bordo e la riga verdi, che qui vogliono dire solo «collegata».
               Una collegata che l'ultima lettura non ha letto non è verde: dice «non letta», e aprendola si ripara. */}
@@ -499,16 +546,6 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
             </button>
           })}</div>
           {fonti.length > quante && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
-          {/* chi ragiona, solo se nessuno ragionava quando il passo è comparso: tre strade, la scheda si apre qui sotto (P4) */}
-          {chiediModello && <div className="onboard-option onboard-model-row">
-            <span className="onboard-option-label">{t('Modello')}</span>
-            {modelloCollegato
-              ? <span className="onboard-connected" style={{ marginLeft: 0, fontSize: 12, overflowWrap: 'anywhere' }}>✓ {t('Collegato')} · {t(modelloCollegato.nome)}</span>
-              : <div className="onboard-provider-choice" style={{ marginBottom: 0, flexWrap: 'wrap' }} role="group" aria-label={t('Modello')}>
-                {MODELLI.map(m => <button key={m.id} type="button" aria-pressed={aperta === m.id} onClick={() => apri(m.id)}>{t(m.etichetta)}</button>)}
-              </div>}
-            <span />
-          </div>}
           {scelta && (() => {
             const guasta = collegata(scelta) ? nonLetta(scelta.id) : undefined
             return <div className="onboard-source-detail" key={scelta.id}>
@@ -523,12 +560,31 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
               </div>}
               {moduloAperto && <Form id={scelta.id} tema="scuro" ok={() => {
                 setModifica(false)
-                // un modello collegato chiude la sua scheda: la riga dice «✓ Collegato»
-                if (eModello) { setAppena(a => a.includes(scelta.id) ? a : [...a, scelta.id]); apri(scelta.id) }
                 void ricarica().catch(() => {})
               }} collegato={conferma => collegataOra(scelta.id, conferma)} />}
+              {/* Mail del Mac è la strada di serie; chi legge la posta nel browser ha l'altra a un clic */}
+              {scelta.id === 'postamac' && !collegata(scelta) && fonti.some(c => c.id === 'posta') && <button type="button" className="onboard-secondary onboard-altra-posta" onClick={() => apri('posta')}>{t('Usi Gmail o un’altra casella nel browser?')}</button>}
             </div>
           })()}
+          {/* chi ragiona, solo se nessuno ragionava quando il passo è comparso: quattro strade, la prima è quella che non chiede niente */}
+          {chiediModello && <div className="onboard-model">
+            <span className="onboard-option-label">{t('Chi ragiona')}</span>
+            {modelloCollegato
+              ? <div className="onboard-connected" style={{ marginLeft: 0, marginTop: 8, fontSize: 12, overflowWrap: 'anywhere' }}>✓ {t('Collegato')} · {t(modelloCollegato.nome)}</div>
+              : <div className="onboard-strade" role="group" aria-label={t('Chi ragiona')}>
+                {STRADE.map(x => <div key={x.id} className="onboard-strada">
+                  <button type="button" aria-pressed={strada === x.id} onClick={() => apriStrada(x.id)}>
+                    <span className="onboard-strada-nome">{t(x.nome)}{x.id === CONSIGLIATA && <em>{t('Consigliato')}</em>}</span>
+                    <span className="onboard-strada-nota">{t(x.nota)}</span>
+                  </button>
+                  {/* Claude Code si scarica fuori: lo si dice prima di sceglierlo, e si porta lì */}
+                  {x.id === 'claude' && <a href="https://claude.com/claude-code" target="_blank" rel="noreferrer">{t('Scarica Claude Code')}</a>}
+                </div>)}
+              </div>}
+            {strada && !modelloCollegato && <div className="onboard-source-detail" key={strada}>
+              <FormStrada strada={strada} tema="scuro" ok={() => { void ricarica().catch(() => {}) }} />
+            </div>}
+          </div>}
         </fieldset>}
         <OnboardErrore testo={errore} />
         <div className="onboard-actions">
@@ -564,7 +620,9 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       {accountConfermato && fine && <>
         <h2 ref={titolo} tabIndex={-1}>{pagina?.lettura === 'prima' ? t('Leggo le tue fonti…') : t('Ho letto le tue fonti.')}</h2>
         {trovato(pagina?.trovato) && <p className="onboard-why" role="status">{trovato(pagina?.trovato)}</p>}
-        {pagina?.lettura === 'prima' && <div className="onboard-working" style={{ minHeight: 40 }}><span aria-hidden="true" className="onboard-working-mark" /></div>}
+        {/* al posto dell'attesa, la prima cosa utile che ha trovato; l'attesa solo se non c'è ancora niente */}
+        {pagina?.scoperta ? <Scoperta scoperta={pagina.scoperta} fonte={nomeFonte(pagina.scoperta.fonte)} />
+          : pagina?.lettura === 'prima' && <div className="onboard-working" style={{ minHeight: 40 }}><span aria-hidden="true" className="onboard-working-mark" /></div>}
         <div className="onboard-actions"><button ref={primario} className="onboard-primary" onClick={entraOra}>{t('Apri Myynd')}<Avanti /></button></div>
       </>}
       {accountConfermato && momento === 3 && !fine && <>
@@ -576,7 +634,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
           <div className="onboard-result-source">{risultato.progetto.nome} · {t('Attività ancora da svolgere')}</div>
         </div> : <>
           {/* l'etichetta sopra e un esempio nel segnaposto, come l'obiettivo al primo passo */}
-          <label className="onboard-field onboard-answer"><span>{t('Prima attività')}</span><Risposta value={azione} disabled={occupato} onChange={e => { setAzione(e.target.value); if (errore) setErrore('') }} invio={() => { if (azione.trim() && !occupato) void prepara() }} maxLength={2000} placeholder={t('Scrivere i testi della pagina iniziale')} /></label>
+          <label className="onboard-field onboard-answer"><span>{t('Prima attività')}</span><Risposta value={azione} disabled={occupato} onChange={e => { setAzione(e.target.value); if (errore) setErrore('') }} invio={() => { if (azione.trim() && !occupato) void prepara() }} maxLength={2000} placeholder={t(esempio.azione)} /></label>
           {/* La data e la fonte fanno parte dell'attività: due righe con la loro etichetta, sempre in vista. */}
           <div className="onboard-options">
             <div className="onboard-option">

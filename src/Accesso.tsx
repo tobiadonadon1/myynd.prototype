@@ -131,7 +131,8 @@ export function Accesso({ accesso, entrato }: {
   useEffect(() => {
     if (!dalMac) return
     let vivo = true
-    guscio?.touchId?.().then(s => { if (vivo) setConTouchId(!!s) }).catch(() => {})
+    // dentro una promessa anche se il guscio risponde altro: un ponte vecchio o finto non deve spegnere la pagina
+    Promise.resolve().then(() => guscio?.touchId?.()).then(s => { if (vivo) setConTouchId(!!s) }).catch(() => {})
     return () => { vivo = false }
     // il guscio non cambia mentre la pagina è aperta
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -958,7 +958,7 @@ const profilo = async (req: express.Request, res: express.Response) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giorniLato', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giorniLato', 'giro', 'argomenti', 'tetto', 'fuso', 'pubblico'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
   // Con l'orologio fermo di una scena (MYYND_DEV=1 e MYYND_ADESSO), il fuso
@@ -998,8 +998,10 @@ const profilo = async (req: express.Request, res: express.Response) => {
     autonomia: [...cfg.AUTONOMIE_VALIDE, 'osservare', 'agire'],
     modello: cfg.MODELLI.map(m => m.id),
     lingua: ['it', 'en'],
-    tema: cfg.TEMI_VALIDI
+    tema: cfg.TEMI_VALIDI,
+    pubblico: cfg.PUBBLICI_VALIDI
   }
+
   for (const [campo, valori] of Object.entries(ammessi)) {
     if (patch[campo] !== undefined && !valori.includes(String(patch[campo]))) {
       return res.status(400).json({ errore: `Non so cosa sia «${String(patch[campo])}» per ${campo}.` })
@@ -5385,6 +5387,8 @@ app.get('/api/avvio/pagina', (_req, res) => {
       // per fonte anche: la riga dei conti non conta una fonte la cui riga è ancora «In coda»
       perFonte: Object.fromEntries(perFonte.filter(r => Number(r.n) > 0).map(r => [r.fonte, Number(r.n)])),
       pagina: s.pagina, carte: s.carte,
+      // la prima frase sul suo progetto, durante l'avvio: senza modello, citata e basta; resta anche a lettura finita
+      scoperta: avvio.primaScoperta({ finito: lettura === 'prima' }),
       // F6 · «Imparo come lavori»: a che punto è il primo giorno
       primoGiorno: primoGiorno.stato()
     })

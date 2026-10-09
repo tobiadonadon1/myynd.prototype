@@ -102,6 +102,19 @@ export const AUTONOMIE_VALIDE = ['chiedere', 'preparare', 'fare']
  * comunque una copia, ma solo per non lampeggiare di panna al primo disegno.
  */
 export const TEMI_VALIDI = ['sistema', 'chiaro', 'scuro']
+/**
+ * Per chi è Myynd: una persona sola, o una squadra o un'azienda.
+ *
+ * Si chiede una volta, all'inizio del primo avvio. Cambia gli esempi e le
+ * prime proposte (quali fonti prima, che obiettivo d'esempio), mai quello che
+ * si può fare: un'azienda non perde l'agenda, una persona non perde Slack.
+ */
+export const PUBBLICI_VALIDI = ['persona', 'azienda'] as const
+export type Pubblico = typeof PUBBLICI_VALIDI[number]
+/** Chi non l'ha detto è una persona: è il caso più comune e quello che non presume niente. */
+export function pubblico(c: Config = leggi()): Pubblico {
+  return c.pubblico === 'azienda' ? 'azienda' : 'persona'
+}
 
 export function tono(c: Config = leggi()): string {
   const t = c.tono ?? 'diretto'
@@ -756,6 +769,8 @@ export type Config = {
   modelli?: Partial<Record<Livello, string>>
   /** In che lingua risponde: 'it' | 'en'. */
   lingua?: string
+  /** Per chi è: 'persona' (solo io) o 'azienda' (la mia squadra o azienda). Vedi `PUBBLICI_VALIDI`. */
+  pubblico?: Pubblico
   /** L'ora del giorno dell'interfaccia: 'sistema' | 'chiaro' | 'scuro'. */
   tema?: 'sistema' | 'chiaro' | 'scuro'
   /**
@@ -1224,6 +1239,9 @@ export function pubblica(c: Config = leggi()) {
     modelli: modelliPerLivello(c),
     lingua: c.lingua ?? 'en',
     tema: c.tema ?? 'sistema',
+    // null finché non l'ha detto: la schermata sa se la domanda è ancora da fare
+    pubblico: c.pubblico === 'azienda' || c.pubblico === 'persona' ? c.pubblico : null,
+
     fuso: c.fuso ?? null,
     oreFatte: c.oreFatte ?? 48,
     giorniLato: c.giorniLato ?? 3,
