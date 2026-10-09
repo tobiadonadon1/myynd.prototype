@@ -241,3 +241,20 @@ test('inviatiVerso: «_» in un indirizzo è una lettera, non un jolly', () => {
   assert.deepEqual(lavoroDati.inviatiVerso('a_b@x.example').map(d => d.id), ['posta:Sent:201'])
   assert.deepEqual(lavoroDati.inviatiVerso('axb@x.example').map(d => d.id), ['posta:Sent:202'])
 })
+
+test('una mail di Mail del Mac ha il suo destinatario e la voce verso di lui, come quella della posta collegata', () => {
+  const docs: Parameters<typeof store.salvaDocumenti>[0] = [
+    { id: 'postamac:Conto/INBOX/1.emlx', fonte: 'postamac', tipo: 'email', titolo: 'Venue', corpo: 'Hi, is Friday fine for the venue?', autore: 'Maya Chen <maya@studio.example>', quando: giorniFa(2) }
+  ]
+  for (let i = 1; i <= 3; i++) docs.push({
+    id: `postamac:Conto/Sent/${i}.emlx`, fonte: 'postamac', tipo: 'email', titolo: 'Re: Venue', inviato: true, quando: giorniFa(10 + i),
+    autore: 'Alex Moore <alex@harbor.example>', destinatari: 'maya@studio.example',
+    corpo: `Hi Maya,\n\nthanks for the note on the venue, Friday afternoon works for the team and I will bring the printed plans.\n\nBest,${FIRMA}`
+  })
+  store.salvaDocumenti(docs)
+  assert.deepEqual(voce.destinatarioDi({ doc: 'postamac:Conto/INBOX/1.emlx', testo: 'Draft a reply: Venue', nota: null }), { indirizzo: 'maya@studio.example', nome: 'Maya' })
+  const v = voce.perRiga({ doc: 'postamac:Conto/INBOX/1.emlx', testo: 'Draft a reply: Venue', nota: '' })
+  assert.equal(v?.profilo.quanti, 3)
+  assert.match(v?.blocco ?? '', /Maya/)
+  assert.ok(v?.scritta, 'la riga deve poter dire «come le tue 3 mail a Maya»')
+})

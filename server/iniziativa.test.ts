@@ -15,15 +15,30 @@ const email = (id: string, extra: Partial<Documento> = {}): Documento => ({ id, 
 beforeEach(() => { store.azzeraTutto(); rmSync(join(dir, 'iniziativa.json'), { force: true }); cfg.scrivi({ lingua: 'en', autonomia: 'preparare' }) })
 after(() => { store.chiudiIndici(); rmSync(dir, { recursive: true, force: true }) })
 
-test('opt-in is off by default; pause and disconnected provider do no work', async () => {
+test('on by default for whoever never touched the switch; off stays off; pause and disconnected provider do no work', async () => {
   store.salvaDocumenti([email('a')]); let calls = 0
   const execute = () => { calls++ }
-  assert.equal(await initiative.giro(ora, execute, () => true), null)
+  // nessun file: nessuno ha mai toccato l'interruttore, ed è acceso
+  assert.equal(initiative.stato(ora).attiva, true)
+  initiative.imposta(false)
+  assert.equal(initiative.stato(ora).attiva, false)
+  assert.equal(await initiative.giro(ora, execute, () => true), null, 'spento da lei resta spento')
   initiative.imposta(true)
   assert.equal(await initiative.giro(ora, execute, () => false), null)
   cfg.aggiorna({ autonomia: 'chiedere' })
   assert.equal(await initiative.giro(ora, execute, () => true), null)
   assert.equal(calls, 0)
+})
+test('a new account drafts a reply to a message that needs one without anyone turning anything on', async () => {
+  store.salvaDocumenti([email('nuova')])
+  const calls: unknown[][] = []
+  const id = await initiative.giro(ora, (...args) => { calls.push(args) }, () => true)
+  assert.ok(id, 'di serie non è nata nessuna bozza')
+  assert.deepEqual(calls, [[id, 'bozza', false]])
+  assert.equal(store.compito(id!)?.origine, 'iniziativa')
+  assert.match(store.compito(id!)?.testo ?? '', /^Draft a reply:/)
+  // e la fonte resta valida per la consegna nella casella: fonteValida legge lo stesso default
+  assert.equal(initiative.fonteValida('nuova', ora), true)
 })
 test('eligibility rejects promotions, receipts, stale, sent, technical and quoted-only requests', () => {
   assert.deepEqual(initiative.candidati([

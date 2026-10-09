@@ -22,3 +22,14 @@ export function openInProva(chi: string, argomenti: string[]): boolean {
   console.log(`myynd · ${chi} · open non eseguito (prova): ${argomenti.join(' ')}`)
   return true
 }
+
+/**
+ * Lo stesso per un'app guidata da AppleScript (una bozza in Mail): nelle
+ * scene e sotto `node --test` non parte niente, si scrive cosa sarebbe
+ * partito. Gli argomenti non si stampano: dentro c'è il testo di una mail.
+ */
+export function osascriptInProva(chi: string, cosa: string): boolean {
+  if (!nienteOpen() && !process.env.NODE_TEST_CONTEXT) return false
+  console.log(`myynd · ${chi} · osascript non eseguito (prova): ${cosa}`)
+  return true
+}

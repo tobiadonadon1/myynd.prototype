@@ -3152,15 +3152,11 @@ app.post('/api/feed/iniziative/:id/feedback', (req, res) => {
 })
 
 app.post('/api/feed/genera', async (_req, res) => {
-  // la lettura vuole un motore vero — chiave o fornitore — perché torna uno
-  // schema, e l'abbonamento non lo fa. Senza, `generaFeed` tornava vuoto in
-  // silenzio e l'avviso diceva «niente da segnalare»: una bugia, e di quelle
-  // che fanno chiudere l'app. Meglio dire cosa manca, come fanno le bozze.
-  if (!mod.motore()) {
-    return errore(res, new Error(mod.collegato()
-      ? 'Per la lettura serve una chiave API o un fornitore: l’abbonamento basta per la chat.'
-      : 'Collega Claude e potrò lavorarci.'), 400)
-  }
+  // senza un motore che legga, `generaFeed` tornava vuoto in silenzio e
+  // l'avviso diceva «niente da segnalare»: una bugia, e di quelle che fanno
+  // chiudere l'app. Meglio dire cosa manca. L'account Claude legge anche lui
+  // (`puoLeggere`): lo schema glielo chiede `chiedi`, a parole.
+  if (!mod.puoLeggere()) return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
   try {
     /*
      * «Quando premo Leggi adesso ci mette un'eternità» (P10).

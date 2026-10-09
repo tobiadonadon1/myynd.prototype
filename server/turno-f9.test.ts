@@ -21,6 +21,7 @@ const mani = await import('./mani.ts')
 const cestino = await import('./cestino.ts')
 const tetto = await import('./tetto.ts')
 const etichetta = await import('./etichetta-uso.ts')
+const presenza = await import('./presenza.ts')
 
 const SCRIVANIA = join(CASA, 'Desktop')
 const CESTINO = join(CASA, '.Trash')
@@ -225,6 +226,18 @@ test('la veglia: il Mac resta sveglio da un’ora prima della notte, con carte i
   assert.equal(turno.stato(alle(21, 15)).stanotte.fermata, null, 'di giorno la fermata non è della notte')
   turno.imposta({ acceso: true })
   assert.equal(turno.impostazioni().fermo, null, 'riacceso è anche ripreso')
+})
+
+test('la veglia solo con la corrente: a batteria il Mac non resta sveglio, anche con carte in coda; ricaricato sì', () => {
+  turno.perProva({ motore: () => true, assente: () => false, contratto: async () => null, occupato: () => true })
+  carta('Something for tonight, on battery')
+  try {
+    presenza.registra(0, Date.now(), true)
+    const v = turno.veglia(alle(23))
+    assert.deepEqual([v.sveglio, v.inAttesa], [false, true], 'a batteria la notte aspetta, ma il Mac non si tiene sveglio')
+    presenza.registra(0, Date.now(), false)
+    assert.equal(turno.veglia(alle(23)).sveglio, true, 'attaccato alla corrente sì')
+  } finally { presenza.perProva(null) }
 })
 
 test('finita un attimo prima del bottone: la carta resta consegnata, e il suo file resta dove l’ha messo', () => {

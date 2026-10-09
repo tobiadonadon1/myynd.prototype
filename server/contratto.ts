@@ -30,6 +30,7 @@ import * as store from './store.ts'
 import * as progetti from './progetti.ts'
 import * as lavoro from './lavoro.ts'
 import { OSPITATO } from './ospitato.ts'
+import * as mailDelMac from './bozza-mail-mac.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
 import { tipoDiLavoro, type Tipo } from './domanda-sola.ts'
@@ -49,6 +50,8 @@ type Ferri = {
   chiediJSON: typeof chiediJSON
   collegato: () => boolean
   postaCollegata: () => boolean
+  /** Mail del Mac collegata, sul Mac: una risposta a una sua mail va nelle Bozze di Mail. */
+  bozzeInMail: () => boolean
   codiceDisponibile: () => boolean
   esiste: (percorso: string) => boolean
 }
@@ -59,6 +62,7 @@ const VERI: Ferri = {
     const c = cfg.leggi()
     return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
   },
+  bozzeInMail: () => mailDelMac.disponibile(),
   codiceDisponibile: () => {
     if (OSPITATO) return false
     try { return !!lavoro.installato() } catch { return false }
@@ -114,7 +118,9 @@ export function forma(c: Pick<store.Compito, 'testo' | 'nota' | 'modo' | 'doc' |
   const dellAutomazione = c.attrezzi?.origine === 'automazione' || !!c.attrezzi?.nomi?.length
   if (!dellAutomazione && c.modo !== 'prompt') {
     if (tipo === 'codice') mani.add('codice')
-    if ((tipo === 'risposta' || tipo === 'preventivo' || tipo === 'proposta-incontro') && ferri.postaCollegata() && !c.doc?.startsWith('postamac:')) mani.add('posta')
+    // la mail di Mail del Mac ha la sua casella: le Bozze di Mail (`bozza-mail-mac.ts`)
+    const dalMac = !!c.doc?.startsWith('postamac:')
+    if ((tipo === 'risposta' || tipo === 'preventivo' || tipo === 'proposta-incontro') && (dalMac ? ferri.bozzeInMail() : ferri.postaCollegata())) mani.add('posta')
     if (NOTE.test(testo)) mani.add('nota')
     if (tipo === 'documento' || tipo === 'riassunto' || (!messaggio && FILE.test(testo))) mani.add('file')
     if (RICERCA.test(testo) || (!doc && tipo !== 'codice' && !messaggio)) mani.add('web')

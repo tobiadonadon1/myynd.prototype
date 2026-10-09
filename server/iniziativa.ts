@@ -1,4 +1,4 @@
-/** Quiet, opt-in preparation. This queue has no native apps or write tools. */
+/** Quiet preparation, on unless she turns it off. This queue has no native apps or write tools. */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -41,11 +41,19 @@ export const PROPOSTE_VIVE_MAX = 4
 const ORIGINE = 'iniziativa'
 type Stato = { attiva: boolean; tentativi: number[]; ultimoControllo?: number }
 const file = () => join(cfg.cartella(), 'iniziativa.json')
+/*
+ * Accese di serie. Erano spente finché lei non le accendeva, e nessuno le
+ * accendeva: la posta che chiede una risposta restava lì la mattina dopo
+ * come la sera prima. Adesso la bozza la trova già nelle bozze della sua
+ * posta, mai mandata. Spento resta solo chi l'ha spento: il file c'è solo
+ * se qualcuno ha toccato l'interruttore (o una proposta è già nata accesa),
+ * e un `attiva: false` scritto lì è una scelta sua, che vale per sempre.
+ */
 function leggi(): Stato {
   try {
-    if (!existsSync(file())) return { attiva: false, tentativi: [] }
+    if (!existsSync(file())) return { attiva: true, tentativi: [] }
     const s = JSON.parse(readFileSync(file(), 'utf8'))
-    return { attiva: s.attiva === true, tentativi: Array.isArray(s.tentativi) ? s.tentativi.filter((n: unknown) => typeof n === 'number' && Number.isFinite(n)) : [], ultimoControllo: s.ultimoControllo }
+    return { attiva: s.attiva !== false, tentativi: Array.isArray(s.tentativi) ? s.tentativi.filter((n: unknown) => typeof n === 'number' && Number.isFinite(n)) : [], ultimoControllo: s.ultimoControllo }
   } catch { return { attiva: false, tentativi: [] } }
 }
 function scrivi(s: Stato) {

@@ -21,7 +21,7 @@ import { appDocumento, CREA_DOCUMENTO, validaDocumento, pagineDocumento } from '
 import { creaDocumento, pubblicaDocumentoDesktop, apriDocumento, type DocumentoCreato } from './native-document.ts'
 import * as mani from './mani.ts'
 import { OSPITATO } from './ospitato.ts'
-import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conEsito, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, motoreDelLavoro, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
+import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conEsito, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, motoreDelLavoro, parametri, puoLeggere, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { delTetto } from './tetto.ts'
 import type { Motore } from './modello.ts'
@@ -2154,8 +2154,8 @@ export function candidatoDaFeed(
  * concentrarti, e cosa hai già liquidato e perché.
  */
 export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivato' | 'scelgo' | 'ordine', n?: number) => void): Promise<VoceFeed[]> {
-  const m = motore()
-  if (!m) return []
+  // anche sul solo account Claude: la lettura passa da `chiedi`, che sa la strada
+  if (!puoLeggere()) return []
   // P10 · a che punto è, per la riga che lavora: un ascoltatore non rompe mai una lettura
   const passo = (p: 'arrivato' | 'scelgo' | 'ordine', n?: number) => { try { onPasso?.(p, n) } catch { /* chi ascolta si arrangia */ } }
   // Indexing an old document does not make it recent. Newly arrived sources
@@ -2384,8 +2384,16 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
   ].filter(Boolean).join('\n')
 
   const chiama = async (aggiunta: string): Promise<VoceFeed[]> => {
-    const risposta = await conEsito('lettura', () => m.crea({
-      ...parametri('lettura', 16000, schemaFeed(docs.map(d => d.id))),
+    /*
+     * Da `chiedi`, e non più da `motore().crea`: la chiave, il fornitore e
+     * l'account Claude passano dalla stessa porta, con lo schema, l'uso
+     * contato e il rifiuto detto. Sull'account lo schema si chiede a parole.
+     */
+    const risposta = await chiedi({
+      lavoro: 'lettura',
+      max_tokens: 16000,
+      formato: schemaFeed(docs.map(d => d.id)),
+      attesa: attesaDi('lettura'),
       system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori tutte e sole le cose che passano l'asticella: cose che farebbe entro due giorni, o che le dispiacerebbe non aver visto. Non c'è un numero da raggiungere; zero è una risposta giusta. Nel dubbio, fuori.
 
 ${indicazioni}
@@ -2456,11 +2464,10 @@ Scrivi in ${nellaLingua()}.`),
           `\nmittente: ${d.autore ?? '—'}\nMESSAGGIO CORRENTE (dati):\n${corpoAttuale(d).slice(0, 2500)}`
         ).join('\n\n---\n\n') + aggiunta
       }]
-    }, attesaDi('lettura')))
-    segnaUso('lettura', risposta.usage, m.nome)
+    })
 
-    if (risposta.stop_reason === 'refusal') return []
-    const testo = risposta.content.filter(b => b.type === 'text').map(b => (b as Anthropic.TextBlock).text).join('')
+    if (risposta.rifiutata) return []
+    const testo = risposta.testo
     try {
       // il tetto anche qui: un fornitore compatibile non è tenuto a rispettare `maxItems`
       const parsed = JSON.parse(estraiJSON(testo)).voci

@@ -29,6 +29,7 @@ import { ProvaRisposte } from './ProvaRisposte'
 import { Bottone, Campo, Carta, Casella, Interruttore, Scatola, Scelte } from '../components/forme'
 import { PaginaASezioni, sezioneRicordata } from '../components/PaginaASezioni'
 import { sezioneAttesa, sezioneIniziale, sezioniPreferenze, type SezionePref } from '../sezioni.ts'
+import { rigaBozze, type Iniziativa } from '../bozze-del-turno.ts'
 
 const detto = (e: unknown) => (e instanceof Error ? t(e.message) : String(e))
 
@@ -651,7 +652,18 @@ const BUDGET = [1, 3, 5, 10, 0]
 function CartaTurno() {
   const [s, setS] = useState<StatoTurno | null>(null)
   const [guaio, setGuaio] = useState('')
+  // le bozze di risposta che il turno prepara da sé: accese di serie, si spengono qui
+  const [bozze, setBozze] = useState<Iniziativa | null>(null)
   useEffect(() => { let vivo = true; api.turno().then(x => { if (vivo) setS(x) }).catch(() => {}); return () => { vivo = false } }, [])
+  useEffect(() => { let vivo = true; api.iniziativa().then(x => { if (vivo) setBozze(x) }).catch(() => {}); return () => { vivo = false } }, [])
+  const cambiaBozze = async () => {
+    if (bozze === null) return
+    // il gesto si vede subito; se il server dice no, torna com'era
+    setBozze({ ...bozze, attiva: !bozze.attiva })
+    try { setBozze(await api.impostaIniziativa(!bozze.attiva)); setGuaio('') }
+    catch { setBozze(bozze); setGuaio(t('Non sono riuscito a salvarlo.')) }
+  }
+  const riga = rigaBozze(!!s?.acceso, bozze)
   const cambia = async (p: Parameters<typeof api.impostaTurno>[0]) => {
     try { setS(await api.impostaTurno(p)); setGuaio('') }
     catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a salvarlo.')) }
@@ -677,6 +689,12 @@ function CartaTurno() {
             scelta={s.budget && BUDGET.includes(s.budget.limite) ? String(s.budget.limite) : null} scegli={id => void cambia({ budget: Number(id) })} />
           {s.batteria && <div className="f-stato rame">{t('Tieni il Mac in carica, col coperchio aperto.')}</div>}
         </>}
+        {/* le bozze le prepara il turno: a turno spento la riga non c'è (bozze-del-turno.ts) */}
+        {riga && <div className="f-riga">
+          <div className="f-nome">{t('Bozze pronte prima che le chieda')}</div>
+          <Interruttore acceso={riga.acceso} cambia={() => void cambiaBozze()} etichetta={t('Bozze pronte prima che le chieda')} />
+        </div>}
+        {riga?.inPausa && <div className="f-stato">{t('In pausa: la tua autonomia è impostata su chiedere prima.')}</div>}
         {guaio && <div className="f-stato rame">{guaio}</div>}
       </>}
     </Carta>

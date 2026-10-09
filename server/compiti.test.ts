@@ -601,15 +601,16 @@ test('an explicitly delegated email reply is saved as a real mailbox draft', asy
   assert.equal(writes,1);assert.equal(store.compito(id)?.email?.casella?.stato,'salvata')
 })
 
-// P4 · una mail di Mail del Mac non ha una casella dove mettere la bozza: la
-// riga resta pronta con il testo, e nessuno bussa alla casella IMAP
-test('a delegated reply to a Mail on this Mac message stays ready with no mailbox call and no error', async () => {
+// P4 · una mail di Mail del Mac, senza Mail del Mac collegata qui (un altro
+// computer, il server ospitato): la riga resta pronta con il testo, e nessuno
+// bussa alla casella IMAP
+test('a delegated reply to a Mail on this Mac message, with Mail on this Mac not usable here, stays ready with no mailbox call and no error', async () => {
   const doc = { id: 'postamac:CONTO/INBOX/12.emlx', fonte: 'postamac', tipo: 'email', titolo: 'Menu wording', corpo: 'Could you confirm the menu wording by Thursday?', autore: 'Maya <maya@northwind-studio.test>', quando: new Date().toISOString(), messageId: 'menu@northwind-studio.test' }
   store.salvaDocumenti([doc])
   const id = 'reply-mail-on-mac'
   store.scriviCompito({ id, testo: 'Reply to Maya about the menu wording', doc: doc.id, ordine: 'z2' })
   let casella = 0, smontata = 0
-  prova({ svolgi: async () => ({ testo: 'Dear Maya, the wording is confirmed.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+  prova({ svolgi: async () => ({ testo: 'Dear Maya, the wording is confirmed.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, postaCollegata: () => true, bozzeInMail: () => false,
     preparaEmail: async () => { smontata++; return { a: 'maya@northwind-studio.test', oggetto: 'Re: Menu wording', corpo: 'The wording is confirmed.' } },
     salvaBozzaCasella: async () => { casella++; return { stato: 'salvata', id: 'x', url: 'message://x' } } })
   const o = orecchio(id); compiti.affida(id, 'bozza'); await o.aspetta('pronto'); await pausa(20); o.smetti()
@@ -620,6 +621,42 @@ test('a delegated reply to a Mail on this Mac message stays ready with no mailbo
   assert.equal(c?.guaio ?? null, null)
   assert.equal(c?.email ?? null, null)
   assert.match(String(c?.risultato ?? ''), /wording is confirmed/)
+})
+
+// Mail del Mac collegata qui: la risposta va nelle Bozze di Mail, con la stessa
+// prenotazione delle altre caselle, anche senza una casella IMAP collegata
+test('a delegated reply to a Mail on this Mac message is saved as a draft in Mail', async () => {
+  const doc = { id: 'postamac:CONTO/INBOX/13.emlx', fonte: 'postamac', tipo: 'email', titolo: 'Menu wording', corpo: 'Could you confirm the menu wording by Thursday?', autore: 'Maya <maya@northwind-studio.test>', quando: new Date().toISOString(), messageId: 'menu2@northwind-studio.test' }
+  store.salvaDocumenti([doc])
+  const id = 'reply-mail-on-mac-saved'
+  store.scriviCompito({ id, testo: 'Reply to Maya about the menu wording', doc: doc.id, ordine: 'z3' })
+  const salvate: string[] = []
+  prova({ svolgi: async () => ({ testo: 'Dear Maya, the wording is confirmed.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, postaCollegata: () => false, bozzeInMail: () => true,
+    preparaEmail: async () => ({ a: 'maya@northwind-studio.test', oggetto: 'Re: Menu wording', corpo: 'The wording is confirmed.' }),
+    salvaBozzaCasella: async (task, source) => { salvate.push(`${task} ${source}`); return { stato: 'salvata', id: 'mail-del-mac:alex@example.com', url: '' } } })
+  const o = orecchio(id); compiti.affida(id, 'bozza'); await o.aspetta('pronto'); await pausa(20); o.smetti()
+  assert.deepEqual(salvate, [`${id} ${doc.id}`])
+  const c = store.compito(id)
+  assert.equal(c?.stato, 'pronto')
+  assert.equal(c?.email?.casella?.stato, 'salvata')
+  assert.equal(c?.email?.a, 'maya@northwind-studio.test')
+})
+
+// una bozza che non arriva nella casella lo dice sulla carta, non solo nel registro
+test('a reply whose mailbox save throws shows the failure on its card, and stays ready', async () => {
+  const doc = { id: 'posta:INBOX:save-throws', fonte: 'posta', tipo: 'email', titolo: 'Quote', corpo: 'Could you send the quote?', autore: 'Rossi <rossi@example.com>', quando: new Date().toISOString(), messageId: 'quote@example.com' }
+  store.salvaDocumenti([doc])
+  const id = 'reply-save-throws'
+  store.scriviCompito({ id, testo: 'Reply to Rossi with the quote', doc: doc.id, ordine: 'z4' })
+  prova({ svolgi: async () => ({ testo: 'Dear Rossi, here is the quote.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+    preparaEmail: async () => ({ a: 'rossi@example.com', oggetto: 'Re: Quote', corpo: 'Here is the quote.' }),
+    salvaBozzaCasella: async () => { throw new Error('Mail non ha salvato la bozza. Controlla che sia aperta e che non ci sia una finestra di permesso.') } })
+  const o = orecchio(id); compiti.affida(id, 'bozza'); await o.aspetta('pronto'); await pausa(20); o.smetti()
+  const c = store.compito(id)
+  assert.equal(c?.stato, 'pronto')
+  assert.equal(c?.email?.casella?.stato, 'errore')
+  assert.match(c?.email?.casella?.errore ?? '', /Mail non ha salvato la bozza/)
+  assert.match(String(c?.risultato ?? ''), /here is the quote/)
 })
 
 test('F2 · al riavvio le carte interrotte tornano in coda per il turno, senza guaio e senza partire da sole', () => {

@@ -48,6 +48,11 @@ export async function verificaBaseRevisione(c:store.Compito, deps:{documento?:ty
     let ora = ''
     try { ora = await testoDelFile(base.percorso) } catch { throw new Error('The saved file is no longer there. Read the current version and revise again.') }
     if (createHash('sha256').update(ora).digest('hex') !== base.impronta) throw new Error('The saved file changed while this revision was prepared. Read its current version and revise again.')
+  } else if (base.tipo === 'mailDelMac' && base.task) {
+    // la bozza di prima in Mail del Mac: il corpo salvato sulla riga madre dev'essere ancora quello
+    const parent=store.compito(base.task)
+    const now=parent?.email?.casella?.stato === 'salvata' ? parent.email.corpo.trim() : ''
+    if (!now || createHash('sha256').update(now).digest('hex') !== base.impronta) throw new Error('The previous draft changed while this revision was prepared. Read its current version and revise again.')
   } else if (base.tipo === 'testo' && base.task) {
     const parent=store.compito(base.task)
     const now=parent?.risultato?.trim() || ''
@@ -70,6 +75,14 @@ async function versioneAttuale(c:store.Compito, letture:Letture):Promise<{testo:
   if (d && (d.app === 'Pages' || d.app === 'TextEdit')) {
     const doc:DocumentoAttuale = await (letture.documento ?? leggiDocumentoAttuale)({app:d.app,percorso:d.percorso,desktop:d.desktop})
     return {testo:doc.testo.trim(),baseline:{tipo:'documento',app:doc.app,percorso:doc.percorso,desktop:doc.desktop,impronta:doc.impronta,improntaSalvata:doc.improntaSalvata,modificato:doc.modificato},impronta:doc.impronta,stili:doc.stili?.slice(0,40)}
+  }
+  // una bozza nelle Bozze di Mail del Mac non si rilegge (Mail non dice quale sia): la base è
+  // il corpo salvato sulla riga, che «Cambia» non tocca (toglie solo la riga dell'ipotesi dal
+  // risultato), e la revisione mette una bozza nuova accanto, senza toccare la vecchia
+  if (c.email?.casella?.stato === 'salvata' && c.doc?.startsWith('postamac:')) {
+    const testo = c.email.corpo.trim()
+    const impronta = createHash('sha256').update(testo).digest('hex')
+    return {testo,baseline:{tipo:'mailDelMac',task:c.id,impronta},impronta}
   }
   if (c.email?.casella?.stato === 'salvata') {
     if (!c.doc) throw new Error('The saved draft has no original email source to verify.')

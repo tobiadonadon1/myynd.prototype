@@ -1,0 +1,45 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "p4": {
+    "postaMac": {
+      "caselle": 1,
+      "inArrivo": 2,
+      "inviate": 0,
+      "vecchie": 0,
+      "spazzatura": 0
+    }
+  },
+  "config": {
+    "postamac": {
+      "attiva": true
+    },
+    "autonomia": "chiedere"
+  },
+  "documenti": [
+    {
+      "id": "postamac:2F4A7C10-1B3D-4E5F-8A9B-0C1D2E3F4A51/INBOX/1.emlx",
+      "fonte": "postamac",
+      "tipo": "email",
+      "titolo": "Homepage copy for the new website",
+      "corpo": "Hi Alex,\n\nQuick note about the homepage copy for the new website. Could you get back to me on this?\n\nThanks,\nMaya Lindqvist",
+      "autore": "Maya Lindqvist <maya@northwind-studio.test>",
+      "quando": "-1d",
+      "messageId": "finta-0-INBOX-1@mail.test",
+      "destinatari": "alex@morgan-works.test"
+    },
+    {
+      "id": "posta:INBOX:71",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "October quote",
+      "corpo": "Hi Alex, could you send the October quote? Dana",
+      "autore": "Dana Whitfield <dana@northwind.example>",
+      "percorso": "INBOX",
+      "gruppo": "posta",
+      "quando": "-3h",
+      "messageId": "d71@northwind.example"
+    }
+  ],
+  "compiti": []
+}

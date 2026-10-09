@@ -492,8 +492,8 @@ function BozzaInPosta({ c }: { c: Compito }) {
     </div>
   }
   return <div style={{ marginTop: 10, fontSize: 13 }} onClick={e => e.stopPropagation()}>
-    {b.stato === 'salvata' ? <><span>{c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</span>{' '}<a href={b.url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{t('Apri la bozza nella posta')}</a></>
-      : <span role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {b.errore}</span>}
+    {b.stato === 'salvata' ? <><span>{c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</span>{/* le Bozze di Mail del Mac non hanno un indirizzo da aprire */}{b.url && <>{' '}<a href={b.url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{t('Apri la bozza nella posta')}</a></>}</>
+      : <span role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {t(b.errore ?? '')}</span>}
   </div>
 }
 

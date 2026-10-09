@@ -22,7 +22,7 @@ test('ambiguous network failure never blindly creates another draft', async () =
   let calls = 0
   const create = async () => { calls++; throw new Error('Connection lost after APPEND') }
   assert.equal((await salvaBozzaCasella('lost', 'posta:INBOX:2', email, create, dir)).stato, 'errore')
-  assert.match((await salvaBozzaCasella('lost','posta:INBOX:2',email,create,dir)).errore!, /uncertain/)
+  assert.match((await salvaBozzaCasella('lost','posta:INBOX:2',email,create,dir)).errore!, /in dubbio/)
   assert.equal(calls,1)
 })
 test('IMAP selects existing Drafts and preserves actual reply headers without sending', async () => {
