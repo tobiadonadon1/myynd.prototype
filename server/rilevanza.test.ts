@@ -192,3 +192,12 @@ test('un obbligo con una data da un mittente automatico va al feed; «no action 
   // e una newsletter con una «deadline» resta una newsletter
   assert.notEqual(classifica(mail({ titolo: 'Early bird tickets', corpo: 'Early bird deadline: by 12 October. Unsubscribe here.', autore: 'Conf <news@conf.test>' })), 'feed')
 })
+
+test('da un mittente automatico, «is due by 31 October» regge la carta «Pay …»', () => {
+  const prova = 'Your second payment on account of GBP 1,420.00 is due by 31 October.'
+  const d = mail({ titolo: 'Payment on account due', corpo: `${prova} Pay online to avoid interest.`, autore: 'HMRC <noreply@hmrc.test>' })
+  assert.equal(validaVoceFeed({ titolo: 'Pay HMRC second payment on account', testo: 'The second payment on account of GBP 1,420.00 is due by 31 October.', perche: 'It is due by 31 October, with interest after.', prova }, d), true)
+  // un avviso senza obbligo, dallo stesso mittente, no
+  const avviso = 'Your annual summary is now available online.'
+  assert.equal(validaVoceFeed({ titolo: 'Review the HMRC annual summary', testo: 'HMRC published your annual summary online for you to read.', perche: 'The summary is available online now.', prova: avviso }, mail({ titolo: 'Annual summary', corpo: avviso, autore: 'HMRC <noreply@hmrc.test>' })), false)
+})

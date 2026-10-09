@@ -217,7 +217,9 @@ export function validaVoceFeed(
     // contain "please" or "can you": a forwarded problem is a request too.
     // From files and automated mail the request phrasing is still required.
     const dallaPersona = eEmail(d) && !d.massa && !mittenteAutomatico(d.autore)
-    if (!fonte.includes(prova) || (!dallaPersona && !contieneRichiesta(prova)) || istruzioniInterne(prova, d)) return false
+    // da un mittente automatico basta anche un obbligo con la sua data: «is due by 31 October»
+    const obbligo = OBBLIGO.test(prova) && CON_SCADENZA.test(prova) && !NIENTE_DA_FARE.test(prova)
+    if (!fonte.includes(prova) || (!dallaPersona && !contieneRichiesta(prova) && !obbligo) || istruzioniInterne(prova, d)) return false
     // An unrelated request cannot be used as evidence for a fabricated action.
     const famiglie = [
       /\b(?:sign|signature|firm(?:a|are))\b/i,
