@@ -984,7 +984,7 @@ const profilo = async (req: express.Request, res: express.Response) => {
     // prendere un errore per una parola che sappiamo tradurre
     tono: [...cfg.TONI_VALIDI, 'cordiale'],
     autonomia: [...cfg.AUTONOMIE_VALIDE, 'osservare', 'agire'],
-    modello: cfg.MODELLI.map(m => m.id),
+    modello: [...cfg.MODELLI.map(m => m.id), ...Object.keys(cfg.SUCCESSORI)],
     lingua: ['it', 'en'],
     tema: cfg.TEMI_VALIDI
   }
@@ -1000,13 +1000,13 @@ const profilo = async (req: express.Request, res: express.Response) => {
    */
   if (b.modelli !== undefined) {
     const m = b.modelli
-    const validi = cfg.MODELLI.map(x => x.id) as string[]
-    if (!m || typeof m !== 'object' || cfg.LIVELLI.some(l => !validi.includes(String(m[l])))) {
+    if (!m || typeof m !== 'object' || cfg.LIVELLI.some(l => !cfg.modelloValido(String(m[l])))) {
       return res.status(400).json({ errore: 'Non so quale modello usare per uno dei livelli di lavoro.' })
     }
-    patch.modelli = Object.fromEntries(cfg.LIVELLI.map(l => [l, String(m[l])]))
+    // un nome vecchio si scrive col nome del suo successore
+    patch.modelli = Object.fromEntries(cfg.LIVELLI.map(l => [l, cfg.modelloValido(String(m[l]))!]))
     // il modello «principale» resta allineato alla frontiera, per chi legge il campo vecchio
-    patch.modello = String(m.frontiera)
+    patch.modello = (patch.modelli as Record<string, string>).frontiera
   }
   if (patch.oreFatte !== undefined) {
     const n = Number(patch.oreFatte)

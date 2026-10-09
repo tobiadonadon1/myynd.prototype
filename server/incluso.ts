@@ -21,7 +21,8 @@ import type express from 'express'
 import * as store from './store.ts'
 import * as chi from './chi.ts'
 import * as conti from './conti.ts'
-import { tettoDelPianoSulServer } from './tetto.ts'
+import { tettoDelPianoSulServer, tettoDelMeseSulServer } from './tetto.ts'
+import { SUCCESSORI } from './config.ts'
 
 export const URL_ANTHROPIC = 'https://api.anthropic.com/v1/messages'
 /** Il nome con cui il ponte compare nel registro dell'uso di ognuno, sul server. */
@@ -31,15 +32,34 @@ const USCITA_MAX = 32_000
 
 /**
  * I modelli che il ponte inoltra, e basta. La dose di oggi si conta in token,
- * e un token del modello più caro costa cinque volte uno di quello medio: senza
+ * e un token del modello più caro costa il doppio di uno di quello medio: senza
  * una lista, chiunque con una sessione poteva chiedere il più caro e spendere
- * con la stessa dose cinque volte i soldi. Un modello fuori lista diventa
- * l'ultimo della lista (il più capace fra quelli permessi), non un errore: l'app
- * chiede per livelli, e il lavoro non deve cadere per un nome.
+ * con la stessa dose il doppio dei soldi. Di serie Haiku 5.5 e Sonnet 5.5;
+ * Opus solo se chi ospita lo mette in `MYYND_INCLUSO_MODELLI`. Un nome vecchio
+ * diventa il suo successore; un modello fuori lista diventa l'ultimo della
+ * lista (il più capace fra quelli permessi), non un errore: l'app chiede per
+ * livelli, e il lavoro non deve cadere per un nome.
  */
 export function modelliPermessi(): string[] {
   const d = (process.env.MYYND_INCLUSO_MODELLI ?? '').split(',').map(x => x.trim()).filter(x => /^claude-/.test(x))
-  return d.length ? d : ['claude-haiku-4-5', 'claude-sonnet-5']
+  return d.length ? d : ['claude-haiku-5-5', 'claude-sonnet-5-5']
+}
+
+/** Il modello che il ponte manda davvero per quello che gli si chiede. */
+export function modelloPermesso(chiesto: string, permessi = modelliPermessi()): string {
+  if (permessi.includes(chiesto)) return chiesto
+  const dopo = SUCCESSORI[chiesto]
+  if (dopo && permessi.includes(dopo)) return dopo
+  return permessi[permessi.length - 1]
+}
+
+/**
+ * La dose di oggi, in token: entrata e uscita intere, e la cache letta a un
+ * decimo, che è quanto costa. Senza, una chiamata con trentamila token di
+ * istruzioni in cache non contava quasi niente, e la dose non diceva la spesa.
+ */
+export function tokenDellaDose(t: { entrata: number; uscita: number; cache: number }): number {
+  return t.entrata + t.uscita + Math.ceil(t.cache / 10)
 }
 
 /**
@@ -65,9 +85,13 @@ export type FerriPonte = {
   chiave: () => string | undefined
   utente: (gettone: string) => Promise<string | null>
   dentro: <T>(utente: string, fai: () => T) => T
-  /** I token di oggi della persona in cui si è dentro, entrata più uscita. */
+  /** I token di oggi della persona in cui si è dentro (`tokenDellaDose`). */
   usati: () => number
   tetto: () => number
+  /** I micro-dollari spesi nel mese dalla persona in cui si è dentro. */
+  spesaDelMese: () => number
+  /** Il tetto del mese, in micro-dollari; zero = nessuno. */
+  tettoDelMese: () => number
   segna: (u: store.Uso) => void
   rete: typeof fetch
 }
@@ -76,12 +100,19 @@ function inizioDiOggi(): string {
   return new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z'
 }
 
+/** Dal primo del mese, UTC: lo stesso calendario per tutti i server. */
+function inizioDelMese(): string {
+  return new Date().toISOString().slice(0, 7) + '-01T00:00:00.000Z'
+}
+
 export const PONTE_VERO: FerriPonte = {
   chiave: () => (process.env.MYYND_INCLUSO_CHIAVE ?? '').trim() || undefined,
   utente: g => conti.utenteDelToken(g),
   dentro: (u, fai) => chi.dentro(u, fai),
-  usati: () => { const t = store.usoDal(inizioDiOggi()); return t.entrata + t.uscita },
+  usati: () => tokenDellaDose(store.usoDal(inizioDiOggi())),
   tetto: () => tettoDelPianoSulServer(),
+  spesaDelMese: () => store.spesaDal(inizioDelMese()),
+  tettoDelMese: () => tettoDelMeseSulServer(),
   segna: u => { try { store.segnaUso(u) } catch { /* contare non rompe la risposta */ } },
   rete: (...a) => fetch(...a)
 }
@@ -124,14 +155,15 @@ export function ponte(f: FerriPonte = PONTE_VERO): express.RequestHandler {
     const dentro = await chiEntra(f, req, res)
     if (!dentro) return
     await f.dentro(dentro.utente, async () => {
+      const mese = f.tettoDelMese()
+      if (mese > 0 && f.spesaDelMese() >= mese) return no(res, 429, 'budget_exhausted', 'This month’s included AI allowance is used up.')
       if (f.usati() >= f.tetto()) return no(res, 429, 'budget_exhausted', 'Today’s included AI allowance is used up.')
       const corpo = (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? { ...req.body } : null) as Record<string, unknown> | null
       if (!corpo || typeof corpo.model !== 'string' || !/^claude-/.test(corpo.model) || !Array.isArray(corpo.messages)) {
         return no(res, 400, 'invalid_request_error', 'This request is not a Messages API request.')
       }
       corpo.max_tokens = Math.min(n(corpo.max_tokens) || 1024, USCITA_MAX)
-      const permessi = modelliPermessi()
-      if (!permessi.includes(corpo.model as string)) corpo.model = permessi[permessi.length - 1]
+      corpo.model = modelloPermesso(corpo.model as string)
       const modello = corpo.model as string
       // la dose si prenota prima di inoltrare, e si libera a risposta finita (quando si scrive il conto vero)
       const stima = stimaDi(corpo)

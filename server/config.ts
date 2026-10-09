@@ -17,19 +17,33 @@ import * as cancellati from './cancellati.ts'
 /**
  * I modelli fra cui si può scegliere, dal più economico al più capace.
  *
- * Sonnet 5 è il predefinito perché sul lavoro che fa Myynd — rispondere su
+ * Sonnet 5.5 è il predefinito perché sul lavoro che fa Myynd — rispondere su
  * documenti che ha già in mano, non ragionare nel vuoto — la differenza con
- * Opus non si vede, e costa poco più della metà.
+ * Opus non si vede, e costa la metà. Opus solo quando lo sceglie lei.
  */
 export const MODELLI = [
-  { id: 'claude-haiku-4-5', nome: 'Haiku 4.5', nota: 'Il più rapido e il più economico. Va bene finché le domande sono semplici.' },
-  { id: 'claude-sonnet-5', nome: 'Sonnet 5', nota: 'Il predefinito: quasi la qualità di Opus sul materiale che hai, a meno della metà.' },
-  { id: 'claude-opus-5', nome: 'Opus 5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti, e costa cinque volte tanto.' }
+  { id: 'claude-haiku-5-5', nome: 'Haiku 5.5', nota: 'Il più rapido e il più economico. Va bene finché le domande sono semplici.' },
+  { id: 'claude-sonnet-5-5', nome: 'Sonnet 5.5', nota: 'Il predefinito: quasi la qualità di Opus sul materiale che hai, a metà prezzo.' },
+  { id: 'claude-opus-5-5', nome: 'Opus 5.5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti, e costa il doppio.' }
 ] as const
 
-/** Un nome di modello che conosciamo, o niente. */
-function modelloValido(m: string | undefined): string | null {
-  return m && MODELLI.some(x => x.id === m) ? m : null
+/**
+ * I modelli di prima, e chi ne ha preso il posto.
+ *
+ * Una scelta scritta nel file resta la sua: chi aveva scelto Opus 5 lavora
+ * con Opus 5.5, che costa meno, non torna al predefinito. Lo stesso nella
+ * rotta del profilo, per un client che manda ancora il nome vecchio.
+ */
+export const SUCCESSORI: Readonly<Record<string, string>> = {
+  'claude-haiku-4-5': 'claude-haiku-5-5',
+  'claude-sonnet-5': 'claude-sonnet-5-5',
+  'claude-opus-5': 'claude-opus-5-5'
+}
+
+/** Un nome di modello che conosciamo (quello vecchio diventa il suo successore), o niente. */
+export function modelloValido(m: string | undefined): string | null {
+  const id = m ? (SUCCESSORI[m] ?? m) : ''
+  return id && MODELLI.some(x => x.id === id) ? id : null
 }
 
 /**
@@ -39,7 +53,7 @@ function modelloValido(m: string | undefined): string | null {
  * livelli sotto hanno il loro, vedi `modelloDelLivello`.
  */
 export function modello(c: Config = leggi()): string {
-  return modelloValido(c.modelli?.frontiera) ?? modelloValido(c.modello) ?? 'claude-sonnet-5'
+  return modelloValido(c.modelli?.frontiera) ?? modelloValido(c.modello) ?? 'claude-sonnet-5-5'
 }
 
 /**
@@ -55,7 +69,7 @@ export type Livello = 'casa' | 'media' | 'frontiera'
 export const LIVELLI: readonly Livello[] = ['casa', 'media', 'frontiera']
 
 /** Il modello economico della famiglia: il predefinito delle manovre interne. */
-export const ECONOMICO = 'claude-haiku-4-5'
+export const ECONOMICO = 'claude-haiku-5-5'
 
 /**
  * Il modello per un livello.

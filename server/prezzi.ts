@@ -7,18 +7,25 @@
 // capisce, «duecentomila token» no.
 //
 // I prezzi sono quelli di listino di Anthropic, in dollari per milione di
-// token, letti il 28 settembre 2026: una stima del conto, non la fattura.
+// token, letti il 9 ottobre 2026: una stima del conto, non la fattura. I
+// modelli di prima restano, per le righe già scritte e per chi li ha ancora
+// nel file (`config.SUCCESSORI` li porta ai nuovi). Haiku 5.5 costa così fino
+// a centomila token di entrata; sopra ne costa cinque volte tanto, e Myynd
+// non gli manda mai tanto.
 // La cache letta costa un decimo dell'entrata, quella scritta un quarto in
 // più. Un modello che non è qui non ha un prezzo: si contano i token e basta,
 // meglio una riga senza cifra che una cifra inventata.
 
 export type Prezzo = { entrata: number; uscita: number; cacheLettura: number; cacheScrittura: number }
 
-/** Listino al 28 set 2026, USD per milione di token: una stima, non la fattura. */
+/** Listino al 9 ott 2026, USD per milione di token: una stima, non la fattura. */
 const listino = (entrata: number, uscita: number): Prezzo =>
   ({ entrata, uscita, cacheLettura: entrata * 0.1, cacheScrittura: entrata * 1.25 })
 
 export const PREZZI: Record<string, Prezzo> = {
+  'claude-haiku-5-5': listino(0.1, 0.5),
+  'claude-sonnet-5-5': listino(2, 10),
+  'claude-opus-5-5': listino(4, 20),
   'claude-haiku-4-5': listino(1, 5),
   'claude-sonnet-5': listino(2, 10),
   'claude-opus-5': listino(5, 25)

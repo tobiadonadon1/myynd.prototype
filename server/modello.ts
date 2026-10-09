@@ -300,7 +300,9 @@ function dalPonte(e: unknown): Error | null {
   let corpo = ''
   try { corpo = JSON.stringify((e as { error?: unknown }).error ?? '') } catch { /* resta vuoto */ }
   corpo += e instanceof Error ? e.message : ''
-  if (stato === 429 && /budget_exhausted/.test(corpo)) return tradotto(tettoDiOggi.erroreDelTetto(tettoDiOggi.INCLUSO_FINITO))
+  if (stato === 429 && /budget_exhausted/.test(corpo)) {
+    return tradotto(tettoDiOggi.erroreDelTetto(/month/i.test(corpo) ? tettoDiOggi.INCLUSO_FINITO_MESE : tettoDiOggi.INCLUSO_FINITO))
+  }
   if (stato === 503 && /not_configured/.test(corpo)) return tradotto(new Error(INCLUSO_ASSENTE))
   return null
 }
@@ -319,16 +321,28 @@ export const INCLUSO_ASSENTE = 'L’AI inclusa con Myynd non è ancora disponibi
  * sceglievi Haiku nelle preferenze, la prova della chiave passava, e da lì in
  * poi non funzionava più niente.
  */
-type Capacita = { adattivo: boolean; sforzo: boolean }
+/*
+ * `spegne`: il pensiero si può spegnere con `{ type: 'disabled' }`. Sonnet 5.5
+ * e Opus 5.5 lo rifiutano con un 400 a ogni sforzo: lì un lavoro che non
+ * ragiona non manda il campo, e lo sforzo basso fa il resto. Haiku 5.5 lo
+ * accetta fino a `high`, e i lavori che non ragionano stanno sotto.
+ */
+type Capacita = { adattivo: boolean; sforzo: boolean; spegne: boolean }
 
 const CAPACITA: Record<string, Capacita> = {
-  'claude-haiku-4-5': { adattivo: false, sforzo: false },
-  'claude-sonnet-5': { adattivo: true, sforzo: true },
-  'claude-opus-5': { adattivo: true, sforzo: true }
+  'claude-haiku-5-5': { adattivo: true, sforzo: true, spegne: true },
+  'claude-sonnet-5-5': { adattivo: true, sforzo: true, spegne: false },
+  'claude-opus-5-5': { adattivo: true, sforzo: true, spegne: false },
+  'claude-haiku-4-5': { adattivo: false, sforzo: false, spegne: true },
+  'claude-sonnet-5': { adattivo: true, sforzo: true, spegne: true },
+  'claude-opus-5': { adattivo: true, sforzo: true, spegne: true }
 }
 
-/** In dubbio si assume la generazione nuova: i modelli che aggiungeremo saranno quelli. */
-const CAPACITA_IGNOTE: Capacita = { adattivo: true, sforzo: true }
+/**
+ * In dubbio si assume la generazione nuova: i modelli che aggiungeremo saranno
+ * quelli. E il pensiero non si spegne: non mandare il campo va bene a tutti.
+ */
+const CAPACITA_IGNOTE: Capacita = { adattivo: true, sforzo: true, spegne: false }
 
 export function capacita(m = modello()): Capacita {
   return CAPACITA[m] ?? CAPACITA_IGNOTE
@@ -1169,7 +1183,7 @@ export function parametri(lavoro: Lavoro, max_tokens: number, formato?: object):
     }
     // sotto i 2048 token non c'è spazio per pensare: si lascia stare invece di
     // mandare un budget che il server rifiuta
-  } else if (cap.adattivo) {
+  } else if (cap.adattivo && cap.spegne) {
     fuori.thinking = { type: 'disabled' }
   }
   // sui modelli senza pensiero adattivo, «non pensare» è il comportamento di

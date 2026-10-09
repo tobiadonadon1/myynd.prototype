@@ -1639,10 +1639,10 @@ const EN: Record<string, string> = {
   'Formale': 'Formal',
   'Il più rapido e il più economico. Basta finché le domande sono semplici.':
     'The fastest and cheapest. Enough while the questions stay simple.',
-  'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a meno della metà.':
-    'The default. Nearly Opus quality on your material, at under half the cost.',
-  'Il più capace. Si sente sulle domande che intrecciano più documenti; costa cinque volte tanto.':
-    'The most capable. It shows on questions that weave several documents together; it costs five times as much.',
+  'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a metà prezzo.':
+    'The default. Nearly Opus quality on your material, at half the price.',
+  'Il più capace. Si sente sulle domande che intrecciano più documenti; costa il doppio.':
+    'The most capable. It shows on questions that weave several documents together; it costs twice as much.',
   '"Ciao Marta, ti mando il preventivo aggiornato. Consegna quattro settimane dalla conferma."':
     '"Hi Marta, sending the updated quote. Delivery four weeks from confirmation."',
   '"Ciao Marta, come promesso ti mando il preventivo aggiornato: spero sia tutto chiaro, fammi sapere."':
@@ -3503,6 +3503,7 @@ const EN: Record<string, string> = {
   'Non ancora disponibile': 'Not available yet',
   'La dose di oggi è finita.': 'Today’s allowance is used up.',
   'Hai finito l’AI inclusa di oggi. Si riparte domani.': 'You’ve used today’s included AI. It starts again tomorrow.',
+  'Hai finito l’AI inclusa di questo mese. Si riparte il primo del mese.': 'You’ve used this month’s included AI. It starts again on the first of the month.',
   'L’AI inclusa con Myynd non è ancora disponibile.': 'The AI included with Myynd isn’t available yet.',
   'Claude Code non riceve immagini da Myynd.': 'Claude Code doesn’t receive images from Myynd.',
   'Claude Code non è pronto su questo computer.': 'Claude Code isn’t ready on this computer.',

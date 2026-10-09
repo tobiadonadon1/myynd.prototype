@@ -1879,9 +1879,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      */
     livelli: LIVELLI.map(l => ({
       id: l.id, titolo: t(l.titolo), nota: t(l.nota),
-      scelto: stato.config.modelli?.[l.id] ?? (l.id === 'casa' ? 'claude-haiku-4-5' : stato.config.modello ?? 'claude-sonnet-5'),
+      scelto: stato.config.modelli?.[l.id] ?? (l.id === 'casa' ? 'claude-haiku-5-5' : stato.config.modello ?? 'claude-sonnet-5-5'),
       scegli: (modello: string) => {
-        const attuali = stato.config.modelli ?? { casa: 'claude-haiku-4-5', media: stato.config.modello ?? 'claude-sonnet-5', frontiera: stato.config.modello ?? 'claude-sonnet-5' }
+        const attuali = stato.config.modelli ?? { casa: 'claude-haiku-5-5', media: stato.config.modello ?? 'claude-sonnet-5-5', frontiera: stato.config.modello ?? 'claude-sonnet-5-5' }
         const modelli = { ...attuali, [l.id]: modello }
         setStato(s => ({ ...s, config: { ...s.config, modelli, modello: modelli.frontiera } }))
         api.profilo({ modelli }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })

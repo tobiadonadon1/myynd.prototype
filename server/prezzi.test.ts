@@ -28,6 +28,14 @@ test('il costo: entrata, uscita, cache letta e scritta, in micro-dollari interi'
   assert.ok(Number.isInteger(costo('claude-haiku-4-5', { entrata: 3, uscita: 7, cache: 11 })!))
 })
 
+test('il listino del 9 ottobre: Opus 5.5 4/20, Sonnet 5.5 2/10, Haiku 5.5 0,10/0,50, la cache letta a un decimo', () => {
+  assert.equal(costo('claude-opus-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 24_000_000)
+  assert.equal(costo('claude-sonnet-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 12_000_000)
+  assert.equal(costo('claude-haiku-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 600_000)
+  assert.equal(costo('claude-haiku-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 10_000)
+  assert.equal(costo('claude-opus-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 400_000)
+})
+
 test('un modello senza prezzo non ha un costo, e i numeri storti non contano', () => {
   assert.equal(costo('finto', { entrata: 1000, uscita: 100 }), null)
   assert.equal(costo(null, { entrata: 1000, uscita: 100 }), null)
