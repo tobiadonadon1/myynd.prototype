@@ -1238,6 +1238,7 @@ const EN: Record<string, string> = {
   'Non è partita: la posta di questo server non funziona. Dillo a chi lo gestisce.':
     'It did not go out: this server’s mail is not working. Tell whoever runs it.',
   'Questa convinzione non c’è più.': 'That belief is gone.',
+  'Questa convinzione non si può rimettere.': 'That belief can’t be put back.',
   'Tienila': 'Keep it',
   'Le ha notate da solo: non le usa per scrivere finché non gliele confermi.':
     'It noticed these on its own: it will not write with them until you confirm.',

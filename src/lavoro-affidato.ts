@@ -75,8 +75,25 @@ export function imparatoDellaBozza(c: Pick<Compito, 'stato' | 'voceScritta'>, fr
  * maiuscolo («PROACTIVE PREPARATION TYPE…»), non una riga per lei.
  */
 const DA_SOLO = new Set(['iniziativa', 'primo-giorno', 'guadagnata'])
+/**
+ * Su quelle righe una nota sua va in coda al compito, dopo questa riga: chi
+ * lavora la legge, e il dettaglio mostra solo lei. Scriverla al posto del
+ * compito lascerebbe chi lavora senza sapere cosa fare.
+ */
+const SUA = '\n\nNOTE FROM THE USER:\n'
 export function notaPerLei(c: Pick<Compito, 'origine' | 'nota'>): string {
-  return c.origine && DA_SOLO.has(c.origine) ? '' : c.nota || ''
+  if (!(c.origine && DA_SOLO.has(c.origine))) return c.nota || ''
+  const n = c.nota ?? ''
+  const i = n.lastIndexOf(SUA)
+  return i >= 0 ? n.slice(i + SUA.length) : ''
+}
+/** La nota da salvare: su una riga che Myynd si è preparato, il compito resta e la sua nota va in coda. */
+export function notaDaSalvare(c: Pick<Compito, 'origine' | 'nota'>, sua: string): string | null {
+  if (!(c.origine && DA_SOLO.has(c.origine))) return sua || null
+  const n = c.nota ?? ''
+  const i = n.lastIndexOf(SUA)
+  const compito = i >= 0 ? n.slice(0, i) : n
+  return sua ? `${compito}${SUA}${sua}` : compito || null
 }
 
 /** La riga è ferma su una fonte che manca: il guaio è una delle quattro frasi fisse. */

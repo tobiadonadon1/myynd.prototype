@@ -7,14 +7,14 @@ import { Casella } from '../components/forme'
 import type { Lista } from './useCompiti'
 import { giornoCompito, giornoLocale, spostaGiorno } from './giorni'
 import { oraDi } from '../agenda-ore'
-import { cambiDelDettaglio } from './cambi-dettaglio'
+import { cambiDelDettaglio, valoriDi } from './cambi-dettaglio'
 import './calendario.css'
 
 /** Native modal semantics provide focus containment, Escape and focus restoration. */
 export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () => void }) {
   const dialogo = useRef<HTMLDialogElement>(null)
   const [testo, setTesto] = useState(c.testo)
-  const [nota, setNota] = useState(c.nota ?? '')
+  const [nota, setNota] = useState(() => valoriDi(c, giornoLocale()).nota)
   const [progetti, setProgetti] = useState<Progetto[]>([])
   const [progetto, setProgetto] = useState(c.progetto ?? '')
   useEffect(() => { let vivo = true; api.progetti(c.progetto ?? undefined).then(r => { if (vivo) setProgetti(r.progetti) }).catch(() => {}); return () => { vivo = false } }, [c.progetto])

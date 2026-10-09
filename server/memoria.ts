@@ -27,6 +27,7 @@ import * as progetti from './progetti.ts'
 import { nomeNormalizzato, nominaAmbito } from './ambiti-memoria.ts'
 import { fuoco } from './timone.ts'
 import * as abitudini from './abitudini.ts'
+import { senzaTrattini } from './testo.ts'
 
 /** I blocchi che ogni installazione ha, anche vuoti: sono le domande da riempire. */
 export const BLOCCHI_BASE: { etichetta: string; descrizione: string }[] = [
@@ -483,8 +484,18 @@ export function parlaDiUnAltro(enunciato: string, o: { soggetto?: unknown; nomeS
   if (!prima) return false
   const p = prima.replace(/['’]s$/, '')
   if (p.toLowerCase() === suo || APERTURE.has(p.toLowerCase()) || CALENDARIO.has(p.toLowerCase()) || nelSuoAmbito(p)) return false
-  return persona(p)
+  if (persona(p)) return true
+  // «Nick tends to weigh…»: un nome seguito da un verbo che fa una persona è
+  // un altro anche se lo scambio non lo dice. Non un avverbio («Often prefers»),
+  // non la sua azienda nel suo ambito.
+  const dopo = enunciato.trim().slice(enunciato.trim().indexOf(prima) + prima.length).trim().split(/\s+/)[0]?.toLowerCase() ?? ''
+  return ambito !== 'azienda' && VERBI_DI_PERSONA.has(dopo) && !AVVERBI.has(p.toLowerCase()) && !/(?:ly|mente)$/i.test(p)
 }
+/** I verbi che, dopo un nome, fanno di quel nome una persona: pensa, preferisce, valuta. */
+const VERBI_DI_PERSONA = new Set(['tends', 'prefers', 'likes', 'dislikes', 'wants', 'thinks', 'believes', 'feels', 'evaluates', 'weighs', 'decides', 'expects', 'hates', 'loves', 'insists', 'trusts', 'worries',
+  'tende', 'preferisce', 'vuole', 'pensa', 'crede', 'valuta', 'pesa', 'decide', 'ama', 'odia', 'insiste'])
+/** Gli avverbi in testa che non finiscono in -ly o -mente. */
+const AVVERBI = new Set(['often', 'seldom', 'still', 'also', 'just', 'rather', 'spesso', 'quasi', 'solo', 'anche', 'ancora', 'già', 'pure', 'invece'])
 /**
  * Un nome nello scambio usato come una persona: dopo un verbo che si fa con
  * qualcuno («met», «talked with», «ho sentito»), prima di uno che fa qualcuno
@@ -571,6 +582,8 @@ export async function distilla(
   const nomeSuo = leggi().nome ?? null
   for (const c of Array.isArray(out.convinzioni) ? out.convinzioni : []) {
     if (!c || typeof c.enunciato !== 'string' || !c.enunciato.trim()) continue
+    // la frase finisce sotto le bozze e nei suoi avvisi: senza lineette, come tutto quello che scrive il modello
+    c.enunciato = senzaTrattini(c.enunciato.trim())
     // Un modello piccolo, ogni tanto, restituisce una frase di cortesia al
     // posto di una convinzione. Una riga sotto le tre parole non è un giudizio
     // su nessuno: è rumore che poi finisce dentro ogni prompt, per sempre.

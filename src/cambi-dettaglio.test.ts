@@ -49,3 +49,21 @@ test('un’ora data a una riga «di oggi» senza data si porta dietro il giorno,
   const datata = riga({ giorno: OGGI })
   assert.deepEqual(cambiDelDettaglio(datata, { ...valoriDi(datata, OGGI), ora: '10:30' }, OGGI), { ora: '10:30' })
 })
+
+test('una riga che Myynd si è preparato non mostra il compito di chi lavora, e una nota sua non lo cancella', () => {
+  const COMPITO = 'PROACTIVE PREPARATION TYPE: risposta. Prepare an unsent email reply for review.'
+  const c = riga({ origine: 'guadagnata', nota: COMPITO })
+  assert.equal(valoriDi(c, OGGI).nota, '')
+  // aprire e salvare senza toccare: niente
+  assert.deepEqual(cambiDelDettaglio(c, valoriDi(c, OGGI), OGGI), {})
+  // una nota sua va in coda al compito, e il dettaglio poi mostra solo lei
+  const fatto = cambiDelDettaglio(c, { ...valoriDi(c, OGGI), nota: 'Mention the Tuesday call' }, OGGI)
+  assert.ok(fatto.nota?.startsWith(COMPITO))
+  assert.match(fatto.nota ?? '', /Mention the Tuesday call$/)
+  const dopo = riga({ origine: 'guadagnata', nota: fatto.nota })
+  assert.equal(valoriDi(dopo, OGGI).nota, 'Mention the Tuesday call')
+  // cancellata la sua, il compito resta
+  assert.deepEqual(cambiDelDettaglio(dopo, { ...valoriDi(dopo, OGGI), nota: '' }, OGGI), { nota: COMPITO })
+  // su una riga sua, la nota è la nota
+  assert.deepEqual(cambiDelDettaglio(riga({ nota: null }), { ...valoriDi(riga({ nota: null }), OGGI), nota: 'x' }, OGGI), { nota: 'x' })
+})

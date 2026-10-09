@@ -4953,7 +4953,17 @@ app.post('/api/memoria/convinzione', (req, res) => {
 })
 
 app.delete('/api/memoria/convinzione/:id', (req, res) => {
-  store.scordaConvinzione(req.params.id)
+  const tolta = store.scordaConvinzione(req.params.id)
+  // la riga com'era: «Undo» sotto una bozza la rimette tale e quale
+  res.json({ ok: true, tolta })
+})
+
+app.post('/api/memoria/convinzione/:id/rimetti', (req, res) => {
+  const riga = req.body?.riga
+  if (!riga || typeof riga !== 'object' || !store.rimettiConvinzione(req.params.id, riga as Record<string, unknown>)) {
+    return res.status(400).json({ errore: 'Questa convinzione non si può rimettere.' })
+  }
+  compiti.annunciaCambio()
   res.json({ ok: true })
 })
 
@@ -5217,11 +5227,8 @@ app.post('/api/gradino/ritira', (req, res) => {
   compiti.annunciaCambio()
 })
 
-/** La preparazione discreta di ogni quarto d'ora: prima le risposte guadagnate, poi le proposte. */
-function preparazione() {
-  try { iniziativa.guadagnate() } catch (e) { console.warn('myynd · le risposte guadagnate non sono partite:', e instanceof Error ? e.message : e) }
-  return iniziativa.giro()
-}
+/** La preparazione discreta di ogni quarto d'ora (`iniziativa.preparazione`). */
+const preparazione = () => iniziativa.preparazione()
 // — D: rotte, fine —
 
 const senzaOsservatore = (res: express.Response) => res.status(404).json({ disponibile: false })

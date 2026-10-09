@@ -1657,7 +1657,10 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ etichetta, testo }) }),
 
   scordaConvinzione: (id: string) =>
-    json<{ ok: true }>(`/api/memoria/convinzione/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    json<{ ok: true; tolta?: Record<string, unknown> | null }>(`/api/memoria/convinzione/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** «Undo» subito dopo averla scordata: la riga che il server ha restituito torna com'era. */
+  rimettiConvinzione: (id: string, riga: Record<string, unknown>) =>
+    json<{ ok: true }>(`/api/memoria/convinzione/${encodeURIComponent(id)}/rimetti`, { method: 'POST', body: JSON.stringify({ riga }) }),
 
   /** «Tienila»: da qui in poi Myynd può ragionarci sopra. */
   confermaConvinzione: (id: string) =>

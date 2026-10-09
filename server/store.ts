@@ -4850,15 +4850,35 @@ export function convinzioniStoriche(): Convinzione[] {
   return righe.map(daRigaConvinzione)
 }
 
-/** Cancellare a mano è un diritto: è la sua testa, deve poterci mettere le mani. */
-export function scordaConvinzione(id: string) {
+/** Cancellare a mano è un diritto: è la sua testa, deve poterci mettere le mani. Torna la riga com'era, per un «Undo» subito dopo. */
+export function scordaConvinzione(id: string): Record<string, unknown> | null {
   // la lapide prima: la stessa frase dedotta domani non deve tornare (P5)
   db.exec('BEGIN')
   try {
+    const riga = (db.prepare('SELECT * FROM convinzioni WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null
     db.prepare('INSERT OR REPLACE INTO convinzioni_tolte (id, quando) VALUES (?, ?)').run(id, new Date().toISOString())
     db.prepare('DELETE FROM convinzioni WHERE id = ?').run(id)
     db.exec('COMMIT')
+    return riga
   } catch (e) { db.exec('ROLLBACK'); throw e }
+}
+
+/**
+ * «Undo» dopo averla scordata: la riga torna com'era (tenuta, con la sua
+ * origine e la sua data), e la lapide se ne va. Solo le colonne della
+ * tabella, e solo se l'id è quello: non è un modo di scriverne una nuova.
+ */
+export function rimettiConvinzione(id: string, riga: Record<string, unknown>): boolean {
+  if (!riga || riga.id !== id || typeof riga.enunciato !== 'string' || !riga.enunciato.trim()) return false
+  const colonne = (db.prepare('PRAGMA table_info(convinzioni)').all() as { name: string }[]).map(c => c.name).filter(c => c in riga)
+  const valore = (v: unknown) => (v === undefined ? null : typeof v === 'object' && v !== null ? JSON.stringify(v) : v) as string | number | null
+  db.exec('BEGIN')
+  try {
+    db.prepare('DELETE FROM convinzioni_tolte WHERE id = ?').run(id)
+    db.prepare(`INSERT OR IGNORE INTO convinzioni (${colonne.join(', ')}) VALUES (${colonne.map(() => '?').join(', ')})`).run(...colonne.map(c => valore(riga[c])))
+    db.exec('COMMIT')
+  } catch (e) { db.exec('ROLLBACK'); throw e }
+  return !!db.prepare('SELECT 1 FROM convinzioni WHERE id = ?').get(id)
 }
 
 export function chiudiConvinzione(id: string) {

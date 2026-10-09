@@ -53,6 +53,24 @@ test('controcaso: detta da lei, si scrive e la lapide se ne va', () => {
   assert.ok(lapide(id))
 })
 
+test('«Undo» subito dopo: la riga torna com’era, tenuta, e la lapide se ne va', () => {
+  const id = store.ricorda({ enunciato: 'Puts the decision in the first line of every document', ambito: 'persona', genere: 'indotta', fiducia: 0.6, origine: 'correzione' })
+  assert.ok(store.confermaConvinzione(id))
+  const prima = store.convinzioni().find(k => k.id === id)!
+  const riga = store.scordaConvinzione(id)
+  assert.ok(riga && !viva(id) && lapide(id))
+  // un'altra riga, o una con un id diverso, non passa da qui
+  assert.equal(store.rimettiConvinzione('altro', riga!), false)
+  assert.ok(!viva(id))
+  // attraverso JSON, come arriva dal client
+  assert.ok(store.rimettiConvinzione(id, JSON.parse(JSON.stringify(riga))))
+  assert.ok(!lapide(id))
+  const dopo = store.convinzioni().find(k => k.id === id)!
+  assert.deepEqual(dopo, prima)
+  // e conta ancora: tenuta da un documento corretto
+  assert.ok(store.convinzioni(undefined, { indotteSoloSeConfermate: true }).some(k => k.id === id))
+})
+
 test('controcaso: una frase diversa non è fermata', () => {
   const id = store.ricorda({ enunciato: 'Risponde a Harbor Labs entro un’ora', ambito: 'persona', genere: 'indotta', fiducia: 0.6, origine: 'chiusura' })
   assert.ok(viva(id))

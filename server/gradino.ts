@@ -45,6 +45,8 @@ export type Gradino = {
 const pulito = (a: string) => a.trim().toLowerCase()
 /** Intatta o appena ritoccata: il senso è quello, qualche parola al massimo. */
 const leggera = (distanza: number) => { const c = classe(distanza); return c === 'identico' || c === 'ritocco' }
+/** Riscritta a fondo: oltre metà delle parole cambiate. Una modificata a metà non è un rifiuto. */
+const pesante = (distanza: number) => classe(distanza) === 'riscritto'
 
 /**
  * Una bozza di risposta partita verso la persona a cui rispondeva. Una per
@@ -109,7 +111,8 @@ function stati(): Map<string, Gradino & { acceso: boolean }> {
     try { const n = (JSON.parse(f.dati ?? '{}') as { nome?: string }).nome; if (n) s.nome = n } catch { /* il nome è un di più */ }
     const buona = leggera(Number(f.valore))
     s.ultime = [...s.ultime, buona].slice(-FINESTRA)
-    s.pesanti = buona ? 0 : s.pesanti + 1
+    // una modificata a metà non sale e non scende: non conta fra le buone, e non rompe né allunga la fila delle riscritte
+    s.pesanti = buona ? 0 : pesante(Number(f.valore)) ? s.pesanti + 1 : s.pesanti
     if (s.acceso && s.pesanti >= PESANTI) { s.acceso = false; continue }
     const conto = s.ultime.filter(Boolean).length
     if (!s.acceso && conto >= SERVONO) { s.acceso = true; s.dal = f.quando }

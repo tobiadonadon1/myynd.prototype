@@ -43,8 +43,11 @@ test('sale a quattro su cinque intatte o quasi, non prima; due riscritte di fila
   // una riscritta sola non basta per scendere
   parte(0.9)
   assert.ok(gradino.acceso(NORA))
-  // la seconda di fila sì
+  // una modificata a metà in mezzo non è una riscritta: non scende
   parte(0.4)
+  assert.ok(gradino.acceso(NORA), 'una bozza modificata a metà non è un rifiuto')
+  // la seconda riscritta di fila sì (la modificata non rompe la fila)
+  parte(0.8)
   assert.equal(gradino.acceso(NORA), null)
   // e dopo due riscritte non si risale con una buona: le ultime cinque non fanno quattro
   parte(0)
@@ -103,6 +106,15 @@ test('di notte, ogni mail di chi è salito che chiede una risposta ha la sua rig
   gradino.ritira(NORA)
   assert.equal(attenzione.compitiAttuali().find(c => c.id === nate[0])!.guadagnato, null)
   assert.equal(gradino.rigaValida(store.compito(nate[0])!), false)
+})
+
+test('il giro di ogni quarto d’ora passa dalle guadagnate, anche con le proposte spente', async () => {
+  store.salvaDocumenti([mail('p1', `Nora <${NORA}>`, { messageId: 'p1@harbor.example' })])
+  for (let i = 0; i < 4; i++) parte(0)
+  const code: string[] = []
+  await iniziativa.preparazione(ORA, id => { code.push(id) }, () => true)
+  assert.equal(code.length, 1)
+  assert.equal(store.compito(code[0]!)?.origine, gradino.ORIGINE)
 })
 
 test('«Come lavori» elenca chi è salito', () => {

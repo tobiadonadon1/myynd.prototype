@@ -35,7 +35,7 @@ import { nominaAmbito } from './ambiti-memoria.ts'
 import { projectMemoryContext } from './project-memory.ts'
 import { fonteValida } from './iniziativa.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
-import { tutteLeDomande } from './testo.ts'
+import { senzaTrattini, tutteLeDomande } from './testo.ts'
 import { giudica, prossimoPasso, simili } from './revisione-lavoro.ts'
 import * as mani from './mani.ts'
 import * as contratto from './contratto.ts'
@@ -1085,7 +1085,7 @@ export function regoleSeguite(v: voce.Voce | null, messaggio: boolean): store.Re
   let tenute: store.Convinzione[] = []
   try { tenute = ferri.imparateDaCorrezioni() } catch { tenute = [] }
   // una convinzione tenuta non ha un conto di correzioni: 0, e la riga non scrive un numero
-  return tenute.map(k => ({ chiave: k.id, genere: 'convinzione' as const, casi: 0, testo: k.enunciato }))
+  return tenute.map(k => ({ chiave: k.id, genere: 'convinzione' as const, casi: 0, testo: senzaTrattini(k.enunciato) }))
 }
 
 const USATA = 'convinzione.usata:'

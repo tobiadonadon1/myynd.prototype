@@ -219,3 +219,13 @@ export function guadagnate(adesso = Date.now(), esegui: (id: string, modo: strin
   if (nate.length) compiti.annunciaCambio()
   return nate
 }
+
+/**
+ * La preparazione discreta di ogni quarto d'ora: prima le risposte
+ * guadagnate, poi le proposte. Qui e non nella rotta, perché il giro della
+ * notte che chiama le guadagnate si possa provare senza aspettare il timer.
+ */
+export function preparazione(adesso = Date.now(), esegui: (id: string, modo: string, nativa: boolean) => void = inCodaPerIlTurno(), pronto = collegato): Promise<string | null> {
+  try { guadagnate(adesso, esegui, pronto) } catch (e) { console.warn('myynd · le risposte guadagnate non sono partite:', e instanceof Error ? e.message : e) }
+  return giro(adesso, esegui, pronto)
+}

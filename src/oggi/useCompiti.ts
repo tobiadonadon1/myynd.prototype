@@ -627,8 +627,13 @@ export function useCompiti(
             .catch(() => mostraToast(t('Non sono riuscito a rimetterla.')))
         })
       } else {
-        await api.scordaConvinzione(r.chiave)
-        mostraToast(t('Tolta: non la seguo più.'))
+        // come per una regola sul tono: «Undo» la rimette com'era, tenuta
+        const { tolta } = await api.scordaConvinzione(r.chiave)
+        mostraToast(t('Tolta: non la seguo più.'), tolta ? () => {
+          api.rimettiConvinzione(r.chiave, tolta)
+            .then(() => setCompiti(cs => cs.map(c => { const p = prima.find(x => x.id === c.id); return p?.voceScritta ? { ...c, voceScritta: p.voceScritta } : c })))
+            .catch(() => mostraToast(t('Non sono riuscito a rimetterla.')))
+        } : undefined)
       }
     } catch { setCompiti(prima); mostraToast(t('Non sono riuscito a toglierla.')) }
   }, [mostraToast])

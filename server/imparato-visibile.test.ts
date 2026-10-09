@@ -173,6 +173,25 @@ test('un documento corretto: la convinzione che nasce chiede «Lo faccio sempre?
   compatibile.usaRete(null)
 })
 
+test('una convinzione nata da un documento corretto si scrive senza lineette: è la frase di «Always do this?» e di «Learned»', async () => {
+  compiti.perProva(null)
+  cfg.scrivi({ lingua: 'en', nome: 'Alex', motore: 'compatibile', compatibile: { url: 'https://memoria.test/v1', modello: 'test' } })
+  compatibile.usaRete((async () => Response.json({
+    choices: [{ message: { role: 'assistant', content: JSON.stringify({ progetti: [], convinzioni: [
+      { enunciato: 'Opens every note with the decision — then the details', ambito: 'persona', genere: 'indotta', fiducia: 0.5, premesse: [], citazione: '', sostituisce: '', soggetto: 'lei' }
+    ] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 }
+  })) as typeof fetch)
+  const nata = await memoria.imparaDalDocumento('The details first.\n\nThen the decision.', 'The decision.\n\nThen the details.')
+  assert.equal(nata?.enunciato, 'Opens every note with the decision. Then the details')
+  assert.deepEqual(store.convinzioni().map(k => k.enunciato), ['Opens every note with the decision. Then the details'])
+  // e una vecchia già scritta con la lineetta non la mostra sotto la bozza
+  store.confermaConvinzione(nata!.id)
+  const vecchia = store.ricorda({ enunciato: 'Keeps tables short — five rows at most', ambito: 'persona', genere: 'indotta', fiducia: 0.6, origine: 'correzione' })
+  store.confermaConvinzione(vecchia)
+  assert.ok(compiti.regoleSeguite(null, false).every(r => !/[—–]/.test(r.testo ?? '')))
+  compatibile.usaRete(null)
+})
+
 test('una mail corretta non chiede «Lo faccio sempre?»: va alle regole sul tono', async () => {
   let chiesto = false
   prova({ svolgi: async () => ({ testo: '', fonti: [] }), imparaDalDocumento: async () => { chiesto = true; return { id: 'x', enunciato: 'y' } } })
@@ -233,6 +252,14 @@ test('la maiuscola in testa non basta: un attrezzo, un giorno, la sua azienda, u
   // ma un'altra persona nominata dal modello, fuori dal suo ambito, no
   assert.equal(memoria.parlaDiUnAltro('Prefers calls to email', { soggetto: 'Nick', ambito: 'cliente:Acme', scambio }), true)
   assert.equal(memoria.parlaDiUnAltro('Prefers calls to email', { soggetto: 'Nick', ambito: 'azienda', scambio }), true, 'Nick è una persona nello scambio')
+  // un nome seguito da un verbo che fa una persona è un altro, anche se lo scambio non lo dice
+  const sola = { soggetto: 'lei', nomeSuo: 'Tobia Donadon', scambio: 'What does Nick think about the audit levers? Nick tends to weigh each lever by margin impact.' }
+  assert.equal(memoria.parlaDiUnAltro('Nick tends to weigh each lever by margin impact', sola), true)
+  assert.equal(memoria.parlaDiUnAltro('Marta preferisce le chiamate alle mail', { soggetto: 'lei' }), true)
+  assert.equal(memoria.parlaDiUnAltro('Often prefers calls to email', sola), false, 'un avverbio non è un nome')
+  assert.equal(memoria.parlaDiUnAltro('Strongly prefers calls to email', sola), false)
+  assert.equal(memoria.parlaDiUnAltro('Tobia prefers calls to email', sola), false, 'il suo nome è lui')
+  assert.equal(memoria.parlaDiUnAltro('Harbor prefers invoices at thirty days', { soggetto: 'lei', ambito: 'azienda' }), false, 'la sua azienda nel suo ambito')
   // chi scrive e basta (una notifica) non è un corrispondente: nomiNoti lo filtra; qui un nome noto conta
   assert.equal(memoria.parlaDiUnAltro('Slack gets checked twice a day', { soggetto: 'lei', noti: new Set(['priya']) }), false)
 })
