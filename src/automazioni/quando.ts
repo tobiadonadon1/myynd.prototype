@@ -28,6 +28,8 @@ export function quandoGira(q: Quando): string {
   const ora = hh(q.ora)
   if (q.ogni === 'giorno') return `${t('ogni giorno alle')} ${ora}`
   if (q.ogni === 'feriali') return du({ it: `dal lunedì al venerdì alle ${ora}`, en: `weekdays at ${ora}` })
+  // il 31 è «l'ultimo giorno»: il turno gira il 30 nei mesi da trenta, e «day 31» sembrava saltarli
+  if (q.ogni === 'mese' && q.giorno === 31) return du({ it: `l'ultimo giorno di ogni mese alle ${ora}`, en: `on the last day of each month at ${ora}` })
   if (q.ogni === 'mese') return du({ it: `il ${q.giorno} di ogni mese alle ${ora}`, en: `on day ${q.giorno} of each month at ${ora}` })
   return `${t('ogni')} ${t(GIORNI[q.giorno] ?? 'lunedì')} ${t('alle')} ${ora}`
 }

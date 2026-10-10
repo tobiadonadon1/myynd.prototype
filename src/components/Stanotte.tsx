@@ -93,7 +93,11 @@ export function RigheFatte({ xs, l, apri, disfa = false, inCarta = false }: {
         )
         return (
           <li key={f.id} className="fatta">
-            {c ? <button type="button" className="ricevuta-apri" onClick={() => apri(c)}>{dentro}</button> : <span className="ricevuta-apri">{dentro}</span>}
+            {/* una carta già chiusa non sta più nella lista: il file o la bozza si aprono lo stesso, dal server
+                (era una riga morta sotto «Fatto», 9 ottobre 2026) */}
+            {c ? <button type="button" className="ricevuta-apri" onClick={() => apri(c)}>{dentro}</button>
+              : l && f.dove.genere !== 'carta' ? <button type="button" className="ricevuta-apri" aria-label={`${t('Apri')}: ${f.titolo}`} onClick={() => void l.portami(f.id)}>{dentro}</button>
+              : <span className="ricevuta-apri">{dentro}</span>}
             {/* F9 · una carta chiusa si disfa per sette giorni, anche da qui */}
             {disfa && c && l && puoDisfare(c) && (
               <span className="stanotte-gesti">

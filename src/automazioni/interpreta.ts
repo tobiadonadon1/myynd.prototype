@@ -33,12 +33,14 @@ const GIORNI: [RegExp, number][] = [
  * intera): `NaN`, e chi chiama non legge la frase invece di scrivere le 16.
  */
 function ora(frase: string): number | null {
-  const m = frase.match(/\b(?:alle|at)\s+(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\b/i)
+  // «5 p.m.» coi punti è «5pm»: senza, il punto dopo la «p» non combaciava e restavano le 5 del mattino
+  const m = frase.match(/\b(?:alle|at)\s+(\d{1,2})(?:[:](\d{2}))?\s*([ap])?\.?\s*(m)?\.?(?![\p{L}])/iu)
   if (m) {
     if (m[2] && Number(m[2]) !== 0) return NaN
     let h = Number(m[1])
-    if (m[3]?.toLowerCase() === 'pm' && h < 12) h += 12
-    if (m[3]?.toLowerCase() === 'am' && h === 12) h = 0
+    const meridiano = m[3] && m[4] ? m[3].toLowerCase() : null
+    if (meridiano === 'p' && h < 12) h += 12
+    if (meridiano === 'a' && h === 12) h = 0
     return h >= 0 && h <= 23 ? h : null
   }
   if (/\b(?:mattina|morning)\b/i.test(frase)) return 8
@@ -91,7 +93,8 @@ export function quandoDetto(frase: string): Quando | null {
      */
     const g = giornoDelMese
       ?? frase.match(/\b(?:on the|the)\s+(\d{1,2})(?:st|nd|rd|th)\b/i)
-      ?? frase.match(/(?<![\p{L}])il\s+(\d{1,2})(?!\s*(?:[\p{L}\d]|%|€|\$))/iu)
+      // «il 15 alle 9», «il 15 controlla»: dopo «il» un numero è un giorno, salvo una quantità
+      ?? frase.match(/(?<![\p{L}])il\s+(\d{1,2})(?!\d|[.,]\d|\s*(?:%|€|\$|per\s*cento|euro|mq|km|kg|ore\b))/iu)
     const giorno = g ? Number(g[1]) : 1
     return { ogni: 'mese', giorno: giorno >= 1 && giorno <= 31 ? giorno : 1, ora: h ?? 8 }
   }

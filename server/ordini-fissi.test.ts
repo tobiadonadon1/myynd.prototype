@@ -314,6 +314,34 @@ test('una mail che ha già la sua bozza (della notte, salvata nella casella) non
   assert.ok(p.bozze.some(b => b.doc === 'posta:q-2'))
 })
 
+test('una mail toccata solo da un riepilogo riceve la sua bozza; una già coperta da una proposta chiusa no (seconda passata, 9 ottobre 2026)', async () => {
+  store.salvaDocumenti([
+    { id: 'posta:r-1', fonte: 'posta', tipo: 'email', titolo: 'Richiesta preventivo porta', corpo: 'Mi manda il preventivo della porta?', autore: 'Ada <ada@harbor.example>', quando: new Date().toISOString(), messageId: '<r1@harbor>' },
+    { id: 'posta:r-2', fonte: 'posta', tipo: 'email', titolo: 'Richiesta preventivo finestra', corpo: 'E quello della finestra?', autore: 'Bo <bo@studio.example>', quando: new Date().toISOString(), messageId: '<r2@studio>' }
+  ] as never)
+  // un riepilogo di un altro ordine fisso ha messo lì il suo primo documento: non è una risposta
+  store.scriviCompito({ id: 'riepilogo', testo: 'Riepilogo dei preventivi', quando: 'oggi', ordine: 'b0', origine: 'auto:riepilogo', doc: 'posta:r-1' })
+  // una proposta di risposte su Bo, già approvata e chiusa
+  // la riga sta sul primo documento del suo giro, un'altra mail: le coperte sono dentro la proposta
+  store.scriviCompito({ id: 'vecchia', testo: 'Risposte ai preventivi', quando: 'oggi', ordine: 'b1', origine: 'auto:vecchia', doc: 'posta:r-altro' })
+  store.proponi('vecchia', { azione: 'posta.bozza', bozze: [{ doc: 'posta:r-2', a: 'bo@studio.example', oggetto: 'Re', corpo: 'Eccolo.' }] } as never, 'Una risposta.')
+  store.scordaProposta('vecchia')
+  store.cambiaStatoCompito('vecchia', 'fatto', 'Approvata.')
+  const r = auto.scrivi(ricetta('bozze-riepilogo', { proponi: 'posta.bozza', attrezzi: ['posta.leggi'], guarda: { cerca: 'Richiesta preventivo porta finestra' } }))
+  let ids: string[] = []
+  auto.perProva({
+    collegato: () => true,
+    uso: () => ({ tetto: 0, entrata: 0, uscita: 0 }),
+    chiediJSON: async o => {
+      ids = (o.formato as { properties: { voci: { items: { properties: { doc: { enum: string[] } } } } } }).properties.voci.items.properties.doc.enum
+      return { voci: [] }
+    }
+  })
+  try { await auto.fai(r) } finally { auto.perProva(null) }
+  assert.ok(ids.includes('posta:r-1'), 'il riepilogo non è una risposta: Ada riceve la sua bozza')
+  assert.ok(!ids.includes('posta:r-2'), 'Bo era già nella proposta approvata: non la si ripropone')
+})
+
 test('se la casella non salva nessuna bozza, la riga resta lì con la sua proposta', async () => {
   const id = 'c-casella-giu'
   store.scriviCompito({ id, testo: 'Risposte', quando: 'oggi', ordine: 'a0', origine: 'auto:x' })

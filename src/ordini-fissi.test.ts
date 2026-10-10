@@ -166,3 +166,18 @@ test('il nome dalla frase si taglia fra due parole, mai a metà di una', () => {
   for (const f of ['Every weekday at 9 put a reply in my drafts for each quote request that is still waiting', 'x'.repeat(90)]) assert.ok(q.nomeDallaFrase(f).length <= 60)
   assert.equal(q.ricettaDaCarta('Send the weekly status update to the Harbor team with the open risks and blockers').nome, 'Send the weekly status update to the Harbor team', 'le paroline appese in fondo se ne vanno')
 })
+
+test('«il 15 alle 9» è il 15, e «5 p.m.» coi punti è il pomeriggio (dopo la seconda passata, 9 ottobre 2026)', () => {
+  assert.deepEqual(quandoDetto('Ogni mese, il 15 alle 9 controlla le fatture'), { ogni: 'mese', giorno: 15, ora: 9 })
+  assert.deepEqual(quandoDetto('Ogni mese il 20 manda il riepilogo'), { ogni: 'mese', giorno: 20, ora: 8 })
+  // una quantità non è un giorno
+  assert.deepEqual(quandoDetto('Ogni mese controlla il 30% delle fatture'), { ogni: 'mese', giorno: 1, ora: 8 })
+  assert.deepEqual(quandoDetto('Every Friday at 5 p.m. send me the digest'), { ogni: 'settimana', giorno: 5, ora: 17 })
+  assert.deepEqual(quandoDetto('Every Monday at 9 a.m. list the quotes'), { ogni: 'settimana', giorno: 1, ora: 9 })
+  assert.deepEqual(quandoDetto('Every Monday at 4pm list the quotes'), { ogni: 'settimana', giorno: 1, ora: 16 })
+})
+
+test('il 31 si dice «l\'ultimo giorno di ogni mese»', () => {
+  assert.equal(in_('en', () => q.quandoGira({ ogni: 'mese', giorno: 31, ora: 8 })), 'on the last day of each month at 08:00')
+  assert.equal(in_('it', () => q.quandoGira({ ogni: 'mese', giorno: 31, ora: 8 })), 'l\'ultimo giorno di ogni mese alle 08:00')
+})

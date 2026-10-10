@@ -4251,10 +4251,22 @@ export function scordaChieste(id: string) {
   db.prepare('UPDATE compiti SET chieste = NULL WHERE id = ?').run(id)
 }
 
-/** Fatta o rifiutata, la proposta non deve restare lì premibile una seconda volta. */
+/**
+ * Fatta o rifiutata, la proposta non deve restare lì premibile una seconda volta.
+ *
+ * Una proposta di risposte lascia scritto quali mail copriva, in `fonti` con
+ * `coperta`: senza, alla volta dopo lo stesso ordine fisso riproponeva le stesse
+ * mail, e approvandole la casella aveva due bozze per lo stesso messaggio
+ * (`docsConRisposta`).
+ */
 export function scordaProposta(id: string) {
-  db.prepare('UPDATE compiti SET proposta = NULL, aggiornato = ?, versione = versione + 1 WHERE id = ?')
-    .run(new Date().toISOString(), id)
+  const r = db.prepare('SELECT proposta, fonti FROM compiti WHERE id = ?').get(id) as { proposta: string | null; fonti: string | null } | undefined
+  const p = jsonOppureNulla(r?.proposta ?? null) as { azione?: string; bozze?: { doc?: string }[] } | null
+  const coperte = p?.azione === 'posta.bozza' ? (p.bozze ?? []).map(b => b.doc).filter((d): d is string => typeof d === 'string') : []
+  const prima = jsonOppureNulla(r?.fonti ?? null)
+  const fonti = coperte.length ? [...(Array.isArray(prima) ? prima : []), ...coperte.map(doc => ({ id: doc, label: '', coperta: true }))] : null
+  db.prepare(`UPDATE compiti SET proposta = NULL${fonti ? ', fonti = ?' : ''}, aggiornato = ?, versione = versione + 1 WHERE id = ?`)
+    .run(...(fonti ? [JSON.stringify(fonti)] : []), new Date().toISOString(), id)
 }
 
 /**
@@ -5376,6 +5388,40 @@ export function docsConRiga(
       ${soglia ? 'AND ((chiuso IS NULL AND sparito IS NULL) OR COALESCE(sparito, chiuso, aggiornato) >= ?)' : ''}
     `).all(...pezzo, ...(origine ? [origine] : []), ...(soglia ? [soglia] : [])) as { doc: string }[]
     for (const r of righe) fuori.add(r.doc)
+  }
+  return fuori
+}
+
+/**
+ * Le mail che hanno già una risposta da un'altra parte (`automazioni.senzaRispostaAltrove`).
+ *
+ * Una riga su quel documento conta se è una risposta: una bozza della notte,
+ * una risposta affidata, una proposta di risposte. Non conta la riga di un
+ * ordine fisso che riassume (un riepilogo, una nota, un evento): mette lì il suo
+ * primo documento, e quella mail non riceveva più nessuna bozza. E contano le
+ * mail coperte da una proposta di risposte già chiusa (`scordaProposta`).
+ * Righe vive, o chiuse da meno di `entroGiorni`.
+ */
+export function docsConRisposta(ids: string[], entroGiorni = 14): Set<string> {
+  const fuori = new Set<string>()
+  if (!ids.length) return fuori
+  const soglia = new Date(Date.now() - entroGiorni * 86_400_000).toISOString()
+  const vivaORecente = '((chiuso IS NULL AND sparito IS NULL) OR COALESCE(sparito, chiuso, aggiornato) >= ?)'
+  for (let i = 0; i < ids.length; i += 200) {
+    const pezzo = ids.slice(i, i + 200)
+    const righe = db.prepare(`SELECT doc, origine, proposta FROM compiti WHERE doc IN (${pezzo.map(() => '?').join(',')}) AND ${vivaORecente}`)
+      .all(...pezzo, soglia) as { doc: string; origine: string | null; proposta: string | null }[]
+    for (const r of righe) {
+      const dellOrdine = String(r.origine ?? '').startsWith('auto:')
+      const proposta = jsonOppureNulla(r.proposta) as { azione?: string } | null
+      if (!dellOrdine || proposta?.azione === 'posta.bozza') fuori.add(r.doc)
+    }
+  }
+  const voluti = new Set(ids)
+  const chiuse = db.prepare(`SELECT fonti FROM compiti WHERE origine LIKE 'auto:%' AND fonti IS NOT NULL AND ${vivaORecente}`).all(soglia) as { fonti: string }[]
+  for (const r of chiuse) {
+    const f = jsonOppureNulla(r.fonti)
+    for (const x of Array.isArray(f) ? f as { id?: string; coperta?: boolean }[] : []) if (x?.coperta && x.id && voluti.has(x.id)) fuori.add(x.id)
   }
   return fuori
 }

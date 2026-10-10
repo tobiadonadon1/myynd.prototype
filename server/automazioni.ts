@@ -876,7 +876,8 @@ const COME_PREPARA: Record<Preparata, string> = {
  */
 export function senzaRispostaAltrove(docs: store.Documento[]): store.Documento[] {
   if (!docs.length) return docs
-  const conRiga = store.docsConRiga(docs.map(d => d.id), undefined, 14)
+  // una riga di risposta, non una riga qualunque: un riepilogo dello stesso ordine non è una risposta
+  const conRiga = store.docsConRisposta(docs.map(d => d.id), 14)
   const proposte = new Set(store.elencoCompiti().flatMap(c =>
     !c.sparito && c.stato === 'pronto' && c.proposta?.azione === 'posta.bozza' ? (c.proposta.bozze ?? []).map(b => b.doc) : []))
   return docs.filter(d => {
@@ -884,7 +885,7 @@ export function senzaRispostaAltrove(docs: store.Documento[]): store.Documento[]
     if (!d.filo) return true
     const filo = store.stessoFilo(d.filo, [d.id], 100)
     if (filo.some(p => p.inviato && Date.parse(p.quando ?? '') >= Date.parse(d.quando ?? ''))) return false
-    return !store.docsConRiga(filo.map(p => p.id), undefined, 14).size
+    return !store.docsConRisposta(filo.map(p => p.id), 14).size
   })
 }
 
