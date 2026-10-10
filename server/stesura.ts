@@ -15,7 +15,7 @@
 // `fermo()` si guarda dopo ogni attesa: un richiamo arrivato mentre il
 // modello scriveva butta via il lavoro, e da qui torna null.
 
-import { congedoAParte, ipotesiNellaLingua, senzaTrattini } from './testo.ts'
+import { congedoAParte, firmaSotto, ipotesiNellaLingua, senzaTrattini } from './testo.ts'
 import * as mani from './mani.ts'
 import { corpoPerChiRiceve, haSegnaposto } from './cornice.ts'
 import { bloccoDalTesto, decidi, duroDalTesto, ipotesiDaDomanda, type Genere, type Mossa } from './domanda-sola.ts'
@@ -181,7 +181,7 @@ export async function stendi(o: {
   let uscita = await chiama(notaGiro)
   for (;;) {
     if (o.fermo()) return null
-    const testo0 = ipotesiNellaLingua(congedoAParte(senzaTrattini(uscita.testo)))
+    const testo0 = firmaSotto(ipotesiNellaLingua(congedoAParte(senzaTrattini(uscita.testo))), cfg.leggi().nome)
     let testo = testo0
     const lette = uscita.lette ?? []
     const eseguito = !!uscita.eseguito

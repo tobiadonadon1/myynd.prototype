@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { congedoAParte, ipotesiNellaLingua, riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
+import { congedoAParte, firmaSotto, ipotesiNellaLingua, riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -279,4 +279,12 @@ test('«Ho supposto» in una bozza inglese diventa «I assumed»; in una italian
     'Cheers,\nAlex\n\nI assumed that "by Thursday" means you can commit to it.')
   const it = 'Un caro saluto\n\nHo supposto venerdì come scadenza.'
   assert.equal(ipotesiNellaLingua(it), it)
+})
+
+test('il congedo senza nome prende il nome di chi scrive; con il nome resta com\'è', () => {
+  assert.equal(firmaSotto('Hi Marco,\n\nTuesday works.\n\nCheers,\n\nDates from [1].', 'Alex Rivera'), 'Hi Marco,\n\nTuesday works.\n\nCheers,\nAlex\n\nDates from [1].')
+  assert.equal(firmaSotto('Ciao,\n\nva bene.\n\nUn caro saluto,', 'Tobia'), 'Ciao,\n\nva bene.\n\nUn caro saluto,\nTobia')
+  const firmata = 'Hi,\n\nOk.\n\nCheers,\nAlex\n\nFrom [1].'
+  assert.equal(firmaSotto(firmata, 'Alex'), firmata)
+  assert.equal(firmaSotto('Hi,\n\nCheers,\n\nx', ''), 'Hi,\n\nCheers,\n\nx')
 })

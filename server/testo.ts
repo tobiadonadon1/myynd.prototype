@@ -113,6 +113,21 @@ export function congedoAParte(testo: string): string {
 }
 
 /**
+ * Il nome sotto il congedo, quando il modello l'ha dimenticato.
+ *
+ * Sul modello vero una risposta finiva con «Cheers,» e poi la riga delle
+ * fonti: una mail firmata da nessuno. Un congedo da solo sulla sua riga, con
+ * sotto una riga vuota o la fine, prende il nome di chi scrive. Il primo
+ * congedo e basta: in una bozza c'è una mail sola.
+ */
+const CONGEDO_SOLO = /^((?:Cheers|Best|Best regards|Kind regards|Warm regards|Regards|Thanks|Thank you|Many thanks|All the best|Un caro saluto|Cari saluti|Saluti|Un saluto|A presto|Grazie|Buona giornata)[,!]?)[ \t]*\n(?=[ \t]*\n|$)/m
+export function firmaSotto(testo: string, nome: string | null | undefined): string {
+  const primo = (nome ?? '').trim().split(/\s+/)[0]
+  if (!primo) return testo
+  return `${testo}\n`.replace(CONGEDO_SOLO, `$1\n${primo}\n`).replace(/\n$/, '')
+}
+
+/**
  * «Ho supposto» davanti a una frase inglese diventa «I assumed».
  *
  * Il prompt chiede la riga dell'ipotesi con «Ho supposto» («I assumed» in
