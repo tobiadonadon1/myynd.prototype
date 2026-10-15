@@ -16,6 +16,9 @@
 //                 l'ultima è ieri; p pulito, g guasto, m muto, - niente. Le ultime `nuova` hanno la versione dell'app.
 //   episodi       [{ fonte, motivo?, rimedio, dal: "-26h", fila?, visto?: "-15m", frase? }]
 //   saltaGiornaliero  true: il giro del giorno risulta già fatto (niente sonda di WhatsApp durante la scena)
+//   x             { fermoGiorni: 25, archivi: [{ nome: "x-fresco", generatoGiorniFa: 2 }] }: il motore di X fermo
+//                 da tanti giorni (config `x` accesa), e archivi di X scompattati in <casa>/Downloads/<nome>;
+//                 `altro: "maniglia"`: un archivio di un altro account trovato fra i download
 
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -26,6 +29,7 @@ const cfg = await import(join(SERVER, 'config.ts'))
 const store = await import(join(SERVER, 'store.ts'))
 const salute = await import(join(SERVER, 'salute-fonti.ts'))
 const fuso = await import(join(SERVER, 'fuso.ts'))
+const finto = await import(new URL('./archivio-x-finto.ts', import.meta.url).pathname)
 
 /** Claude Code finto: entra quando glielo si chiede, e dice se c'è entrato (lo stesso delle prove delle rotte). */
 const FINTO_CLAUDE = `#!/bin/sh
@@ -50,6 +54,7 @@ export type P8 = {
   config?: Record<string, unknown>; togli?: string[]; claude?: 'fuori'; noteNegate?: boolean
   versioni?: Record<string, string>; indicizzati?: Record<string, string>; storia?: Storia[]; episodi?: Episodio[]
   saltaGiornaliero?: boolean
+  x?: { fermoGiorni?: number; archivi?: { nome: string; generatoGiorniFa: number }[]; altro?: string }
 }
 
 /** «-26h», «-6d», «-15m»: un istante ISO. */
@@ -125,6 +130,28 @@ export function semina(p8: P8, o: { casa: string }) {
   for (const e of p8.episodi ?? []) {
     db.prepare('INSERT OR REPLACE INTO stato_fonti (fonte, motivo, rimedio, frase, dal, fila, visto) VALUES (?,?,?,?,?,?,?)')
       .run(e.fonte, e.motivo ?? 'non-disponibile', e.rimedio, e.frase ?? null, tempo(e.dal), e.fila ?? 1, tempo(e.visto ?? e.dal))
+  }
+
+  if (p8.x) {
+    const adesso = Date.now()
+    if (p8.x.fermoGiorni) {
+      const db = join(o.casa, 'x-engine', 'data', 'engine.db')
+      finto.motoreFermo(db, adesso, p8.x.fermoGiorni)
+      cfg.aggiorna({ x: { db } })
+    }
+    if (p8.x.altro) store.segnaCursore('x:archivio:visti', JSON.stringify({ altra: { nome: `twitter-2026-10-14-${p8.x.altro}.zip`, maniglia: p8.x.altro } }))
+    for (const a of p8.x.archivi ?? []) {
+      finto.scriviCartella(join(o.casa, 'Downloads', a.nome), finto.fileArchivio({
+        adesso, generatoGiorniFa: a.generatoGiorniFa,
+        post: [
+          { giorni: a.generatoGiorniFa + 1, testo: 'Shipped the onboarding rewrite today. Fewer screens, one question at a time.', mipiace: 42, repost: 6 },
+          { giorni: a.generatoGiorniFa + 3, testo: 'A digital twin should work while you sleep, not ask you to babysit it.', mipiace: 120, repost: 18 },
+          { giorni: a.generatoGiorniFa + 9, testo: '@maria yes, the spec file is the product.', risposta: true, mipiace: 3 },
+          { giorni: 400, testo: 'Agents need a boundary before they need a prompt.', mipiace: 880, repost: 140 }
+        ],
+        mipiace: [{ giorni: a.generatoGiorniFa + 2, testo: 'Local models are good enough for most of what you do in a day.', autore: 'alice' }]
+      }))
+    }
   }
 
   if (p8.saltaGiornaliero) {
