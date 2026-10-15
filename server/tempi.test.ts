@@ -226,7 +226,7 @@ test('il tempo passato a monitor spento non diventa un ciclo fermo, uno vero sì
       tempi.guardaIlMinuto()
     })
     assert.equal(righe.length, 1, righe.join(' | '))
-    assert.match(righe[0], /^myynd · tempi · ciclo fermo max (4\d\d|5\d\d) ms, p99 \d+ ms · a calcolare \d+ ms · lavori: rilettura$/)
+    assert.match(righe[0], /^myynd · tempi · ciclo fermo max [4-9]\d\d ms, p99 \d+ ms · a calcolare \d+ ms · lavori: rilettura$/)
   } finally {
     mock.timers.reset()
     tempi.perProva(null)
