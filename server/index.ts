@@ -1685,6 +1685,8 @@ function dopoArchivioX(e: archivioX.EsitoImport) {
     store.segnaCursore('x:fermo', null)
     saluteFonti.dimentica('x')
   }
+  // un archivio vecchio con il motore fermo: la lettura di X lo rimette fra quelle da sistemare
+  else if (cfg.leggi().x) leggiInSottofondo('x')
   compiti.annunciaCollegamento()
 }
 

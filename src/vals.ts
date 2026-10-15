@@ -833,6 +833,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const tornati = ripresi(prima, dopo, saniDi(stato))
     // i motori non sono fonti: «posso di nuovo leggere il modello sul tuo Mac» non vuol dire niente
     const fonti = tornati.filter(id => !['claude', 'openai', 'compatibile', 'incluso'].includes(id))
+      // X guarito da un archivio appena letto: lo dice la riga dell'archivio, una sola
+      .filter(id => !(id === 'x' && stato.connettori.find(c => c.id === 'x')?.archivio?.daDire))
     const detto: string[] = []
     if (fonti.length) detto.push(riempi(t('Posso di nuovo leggere {nome}.'), { nome: elenco(fonti.map(nomeDi)) }))
     if (tornati.includes('claude') && Date.now() - claudeDetto.current > 30_000) detto.push(t('Anthropic è di nuovo collegato.'))

@@ -157,6 +157,10 @@ test('quello che arriva dal server ha una traduzione', () => {
 
 /** Quello che non arriva mai sotto gli occhi di nessuno, e perché. */
 const INTERNI = new Set([
+  // l'archivio di X: i guasti dello zip e delle parti si prendono lì accanto e diventano
+  // «Non riesco a leggere questo archivio di X.» o una parte saltata; nessuno li vede
+  'Lo zip finisce prima del previsto.', 'Questo non è uno zip.', 'Questo zip non si legge.',
+  'voce troppo grande', 'voce senza testa', 'parte senza testa', 'parte senza elenco',
   // P10 · `npm run velocita` spegne la rete apposta: lo legge chi lancia il comando nel terminale, mai l'app
   'velocita: niente rete',
   // tornano al modello dentro il giro degli strumenti, non a una persona

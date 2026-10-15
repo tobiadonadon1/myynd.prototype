@@ -1,0 +1,17 @@
+[
+  { "aspetta": 6000 },
+  { "vai": "Sources" },
+  { "aspetta": 800 },
+  { "clicca": "X" },
+  { "aspetta": 1200 },
+  { "scatta": "x-prima" },
+  { "testo": "x-prima" },
+  { "js": "fetch('/api/stato', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }).then(r => r.json()).then(j => fetch('/api/x/archivio', { method: 'POST', headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }, body: JSON.stringify({ percorso: j.config.desktop.cartelle[0].replace(/Documents$/, 'Downloads/x-fresco') }) })).then(r => r.text())" },
+  { "aspetta": 2500 },
+  { "scatta": "x-dopo" },
+  { "testo": "x-dopo" },
+  { "js": "fetch('/api/stato', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }).then(r => r.json()).then(j => fetch('/api/x/archivio', { method: 'POST', headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }, body: JSON.stringify({ percorso: j.config.desktop.cartelle[0].replace(/Documents$/, 'Downloads/x-vecchio') }) })).then(r => r.text())" },
+  { "aspetta": 2500 },
+  { "scatta": "x-vecchio" },
+  { "testo": "x-vecchio" }
+]

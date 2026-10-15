@@ -1,0 +1,12 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" }
+  ],
+  "p8": {
+    "x": { "fermoGiorni": 25, "archivi": [{ "nome": "x-fresco", "generatoGiorniFa": 2 }, { "nome": "x-vecchio", "generatoGiorniFa": 45 }] },
+    "saltaGiornaliero": true
+  }
+}
