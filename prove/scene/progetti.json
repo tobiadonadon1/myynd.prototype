@@ -1,0 +1,46 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 to the first ten paying customers", "priorita": "alta" },
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Close the Harbor Labs pilot" },
+    { "chiave": "qu", "nome": "Quarterly investor update for the seed round, with the new retention numbers", "obiettivo": "Send the Q3 update to investors" },
+    { "chiave": "gs", "nome": "Garden studio" }
+  ],
+  "documenti": [
+    { "id": "conversazioni:codice:nw1", "fonte": "conversazioni", "tipo": "chat", "titolo": "northwind-app · billing", "corpo": "Project: northwind-app\n\nYou: finish the billing page and the invoice emails\n\nClaude: Billing page done. The invoice emails wait for the Stripe test keys.", "quando": "-2h" },
+    { "id": "posta:INBOX:hb1", "fonte": "posta", "tipo": "email", "titolo": "Harbor Labs pilot: next steps", "corpo": "Hi Alex, the Harbor Labs team liked the demo. Can you send the pilot proposal with pricing by Friday?", "autore": "Nora <nora@harbor.example>", "quando": "-3d" },
+    { "id": "posta:INBOX:qu1", "fonte": "posta", "tipo": "email", "titolo": "Quarterly investor update", "corpo": "Alex, when is the quarterly investor update for the seed round going out? We would love the new retention numbers.", "autore": "Sam <sam@fund.example>", "quando": "-6d" }
+  ],
+  "cartelle": [
+    { "nome": "northwind-app", "dentro": "Code", "readme": "# Northwind\n\nThe Northwind web app.\n", "commit": [{ "quando": "-9d", "messaggio": "first billing models" }, { "quando": "-1d", "messaggio": "billing page" }] },
+    { "nome": "recipe-scraper", "dentro": "Code", "commit": [{ "quando": "-6d", "messaggio": "init" }, { "quando": "-2d", "messaggio": "parse ingredients" }] },
+    { "nome": "experimental-voice-transcription-pipeline-for-weekly-meetings", "dentro": "Code", "commit": [{ "quando": "-4d", "messaggio": "whisper prototype" }] },
+    { "nome": "dotfiles", "dentro": "Code", "commit": [{ "quando": "-40d", "messaggio": "zsh" }] }
+  ],
+  "quadri": [
+    {
+      "progetto": "nw", "quando": "-40m",
+      "sintesi": "Northwind is the web app Alex is taking to its first ten paying customers. The billing page shipped yesterday and the invoice emails are the last piece before checkout works end to end. Three design partners are waiting for an invite, and none of them has been told a date yet. Once billing is live, the next step is the invite email to those three.",
+      "stato": "Billing page done. Invoice emails wait for the Stripe test keys.",
+      "traguardo": "First paying customer on Northwind",
+      "mosse": [{ "genere": "sblocco", "titolo": "Ask Priya for the Stripe test keys today", "testo": "The invoice emails are finished in code and only wait for the keys; with them checkout works end to end.", "leva": 3, "urgenza": "oggi" }],
+      "letto": { "riferimento": 1, "memoria": 1, "cartelle": 1, "sessioni": 3, "posta": 4 }
+    },
+    {
+      "progetto": "hb", "quando": "-50m",
+      "stato": "Nora liked the demo and asked for a pilot proposal with pricing by Friday. Nothing has been drafted yet. The pricing sheet from August is the only reference.",
+      "traguardo": "Pilot proposal sent to Nora by Friday",
+      "mosse": []
+    },
+    {
+      "progetto": "qu", "quando": "-30m",
+      "sintesi": "The Q3 investor update is overdue by about a week and Sam asked for it directly, with the new retention numbers that came in at the end of September. The numbers exist in the metrics sheet; the letter itself has not been started, and the last update in July is a good template for its length and tone.",
+      "stato": "Overdue. Numbers ready, letter not started.",
+      "traguardo": "Q3 update sent to all investors",
+      "mosse": [{ "genere": "lavoro", "titolo": "Draft the Q3 investor update from the July one", "testo": "Same length and tone as July, with the September retention numbers in the first paragraph.", "leva": 2, "urgenza": "settimana" }],
+      "letto": { "posta": 2, "file": 1 }
+    }
+  ]
+}

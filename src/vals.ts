@@ -1341,6 +1341,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     isMyynd: screen === 'myynd', isOggi: screen === 'oggi', isChat: screen === 'chat', isAuto: screen === 'auto',
     isMappa: screen === 'mappa', isPref: screen === 'pref', isConn: screen === 'conn',
     isMemoria: screen === 'memoria',
+    isProgetti: screen === 'progetti',
     isAiuto: screen === 'aiuto', menuAiuto: screen === 'aiuto' ? MENU_ON : MENU_OFF, goAiuto: go('aiuto'),
     navMyynd: screen === 'myynd' ? NAV_ON : NAV_OFF,
     navOggi: screen === 'oggi' ? NAV_ON : NAV_OFF,
@@ -1348,6 +1349,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     mostraToast,
     navChat: screen === 'chat' ? NAV_ON : NAV_OFF,
     navAuto: screen === 'auto' ? NAV_ON : NAV_OFF,
+    navProgetti: screen === 'progetti' ? NAV_ON : NAV_OFF,
     /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende. */
     suggerimentiNuovi: stato.suggerimentiNuovi ?? 0,
     vassoioNuovi: stato.vassoioNuovi ?? 0,
@@ -1364,7 +1366,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     menuMemoria: screen === 'memoria' ? MENU_ON : MENU_OFF,
     menuOpen: menu, toggleMenu: () => setMenu(m => !m), chiudiMenu: () => setMenu(false),
     chevron: { display: 'flex', transform: menu ? 'none' : 'rotate(180deg)', transition: 'transform .2s' } as CSSProperties,
-    goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'),
+    goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'), goProgetti: go('progetti'),
     goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'), goMemoria: go('memoria'),
     /** P5: una pagina a sezioni, su una sezione e una scheda precise (la scheda si cerchia di rame). */
     apri: (pagina: 'pref' | 'memoria', sezione?: string, scheda?: string) => { chiediSezione(pagina, sezione, scheda); go(pagina)() },

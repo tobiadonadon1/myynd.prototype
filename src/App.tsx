@@ -5,7 +5,7 @@ import { Sfondo } from './Sfondo'
 import { Cestino, Hov, daTastiera, taglia, useAttiva, useLarghezza } from './ui'
 import {
   IconAiuto, IconCerca, IconChat, IconFulmine, IconIngranaggio,
-  IconMappa, IconMemoria, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
+  IconMappa, IconMemoria, IconPiu, IconProgetti, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
 import { useTastiMenu } from './components/MenuGiu'
 import { Documento, Ricerca, Toast } from './modals'
 import { Aiuto } from './screens/Aiuto'
@@ -25,6 +25,7 @@ import { conLettera } from './mattina'
 import { Preferenze } from './screens/Preferenze'
 import { Memoria } from './screens/Memoria'
 import { PaginaProgetto } from './screens/PaginaProgetto'
+import { Progetti } from './screens/Progetti'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
@@ -547,6 +548,11 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             {lista.inAttesa > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? 'var(--avorio)' : 'var(--rame)' }} />}
             {!rail && lista.inAttesa === 0 && lista.daFare > 0 && <span style={v.badge}>{lista.daFare}</span>}
           </a>
+          {/* il succo di ogni progetto, come l'ha capito: si legge e basta */}
+          <a href="#" onClick={v.goProgetti} style={nav(v.navProgetti)} title={rail ? t('Progetti') : undefined}>
+            <IconProgetti style={{ flex: 'none' }} />
+            {!rail && <span style={{ flex: 1 }}>{t('Progetti')}</span>}
+          </a>
           <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             {/* Myynd ha scritto: il fumetto si accende di rame e il pallino salta, finché non gli rispondi */}
             {v.chatDaLeggere && !v.isChat ? <IconChatPiena style={{ flex: 'none', color: 'var(--rame)' }} /> : <IconChat style={{ flex: 'none' }} />}
@@ -712,6 +718,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             apriGuida={v.goAiuto}
           />
         )}
+        {v.isProgetti && <Progetti v={v} />}
         {v.isChat && <Chat v={v} />}
         {v.isAuto && <Automazioni v={v} />}
         {v.isMappa && <Mappa v={v} />}
