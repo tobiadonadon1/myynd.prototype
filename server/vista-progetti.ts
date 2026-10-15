@@ -18,6 +18,7 @@ import * as progetti from './progetti.ts'
 import * as quadro from './quadro.ts'
 import { stessaCosa } from './priorita.ts'
 import { senzaTrattini } from './testo.ts'
+import { cartella } from './config.ts'
 
 /** Una cartella si propone se ci ha lavorato in questi giorni. */
 export const GIORNI_SUGGERITI = 14
@@ -52,16 +53,7 @@ export type Suggerito = { nome: string; percorso: string; dove: string; ultima: 
  * che una sintesi non ce l'hanno e hanno `stato` (due o tre frasi).
  */
 export function primeFrasi(testo: string, frasi = 3, tetto = 420): string {
-  const pulito = testo.replace(/\s+/g, ' ').trim()
-  if (!pulito) return ''
-  const pezzi = pulito.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) ?? [pulito]
-  let fuori = ''
-  for (const f of pezzi.slice(0, frasi)) {
-    if (fuori && (fuori + f).length > tetto) break
-    fuori += f
-  }
-  fuori = fuori.trim()
-  return fuori.length > tetto ? `${fuori.slice(0, tetto - 1).trimEnd()}…` : fuori
+  return testo.trim() ? quadro.tagliaAFrase(testo, tetto, frasi) : ''
 }
 
 /** Il succo di un quadro: la sintesi se l'ha scritta, sennò le prime frasi di dove sta. */
@@ -91,9 +83,21 @@ export function lettoInFila(letto: Record<string, number> | undefined): { tipo: 
 }
 
 /**
- * Le cartelle di lavoro toccate negli ultimi `GIORNI_SUGGERITI` giorni che non
- * sono di nessun progetto, nemmeno di uno chiuso (chiuderlo è già una
- * risposta). Le più recenti prima, al massimo `SUGGERITI_MAX`.
+ * Una cartella su cui si lavora davvero, e quando. Un repository vale per il
+ * suo ultimo commit; una cartella senza storia solo se ha l'aria di un
+ * progetto (un README o degli appunti: un ambiente Python o una cartella di
+ * dati non lo sono) e per la sua data.
+ */
+export function lavoroNellaCartella(d: Pick<store.Documento, 'corpo' | 'quando'>): string | null {
+  if (/Ultimi commit:\n\d{4}-\d{2}-\d{2}/.test(d.corpo)) return quadro.ultimaDellaCartella(d)
+  return /(?:^|\n)(?:README|Appunti): \S/.test(d.corpo) ? d.quando ?? null : null
+}
+
+/**
+ * Le cartelle di lavoro toccate negli ultimi `GIORNI_SUGGERITI` giorni
+ * (`lavoroNellaCartella`) che non sono di nessun progetto, nemmeno di uno
+ * chiuso (chiuderlo è già una risposta). Le più recenti prima, al massimo
+ * `SUGGERITI_MAX`.
  */
 export function suggeriti(docs: readonly store.Documento[], tutti: readonly Pick<progetti.Progetto, 'nome' | 'alias'>[], adesso = Date.now(), casaGrezza = homedir()): Suggerito[] {
   // «/var/…/T//casa» e «/var/…/T/casa» sono la stessa casa
@@ -103,9 +107,11 @@ export function suggeriti(docs: readonly store.Documento[], tutti: readonly Pick
   for (const d of docs) {
     if (d.fonte !== 'lavoro' || !d.id.startsWith('lavoro:')) continue
     const percorso = d.id.slice('lavoro:'.length)
-    const ultima = quadro.ultimaDellaCartella(d)
+    const ultima = lavoroNellaCartella(d)
     if (!ultima || !(Date.parse(ultima) >= soglia)) continue
     const nome = basename(percorso)
+    // un nome che `cartellaDel` non sa leggere (niente lettere latine né cifre) non tornerebbe mai suo: resterebbe proposto per sempre
+    if (!/[a-z0-9]/i.test(nome.normalize('NFD'))) continue
     if (tutti.some(p => quadro.cartellaDel(p, nome, d.corpo))) continue
     const sopra = dirname(percorso)
     fuori.push({ nome, percorso, dove: casa && (sopra === casa || sopra.startsWith(`${casa}/`)) ? `~${sopra.slice(casa.length)}` : sopra, ultima })
@@ -126,19 +132,48 @@ export function suggeritiAdesso(adesso = Date.now()): Suggerito[] {
 export function aggiungiCartella(percorso: string, adesso = Date.now()): progetti.Creazione | null {
   const s = suggeritiAdesso(adesso).find(x => x.percorso === percorso)
   if (!s) return null
+  cache.delete(cartella())
   return progetti.crea({ nome: s.nome })
 }
 
+/** Quanto resta buona la pagina già fatta, se i quadri e i progetti non sono cambiati. */
+export const CACHE_MS = 60_000
+type Vista = { progetti: VistaProgetto[]; suggeriti: Suggerito[] }
+/*
+ * La pagina già fatta, per persona (la chiave è la sua cartella): rifarla
+ * vuol dire scorrere milleduecento documenti per ogni progetto, e la si apre
+ * spesso. Si rifà dopo un minuto, o subito se è cambiato `quadri.json` o un
+ * progetto (uno nuovo, un nome, uno stato, una priorità).
+ */
+const cache = new Map<string, { quando: number; firma: string; dati: Vista }>()
+/** Solo per le prove. */
+export function svuotaCache() { cache.clear() }
+
+function firma(): string {
+  const ps = progetti.elenco().map(p => `${p.id}|${p.nome}|${p.alias.join(',')}|${p.stato}|${p.priorita ?? ''}|${p.aggiornato}`).join('\n')
+  return `${quadro.quandoCambiatiIQuadri()}\n${ps}`
+}
+
 /** La pagina intera: i progetti vivi col loro succo, e le cartelle proposte. */
-export async function vista(adesso = Date.now()): Promise<{ progetti: VistaProgetto[]; suggeriti: Suggerito[] }> {
+export async function vista(adesso = Date.now()): Promise<Vista> {
+  const chiave = cartella()
+  const ora = firma()
+  const gia = cache.get(chiave)
+  if (gia && gia.firma === ora && Date.now() - gia.quando < CACHE_MS) return gia.dati
+  const dati = fai(adesso)
+  cache.set(chiave, { quando: Date.now(), firma: ora, dati })
+  return dati
+}
+
+function fai(adesso: number): Vista {
   const quadri = quadro.leggiQuadri()
   const docs = store.recenti(1200)
   const fuori: VistaProgetto[] = []
   for (const p of quadro.progettiDaGuardare()) {
     const q = quadri[p.id]
-    // solo l'indice: niente git, niente rete. Serve a sapere quando si è mosso
+    // solo la scelta dei documenti, senza metterli insieme: quando si è mosso
     // e, per i quadri di prima, cosa c'era da leggere
-    const m = await quadro.materiale(p, docs, async () => '', adesso).catch(() => null)
+    const m = quadro.attivitaDi(p, docs, adesso)
     const decise = store.feedDelProgetto(p.id, 30).filter(v => v.stato !== 'aperto').map(v => v.titolo)
     const mossa = prossimaMossa(q, decise, progetti.eAlto(p))
     fuori.push({
@@ -147,10 +182,10 @@ export async function vista(adesso = Date.now()): Promise<{ progetti: VistaProge
       priorita: p.priorita,
       sintesi: succo(q),
       capito: q?.quando ?? null,
-      ultima: m?.recente ?? null,
+      ultima: m.recente,
       mossa: mossa ? { titolo: mossa.titolo, testo: mossa.testo } : null,
       traguardo: q?.traguardo ?? '',
-      letto: q ? lettoInFila(q.letto ?? m?.letto) : []
+      letto: q ? lettoInFila(q.letto ?? m.letto) : []
     })
   }
   // quelli segnati alti davanti, poi i più mossi

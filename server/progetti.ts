@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cartella, leggi as leggiConfig, aggiorna as aggiornaConfig, lingua as linguaApp } from './config.ts'
-import { nominaAmbito, nomeNormalizzato } from './ambiti-memoria.ts'
+import { nominaAmbito, nomeNormalizzato, paroleNormalizzate } from './ambiti-memoria.ts'
 import db, { compito, riassegnaProgetto, type Compito } from './store.ts'
 import { compitiAttuali } from './attenzione.ts'
 import { senzaTrattini } from './testo.ts'
@@ -705,7 +705,7 @@ export function eUnObiettivo(testo: string, progetti = vivi()): boolean {
  * si decide *cosa fargli leggere*, e deve costare zero.
  */
 export function tocca(p: { nome: string; obiettivo: string; alias?: string[] }, testo: string): boolean {
-  const paroleTesto = new Set(nomeNormalizzato(testo).split(' '))
+  const paroleTesto = paroleNormalizzate(testo)
   if (nominaProgetto(testo, { nome: p.nome, alias: p.alias ?? [] })) return true
   const parole = paroleDi(p)
   if (parole.length < 2) return false

@@ -44,7 +44,7 @@
 //   · un progetto che lui ha detto morto non ha quadro.
 
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -60,6 +60,28 @@ import { nominaAmbito } from './ambiti-memoria.ts'
 import { normalizzata, stessaCosa, testoDelProgetto, PROVA_MIN, PROVA_MAX } from './priorita.ts'
 
 const execFileP = promisify(execFile)
+
+/** Quanto può essere lunga la sintesi di un progetto: oltre, si taglia all'ultima frase che ci sta. */
+export const SINTESI_MAX = 900
+
+/**
+ * Un testo tagliato all'ultima fine di frase entro il tetto; se nemmeno la
+ * prima frase ci sta, all'ultima parola, coi puntini.
+ */
+export function tagliaAFrase(testo: string, tetto: number, frasi = Infinity): string {
+  const pulito = testo.replace(/\s+/g, ' ').trim()
+  // una frase finisce dove un punto è seguito da uno spazio: «1.0» non è una fine
+  const pezzi = pulito.split(/(?<=[.!?])\s+/)
+  let fuori = ''
+  for (const f of pezzi.slice(0, frasi)) {
+    const con = fuori ? `${fuori} ${f}` : f
+    if (con.length > tetto) break
+    fuori = con
+  }
+  if (fuori) return fuori
+  const corto = pulito.slice(0, tetto - 1)
+  return `${(corto.includes(' ') ? corto.slice(0, corto.lastIndexOf(' ')) : corto).trimEnd()}…`
+}
 
 /** Sotto queste ore dall'ultimo quadro di un progetto non se ne rifà un altro, anche se il materiale è cambiato. */
 export const ORE_MINIME = 2
@@ -145,6 +167,10 @@ const FILE = () => join(cartella(), 'quadri.json')
 export function leggiQuadri(): Record<string, Quadro> {
   try { return (JSON.parse(readFileSync(FILE(), 'utf8')) as Archivio).quadri ?? {} } catch { return {} }
 }
+/** Quando è cambiato l'archivio dei quadri di questa persona, o 0 se non c'è: chi tiene una copia sa se rifarla. */
+export function quandoCambiatiIQuadri(): number {
+  try { return statSync(FILE()).mtimeMs } catch { return 0 }
+}
 function scriviQuadri(q: Record<string, Quadro>) {
   const dentro = cartella()
   if (!existsSync(dentro)) mkdirSync(dentro, { recursive: true, mode: 0o700 })
@@ -163,8 +189,10 @@ const piano = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g
  */
 export function cartellaDel(p: Pick<progetti.Progetto, 'nome' | 'alias'>, nomeCartella: string, readme = ''): boolean {
   const c = piano(nomeCartella)
-  const nomi = [p.nome, ...p.alias].map(piano).filter(n => n.length >= 3)
   if (!c) return false
+  // lo stesso nome, anche cortissimo («ux»): una cartella diventata progetto col suo nome è sua
+  if ([p.nome, ...p.alias].some(n => piano(n) === c)) return true
+  const nomi = [p.nome, ...p.alias].map(piano).filter(n => n.length >= 3)
   for (const n of nomi) {
     if (n === c) return true
     const parole = n.split(' ')
@@ -368,8 +396,57 @@ async function guardaVero(url: string): Promise<string> {
  * lo nominano, la posta e le note che lo toccano, la memoria del progetto,
  * quello che ha scritto lui, la lista, e com'è andata con le carte di prima.
  */
-export async function materiale(p: progetti.Progetto, docs: readonly store.Documento[], leggi: Leggi = cartellaProfonda, adesso = Date.now(), guarda: Guarda | null = null): Promise<Materiale> {
+/**
+ * I documenti che appartengono a un progetto, scelti senza leggerli: le sue
+ * cartelle di codice, le sessioni con gli assistenti fatte lì o che lo nominano,
+ * e la posta, le note, i file, l'agenda degli ultimi `GIORNI` che lo toccano.
+ * La stessa scelta per il materiale del quadro e per la pagina dei Progetti.
+ */
+export function fontiDel(p: progetti.Progetto, docs: readonly store.Documento[], adesso = Date.now()) {
   const soglia = adesso - GIORNI * 86_400_000
+  const cartelle = docs.filter(d => d.fonte === 'lavoro' && cartellaDel(p, basename(d.id.slice('lavoro:'.length)), d.corpo))
+  const percorsi = new Set(cartelle.map(d => d.id.slice('lavoro:'.length)))
+  // in una sua cartella, o che lo nominano nel titolo
+  const sessioni = docs.filter(d => {
+    if (d.fonte !== 'conversazioni' || Date.parse(d.quando ?? '') < soglia) return false
+    const c = cartellaDellaSessione(d)
+    if (c && (percorsi.has(c) || [...percorsi].some(x => basename(x) === c) || cartellaDel(p, basename(c)))) return true
+    return progetti.nominaProgetto(d.titolo, p)
+  }).sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 6)
+  const altri = docs.filter(d => !['lavoro', 'conversazioni', 'x'].includes(d.fonte)
+    && Date.parse(d.quando ?? '') >= soglia
+    && progetti.tocca(p, `${d.titolo}\n${d.corpo.slice(0, 1500)}`))
+    .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 8)
+  return { cartelle, sessioni, altri }
+}
+
+/** Le righe che ha scritto lui di suo pugno su questo progetto (il riferimento), col suo nome o un alias. */
+function suoiDel(p: progetti.Progetto): string {
+  const nomi = [p.nome, ...p.alias, ...[...riferimento.alias()].filter(([, id]) => id === p.id).map(([n]) => n)]
+  return riferimento.leggi().testo.split('\n').filter(r => nomi.some(n => nominaAmbito(r, n))).join('\n').slice(0, 1500)
+}
+
+/**
+ * Quando si è mosso un progetto e cosa c'è da leggere, senza mettere insieme
+ * il materiale: niente testo, niente cartelle aperte. Per la pagina dei
+ * Progetti, che lo chiede a ogni visita; il conteggio è quello che il quadro
+ * leggerebbe prima del tetto sui caratteri.
+ */
+export function attivitaDi(p: progetti.Progetto, docs: readonly store.Documento[], adesso = Date.now()): { recente: string | null; letto: Record<string, number> } {
+  const { cartelle, sessioni, altri } = fontiDel(p, docs, adesso)
+  let recente = ''
+  const segna = (q: string | null | undefined) => { if (q && q > recente) recente = q }
+  const letto: Record<string, number> = {}
+  const conta = (tipo: string) => { letto[tipo] = (letto[tipo] ?? 0) + 1 }
+  if (suoiDel(p)) conta('riferimento')
+  if (testoDelProgetto(p.id)) conta('memoria')
+  for (const d of cartelle) { segna(ultimaDellaCartella(d)); conta('cartelle') }
+  for (const d of sessioni) { segna(d.quando); conta('sessioni') }
+  for (const d of altri) { segna(d.quando); conta(tipoDiFonte(d.fonte)) }
+  return { recente: recente || null, letto }
+}
+
+export async function materiale(p: progetti.Progetto, docs: readonly store.Documento[], leggi: Leggi = cartellaProfonda, adesso = Date.now(), guarda: Guarda | null = null): Promise<Materiale> {
   const fonti = new Map<string, string>()
   /*
    * I blocchi in fila per importanza, ognuno col suo tetto, e la prova vale
@@ -386,9 +463,8 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     if (lavoro && lavoro > recente) recente = lavoro
   }
 
+  const { cartelle, sessioni, altri } = fontiDel(p, docs, adesso)
   // le cartelle
-  const cartelle = docs.filter(d => d.fonte === 'lavoro' && cartellaDel(p, basename(d.id.slice('lavoro:'.length)), d.corpo))
-  const percorsi = new Set(cartelle.map(d => d.id.slice('lavoro:'.length)))
   for (const d of cartelle) {
     const percorso = d.id.slice('lavoro:'.length)
     const t = ((await leggi(percorso)) || d.corpo).slice(0, TETTO_CARTELLA)
@@ -396,13 +472,7 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     metti(d.id, `[${d.id}] Cartella di codice ${basename(percorso)} (ultima modifica ${(d.quando ?? '').slice(0, 10)})\n${t}`, t, 'cartelle')
   }
 
-  // le sessioni con gli assistenti: in una sua cartella, o che lo nominano nel titolo
-  const sessioni = docs.filter(d => {
-    if (d.fonte !== 'conversazioni' || Date.parse(d.quando ?? '') < soglia) return false
-    const c = cartellaDellaSessione(d)
-    if (c && (percorsi.has(c) || [...percorsi].some(x => basename(x) === c) || cartellaDel(p, basename(c)))) return true
-    return progetti.nominaProgetto(d.titolo, p)
-  }).sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 6)
+  // le sessioni con gli assistenti
   for (const d of sessioni) {
     const t = sessioneRidotta(d.corpo)
     segna(d.quando)
@@ -410,10 +480,6 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   }
 
   // la posta, le note, i file, l'agenda che lo toccano
-  const altri = docs.filter(d => !['lavoro', 'conversazioni', 'x'].includes(d.fonte)
-    && Date.parse(d.quando ?? '') >= soglia
-    && progetti.tocca(p, `${d.titolo}\n${d.corpo.slice(0, 1500)}`))
-    .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 8)
   for (const d of altri) {
     const t = d.corpo.replace(/\s+/g, ' ').trim().slice(0, 700)
     segna(d.quando)
@@ -434,8 +500,7 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   // la memoria del progetto e quello che ha scritto lui
   const memoria = testoDelProgetto(p.id).slice(0, 3000)
   if (memoria) blocchi.unshift({ id: 'memoria', testo: `[memoria] Obiettivo e memoria del progetto\n${memoria}`, fonte: memoria, tipo: 'memoria' })
-  const nomi = [p.nome, ...p.alias, ...[...riferimento.alias()].filter(([, id]) => id === p.id).map(([n]) => n)]
-  const suoi = riferimento.leggi().testo.split('\n').filter(r => nomi.some(n => nominaAmbito(r, n))).join('\n').slice(0, 1500)
+  const suoi = suoiDel(p)
   if (suoi) blocchi.unshift({ id: 'riferimento', testo: `[riferimento] Quello che ha scritto lui su questo progetto, di suo pugno (vale più di tutto il resto)\n${suoi}`, fonte: suoi, tipo: 'riferimento' })
 
   // la lista, e com'è andata con le carte di prima: è così che impara
@@ -620,7 +685,8 @@ export async function quadroDi(p: progetti.Progetto, m: Materiale): Promise<Quad
   // sull'obiettivo solo sotto la soglia; su una cosa vista sempre, se il modello la ritiene necessaria
   const tipo = out.domandaTipo === 'osservazione' ? 'osservazione' : 'obiettivo'
   const domanda = tipo === 'osservazione' || certezza < CERTEZZA_MINIMA ? (testoDi(out.domanda, 10, 260) ?? '') : ''
-  const sintesi = testoDi(out.sintesi, 20, 900)
+  // troppo lunga si taglia a una fine di frase: perderla tutta per una frase in più non serve a nessuno
+  const sintesi = testoDi(typeof out.sintesi === 'string' ? tagliaAFrase(out.sintesi, SINTESI_MAX) : null, 20, SINTESI_MAX)
   return {
     progetto: p.id, nome: p.nome,
     ...(obiettivo ? { obiettivo: { testo: obiettivo, certezza } } : {}),
@@ -666,6 +732,9 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
       const prima = archivio[p.id]
       const eta = prima ? adesso - Date.parse(prima.quando) : Infinity
       const vecchio = !prima || prima.versione !== VERSIONE
+      // un quadro di prima della sintesi (senza `letto`, che c'è in tutti quelli nuovi) si rifà al primo giro
+      // utile, dentro il tetto di QUADRI_AL_GIRO; uno nuovo a cui il modello non l'ha scritta non si richiede per questo
+      const senzaSintesi = !!prima && !prima.sintesi && !prima.letto
       const m = await materiale(p, docs, ferri.leggi, adesso)
       const cambiato = vecchio || prima.impronta !== m.impronta
       // la pagina pubblica: un progetto che ne ha una si rilegge almeno ogni ORE_SITO, e se la pagina è cambiata il quadro si rifà
@@ -675,7 +744,7 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
         fuoriCambiato = !!conFuori.fuori && conFuori.fuori !== prima?.fuori
       }
       const sitoScaduto = !!m.indirizzi?.length && eta >= ORE_SITO * 3_600_000
-      if ((cambiato && (vecchio || eta >= ORE_MINIME * 3_600_000)) || fuoriCambiato || sitoScaduto || eta >= ORE_MASSIME * 3_600_000) candidati.push({ p, m })
+      if ((cambiato && (vecchio || eta >= ORE_MINIME * 3_600_000)) || (senzaSintesi && eta >= ORE_MINIME * 3_600_000) || fuoriCambiato || sitoScaduto || eta >= ORE_MASSIME * 3_600_000) candidati.push({ p, m })
     }
     candidati.sort((a, b) => b.m.ultima.localeCompare(a.m.ultima))
     for (const { p, m: interno } of candidati.slice(0, QUADRI_AL_GIRO)) {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { frasi, t } from '../lingua'
 import { api, type CartellaSuggerita, type ProgettoVisto } from '../api'
 import { Bottone, Casella } from '../components/forme'
-import { IconPiu } from '../icons'
+import { IconGiu, IconPiu } from '../icons'
 import { daQuando, lettoInRiga } from '../progetti-vista'
 import type { Vals } from '../vals'
 import './progetti.css'
@@ -85,13 +85,19 @@ export function Progetti({ v }: { v: Vals }) {
 function Riga({ p, aperta, apri, vai }: { p: ProgettoVisto; aperta: boolean; apri: () => void; vai: () => void }) {
   const succo = p.sintesi || ''
   const passo = p.mossa?.titolo || p.traguardo
+  const quando = daQuando(p.ultima)
   return (
     <li className={`pj-voce${aperta ? ' aperta' : ''}`}>
       <button type="button" className="pj-riga" aria-expanded={aperta} onClick={apri}>
-        <span className="pj-nome">{p.nome}</span>
+        {/* la freccia della pagina di un progetto («Nomi e raggruppamento»): di lato chiusa, giù aperta */}
+        <span className="pj-nome">
+          <span className="pj-freccia" aria-hidden="true"><IconGiu size={10} stroke="currentColor" /></span>
+          <span className="pj-nome-testo">{p.nome}</span>
+        </span>
         {/* aperta, il succo sta intero qui sotto: la riga non lo ripete */}
-        <span className={`pj-succo${succo ? '' : ' muto'}`} aria-hidden={aperta || undefined}>{aperta ? '' : succo || t('Non ancora letto')}</span>
-        <span className="pj-quando">{daQuando(p.ultima)}</span>
+        {/* senza un'attività nota la colonna della data non resta vuota: il succo si allarga fin là */}
+        <span className={`pj-succo${succo ? '' : ' muto'}`} data-solo={quando ? undefined : true} aria-hidden={aperta || undefined}>{aperta ? '' : succo || t('Non ancora letto')}</span>
+        {quando && <span className="pj-quando">{quando}</span>}
       </button>
       {aperta && (
         <div className="pj-dettaglio">
