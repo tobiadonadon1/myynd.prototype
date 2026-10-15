@@ -206,6 +206,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
       ].filter(Boolean).join(' · ') || (moduloSopra ? '' : t(scelta.nota))
     : t(scelta.nota)
   const pronti = tutti
+  // rotta: un guaio scritto, o le Note senza il permesso del disco
+  const rotta = (c: NonNullable<typeof s>['connettori'][number]) => !!c.problema || (c.id === 'note' && c.collegato && !!s && statoAccessoNote(s).problema)
   const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
   const apri = (id: string) => {
     ultimo.current = id; setSoloQuesta(id); setModifica(false); setDaFinire(false); giaPartita.current = false
@@ -264,7 +266,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
               manca sotto. Qui conta ancora di più, perché il pannello si apre per
               collegare qualcosa — e la seconda lista è quella che si è venuti a
               leggere. Vedi `connessioni.css`, «collegate sopra, da collegare sotto». */}
-          {([['Collegate', pronti.filter(c => c.collegato || !!c.problema), 'collegate'],
+          {([['Collegate', pronti.filter(c => c.collegato && !rotta(c)), 'collegate'],
+             ['Da sistemare', pronti.filter(rotta), 'da-sistemare'],
              ['Da collegare', pronti.filter(c => !c.collegato && !c.problema), 'da-collegare']] as const).map(([titolo, quali, classe]) => !!quali.length &&
             <section key={classe} className={`connections-group ${classe}`} aria-labelledby={`gruppo-${classe}`}>
               <h3 className="connections-group-heading" id={`gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h3>
@@ -302,7 +305,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
               testo={frasi.cartelleNonAperte(letturaDesk.illeggibili.length)}
               coda={t('Apri Impostazioni, aggiungi Myynd, poi torna qui.')} />
           </div>}
-          {scelta.collegato && <div className="connection-detail-actions">
+          {(scelta.collegato || !!problema) && <div className="connection-detail-actions">
             {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} aria-busy={!!fonteInLettura || undefined} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id || (fonteInLettura === '*' && righe?.some(r => r.id === scelta.id && (r.stato === 'attesa' || r.stato === 'leggo'))) ? t('leggo…') : t('Rileggi')}</button>}
             {CAMBIABILI.includes(scelta.id) && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}
             <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica() }}>{t('Scollega')}</BottoneSicuro>

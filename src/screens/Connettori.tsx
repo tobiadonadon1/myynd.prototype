@@ -46,8 +46,11 @@ export function Connettori({ v }: { v: Vals }) {
    * L'ordine non è alfabetico e non è casuale: dentro ogni gruppo resta quello
    * del catalogo, che è già stato deciso una volta in `registro.ts`.
    */
-  const collegate = fonti.filter(c => c.collegata)
-  const daCollegare = fonti.filter(c => !c.collegata)
+  // ottobre 2026: una fonte rotta o scollegata non sta mai fra le collegate.
+  // Ha il suo gruppo in mezzo, con la parola che dice cosa serve
+  const collegate = fonti.filter(c => c.collegata && !c.problema)
+  const daSistemare = fonti.filter(c => c.problema)
+  const daCollegare = fonti.filter(c => !c.collegata && !c.problema)
   const gruppo = (titolo: string, quali: typeof fonti, classe: string) => !!quali.length &&
     <section className={`connections-group ${classe}`} aria-labelledby={`gruppo-${classe}`}>
       <h2 className="connections-group-heading" id={`gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h2>
@@ -65,6 +68,7 @@ export function Connettori({ v }: { v: Vals }) {
       {v.connCount > 0 && <button className="connections-button" onClick={v.sincronizza} disabled={!!v.sincronizzando} aria-busy={!!v.sincronizzando || undefined}>{v.sincronizzando ? t('Leggo…') : t('Rileggi tutto')}</button>}
     </header>
     {gruppo('Collegate', collegate, 'collegate')}
+    {gruppo('Da sistemare', daSistemare, 'da-sistemare')}
     {gruppo('Da collegare', daCollegare, 'da-collegare')}
     {!!v.connFuturi.length && <details className="connections-future"><summary>{t('Più avanti')} <span>{v.connFuturi.length}</span></summary>
       <p>{t('Questi restano qui perché fanno parte del disegno, ma non sono ancora collegabili.')}</p>

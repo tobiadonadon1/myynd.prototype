@@ -180,8 +180,9 @@ export function scegliClaudeSeServe(): boolean {
  * le configurazioni rimaste così non guarivano più: le Fonti dicevano Claude
  * collegato, la prima pagina «serve Claude». E una configurazione vecchia letta
  * all'avvio. L'ordine: Claude, per cui Myynd è messo a punto; il modello sul
- * computer, che non costa niente; OpenAI con la chiave; l'account ChatGPT solo
- * se in Myynd è acceso. Un motore che lavora non si tocca mai.
+ * computer mai: lavora solo se è lei a sceglierlo; OpenAI con la chiave;
+ * l'account ChatGPT solo se in Myynd è acceso. Un motore che lavora non si
+ * tocca mai.
  */
 export function riparaIlMotore(): boolean {
   if (tornaAlMotoreDiPrima()) return true
@@ -202,7 +203,7 @@ export function riparaIlMotore(): boolean {
     ...(ferma ? [['claude', conClaude()] as [Via, boolean]] : []),
     // F8 · l'AI inclusa non costa niente a chi la usa: subito dopo Claude
     ['incluso', !!fornitoreIncluso(c)],
-    ['compatibile', !!(c.compatibile?.url && c.compatibile.modello)],
+    // il modello sul computer mai da solo: lavora se l'ha scelto lei (ottobre 2026)
     ['openai', !!fornitoreOpenAI(c)],
     ['chatgpt', c.chatgpt?.attivo === true && !!chatgpt.installato()]
   ]
@@ -301,7 +302,10 @@ export function tornaAlMotoreDiPrima(): boolean {
     : prima === 'incluso' ? !!fornitoreIncluso(c)
     : !!(c.compatibile?.url && c.compatibile.modello)
   // il motore di prima che è ancora morto non torna: tornerebbe a non rispondere
-  if (!puo || morta(prima)) return false
+  // scollegato nel frattempo: non c'è più niente a cui tornare, e il ricordo
+  // teneva la sua scheda fra le Collegate con «non risponde»
+  if (!puo) { delete c.motorePrima; scriviConfig(c, { togli: ['motorePrima'] }); return false }
+  if (morta(prima)) return false
   /*
    * Quelli che si bussano tornano solo con una risposta vista: «non ancora
    * morto» non basta. Dopo un riavvio non si è bussato a nessuno, e al primo

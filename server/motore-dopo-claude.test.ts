@@ -76,27 +76,23 @@ test('ogni strada che collega Claude passa dalla regola, e lo stato dice se si r
 /*
  * Il 2 ottobre 2026 Claude Code è uscito, `riparaIlMotore` ha messo al lavoro
  * Ollama (scritto da settembre, spento), e quando Claude è tornato il motore è
- * rimasto quello: una settimana senza un punto, una notizia, una carta.
+ * rimasto quello: una settimana senza un punto, una notizia, una carta. Da
+ * ottobre il locale non prende mai da solo il posto di Claude.
  */
-test('il motore scelto da Myynd al posto di Claude torna a Claude quando Claude torna', () => {
-  // Claude se n'è andato: lavora il modello sul computer, e si ricorda da dove si veniva
+test('Claude se ne va: il modello sul computer non prende il suo posto, e Claude torna da solo', () => {
   cfg.scrivi({
     motore: 'claude',
     compatibile: { url: 'http://127.0.0.1:11434/v1', modello: 'qwen3.5:9b' }
   } as never, { togli: ['claude', 'claudeCon', 'motorePrima'] })
   assert.equal(mod.collegato(), false)
-  assert.equal(mod.riparaIlMotore(), true)
-  assert.equal(cfg.leggi().motore, 'compatibile')
-  assert.equal(cfg.leggi().motorePrima, 'claude')
-  // Claude non c'è ancora: si resta dove si è
-  assert.equal(mod.riparaIlMotore(), false)
-  assert.equal(cfg.leggi().motore, 'compatibile')
-  // Claude è tornato: si torna lì, e il ricordo se ne va
-  cfg.aggiorna({ claude: { apiKey: 'sk-ant-prova' } } as never)
-  assert.equal(mod.riparaIlMotore(), true)
+  assert.equal(mod.riparaIlMotore(), false, 'il locale lavora solo se l’ha scelto lei')
   assert.equal(cfg.leggi().motore, 'claude')
   assert.equal(cfg.leggi().motorePrima, undefined)
-  assert.equal(mod.riparaIlMotore(), false, 'una volta tornato, non si cambia più niente')
+  // Claude è tornato: lavora, senza niente da rimettere a posto
+  cfg.aggiorna({ claude: { apiKey: 'sk-ant-prova' } } as never)
+  assert.equal(mod.collegato(), true)
+  assert.equal(mod.riparaIlMotore(), false)
+  assert.equal(cfg.leggi().motore, 'claude')
 })
 
 test('un motore scelto da lei non torna indietro da solo', () => {

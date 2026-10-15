@@ -163,18 +163,27 @@ test('un motore che lavora non si tocca, e senza un altro che risponda non si ca
   assert.equal(teste.testaDaMostrare()?.rimedio, 'spento')
 })
 
-test('Claude con la chiave respinta e il modello sul Mac che risponde: si passa al locale, e la chiave nuova riporta Claude', async () => {
+test('Claude con la chiave respinta e il modello sul Mac che risponde: si resta su Claude, la riga chiede la chiave', async () => {
   usa({ motore: 'claude', claude: { apiKey: 'sk-ant-vecchia' }, compatibile: LOCALE })
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   mod.notaRifiuto(new Anthropic.AuthenticationError(401, { type: 'error', error: { type: 'authentication_error', message: 'invalid' } }, 'invalid', new Headers()), 'claude')
   await teste.sonda({ forza: true })
-  assert.equal(cfg.leggi().motore, 'compatibile', 'il locale ha appena risposto: lavora lui')
+  assert.equal(cfg.leggi().motore, 'claude', 'il modello sul Mac lavora solo se l’ha scelto lei')
+  assert.equal(cfg.leggi().motorePrima, undefined)
   assert.equal(teste.testaDaMostrare()?.rimedio, 'credenziale')
-  assert.deepEqual(teste.testaDaMostrare()?.intanto, { via: 'compatibile', locale: true })
-  // la chiave nuova: Claude torna
+  assert.equal(teste.testaDaMostrare()?.intanto, undefined)
+  // la chiave nuova: Claude lavora di nuovo, senza cambi
   const c = cfg.leggi(); c.claude = { apiKey: 'sk-ant-nuova' }; cfg.scrivi(c)
-  assert.equal(mod.riparaIlMotore(), true)
+  assert.equal(mod.riparaIlMotore(), false)
   assert.equal(cfg.leggi().motore, 'claude')
+})
+
+test('il motore di prima scollegato: il ricordo se ne va, e la sua scheda non ha più un guaio', () => {
+  usa({ motore: 'claude', motorePrima: 'compatibile', claude: { apiKey: 'sk-ant-a' } })
+  mod.segnaVia('compatibile', false); mod.segnaVia('compatibile', false)
+  assert.equal(mod.riparaIlMotore(), false)
+  assert.equal(cfg.leggi().motorePrima, undefined)
+  assert.equal(teste.problemaScheda('compatibile'), null)
 })
 
 test('una scelta sua dimentica il cambio: Myynd non la rimette com’era', () => {

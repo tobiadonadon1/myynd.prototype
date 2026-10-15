@@ -5860,7 +5860,8 @@ function aParte(cosa: string, fai: () => Promise<unknown>): () => void {
  */
 function perOgnuno(cosa: string, fai: () => Promise<unknown>): () => void {
   return aParte(cosa, async () => {
-    for (const utente of conti.tutti()) {
+    // sul Mac solo chi lo usa: vedi `conti.alLavoro`
+    for (const utente of ospitato.OSPITATO ? conti.tutti() : conti.alLavoro(cfg.RADICE)) {
       try {
         await chi.dentro(utente, fai)
       } catch (e) {

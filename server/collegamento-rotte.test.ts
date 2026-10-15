@@ -219,7 +219,7 @@ test('spegnere ChatGPT in Myynd, con Claude collegato, lascia lavorare Claude', 
   assert.equal(letto.motore, 'claude', 'spento ChatGPT, il motore resta su uno che non può lavorare')
 })
 
-test('scollegato Claude, lavora il modello sul computer che è ancora collegato', async () => {
+test('scollegato Claude, il modello sul computer ancora collegato non prende il suo posto da solo', async () => {
   await daCapo()
   const c = await chiama('POST', '/api/connettori/compatibile', { url: `${fintoUrl}/compat/v1`, modello: 'finto-locale', nome: 'Finto' })
   assert.equal(c.stato, 200, JSON.stringify(c.json))
@@ -228,8 +228,11 @@ test('scollegato Claude, lavora il modello sul computer che è ancora collegato'
   assert.equal((await stato()).motore, 'claude')
   await chiama('DELETE', '/api/connettori/claude')
   const dopo = await stato()
-  assert.equal(dopo.ragiona, true, 'c’è un modello collegato e Myynd dice che non può ragionare')
-  assert.equal(dopo.motore, 'compatibile')
+  // ottobre 2026: il locale lavora solo se è lei a sceglierlo
+  assert.equal(dopo.ragiona, false)
+  assert.notEqual(dopo.motore, 'compatibile')
+  await chiama('POST', '/api/modello/motore', { motore: 'compatibile' })
+  assert.equal((await stato()).ragiona, true, 'scelto a mano, il locale lavora')
 })
 
 test('un collegamento cambiato arriva anche a un’altra finestra, sul filo dei compiti', async () => {

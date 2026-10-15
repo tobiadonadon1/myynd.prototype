@@ -126,23 +126,22 @@ export function desktop(): Desktop | null {
 export type Piattaforma = Desktop['piattaforma']
 
 /*
- * Gli avvisi di sistema: spenti finché la persona non li accende.
+ * Gli avvisi di sistema: accesi finché la persona non li spegne.
  *
- * Il brief vuole un'app quieta, e un avviso è un'interruzione: la si sceglie.
- * Sta in `localStorage`, come le altre preferenze della pagina, e si legge
- * senza rompere niente dove il browser lo nega.
+ * Erano spenti finché non li si accendeva, e nessuno li accendeva: a metà
+ * ottobre 2026 sul suo Mac la chiave non era mai stata scritta, e un lavoro
+ * pronto o una fonte rotta non arrivavano mai. Sta in `localStorage`, come le
+ * altre preferenze della pagina: «0» vuol dire spenti da lei, e una pagina su
+ * una porta nuova (che il deposito non lo ha) li trova accesi, non persi.
  */
 const CHIAVE_AVVISI = 'myynd.avvisi'
 
 export function avvisiAccesi(): boolean {
-  try { return localStorage.getItem(CHIAVE_AVVISI) === '1' } catch { return false }
+  try { return localStorage.getItem(CHIAVE_AVVISI) !== '0' } catch { return true }
 }
 
 export function impostaAvvisi(accesi: boolean) {
-  try {
-    if (accesi) localStorage.setItem(CHIAVE_AVVISI, '1')
-    else localStorage.removeItem(CHIAVE_AVVISI)
-  } catch { /* senza deposito resta spento, che è il predefinito */ }
+  try { localStorage.setItem(CHIAVE_AVVISI, accesi ? '1' : '0') } catch { /* senza deposito restano accesi, che è il predefinito */ }
 }
 
 /** Il nome della piattaforma come lo si scrive, non come lo dice Node. */

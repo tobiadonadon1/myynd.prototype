@@ -149,7 +149,7 @@ function LApp({ ospitato }: { ospitato: boolean }) {
         <Interruttore acceso={!!avvio} cambia={cambiaAvvio} etichetta={t('Si apre all’accesso')} disabilitato={avvio === null} />
       </div>
 
-      {/* spento finché non lo si accende; P8 lo usa anche per una fonte che si rompe */}
+      {/* acceso finché non lo si spegne; P8 lo usa anche per una fonte che si rompe */}
       <div className="f-riga">
         <div className="f-nome">{t('Notifiche')}</div>
         <Interruttore acceso={avvisi} cambia={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} etichetta={t('Notifiche')} />

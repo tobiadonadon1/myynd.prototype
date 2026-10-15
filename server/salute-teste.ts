@@ -142,6 +142,10 @@ export function guaioDi(via: mod.Via): Guaio | null {
  * bussata vecchia a un motore che non lavora non dice niente di adesso.
  */
 export function problemaScheda(id: 'claude' | 'openai' | 'compatibile'): Rimedio | null {
+  // scollegato non ha guai: una scheda senza niente scritto sta fra le «da collegare»
+  const scritto = leggi()
+  if (id === 'compatibile' && !scritto.compatibile) return null
+  if (id === 'openai' && !scritto.openai?.chiave && scritto.chatgpt?.attivo !== true) return null
   if (id === 'claude' || id === 'openai') {
     const p = problemaTesta(id)
     if (p && p.rimedio !== 'credito') return p.rimedio

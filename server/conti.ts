@@ -310,6 +310,21 @@ export function tutti(): string[] {
 }
 
 /**
+ * Per chi girano i lavori di sfondo su questo computer.
+ *
+ * Sul Mac l'app è di una persona: i conti dei suoi clienti stanno sul disco,
+ * ma lavorare per loro tutto il giorno senza un motore collegato faceva 566
+ * «Collega Claude» in due giorni (ottobre 2026). Qui girano solo il conto
+ * della radice — chi c'era prima dei conti — e chi ha una sessione aperta.
+ * Sui conti di Postgres (un server) girano tutti, come prima.
+ */
+export function alLavoro(radice: string): string[] {
+  if (!db) return tutti()
+  const dentro = new Set((db.prepare('SELECT DISTINCT utente FROM sessioni').all() as { utente: string }[]).map(r => r.utente))
+  return tutti().filter(u => dentro.has(u) || cartellaDi(u) === radice)
+}
+
+/**
  * La cartella di questo conto.
  *
  * Quasi sempre `utenti/<id>`. L'eccezione è una sola e vale per una
