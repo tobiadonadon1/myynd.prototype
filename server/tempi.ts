@@ -20,9 +20,10 @@ import * as chi from './chi.ts'
 export const SOGLIA = Number(process.env.MYYND_TEMPI_SOGLIA) || 150
 
 type Monitor = { enable(): boolean; disable(): boolean; reset(): void; max: number; percentile(p: number): number }
-type Ferri = { ora: () => number; monitor: () => Monitor; log: (riga: string) => void }
+type Ferri = { ora: () => number; cpu: () => number; monitor: () => Monitor; log: (riga: string) => void }
 const VERI: Ferri = {
   ora: () => performance.now(),
+  cpu: () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000 },
   monitor: () => monitorEventLoopDelay({ resolution: 50 }),
   log: riga => console.log(riga)
 }
@@ -114,13 +115,36 @@ let contaCessioni = 0
 export const cessioni = () => contaCessioni
 
 // — il ciclo degli eventi, solo quando c'è lavoro —
+//
+// Ottobre 2026 · il registro diceva «ciclo fermo max 50097 ms, p99 52 ms»
+// ogni minuto, e il server intanto rispondeva in pochi millisecondi. Non era
+// il ciclo, era il monitor: `disable()` non dimentica l'ultimo campione, e al
+// `enable()` dopo il primo campione è tutto il tempo passato da spento (dai
+// dieci secondi di quiete fino alla richiesta dopo). Adesso, prima di
+// dormire, i numeri del minuto si mettono da parte e il monitor si azzera:
+// riparte da capo.
+//
+// E un fermo vero si dice per quello che è. Un battito ogni 200 ms guarda
+// quanto è in ritardo e quanto ha lavorato il processo nel frattempo: «a
+// calcolare» è il ciclo occupato (JSON, regex, un ciclo lungo); «senza
+// calcolo» è il processo sospeso dal sistema, o fermo su una chiamata
+// sincrona che aspetta (un comando, il disco).
+
+const BATTITO = 200
 
 let monitor: Monitor | null = null
 let acceso = false
 let accesoNelMinuto = false
 let spegni: ReturnType<typeof setTimeout> | null = null
 let minuto: ReturnType<typeof setInterval> | null = null
-let ultimoFermo: { max: number; p99: number; quando: string } | null = null
+let battito: ReturnType<typeof setInterval> | null = null
+let ultimoBattito: { ora: number; cpu: number } | null = null
+/** I numeri del minuto (in ns, come il monitor) messi da parte prima di dormire. */
+let daParte = { max: 0, p99: 0 }
+/** Il fermo più lungo del minuto visto dal battito, in ms, per com'era. */
+let fermi = { calcolo: 0, senza: 0 }
+type Fermo = { max: number; p99: number; quando: string; calcolo?: number; senzaCalcolo?: number }
+let ultimoFermo: Fermo | null = null
 const lavori = new Map<string, number>()
 
 function comincia() {
@@ -142,6 +166,9 @@ function sveglia() {
     acceso = true
     accesoNelMinuto = true
   } catch { return }
+  try { ultimoBattito = { ora: ferri.ora(), cpu: ferri.cpu() } } catch { ultimoBattito = null }
+  battito = setInterval(battiIlCuore, BATTITO)
+  battito.unref?.()
   if (!minuto) {
     minuto = setInterval(guardaIlMinuto, 60_000)
     minuto.unref?.()
@@ -153,25 +180,60 @@ function forseDorme() {
   spegni = setTimeout(() => {
     spegni = null
     if (inVolo > 0 || lavori.size > 0) return
-    try { monitor?.disable() } catch { /* niente */ }
-    acceso = false
+    dormi()
   }, 10_000)
   spegni.unref?.()
+}
+
+/** Spegne il monitor senza portarsi dietro il tempo da spento. */
+function dormi() {
+  if (battito) { clearInterval(battito); battito = null }
+  ultimoBattito = null
+  try {
+    if (monitor) {
+      daParte = { max: Math.max(daParte.max, monitor.max), p99: Math.max(daParte.p99, monitor.percentile(99)) }
+      monitor.reset()
+      monitor.disable()
+    }
+  } catch { /* niente */ }
+  acceso = false
+}
+
+/** Un battito: quanto è arrivato tardi, e se intanto il processo calcolava (per le prove si chiama a mano). */
+export function battiIlCuore(): void {
+  let adesso: { ora: number; cpu: number }
+  try { adesso = { ora: ferri.ora(), cpu: ferri.cpu() } } catch { return }
+  const prima = ultimoBattito
+  ultimoBattito = adesso
+  if (!prima) return
+  const fermo = adesso.ora - prima.ora - BATTITO
+  if (fermo <= SOGLIA) return
+  // almeno metà del fermo passata a lavorare: il ciclo era occupato
+  const calcolo = adesso.cpu - prima.cpu >= fermo / 2
+  const ms = Math.round(fermo)
+  if (calcolo) fermi.calcolo = Math.max(fermi.calcolo, ms)
+  else fermi.senza = Math.max(fermi.senza, ms)
 }
 
 /** Ogni minuto: se il ciclo è stato fermo oltre la soglia, lo si dice (per le prove si chiama a mano). */
 export function guardaIlMinuto() {
   if (!monitor) return
   if (accesoNelMinuto) {
-    const max = Math.round(monitor.max / 1e6)
-    const p99 = Math.round(monitor.percentile(99) / 1e6)
+    const max = Math.round(Math.max(daParte.max, monitor.max) / 1e6)
+    const p99 = Math.round(Math.max(daParte.p99, monitor.percentile(99)) / 1e6)
     if (max > SOGLIA) {
       ultimoFermo = { max, p99, quando: new Date().toISOString() }
+      const pezzi = [`ciclo fermo max ${max} ms, p99 ${p99} ms`]
+      if (fermi.calcolo > SOGLIA) { ultimoFermo.calcolo = fermi.calcolo; pezzi.push(`a calcolare ${fermi.calcolo} ms`) }
+      if (fermi.senza > SOGLIA) { ultimoFermo.senzaCalcolo = fermi.senza; pezzi.push(`senza calcolo ${fermi.senza} ms (sospeso, o in attesa sincrona)`) }
       const chi = [...lavori.keys()]
-      ferri.log(`myynd · tempi · ciclo fermo max ${max} ms, p99 ${p99} ms${chi.length ? ` · lavori: ${chi.join(', ')}` : ''}`)
+      if (chi.length) pezzi.push(`lavori: ${chi.join(', ')}`)
+      ferri.log(`myynd · tempi · ${pezzi.join(' · ')}`)
     }
   }
   try { monitor.reset() } catch { /* niente */ }
+  daParte = { max: 0, p99: 0 }
+  fermi = { calcolo: 0, senza: 0 }
   accesoNelMinuto = acceso
 }
 
@@ -297,7 +359,7 @@ export function manutenzioneTocca(ora: number, dovuta: number, quietoAdesso: boo
 
 export type Riassunto = {
   richieste: { rotta: string; n: number; p50: number; p95: number; max: number }[]
-  ciclo: { max: number; p99: number; quando: string } | null
+  ciclo: Fermo | null
   lavori: string[]
   chat: RecordChat[]
 }
@@ -348,6 +410,8 @@ export function perProva(f: Partial<Ferri> | null = null): void {
   inVolo = 0; ultimaFine = Number.NEGATIVE_INFINITY; contaCessioni = 0
   if (spegni) clearTimeout(spegni)
   if (minuto) clearInterval(minuto)
+  if (battito) clearInterval(battito)
   try { monitor?.disable() } catch { /* niente */ }
-  spegni = null; minuto = null; monitor = null; acceso = false; accesoNelMinuto = false; ultimoFermo = null
+  spegni = null; minuto = null; battito = null; ultimoBattito = null; monitor = null; acceso = false; accesoNelMinuto = false; ultimoFermo = null
+  daParte = { max: 0, p99: 0 }; fermi = { calcolo: 0, senza: 0 }
 }

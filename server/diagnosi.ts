@@ -9,10 +9,10 @@
 // cartella di casa. Niente esce dal Mac: il file si scrive e basta, e lo
 // manda lei se vuole.
 
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { arch, homedir, release, userInfo } from 'node:os'
-import { format } from 'node:util'
+import { format, promisify } from 'node:util'
 import { join } from 'node:path'
 
 /** Quante righe del registro entrano nel rapporto. */
@@ -134,12 +134,18 @@ export type Contenuto = {
   adesso?: Date
 }
 
-/** La versione di macOS, chiesta a `sw_vers`; fuori da un Mac il sistema com'è. */
-export function versioneMacOS(): string {
+const esegui = promisify(execFile)
+
+/**
+ * La versione di macOS, chiesta a `sw_vers`; fuori da un Mac il sistema com'è.
+ * Senza aspettare fermi: era l'ultimo comando sincrono del server, e con il
+ * suo tetto di tre secondi poteva tenere fermo il ciclo per tutti.
+ */
+export async function versioneMacOS(): Promise<string> {
   if (process.platform !== 'darwin') return `${process.platform} ${release()} (${arch()})`
   try {
-    const v = execFileSync('/usr/bin/sw_vers', ['-productVersion'], { encoding: 'utf8', timeout: 3000 }).trim()
-    return `macOS ${v} (Darwin ${release()}, ${arch()})`
+    const { stdout } = await esegui('/usr/bin/sw_vers', ['-productVersion'], { encoding: 'utf8', timeout: 3000 })
+    return `macOS ${stdout.trim()} (Darwin ${release()}, ${arch()})`
   } catch { return `macOS (Darwin ${release()}, ${arch()})` }
 }
 

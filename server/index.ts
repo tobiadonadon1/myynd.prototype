@@ -1839,7 +1839,7 @@ app.get('/api/incluso', async (_req, res) => {
  * Scrivania, con quello che è suo coperto (`diagnosi.oscura`). Niente rete.
  * Solo sul suo computer: su un server non c'è una Scrivania.
  */
-app.post('/api/diagnosi', (_req, res) => {
+app.post('/api/diagnosi', async (_req, res) => {
   if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Non ancora disponibile su questo server.' })
   try {
     const c = cfg.leggi()
@@ -1848,7 +1848,7 @@ app.post('/api/diagnosi', (_req, res) => {
       : c.motore === 'openai' ? `openai (${c.openai?.modello ?? '?'})` : (c.motore ?? 'claude')
     const testo = diagnosi.rapporto({
       versione: saluteFonti.versioneApp(),
-      macos: diagnosi.versioneMacOS(),
+      macos: await diagnosi.versioneMacOS(),
       motore: `${motore}${c.motorePrima ? `, chosen ${c.motorePrima}` : ''}${mod.collegato() ? '' : ', not connected'}`,
       modelli: cfg.modelliPerLivello(c),
       salute: tg ? `${tg.via ?? tg.id}: ${tg.rimedio}${tg.minuti ? ` for ${tg.minuti} min` : ''}${tg.intanto ? `, working with ${tg.intanto.via}` : ''}` : 'ok',
