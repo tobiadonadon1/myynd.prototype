@@ -289,6 +289,9 @@ export type Presenza = { ultima?: string; dal?: string }
  * che finisce adesso; se no, vale quella di prima. Mai oltre sette giorni.
  * Null: non l'ha mai guardato, e conta la giornata.
  */
+/** Sempre qui da più di tanto: «mentre eri via» torna a essere la giornata. */
+export const PRESENTE_MAX_ORE = 36
+
 export function dalDa(p: Presenza, adesso: Date): string | null {
   const ora = adesso.getTime()
   const tetto = ora - ASSENZA_MAX_GIORNI * GIORNO
@@ -296,7 +299,8 @@ export function dalDa(p: Presenza, adesso: Date): string | null {
   const dal = p.dal ? Date.parse(p.dal) : NaN
   const nel = (t: number) => Number.isFinite(t) && t <= ora
   if (nel(ultima) && ora - ultima >= ASSENZA_MIN * 60_000) return new Date(Math.max(ultima, tetto)).toISOString()
-  if (nel(dal)) return new Date(Math.max(dal, tetto)).toISOString()
+  // un'assenza finita da più di un giorno e mezzo, e lui sempre qui da allora: conta la giornata
+  if (nel(dal) && ora - dal <= PRESENTE_MAX_ORE * 3_600_000) return new Date(Math.max(dal, tetto)).toISOString()
   return null
 }
 
@@ -310,6 +314,9 @@ export function dalDelRitorno(adesso = new Date()): string | null {
  * lo perde. Un ritorno dopo mezz'ora fissa l'inizio dell'assenza che finisce.
  */
 export function qui(adesso = new Date()) {
+  // scritto meno di un minuto fa: niente di nuovo da dire al disco
+  const prima = leggiJson<Presenza>(FILE_PRESENZA, {}).ultima
+  if (prima && adesso.getTime() - Date.parse(prima) >= 0 && adesso.getTime() - Date.parse(prima) < 60_000) return
   const dal = dalDelRitorno(adesso)
   scriviJson(FILE_PRESENZA, { ultima: adesso.toISOString(), ...(dal ? { dal } : {}) })
 }

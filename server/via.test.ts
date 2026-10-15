@@ -184,4 +184,10 @@ test('da quando non c’era lo sa il server: mezz’ora di assenza apre una rice
   assert.equal(via.dalDelRitorno(ore(3)), ore(0).toISOString())
   via.qui(ore(3))
   assert.equal(via.dalDelRitorno(ore(3.1)), ore(0).toISOString(), 'tornato: l’assenza resta quella, finché non ne fa un’altra')
+  // sempre qui da più di un giorno e mezzo: «mentre eri via» torna a essere la giornata
+  assert.equal(via.dalDa({ ultima: ore(39.9).toISOString(), dal: ore(0).toISOString() }, ore(40)), null)
+  // un secondo `qui` entro il minuto non riscrive niente
+  via.qui(ore(3.2))
+  via.qui(ore(3.2 + 0.5 / 60))
+  assert.equal(via.dalDelRitorno(ore(3.2 + 0.6 / 60)), ore(0).toISOString())
 })
