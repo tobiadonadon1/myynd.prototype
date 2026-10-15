@@ -4,7 +4,7 @@
 
 import { loc } from './lingua'
 
-export type Screen = 'myynd' | 'oggi' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto'
+export type Screen = 'myynd' | 'oggi' | 'progetti' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto'
 
 export type Campo = { k: string; v: string }
 export type Fonte = { id: string; label: string }

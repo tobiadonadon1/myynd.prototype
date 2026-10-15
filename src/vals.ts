@@ -21,7 +21,8 @@ import { contaGenere } from './conta-fonti.ts'
 import { genereDi as genereDiFonte } from '../server/generi.ts'
 import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
-import { avvisiAccesi, desktop } from './desktop.ts'
+import { avvisiAccesi } from './desktop.ts'
+import { avvisa, dalFeed, impostaSchermo } from './avvisi.ts'
 import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
 import { segna, tempiChat } from './tempi.ts'
 import { rigaImparata } from './gemello-frasi.ts'
@@ -609,11 +610,14 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const inSospeso = useRef<EventoLettura | null>(null)
   const iniziativeOra = useRef<ProjectInitiative[]>([])
 
+  /** Il feed è arrivato almeno una volta: da lì in poi una carta nuova è davvero nuova. */
+  const feedLetto = useRef(false)
   const caricaFeed = useCallback(async () => {
     let f: Awaited<ReturnType<typeof api.feed>>
     const miaAllInvio = mia.current
     try {
       f = await api.feed()
+      feedLetto.current = true
       setGuastoFeed(null)
       segna('feed')
     } catch (e) {
@@ -721,6 +725,25 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     return () => { clearTimeout(attesa); chiudi() }
   }, [caricaFeed])
 
+  /*
+   * Una carta che oggi conta davvero, nata mentre lui non guarda.
+   *
+   * La prima lettura del feed è come stanno le cose, e non si dice niente; da
+   * lì, una carta nuova col peso più alto («oggi, o in ritardo») diventa un
+   * avviso di sistema, se gli avvisi sono accesi e la finestra non è davanti.
+   * Il clic porta su quella carta. Le altre no: il feed non è un campanello.
+   */
+  const vociNote = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    if (!feedLetto.current) return
+    const prima = vociNote.current
+    vociNote.current = new Set([...(prima ?? []), ...aperti.map(v => v.id)])
+    if (!prima) return
+    for (const c of dalFeed(prima, aperti)) avvisa(c)
+  }, [aperti])
+  // la schermata davanti a lui: tornato sulla finestra, quello che lei mostra l'ha visto
+  useEffect(() => { impostaSchermo(screen) }, [screen])
+
   // il grafo arriva quando si apre la Mappa, e una volta sola
   useEffect(() => {
     if (mappaInVista && !grafo) caricaMente(true).catch(() => {})
@@ -822,7 +845,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         titoliNegati: false, dopoImpostazioni: false, puoAprire: false, puoRiavviare: false
       })
       if (r) {
-        desktop()?.notifica?.({ titolo: r.frase, corpo: '', dove: 'oggi' })
+        avvisa({ genere: 'fonte', id: [...nuovi].sort().join(','), titolo: r.frase, corpo: '', dove: 'oggi' })
         for (const id of nuovi) notificati.current.add(id)
       }
     }
@@ -1332,6 +1355,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     isMyynd: screen === 'myynd', isOggi: screen === 'oggi', isChat: screen === 'chat', isAuto: screen === 'auto',
     isMappa: screen === 'mappa', isPref: screen === 'pref', isConn: screen === 'conn',
     isMemoria: screen === 'memoria',
+    isProgetti: screen === 'progetti',
     isAiuto: screen === 'aiuto', menuAiuto: screen === 'aiuto' ? MENU_ON : MENU_OFF, goAiuto: go('aiuto'),
     navMyynd: screen === 'myynd' ? NAV_ON : NAV_OFF,
     navOggi: screen === 'oggi' ? NAV_ON : NAV_OFF,
@@ -1339,6 +1363,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     mostraToast,
     navChat: screen === 'chat' ? NAV_ON : NAV_OFF,
     navAuto: screen === 'auto' ? NAV_ON : NAV_OFF,
+    navProgetti: screen === 'progetti' ? NAV_ON : NAV_OFF,
     /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende. */
     suggerimentiNuovi: stato.suggerimentiNuovi ?? 0,
     vassoioNuovi: stato.vassoioNuovi ?? 0,
@@ -1355,7 +1380,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     menuMemoria: screen === 'memoria' ? MENU_ON : MENU_OFF,
     menuOpen: menu, toggleMenu: () => setMenu(m => !m), chiudiMenu: () => setMenu(false),
     chevron: { display: 'flex', transform: menu ? 'none' : 'rotate(180deg)', transition: 'transform .2s' } as CSSProperties,
-    goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'),
+    goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'), goProgetti: go('progetti'),
     goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'), goMemoria: go('memoria'),
     /** P5: una pagina a sezioni, su una sezione e una scheda precise (la scheda si cerchia di rame). */
     apri: (pagina: 'pref' | 'memoria', sezione?: string, scheda?: string) => { chiediSezione(pagina, sezione, scheda); go(pagina)() },

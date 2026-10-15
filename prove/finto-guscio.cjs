@@ -17,4 +17,16 @@ function finto() {
     apply() { return finto() }
   })
 }
-window.myynd = finto()
+// Gli avvisi di sistema non escono: si scrivono in `window.__avvisi`, e chi
+// si iscrive a `naviga` resta in `window.__naviga`, così un passo `js` può
+// leggere cosa la pagina avrebbe detto e fare il clic dell'avviso.
+window.__avvisi = []
+window.__naviga = []
+const base = finto()
+window.myynd = new Proxy(base, {
+  get(t, k) {
+    if (k === 'notifica') return n => { window.__avvisi.push(JSON.parse(JSON.stringify(n))) }
+    if (k === 'naviga') return cb => { window.__naviga.push(cb); return () => { window.__naviga = window.__naviga.filter(f => f !== cb) } }
+    return t[k]
+  }
+})

@@ -1,0 +1,58 @@
+/* La pagina dei Progetti (`Progetti.tsx`).
+   Righe su una linea, divise da un filo: niente carte, niente colori. Il titolo
+   fa la gerarchia; il rame non c'è, se non nel bottone sotto il dito e nel fuoco
+   da tastiera. Di notte niente velo sotto il mouse: cambia solo l'inchiostro. */
+
+.pj{width:100%;max-width:760px;padding:12px 4px 30px;box-sizing:border-box;color:var(--inchiostro)}
+.pj h1{margin:0 0 22px;font-size:32px;line-height:1.1;font-weight:400}
+.pj :is(button,input):focus-visible{outline:2px solid var(--rame-testo);outline-offset:3px}
+
+.pj-lista{list-style:none;margin:0;padding:0;border-top:1px solid rgba(var(--inchiostro-rgb),.1)}
+.pj-voce{border-bottom:1px solid rgba(var(--inchiostro-rgb),.1)}
+.pj-riga{display:grid;grid-template-columns:minmax(0,198px) minmax(0,1fr) minmax(72px,auto);align-items:baseline;column-gap:18px;width:100%;padding:13px 2px;border:none;background:none;color:inherit;font-family:inherit;text-align:left;cursor:pointer}
+.pj-nome{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:14.5px;font-weight:500}
+.pj-nome-testo{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pj-succo{min-width:0;font-size:13px;color:rgba(var(--inchiostro-rgb),.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .15s}
+.pj-succo[data-solo]{grid-column:2/-1}
+.pj-freccia{flex:none;display:flex;align-self:center;color:rgba(var(--inchiostro-rgb),.45);transform:rotate(-90deg);transition:transform .2s}
+.pj-voce.aperta .pj-freccia{transform:none}
+.pj-succo.muto,.pj-testo.muto{color:rgba(var(--inchiostro-rgb),.42)}
+.pj-riga:hover .pj-succo:not(.muto),.pj-voce.aperta .pj-succo:not(.muto){color:rgba(var(--inchiostro-rgb),.85)}
+.pj-quando{flex:none;font-size:12px;color:rgba(var(--inchiostro-rgb),.5);white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
+
+/* aperta: il succo intero sotto il nome, poi il prossimo passo e cosa ha letto */
+.pj-dettaglio{padding:0 2px 18px 20px;display:flex;flex-direction:column;gap:14px;animation:fadein .18s ease}
+.pj-testo{margin:0;max-width:62ch;font-size:13.5px;line-height:1.6;color:rgba(var(--inchiostro-rgb),.86);overflow-wrap:anywhere;text-wrap:pretty}
+.pj-campo{display:flex;flex-direction:column;gap:3px;min-width:0}
+.pj-etichetta{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.5)}
+.pj-passo{margin:0;font-size:13.5px;font-weight:500;line-height:1.45;overflow-wrap:anywhere}
+.pj-perche,.pj-letto{margin:0;font-size:12.5px;line-height:1.5;color:rgba(var(--inchiostro-rgb),.64);overflow-wrap:anywhere}
+.pj-piede{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.pj-piede>span{min-width:0;font-size:12px;color:rgba(var(--inchiostro-rgb),.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* il gesto per farne uno nuovo: scritto piccolo, senza bordo */
+.pj-gesto{display:inline-flex;align-items:center;gap:6px;margin-top:14px;padding:2px 0;border:none;background:none;color:rgba(var(--inchiostro-rgb),.55);font-family:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.pj-gesto:hover{color:var(--rame-testo)}
+.pj-nuovo{margin-top:14px;width:100%;max-width:420px}
+.pj-nuovo .f-scatola{align-items:center;padding:5px 6px 5px 14px}
+.pj-vuoto-riga{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px}
+.pj-vuoto-riga .pj-gesto,.pj-vuoto-riga .pj-nuovo{margin-top:0}
+.pj-vuoto-riga .pj-nuovo{flex:1;min-width:220px}
+.pj-vuoto{margin:0;font-size:13.5px;color:rgba(var(--inchiostro-rgb),.62)}
+
+/* sotto, piano: le cartelle in cui lavora che non sono ancora un progetto */
+.pj-cartelle{margin-top:40px}
+.pj-cartelle h2{margin:0 0 6px;font-size:12px;font-weight:500;color:rgba(var(--inchiostro-rgb),.55)}
+.pj-cartelle ul{list-style:none;margin:0;padding:0}
+.pj-cartella{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,180px) minmax(72px,auto) auto;align-items:center;column-gap:18px;padding:7px 2px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.06)}
+.pj-cartella:last-child{border-bottom:none}
+.pj-cartella-nome{font-size:13px;color:rgba(var(--inchiostro-rgb),.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pj-cartella-dove{min-width:0;font-size:12px;color:rgba(var(--inchiostro-rgb),.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+@media(max-width:620px){
+  .pj-riga{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
+  .pj-riga .pj-succo{grid-column:1/-1;grid-row:2;padding-left:18px}
+  .pj-cartella{grid-template-columns:minmax(0,1fr) auto auto}
+  .pj-cartella-dove{display:none}
+}
+@media(prefers-reduced-motion:reduce){.pj-dettaglio{animation:none}.pj-succo,.pj-freccia{transition:none}}

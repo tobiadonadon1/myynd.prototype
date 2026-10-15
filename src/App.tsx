@@ -5,7 +5,7 @@ import { Sfondo } from './Sfondo'
 import { Cestino, Hov, daTastiera, taglia, useAttiva, useLarghezza } from './ui'
 import {
   IconAiuto, IconCerca, IconChat, IconFulmine, IconIngranaggio,
-  IconMappa, IconMemoria, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
+  IconMappa, IconMemoria, IconPiu, IconProgetti, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
 import { useTastiMenu } from './components/MenuGiu'
 import { Documento, Ricerca, Toast } from './modals'
 import { Aiuto } from './screens/Aiuto'
@@ -25,6 +25,7 @@ import { conLettera } from './mattina'
 import { Preferenze } from './screens/Preferenze'
 import { Memoria } from './screens/Memoria'
 import { PaginaProgetto } from './screens/PaginaProgetto'
+import { Progetti } from './screens/Progetti'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
@@ -430,11 +431,35 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   useTastiMenu(menuConto, { chiudi: v.chiudiMenu, ritorno: bottoneConto, aperto: v.menuOpen })
   const vRef = useRef(v)
   vRef.current = v
+  // un avviso di sistema apre la riga di cui parla: la lista e il gesto di adesso
+  const casaRef = useRef({ lista, apri: apriLavoroCasa })
+  casaRef.current = { lista, apri: apriLavoroCasa }
   useEffect(() => desktop()?.naviga(dove => {
     const v = vRef.current
-    // dal richiamo: «continua nell'app» porta sulla chat appena nata
-    if (typeof dove === 'object') { if (dove.dove === 'chat' && dove.id) v.apriChat(dove.id); return }
-    if (dove === 'preferenze') v.goPref()
+    if (typeof dove === 'object') {
+      // dal richiamo: «continua nell'app» porta sulla chat appena nata
+      if (dove.dove === 'chat' && dove.id) v.apriChat(dove.id)
+      // da un avviso: la riga pronta si apre sopra la prima pagina; se la
+      // lista non l'ha ancora, resta la prima pagina, dove arriverà
+      if (dove.dove === 'compito' && dove.id) {
+        v.goMyynd()
+        const c = casaRef.current.lista.compiti.find(x => x.id === dove.id)
+        if (c) casaRef.current.apri(c)
+      }
+      // e la carta del feed: la prima pagina, con la carta sotto gli occhi
+      if (dove.dove === 'voce' && dove.id) {
+        v.goMyynd()
+        const id = dove.id
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const el = [...document.querySelectorAll<HTMLElement>('[data-voce]')].find(x => x.dataset.voce === id)
+          el?.scrollIntoView({ block: 'center' })
+          el?.focus({ preventScroll: true })
+        }))
+      }
+      return
+    }
+    if (dove === 'casa') v.goMyynd()
+    else if (dove === 'preferenze') v.goPref()
     else if (dove === 'chat') v.goChat()
     else if (dove === 'oggi') v.goOggi()
     else if (dove === 'aiuto') v.goAiuto()
@@ -522,6 +547,11 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
                 il Dock e la barra dei menù: una regola sola) */}
             {lista.inAttesa > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? 'var(--avorio)' : 'var(--rame)' }} />}
             {!rail && lista.inAttesa === 0 && lista.daFare > 0 && <span style={v.badge}>{lista.daFare}</span>}
+          </a>
+          {/* il succo di ogni progetto, come l'ha capito: si legge e basta */}
+          <a href="#" onClick={v.goProgetti} style={nav(v.navProgetti)} title={rail ? t('Progetti') : undefined}>
+            <IconProgetti style={{ flex: 'none' }} />
+            {!rail && <span style={{ flex: 1 }}>{t('Progetti')}</span>}
           </a>
           <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             {/* Myynd ha scritto: il fumetto si accende di rame e il pallino salta, finché non gli rispondi */}
@@ -688,6 +718,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             apriGuida={v.goAiuto}
           />
         )}
+        {v.isProgetti && <Progetti v={v} />}
         {v.isChat && <Chat v={v} />}
         {v.isAuto && <Automazioni v={v} />}
         {v.isMappa && <Mappa v={v} />}

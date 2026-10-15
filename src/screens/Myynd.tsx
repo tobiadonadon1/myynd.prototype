@@ -243,7 +243,7 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
   )
 
   return (
-    <div ref={radice} role={espandibile ? 'button' : undefined} tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)} {...props}
+    <div ref={radice} data-voce={voce.id} role={espandibile ? 'button' : undefined} tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)} {...props}
       onBlur={(e: FocusEvent) => { props.onBlur(e); if (scegliendo && !e.currentTarget.contains(e.relatedTarget as Node | null)) lascia() }}
       aria-expanded={espandibile ? aperta : undefined}
       style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva || scegliendo ? 'var(--riga-sopra)' : 'transparent' }}>
