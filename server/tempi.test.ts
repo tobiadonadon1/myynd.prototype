@@ -2,13 +2,16 @@
 //
 //   node --test server/tempi.test.ts
 
-import { test, beforeEach } from 'node:test'
+import { test, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import * as tempi from './tempi.ts'
 import * as chi from './chi.ts'
 
 let ora = 0
+let cpu = 0
 let righe: string[] = []
 let abilitato = 0
 const finto = () => ({
@@ -16,8 +19,8 @@ const finto = () => ({
   max: 420e6, percentile: () => 180e6
 })
 beforeEach(() => {
-  ora = 1000; righe = []; abilitato = 0
-  tempi.perProva({ ora: () => ora, log: r => righe.push(r), monitor: finto })
+  ora = 1000; cpu = 0; righe = []; abilitato = 0
+  tempi.perProva({ ora: () => ora, cpu: () => cpu, log: r => righe.push(r), monitor: finto })
 })
 
 function richiesta(o: { metodo?: string; path: string; rotta?: string; tipo?: string }) {
@@ -172,4 +175,68 @@ test('la manutenzione: solo quando è dovuta e quieto, o con un giorno di ritard
   assert.equal(tempi.manutenzioneTocca(300, 200, false), false, 'dovuta ma qualcuno lavora')
   assert.equal(tempi.manutenzioneTocca(300, 200, true), true)
   assert.equal(tempi.manutenzioneTocca(200 + g, 200, false), true, 'un giorno di ritardo: si fa lo stesso')
+})
+
+test('il battito distingue il ciclo occupato a calcolare dal processo fermo senza calcolo', async () => {
+  await tempi.misuraLavoro('rilettura', async () => {
+    ora += 200 + 600; cpu += 580           // il battito arriva 600 ms tardi, e il processo ha lavorato
+    tempi.battiIlCuore()
+    ora += 200 + 3000; cpu += 5            // 3 s tardi, e il processo non ha fatto niente: sospeso
+    tempi.battiIlCuore()
+    ora += 200 + 40; cpu += 30             // in orario: non conta
+    tempi.battiIlCuore()
+    tempi.guardaIlMinuto()
+  })
+  assert.deepEqual(righe.filter(r => r.includes('ciclo fermo')), ['myynd · tempi · ciclo fermo max 420 ms, p99 180 ms · a calcolare 600 ms · senza calcolo 3000 ms (sospeso, o in attesa sincrona) · lavori: rilettura'])
+  const c = tempi.riassunto().ciclo!
+  assert.equal(c.calcolo, 600)
+  assert.equal(c.senzaCalcolo, 3000)
+})
+
+/** Un'attesa vera anche con `setTimeout` finto: il monitor vero conta il tempo vero. */
+function aspettaDavvero(ms: number): Promise<void> {
+  const fine = performance.now() + ms
+  return new Promise(r => { const i = setInterval(() => { if (performance.now() >= fine) { clearInterval(i); r() } }, 10) })
+}
+
+test('il tempo passato a monitor spento non diventa un ciclo fermo, uno vero sì (monitor vero)', async () => {
+  // «ciclo fermo max 50097 ms, p99 52 ms» ogni minuto: `disable()` non
+  // dimenticava l'ultimo campione, e il primo dopo `enable()` era tutto il
+  // tempo da spento. Qui: lavoro, dieci secondi di quiete (finti), un secondo
+  // e mezzo spento (vero), un altro lavoro, il minuto.
+  mock.timers.enable({ apis: ['setTimeout'] })
+  try {
+    tempi.perProva({ log: r => righe.push(r) })
+    await tempi.misuraLavoro('rilettura', async () => { await aspettaDavvero(100) })
+    mock.timers.tick(10_000)
+    assert.equal(tempi.misura(), false, 'dopo dieci secondi quieti il monitor dorme')
+    await aspettaDavvero(1500)
+    await tempi.misuraLavoro('rassegna', async () => { await aspettaDavvero(300) })
+    tempi.guardaIlMinuto()
+    const fermo = righe.map(r => Number(/max (\d+) ms/.exec(r)?.[1] ?? 0)).reduce((a, b) => Math.max(a, b), 0)
+    assert.ok(fermo < 1000, `il secondo e mezzo da spento è finito nel conto: ${righe.join(' | ')}`)
+
+    // e un ciclo occupato davvero si vede, e si dice a calcolare
+    righe = []
+    await tempi.misuraLavoro('rilettura', async () => {
+      await aspettaDavvero(50)
+      const fine = performance.now() + 450
+      while (performance.now() < fine) { /* il ciclo è occupato */ }
+      await aspettaDavvero(1200)           // il battito dopo il blocco
+      tempi.guardaIlMinuto()
+    })
+    assert.equal(righe.length, 1, righe.join(' | '))
+    assert.match(righe[0], /^myynd · tempi · ciclo fermo max (4\d\d|5\d\d) ms, p99 \d+ ms · a calcolare \d+ ms · lavori: rilettura$/)
+  } finally {
+    mock.timers.reset()
+    tempi.perProva(null)
+  }
+})
+
+test('nel server nessun comando sincrono: un figlio lento fermerebbe il ciclo per tutti', () => {
+  const dir = import.meta.dirname
+  const file = [...readdirSync(dir).map(f => join(dir, f)), ...readdirSync(join(dir, 'connettori')).map(f => join(dir, 'connettori', f))]
+    .filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+  const colpevoli = file.filter(f => /\b(execFileSync|execSync|spawnSync)\s*\(/.test(readFileSync(f, 'utf8')))
+  assert.deepEqual(colpevoli, [])
 })
