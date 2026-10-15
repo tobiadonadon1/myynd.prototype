@@ -3676,6 +3676,7 @@ const EN: Record<string, string> = {
   'Cartelle di codice': 'Code folders',
   'Sessioni con gli assistenti': 'Assistant sessions',
   'Messaggi': 'Messages',
+  'I tuoi post su X': 'Your posts on X',
   'Sito pubblico': 'Public website',
   'Prossimo passo': 'Next step',
   'Cosa ha letto': 'What it read',

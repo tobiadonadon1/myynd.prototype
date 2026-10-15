@@ -417,7 +417,17 @@ export function fontiDel(p: progetti.Progetto, docs: readonly store.Documento[],
     && Date.parse(d.quando ?? '') >= soglia
     && progetti.tocca(p, `${d.titolo}\n${d.corpo.slice(0, 1500)}`))
     .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 8)
-  return { cartelle, sessioni, altri }
+  /*
+   * I suoi post su X che nominano il progetto: è lui che ne parla in
+   * pubblico, e una mossa può partire da lì. Solo i suoi (`x:mio:`), e solo
+   * per nome: la timeline e i mi piace sono parole d'altri, e restano fuori
+   * come tutto il resto di X.
+   */
+  const suoiSuX = docs.filter(d => d.fonte === 'x' && d.id.startsWith('x:mio:')
+    && Date.parse(d.quando ?? '') >= soglia
+    && progetti.nominaProgetto(d.corpo, p))
+    .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 6)
+  return { cartelle, sessioni, altri, suoiSuX }
 }
 
 /** Le righe che ha scritto lui di suo pugno su questo progetto (il riferimento), col suo nome o un alias. */
@@ -433,7 +443,7 @@ function suoiDel(p: progetti.Progetto): string {
  * leggerebbe prima del tetto sui caratteri.
  */
 export function attivitaDi(p: progetti.Progetto, docs: readonly store.Documento[], adesso = Date.now()): { recente: string | null; letto: Record<string, number> } {
-  const { cartelle, sessioni, altri } = fontiDel(p, docs, adesso)
+  const { cartelle, sessioni, altri, suoiSuX } = fontiDel(p, docs, adesso)
   let recente = ''
   const segna = (q: string | null | undefined) => { if (q && q > recente) recente = q }
   const letto: Record<string, number> = {}
@@ -443,6 +453,7 @@ export function attivitaDi(p: progetti.Progetto, docs: readonly store.Documento[
   for (const d of cartelle) { segna(ultimaDellaCartella(d)); conta('cartelle') }
   for (const d of sessioni) { segna(d.quando); conta('sessioni') }
   for (const d of altri) { segna(d.quando); conta(tipoDiFonte(d.fonte)) }
+  for (const d of suoiSuX) { segna(d.quando); conta('x') }
   return { recente: recente || null, letto }
 }
 
@@ -463,7 +474,7 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     if (lavoro && lavoro > recente) recente = lavoro
   }
 
-  const { cartelle, sessioni, altri } = fontiDel(p, docs, adesso)
+  const { cartelle, sessioni, altri, suoiSuX } = fontiDel(p, docs, adesso)
   // le cartelle
   for (const d of cartelle) {
     const percorso = d.id.slice('lavoro:'.length)
@@ -486,20 +497,11 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     metti(d.id, `[${d.id}] ${d.fonte}${d.autore ? ` da ${d.autore.slice(0, 60)}` : ''}${d.inviato ? ' (scritta da lui)' : ''}: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`, tipoDiFonte(d.fonte))
   }
 
-  /*
-   * I suoi post su X che nominano il progetto: è lui che ne parla in
-   * pubblico, e una mossa può partire da lì. Solo i suoi (`x:mio:`), e solo
-   * per nome: la timeline e i mi piace sono parole d'altri, e restano fuori
-   * come tutto il resto di X.
-   */
-  const suoiSuX = docs.filter(d => d.fonte === 'x' && d.id.startsWith('x:mio:')
-    && Date.parse(d.quando ?? '') >= soglia
-    && progetti.nominaProgetto(d.corpo, p))
-    .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 6)
+  // i suoi post su X che nominano il progetto: vedi `fontiDel`
   for (const d of suoiSuX) {
     const t = d.corpo.replace(/\s+/g, ' ').trim().slice(0, 600)
     segna(d.quando)
-    metti(d.id, `[${d.id}] Post suo su X (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`)
+    metti(d.id, `[${d.id}] Post suo su X (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`, 'x')
   }
 
   // la cosa vista da fuori, come la vede un cliente: il sito vero, e se il blog è fermo.

@@ -17,6 +17,7 @@ const NOMI: Record<string, string> = {
   agenda: 'Agenda',
   messaggi: 'Messaggi',
   sito: 'Sito pubblico',
+  x: 'I tuoi post su X',
   altro: 'Altre fonti'
 }
 
