@@ -36,6 +36,7 @@ import * as regole from './turno-regole.ts'
 import { fonteValida } from './iniziativa.ts'
 import * as primoGiorno from './primo-giorno.ts'
 import * as gradino from './gradino.ts'
+import { suo as diSe } from './da-se.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 import * as budgetNotte from './budget-notte.ts'
 import { conCompito } from './etichetta-uso.ts'
@@ -250,8 +251,10 @@ function ritirabile(c: store.Compito, adesso = new Date()): boolean {
 export function pronte(adesso = new Date()): store.Compito[] {
   const ctx = contesto(adesso)
   const alti = new Set(progetti.elenco('attivo').filter(p => p.priorita === 'alta').map(p => p.id))
+  // il lavoro che Myynd fa da sé (`da-se.ts`) aspetta in coda mentre lui ha chiesto la pausa
+  const inPausa = cfg.autonomia() === 'chiedere'
   return store.elencoCompiti()
-    .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1)
+    .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1 && !(inPausa && diSe(c.origine)))
     .map(c => ({ c, p: regole.punteggio(c, { adesso, progettoAlto: !!c.progetto && alti.has(c.progetto) }) }))
     .sort((a, b) => b.p - a.p || a.c.ordine.localeCompare(b.c.ordine) || a.c.id.localeCompare(b.c.id))
     .map(x => x.c)

@@ -461,3 +461,21 @@ test('(P3) quanteAspettano: le pronte, le domande e le righe ferme su un blocco 
   ]), 4)
   assert.equal(quanteAspettano([]), 0)
 })
+
+test('il lavoro che Myynd fa da sé sta sul tavolo solo pronto, con una domanda, o fermo; in coda o al lavoro no', () => {
+  const b = blocchiFeed({
+    voci: [],
+    compiti: [
+      compito('x-coda', null, { origine: 'idee-x' }),
+      compito('v-lavoro', 'hf', { origine: 'copione-video', stato: 'delegato' }),
+      compito('n-coda', 'hf', { origine: 'pagina-notion' }),
+      compito('x-pronta', null, { origine: 'idee-x', stato: 'pronto' }),
+      compito('n-pronta', 'hf', { origine: 'pagina-notion', stato: 'pronto' }),
+      { ...compito('v-ferma', 'nx', { origine: 'copione-video' }), guaio: 'Ci ha messo più del tempo che aveva.' },
+      compito('sua', 'nx')
+    ],
+    progetti: PROGETTI,
+    nomeResto: 'Il resto'
+  })
+  assert.deepEqual(b.flatMap(ids).sort(), ['n-pronta', 'sua', 'v-ferma', 'x-pronta'])
+})

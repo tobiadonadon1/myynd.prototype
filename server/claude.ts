@@ -3139,7 +3139,9 @@ export async function svolgi(
    */
   esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en'; criterio?: string; mani?: readonly mani.ManoDelContratto[]
     /** F9 · di notte, per una carta del turno: il lavoro sul codice resta nella copia, non si posa nel progetto. */
-    soloCopia?: boolean },
+    soloCopia?: boolean
+    /** La pagina di Notion di questo lavoro, stabile (`progetto:<id>`): senza, vale il titolo. */
+    chiaveNotion?: string },
   /**
    * Il materiale del progetto di cui la riga fa parte, se ne ha uno: la
    * cartella di lavoro come fonte fissa, la memoria e il riferimento nel
@@ -3531,7 +3533,7 @@ export async function svolgi(
         const dettaglio = (c.input as Record<string, unknown> | null)
         const detto = String(dettaglio?.url ?? dettaglio?.percorso ?? dettaglio?.query ?? dettaglio?.titolo ?? dettaglio?.richiesta ?? '').trim().slice(0, 120)
         passo(c.name === mani.CERCA_WEB.name ? { passo: 'cerco', dettaglio: detto } : c.name === mani.LEGGI_FILE.name || c.name === mani.LEGGI_PAGINA.name ? { passo: 'apro', dettaglio: detto } : { passo: 'scrivo', dettaglio: detto })
-        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito(), ...(esecuzione?.soloCopia ? { soloCopia: true } : {}) })
+        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito(), ...(esecuzione?.soloCopia ? { soloCopia: true } : {}), ...(esecuzione?.chiaveNotion ? { chiaveNotion: esecuzione.chiaveNotion } : {}) })
         /*
          * F9 · sul diario della carta, col percorso intero: un file scritto
          * fuori dalla copia di lavoro è una cosa che «Disfa» deve poter

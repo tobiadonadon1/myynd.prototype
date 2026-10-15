@@ -354,6 +354,7 @@ function provenienza(c: Compito, v: Vals, l?: Lista): { testo: string; apri?: ()
   // quindi quelle righe non dicevano da dove venivano
   if (c.origine === 'chat' || c.origine === 'conversazione') return { testo: t('la chat'), apri: () => v.goChat() }
   if (c.origine === 'iniziativa') return { testo: t('Prepara in anticipo') }
+  if (c.origine === 'idee-x') return { testo: t('i tuoi post su X') }
   if (c.origine === 'punto') return { testo: t('il punto del giorno') }
   if (c.origine === 'avvio' || c.origine === 'onboarding') return { testo: t('il primo progetto') }
   if (c.origine?.startsWith('auto:') || c.origine === 'automazione') return { testo: t('un’automazione') }

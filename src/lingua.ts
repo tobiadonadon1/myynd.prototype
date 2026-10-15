@@ -2422,6 +2422,7 @@ const EN: Record<string, string> = {
   'la riga che l’ha fatta nascere': 'the line it came from',
   'un’automazione': 'an automation',
   'il feed': 'the feed',
+  'i tuoi post su X': 'your posts on X',
   // — la carta in cima: sotto il titolo, una riga sola che dice cosa apre —
   'Apri la mail': 'Open the email',
   'Apri il file': 'Open the file',

@@ -1,0 +1,8 @@
+[
+  { "aspetta": 3000 },
+  { "scatta": "prima" },
+  { "testo": "prima" },
+  { "scorri": 600 },
+  { "aspetta": 600 },
+  { "scatta": "prima-sotto" }
+]

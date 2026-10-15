@@ -453,6 +453,17 @@ if ((scena as Record<string, unknown>).p6) {
 }
 // — P6: fine —
 
+// — da sé: inizio —
+if ((scena as Record<string, unknown>).dase) {
+  const ds = await import(join(QUI, 'semina-da-se.ts'))
+  chi.dentro(conto.id, () => {
+    const vivi = progetti.elenco() as { id: string; nome: string }[]
+    const ids = new Map((scena.progetti ?? []).map(p => [p.chiave ?? p.nome, vivi.find(v => v.nome === p.nome)?.id ?? p.nome]))
+    ds.semina((scena as Record<string, unknown>).dase, { ids, nomi: new Map(vivi.map(v => [v.id, v.nome])) })
+  })
+}
+// — da sé: fine —
+
 // — P9: inizio —
 if ((scena as Record<string, unknown>).p9) {
   const p9 = await import(join(QUI, 'semina-p9.ts'))
