@@ -4,7 +4,7 @@
 
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -166,4 +166,51 @@ test('la proposta di un ordine fisso aspetta il suo «Approva»: è fra le cose 
     ]
   }, { dal: DAL, mattina: true })
   assert.deepEqual(m.needsYou.map(a => [a.id, a.genere === 'carta' ? a.motivo : '']), [['ordine', 'approva']], 'la riga sua, senza proposta, non aspetta nessuno')
+})
+
+test('il punto della mattina si dice una volta: solo di mattina, solo per quello che ha fatto la notte', () => {
+  const diNotte = { id: 'x', titolo: 'x', dove: { genere: 'carta' as const }, quando: ADESSO, notte: true }
+  const diGiorno = { ...diNotte, id: 'y', notte: false }
+  assert.equal(mattina.daAnnunciare({ mattina: false, done: [diNotte], needsYou: [] }, '2026-10-09'), null, 'di pomeriggio no')
+  assert.equal(mattina.daAnnunciare({ mattina: true, done: [], needsYou: [] }, '2026-10-09'), null, 'una notte vuota non è una notizia')
+  // affidata alle nove e finita alle nove e cinque: non è «fatta stanotte», e ha già il suo avviso
+  assert.equal(mattina.daAnnunciare({ mattina: true, done: [diGiorno], needsYou: [] }, '2026-10-09'), null)
+  assert.deepEqual(mattina.daAnnunciare({ mattina: true, done: [diNotte, diGiorno, diNotte], needsYou: [{ genere: 'domanda', id: 'd', titolo: 'd' }] }, '2026-10-09'),
+    { giorno: '2026-10-09', fatte: 2, aspettano: 1 })
+})
+
+test('il punto della mattina, dal vivo: una volta al giorno, anche dopo un riavvio; dopo una notte vuota non si rifà', () => {
+  const ora = new Date()
+  const hh = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  const fine = new Date(ora.getTime() - 3_600_000), inizio = new Date(ora.getTime() - 7 * 3_600_000)
+  cfg.scrivi({ lingua: 'en', turno: { notteDa: hh(inizio), notteA: hh(fine) } } as Parameters<typeof cfg.scrivi>[0])
+  const detto = join(cfg.cartella(), 'mattina-detta.json')
+  rmSync(detto, { force: true })
+
+  // una carta finita di mattina, affidata da lui: niente punto della mattina, e il giorno è sistemato
+  store.scriviCompito({ id: 'g1', testo: 'Write the agenda', quando: 'oggi', ordine: 'c' })
+  store.affidaCompito('g1', 'tutto')
+  store.risultatoCompito('g1', 'Saved the agenda.', [])
+  store.scriviConsegnaCompito('g1', { app: 'File', titolo: 'Agenda.md', percorso: '/tmp/Agenda.md', dove: 'scrivania' })
+  const detti: { giorno: string; fatte: number }[] = []
+  assert.equal(mattina.annunciaSeMattina(e => { detti.push(e) }, ora), false)
+  assert.equal(detti.length, 0)
+  assert.equal(JSON.parse(readFileSync(detto, 'utf8')).esito, 'niente')
+
+  // una carta del turno di notte: si dice, una volta
+  rmSync(detto, { force: true })
+  store.scriviCompito({ id: 'm1', testo: 'Write the summary', quando: 'oggi', ordine: 'd' })
+  store.affidaCompito('m1', 'tutto')
+  store.risultatoCompito('m1', 'Saved the summary.', [])
+  store.scriviConsegnaCompito('m1', { app: 'File', titolo: 'Summary.md', percorso: '/tmp/Summary.md', dove: 'scrivania' })
+  store.scriviTurnoCompito('m1', { da: 'tu', quando: 'notte', dal: inizio.toISOString(), tentativi: 1, ultimo: new Date(fine.getTime() - 600_000).toISOString(), notte: true })
+  // nessuno in ascolto: non è detto, e al giro dopo si riprova
+  assert.equal(mattina.annunciaSeMattina(() => false, ora), false)
+  assert.equal(mattina.annunciaSeMattina(e => { detti.push(e) }, ora), true)
+  assert.equal(detti.length, 1)
+  assert.equal(detti[0].fatte, 1, 'solo quella della notte')
+  // il minuto dopo, niente; e dopo un riavvio (il modulo rilegge dal disco) nemmeno
+  assert.equal(mattina.annunciaSeMattina(e => { detti.push(e) }, new Date(ora.getTime() + 60_000)), false)
+  assert.equal(JSON.parse(readFileSync(detto, 'utf8')).esito, 'detto')
+  assert.equal(detti.length, 1)
 })

@@ -20,6 +20,9 @@
 // `componi`, pura e provata da sola; `mattina` legge e la chiama.
 
 import * as store from './store.ts'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import * as cfg from './config.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as turno from './turno.ts'
 import * as regole from './turno-regole.ts'
@@ -202,4 +205,53 @@ export function mattina(chiesto?: string | null, adesso = oraDelResoconto()): Ma
     domanda: d ? { id: d.id, testo: d.testo } : null,
     turno: { inCoda: s.inCoda, prossimaNotte: s.prossimaNotte, acceso: s.acceso, motore: s.motore, fermo: !!s.fermo }
   }, f)
+}
+
+/**
+ * Il punto della mattina, da dire una volta.
+ *
+ * Pura: dalla ricevuta di adesso e dal giorno. Si dice solo di mattina, e
+ * solo per quello che ha fatto la notte: una carta affidata alle nove e
+ * finita alle nove e cinque non è «fatta stanotte», e ha già il suo avviso.
+ * Una mattina senza niente di fatto di notte non è una notizia.
+ */
+export function daAnnunciare(m: Pick<Mattina, 'mattina' | 'done' | 'needsYou'>, giorno: string): { giorno: string; fatte: number; aspettano: number } | null {
+  const fatte = m.done.filter(f => f.notte).length
+  if (!m.mattina || !fatte) return null
+  return { giorno, fatte, aspettano: m.needsYou.length }
+}
+
+/**
+ * Il giorno già sistemato, per conto, su disco: «detto», o «niente» se la
+ * notte non ha fatto niente. Su disco perché un riavvio di mattina non deve
+ * farlo suonare due volte; «niente» perché dopo una notte vuota non si rifà
+ * la ricevuta ogni minuto per sei ore.
+ */
+const FILE_DETTO = 'mattina-detta.json'
+function giornoSistemato(): string | null {
+  try {
+    const x = JSON.parse(readFileSync(join(cfg.cartella(), FILE_DETTO), 'utf8')) as { giorno?: unknown }
+    return typeof x.giorno === 'string' ? x.giorno : null
+  } catch { return null }
+}
+function sistema(giorno: string, esito: 'detto' | 'niente') {
+  try { writeFileSync(join(cfg.cartella(), FILE_DETTO), JSON.stringify({ giorno, esito })) } catch { /* al giro dopo si riprova */ }
+}
+
+/**
+ * Lo chiama il giro del turno, ogni minuto: se è mattina e la notte ha fatto
+ * qualcosa, lo dice sul filo (`compiti.annunciaMattina`), una volta al giorno.
+ * Detto solo se qualcuno l'ha sentito: con l'app che sta partendo, si riprova
+ * al minuto dopo.
+ */
+export function annunciaSeMattina(annuncia: (e: { giorno: string; fatte: number; aspettano: number }) => boolean | void, adesso = oraDelResoconto()): boolean {
+  const s = turno.stato(adesso)
+  if (!finestra(adesso, s.notte, null).mattina) return false
+  const giorno = regole.giornoDi(adesso)
+  if (giornoSistemato() === giorno) return false
+  const e = daAnnunciare(mattina(null, adesso), giorno)
+  if (!e) { sistema(giorno, 'niente'); return false }
+  if (annuncia(e) === false) return false
+  sistema(giorno, 'detto')
+  return true
 }

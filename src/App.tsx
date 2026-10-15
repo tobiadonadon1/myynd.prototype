@@ -430,11 +430,35 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   useTastiMenu(menuConto, { chiudi: v.chiudiMenu, ritorno: bottoneConto, aperto: v.menuOpen })
   const vRef = useRef(v)
   vRef.current = v
+  // un avviso di sistema apre la riga di cui parla: la lista e il gesto di adesso
+  const casaRef = useRef({ lista, apri: apriLavoroCasa })
+  casaRef.current = { lista, apri: apriLavoroCasa }
   useEffect(() => desktop()?.naviga(dove => {
     const v = vRef.current
-    // dal richiamo: «continua nell'app» porta sulla chat appena nata
-    if (typeof dove === 'object') { if (dove.dove === 'chat' && dove.id) v.apriChat(dove.id); return }
-    if (dove === 'preferenze') v.goPref()
+    if (typeof dove === 'object') {
+      // dal richiamo: «continua nell'app» porta sulla chat appena nata
+      if (dove.dove === 'chat' && dove.id) v.apriChat(dove.id)
+      // da un avviso: la riga pronta si apre sopra la prima pagina; se la
+      // lista non l'ha ancora, resta la prima pagina, dove arriverà
+      if (dove.dove === 'compito' && dove.id) {
+        v.goMyynd()
+        const c = casaRef.current.lista.compiti.find(x => x.id === dove.id)
+        if (c) casaRef.current.apri(c)
+      }
+      // e la carta del feed: la prima pagina, con la carta sotto gli occhi
+      if (dove.dove === 'voce' && dove.id) {
+        v.goMyynd()
+        const id = dove.id
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const el = [...document.querySelectorAll<HTMLElement>('[data-voce]')].find(x => x.dataset.voce === id)
+          el?.scrollIntoView({ block: 'center' })
+          el?.focus({ preventScroll: true })
+        }))
+      }
+      return
+    }
+    if (dove === 'casa') v.goMyynd()
+    else if (dove === 'preferenze') v.goPref()
     else if (dove === 'chat') v.goChat()
     else if (dove === 'oggi') v.goOggi()
     else if (dove === 'aiuto') v.goAiuto()
