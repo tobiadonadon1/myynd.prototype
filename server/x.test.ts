@@ -288,3 +288,33 @@ test('la riconciliazione toglie quello che solo il motore scrive e lascia stare 
   // una finestra corta lascia fuori il post dell'8 settembre
   assert.ok(!x.recenti(7, LUNEDI).post.some(p => p.postId === '1004'))
 })
+
+test('il tetto dei mi piace vale anche nell’indice: oltre duecento escono i più vecchi, da chiunque scritti', async () => {
+  const store = await import('./store.ts')
+  const tanti = Array.from({ length: x.TETTO_MIPIACE + 5 }, (_, i) =>
+    x.documentoLike({ postId: String(7000 + i), autore: 'molti', testo: `post ${i}`, url: null, quando: new Date(LUNEDI - (i + 1) * 3_600_000).toISOString() }, false)!)
+  store.salvaDocumenti(tanti)
+  const prima = store.idsConPrefisso('x:like:').length
+  assert.ok(prima > x.TETTO_MIPIACE)
+  x.riconcilia([], LUNEDI)
+  const restano = new Set(store.idsConPrefisso('x:like:'))
+  assert.equal(restano.size, x.TETTO_MIPIACE)
+  // i più nuovi restano, i più vecchi no
+  assert.ok(restano.has('x:like:7000'))
+  assert.ok(!restano.has(`x:like:${7000 + x.TETTO_MIPIACE + 4}`))
+})
+
+test('un motore fermo si dice senza lanciare, e un altro guaio cancella il «fermo dal…» (la lettura in index.ts)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const indice = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+  const passo = indice.slice(indice.indexOf("await fonte('x'"), indice.indexOf("const cal = c.calendario"))
+  // i documenti sono arrivati: niente throw, quindi niente prima lettura fallita e il totale li conta
+  assert.doesNotMatch(passo, /throw motore\.guaioFermo/)
+  assert.match(passo, /stato: 'guaio', fermo: true/)
+  // il database sparito o illeggibile non è «fermo dal 20 set»
+  assert.match(passo, /catch \(err\) \{[^}]*segnaCursore\(motore\.CURSORE_FERMO, null\)[^}]*throw err/)
+  const { esitoLettura } = await import('./lettura-feed.ts')
+  const e = esitoLettura({ fase: 'x', stato: 'guaio', fermo: true, rimedio: 'guarda', frase: x.guaioFermo().message, documenti: 3 })
+  assert.equal(e?.esito, 'guaio', 'la salute delle fonti lo registra come ogni guaio')
+  assert.equal(e?.rimedio, 'guarda')
+})

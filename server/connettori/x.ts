@@ -67,8 +67,8 @@ export const CURSORE_FERMO = 'x:fermo'
 const TITOLO_MAX = 80
 /** Nessuna tabella di questo motore arriva a tanto; è un tetto contro un database che non è il suo. */
 const TETTO = 5000
-/** I mi piace in indice, al massimo. */
-const TETTO_MIPIACE = 200
+/** I mi piace in indice, al massimo, da chiunque arrivino: `riconcilia` toglie i più vecchi oltre il tetto. */
+export const TETTO_MIPIACE = 200
 /** In un giorno di timeline: chi compare di più, e i post più ripresi. */
 const AUTORI_GIORNO = 8
 const POST_GIORNO = 8
@@ -557,19 +557,26 @@ const SOLO_DEL_MOTORE = ['x:nota:', 'x:settimana:', 'x:posted:', 'x:draft:']
  * non li cancella perché non li ha visti, li lascia uscire quando escono dalla
  * loro finestra.
  */
-const CON_FINESTRA: [string, number][] = [['x:mio:', GIORNI], ['x:like:', GIORNI_MIPIACE], ['x:timeline:', GIORNI_TIMELINE]]
+const CON_FINESTRA: [string, number, number][] = [['x:mio:', GIORNI, Infinity], ['x:like:', GIORNI_MIPIACE, TETTO_MIPIACE], ['x:timeline:', GIORNI_TIMELINE, Infinity]]
 
-/** Toglie dall'indice quello che il motore non ha più, e quello che è uscito dalla sua finestra. */
+/**
+ * Toglie dall'indice quello che il motore non ha più, quello che è uscito
+ * dalla sua finestra, e i mi piace più vecchi oltre il tetto: due lettori
+ * che ne scrivono duecento a testa non ne fanno quattrocento.
+ */
 export function riconcilia(visti: string[], adesso = Date.now()): number {
   const vivi = new Set(visti)
   const via: string[] = []
   for (const p of SOLO_DEL_MOTORE) via.push(...store.idsConPrefisso(p).filter(id => !vivi.has(id)))
-  for (const [p, giorni] of CON_FINESTRA) {
+  for (const [p, giorni, tetto] of CON_FINESTRA) {
     const soglia = adesso - giorni * 86_400_000
+    const restano: [string, number][] = []
     for (const [id, quando] of store.quandoPerPrefisso(p)) {
       const q = Date.parse(quando ?? '')
       if (!vivi.has(id) && (!Number.isFinite(q) || q < soglia)) via.push(id)
+      else restano.push([id, Number.isFinite(q) ? q : 0])
     }
+    if (restano.length > tetto) via.push(...restano.sort((a, b) => b[1] - a[1]).slice(tetto).map(([id]) => id))
   }
   return store.scordaDocumenti(via)
 }

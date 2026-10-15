@@ -128,6 +128,19 @@ test('a Mac folder that cannot be opened is a problem row, never a green one', (
   assert.equal(normale[0].stato, 'fatto')
 })
 
+test('a stalled X engine was read: its row is a read row, and only the card says it is not updating', () => {
+  let r = iniziaLettura(['x', 'calendario'])
+  r = avanzaLettura(r, { fase: 'x', stato: 'guaio', fermo: true, errore: 'Il motore di X non scrive niente di nuovo da più di tre giorni.', rimedio: 'guarda', documenti: 3 })
+  assert.equal(r[0].stato, 'fatto')
+  assert.doesNotMatch(r[0].testo, /Not read|three days/)
+  assert.equal(nonLette(r), 0)
+  assert.equal(daGuardare(r), 0)
+  // counter-case: any other X fault is still a problem row
+  let rotta = iniziaLettura(['x'])
+  rotta = avanzaLettura(rotta, { fase: 'x', stato: 'guaio', errore: 'Non riesco a leggere il database di X.', rimedio: 'guarda' })
+  assert.equal(rotta[0].stato, 'guaio')
+})
+
 test('a source disconnected during the read leaves the rows', () => {
   let r = iniziaLettura(['desktop', 'calendario'])
   r = avanzaLettura(r, { fase: 'calendario', stato: 'scollegata' })

@@ -2430,7 +2430,13 @@ async function leggiTuttoDentro(
   if (x && !ospitato.OSPITATO) await fonte('x', async () => {
     avvisa({ fase: 'x', stato: 'leggo X' })
     const motore = await import('./connettori/x.ts')
-    const e = await motore.sincronizza(x)
+    let e: Awaited<ReturnType<typeof motore.sincronizza>>
+    try { e = await motore.sincronizza(x) }
+    catch (err) {
+      // un altro guaio (il database sparito, illeggibile): non è più «fermo dal…», e la scheda non deve dirlo
+      store.segnaCursore(motore.CURSORE_FERMO, null)
+      throw err
+    }
     await store.salvaDocumentiAPezzi(e.docs)
     // quello che solo il motore scrive si riconcilia per intero; i suoi post,
     // i mi piace e la timeline escono quando escono dalla loro finestra (vedi x.ts)
@@ -2439,10 +2445,18 @@ async function leggiTuttoDentro(
      * Un motore fermo: quello che c'era si è letto, ma la fonte va fra quelle
      * da sistemare, con il giorno dell'ultima cosa che ha scritto. Il cursore
      * lo tiene per la scheda; una lettura che lo trova vivo lo cancella.
+     *
+     * Non si lancia: i documenti sono arrivati, la lettura non è fallita (né
+     * per la prima lettura né per il totale). Il guaio si dice con un avviso
+     * marcato `fermo`, che la salute delle fonti registra come ogni guaio e
+     * la riga di lettura nella pagina tratta da fonte letta.
      */
     store.segnaCursore(motore.CURSORE_FERMO, e.fermoDal)
-    if (e.fermoDal) throw motore.guaioFermo()
-    avvisa({ fase: 'x', stato: 'fatto', documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, mipiace: e.mipiace, timeline: e.timeline, tolti })
+    const conti = { documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, mipiace: e.mipiace, timeline: e.timeline, tolti }
+    if (e.fermoDal) {
+      const g = motore.guaioFermo()
+      avvisa({ fase: 'x', stato: 'guaio', fermo: true, errore: g.message, rimedio: g.rimedio, frase: g.message, ...conti })
+    } else avvisa({ fase: 'x', stato: 'fatto', ...conti })
     return e.docs.length
   })
   const cal = c.calendario
@@ -2857,8 +2871,9 @@ async function leggiUna(fonte: string): Promise<'letta' | 'occupato' | 'guaio'> 
   try {
     await withBackgroundWork(() => store.senzaToccare(() => leggiTutto(fonte, e => {
       v.avvisa(e)
-      const x = e as { fase?: string; stato?: string; errore?: string; saltata?: boolean }
-      if (x.fase === fonte && x.stato === 'guaio') { guaio = true; console.error(`myynd · prima lettura · ${fonte}: ${x.errore}`) }
+      const x = e as { fase?: string; stato?: string; errore?: string; saltata?: boolean; fermo?: boolean }
+      // X fermo si è letto: è un guaio da dire, non una lettura da rifare
+      if (x.fase === fonte && x.stato === 'guaio' && !x.fermo) { guaio = true; console.error(`myynd · prima lettura · ${fonte}: ${x.errore}`) }
       // saltata (Calendario chiuso): per questo giro si mette da parte, come un guaio, invece di riprovarla dodici volte
       if (x.fase === fonte && x.saltata) guaio = true
     }, () => cancellati.cancellata(cfg.cartella()), { sfondo: true })))
