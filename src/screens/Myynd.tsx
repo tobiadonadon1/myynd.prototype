@@ -19,7 +19,7 @@ import { quando } from '../data'
 import { dataFonte, testoCarta, secondaRiga, RAGIONI_NON_UTILE } from '../feed-carta'
 import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiFeed, blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, contaInPagina } from '../blocchi-feed'
+import { blocchiFeed, blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, contaInPagina, soloDaSe } from '../blocchi-feed'
 import { conLettera } from '../mattina'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { RigaCheLavora } from '../components/RigaCheLavora'
@@ -1090,7 +1090,7 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
               hover={{ textDecorationColor: 'currentColor' }}>{b.nome}</Hov>
           )
           : <span style={{ ...NOME, color: colore }}>{b.nome}</span>}
-        {suo && !b.progetto!.startsWith('nuovo-') && (
+        {suo && !b.progetto!.startsWith('nuovo-') && !soloDaSe(b.righe) && (
           <PrioritaProgetto alta={!!b.alto} visibile={attiva} nome={b.nome}
             cambia={alta => { v.cambiaProgetto(b.progetto!, { priorita: alta ? 'alta' : null }).catch(() => v.mostraToast(t('Non sono riuscito a salvarlo.'))) }} />
         )}

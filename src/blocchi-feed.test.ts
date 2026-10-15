@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, blocchiInPagina, cheAspettano, chiaveBlocco, contaInPagina, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, blocchiInPagina, cheAspettano, chiaveBlocco, contaInPagina, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, soloDaSe, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -478,4 +478,13 @@ test('il lavoro che Myynd fa da sé sta sul tavolo solo pronto, con una domanda,
     nomeResto: 'Il resto'
   })
   assert.deepEqual(b.flatMap(ids).sort(), ['n-pronta', 'sua', 'v-ferma', 'x-pronta'])
+})
+
+test('un blocco con solo lavoro fatto da sé non dice la priorità del progetto: quelle carte passano per ultime', () => {
+  const riga = (origine: string) => ({ genere: 'compito' as const, compito: compito(origine, 'hf', { origine, stato: 'pronto' }), seguito: null })
+  assert.equal(soloDaSe([riga('copione-video')]), true)
+  assert.equal(soloDaSe([riga('copione-video'), riga('idee-x')]), true)
+  assert.equal(soloDaSe([riga('copione-video'), riga('mano')]), false)
+  assert.equal(soloDaSe([riga('copione-video'), { genere: 'voce' as const, voce: voce('v1', 'hf', '2026-09-16T10:00:00Z') }]), false)
+  assert.equal(soloDaSe([]), false)
 })

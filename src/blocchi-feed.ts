@@ -67,6 +67,13 @@ export const COMPITI_IN_PAGINA = 6
  * sono fermate; in coda restano nella lista, dove sta il lavoro del turno.
  */
 export const DA_SE = ['idee-x', 'copione-video', 'pagina-notion']
+/**
+ * Un blocco che tiene solo lavoro fatto da sé: la priorità del progetto non
+ * ci si legge. Quelle carte hanno priorità bassa (passano dopo le risposte
+ * alla posta), e «Priorità alta» sopra di loro direbbe il contrario.
+ */
+export const soloDaSe = (righe: readonly RigaBlocco<unknown, Pick<CompitoDaBlocco, 'origine'>>[]) =>
+  righe.length > 0 && righe.every(r => r.genere === 'compito' && DA_SE.includes(r.compito.origine))
 export const daSeInAttesa = (c: Pick<CompitoDaBlocco, 'origine' | 'stato' | 'guaio'>) =>
   DA_SE.includes(c.origine) && c.stato !== 'pronto' && c.stato !== 'chiede' && !c.guaio
 

@@ -65,6 +65,23 @@ function ripulisci() {
   rmSync(join(cfg.cartella(), 'da-se.json'), { force: true })
 }
 
+/** Il modello finto che riesce: due idee che reggono, e un copione che regge. */
+const IDEE_BUONE = { idee: [
+  { angolo: 'behind the scenes', testo: 'Day four of building in public and the inbox still answers itself.', perche: 'You keep the daily thread going.', fonti: ['X1'] },
+  { angolo: 'a belief his best posts share', testo: 'Reading mail is not work. Deciding what to say is.', perche: 'Your posts keep coming back to it.', fonti: ['X2'] }
+] }
+const COPIONE_BUONO = {
+  titolo: 'Notes sync', gancio: 'My notes and my inbox finally talk to each other.',
+  battute: [
+    { testo: 'On Tuesday the beta testers got notes sync. Every draft the twin writes now reads the notes I took that morning, before it says a single word to anyone.', fonti: ['E1'] },
+    { testo: 'I built it because I kept fixing the same reply twice. The draft was polite and wrong, because it never knew what I had promised in a meeting an hour earlier.', fonti: ['E1', 'P1'] },
+    { testo: 'If you run a small company from your inbox, this is the difference between a draft you rewrite and a draft you send. That gap is where my mornings used to go.', fonti: ['P2'] }
+  ],
+  chiusura: 'Next on the list is the first founder who pays for it. Would you trust a draft that read your notes?',
+  inquadrature: ['Me to camera at the desk', 'Screen recording of a draft with a note beside it'], perche: 'Notes sync shipped this week.'
+}
+const salvaFinta = (o: { titolo: string; luogo: import('./mani.ts').Luogo }) => ({ percorso: join(CASA, `${o.titolo}.docx`), nome: `${o.titolo}.docx`, luogo: o.luogo })
+
 let myynd: import('./progetti.ts').Progetto
 let evermute: import('./progetti.ts').Progetto
 before(() => {
@@ -120,15 +137,47 @@ test('le idee per X: una carta in coda per il turno, con la mano del file, prior
   assert.deepEqual(c.contratto?.mani, ['file'])
   // il testo non nomina un progetto: la prima pagina la mette fra il resto, non sotto «Myynd»
   assert.ok(!/Myynd|Evermute/.test(`${c.testo}\n${c.nota}`), c.nota ?? '')
-  // lo stesso giorno, e anche con la carta chiusa: niente
-  assert.equal((await daSe.giro(ORA + 60_000, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('idee-x-')).length, 0)
+  // nascere non scrive il ritmo: lo scrive solo il lavoro consegnato
+  assert.equal(daSe.leggiStato().x?.ultimo, undefined)
+  daSe.perProva({ chiedi: (async () => IDEE_BUONE) as never, salva: salvaFinta })
+  const e = await daSe.lavora(c, { adesso: ORA })
+  assert.equal(e.consegna?.app, 'File', JSON.stringify(e))
+  assert.ok(daSe.leggiStato().x?.ultimo)
   chiudiLeMie()
+  // lo stesso giorno: niente
   assert.equal((await daSe.giro(ORA + 60_000, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('idee-x-')).length, 0, 'lo stesso giorno')
   // il giorno dopo, senza niente di nuovo: niente
   assert.equal((await daSe.giro(ORA + GIORNO, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('idee-x-')).length, 0, 'niente di nuovo')
   // un post nuovo: il lotto nasce
   post('Shipped the morning receipt: what the twin did while I slept, in one card.', 0)
   assert.equal((await daSe.giro(ORA + GIORNO, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('idee-x-')).length, 1)
+  chiudiLeMie()
+})
+
+test('una carta caduta non brucia il suo giorno: il modello giù, o nessuna idea che regga, e domani ne nasce un\'altra col materiale di oggi', async () => {
+  ripulisci()
+  const id = (await daSe.giro(ORA + 2 * GIORNO, { pronto: SI, pagina: () => false })).find(x => x.startsWith('idee-x-'))!
+  assert.ok(id)
+  daSe.perProva({ chiedi: (async () => { throw new Error('motore giù') }) as never, salva: salvaFinta })
+  await assert.rejects(daSe.lavora(store.compito(id)!, { adesso: ORA + 2 * GIORNO }))
+  assert.equal(daSe.leggiStato().x?.ultimo, undefined, 'il guasto non scrive il ritmo')
+  chiudiLeMie()
+  // lo stesso giorno la carta c'è già (anche chiusa): l'id ha il giorno dentro
+  assert.equal((await daSe.giro(ORA + 2 * GIORNO + 60_000, { pronto: SI, pagina: () => false })).filter(x => x.startsWith('idee-x-')).length, 0)
+  const domani = (await daSe.giro(ORA + 3 * GIORNO, { pronto: SI, pagina: () => false })).find(x => x.startsWith('idee-x-'))
+  assert.ok(domani, 'lo stesso materiale, il giorno dopo')
+  daSe.perProva({ chiedi: (async () => ({ idee: [] })) as never, salva: salvaFinta })
+  const e = await daSe.lavora(store.compito(domani!)!, { adesso: ORA + 3 * GIORNO })
+  assert.ok(e.ritira)
+  assert.equal(daSe.leggiStato().x?.visto, undefined, 'nessuna idea non segna il materiale come visto')
+  chiudiLeMie()
+  assert.ok((await daSe.giro(ORA + 4 * GIORNO, { pronto: SI, pagina: () => false })).some(x => x.startsWith('idee-x-')))
+  // una carta ferma su un guaio da più di dodici ore si ritira, e non tiene il posto
+  const ferma = mie().find(c => c.origine === 'idee-x')!
+  store.default.prepare("UPDATE compiti SET guaio = 'x', aggiornato = ? WHERE id = ?").run(new Date(ORA).toISOString(), ferma.id)
+  await daSe.giro(ORA + 5 * GIORNO, { pronto: SI, pagina: () => false })
+  assert.equal(store.compito(ferma.id)!.stato, 'ritirato')
+  chiudiLeMie()
 })
 
 test('le idee per X: senza almeno tre post suoi recenti non si sa come scrive, e niente nasce', () => {
@@ -148,8 +197,8 @@ test('il prompt delle idee: i suoi post con i numeri, i progetti, il lavoro chiu
   assert.match(p.utente, /Building in public/)
   assert.match(p.utente, /\[P\d\] Myynd: Sell the Mac app to founders\. Where it stands: Myynd is a Mac twin that drafts replies overnight\. The beta runs on two Macs\. Next milestone: First paying founder\./)
   assert.match(p.utente, /Ship the morning receipt card/)
-  assert.match(p.system, /Never invent numbers/)
-  assert.match(p.system, /does not use hashtags/)
+  assert.match(p.system, /Never invent users/)
+  assert.match(p.system, /No hashtags\./)
   assert.match(p.system, /No em dashes/)
   assert.ok(p.fonti.has('P1') && p.fonti.has('L1') && p.fonti.has('X1'))
   for (const segreto of ['SEGRETO-DELLA-POSTA', 'ntn_SEGRETO', 'sk-SEGRETO', 'marco@lumen']) assert.ok(!tutto.includes(segreto), `nel prompt: ${segreto}`)
@@ -176,7 +225,7 @@ test('le idee che reggono: fonte vera, niente hashtag se non li usa, niente line
 
 // — 2 · il copione —
 
-test('il copione: al progetto che si è mosso abbastanza, una volta alla settimana per progetto, uno al giorno in tutto', async () => {
+test('il copione: al progetto che si è mosso abbastanza, una volta alla settimana per progetto dall\'ultimo consegnato, uno al giorno in tutto', async () => {
   ripulisci()
   quadri({
     [myynd.id]: { sintesi: 'Myynd drafts replies overnight.', traguardo: 'First paying founder' },
@@ -189,11 +238,21 @@ test('il copione: al progetto che si è mosso abbastanza, una volta alla settima
   const video = prima.filter(id => id.startsWith('copione-video-'))
   assert.deepEqual(video, [`copione-video-${myynd.id}-${new Date(ORA).toLocaleDateString('en-CA')}`])
   assert.deepEqual(store.compito(video[0]!)!.contratto?.mani, ['file'])
+  // il primo traguardo visto si scrive una volta, e il giro dopo non riscrive niente
+  assert.equal(daSe.leggiStato().video?.[myynd.id]?.traguardo, 'First paying founder')
+  const disco = readFileSync(join(cfg.cartella(), 'da-se.json'), 'utf8')
+  await daSe.giro(ORA + 60_000, { pronto: SI, pagina: () => false })
+  assert.equal(readFileSync(join(cfg.cartella(), 'da-se.json'), 'utf8'), disco, 'niente cambia, niente si scrive')
+  // consegnato: il ritmo parte da qui
+  daSe.perProva({ chiedi: (async () => COPIONE_BUONO) as never, salva: salvaFinta })
+  const e = await daSe.lavora(store.compito(video[0]!)!, { adesso: ORA })
+  assert.equal(e.consegna?.app, 'File', JSON.stringify(e))
+  assert.ok(daSe.leggiStato().video?.[myynd.id]?.ultimo)
   chiudiLeMie()
   // il giorno dopo, con altro progresso su Myynd: dentro la settimana, niente
   chiusa('Shipped v0.3 with the receipt', myynd.id)
   assert.equal((await daSe.giro(ORA + GIORNO, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-')).length, 0)
-  // otto giorni dopo, senza niente di nuovo: niente; con il traguardo raggiunto e uno nuovo: il copione
+  // otto giorni dopo, senza niente di nuovo: niente; con un traguardo nuovo: il copione
   assert.equal((await daSe.giro(ORA + 8 * GIORNO, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-')).length, 0)
   quadri({
     [myynd.id]: { sintesi: 'Myynd drafts replies overnight.', traguardo: 'Ten paying founders by December' },
@@ -202,7 +261,22 @@ test('il copione: al progetto che si è mosso abbastanza, una volta alla settima
   const dopo = (await daSe.giro(ORA + 8 * GIORNO + 3_600_000, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-'))
   assert.equal(dopo.length, 1)
   assert.ok(dopo[0]!.includes(myynd.id))
-  assert.equal(daSe.leggiStato().video?.[myynd.id]?.primaDelVideo, 'First paying founder')
+  chiudiLeMie()
+})
+
+test('un copione caduto non brucia la settimana: il giorno dopo il progetto torna in gara', async () => {
+  ripulisci()
+  quadri({ [myynd.id]: { sintesi: 'Myynd drafts replies overnight.', traguardo: 'First paying founder' } })
+  chiusa('Launched the morning receipt to beta users', myynd.id)
+  chiusa('Shipped the notes sync', myynd.id)
+  const id = (await daSe.giro(ORA + 2 * GIORNO, { pronto: SI, pagina: () => false })).find(x => x.startsWith('copione-video-'))
+  assert.ok(id)
+  daSe.perProva({ chiedi: (async () => ({ ...COPIONE_BUONO, battute: COPIONE_BUONO.battute.slice(0, 1) })) as never, salva: salvaFinta })
+  await assert.rejects(daSe.lavora(store.compito(id!)!, { adesso: ORA + 2 * GIORNO }), /did not hold up/)
+  assert.equal(daSe.leggiStato().video?.[myynd.id]?.ultimo, undefined)
+  chiudiLeMie()
+  assert.ok((await daSe.giro(ORA + 3 * GIORNO, { pronto: SI, pagina: () => false })).some(x => x.startsWith('copione-video-')))
+  chiudiLeMie()
 })
 
 test('il progresso: una cosa uscita e un traguardo nuovo pesano tre, una riga chiusa uno; il traguardo nuovo conta solo se è un altro', () => {
@@ -218,28 +292,96 @@ test('il progresso: una cosa uscita e un traguardo nuovo pesano tre, una riga ch
 test('il prompt del copione: il progresso con le etichette, la forma, la voce; niente posta né segreti', () => {
   const foto = daSe.fotoDi({ progetto: myynd.id, nome: 'Myynd', stato: '', sintesi: 'Myynd drafts replies overnight.', traguardo: 'First paying founder', blocco: '', mosse: [], quando: '', impronta: '' } as never)
   const progresso = daSe.progressoDi(myynd, foto, ORA - 7 * GIORNO, ORA)
-  const p = daSe.promptVideo({ progetto: myynd, foto, progresso, post: daSe.suoiPost(ORA), lingua: 'en' })
+  // la cartella del progetto: i commit e il changelog, scritti da lui
+  const oggi = new Date(ORA).toISOString().slice(0, 10)
+  store.salvaDocumenti([{ id: '/casa/code/myynd'.replace(/^/, 'lavoro:'), fonte: 'lavoro', tipo: 'cartella', gruppo: 'documenti', titolo: 'Lavoro: myynd', percorso: '/casa/code/myynd', quando: new Date(ORA).toISOString(),
+    corpo: `Cartella di lavoro: myynd (/casa/code/myynd).\nUltimi commit:\n${oggi}  drafts read the notes you took that morning\n${oggi}  receipt card counts what was set aside\nREADME: Myynd, a digital twin for founders.\nAppunti: CHANGELOG - 0.3: drafts read your notes before writing. - 0.2: the morning receipt.` } as never])
+  const cartella = daSe.cartellaPerVideo(myynd, ORA)
+  assert.ok(cartella.some(f => /commit: drafts read the notes/.test(f.testo)), JSON.stringify(cartella))
+  assert.ok(cartella.some(f => /notes: 0\.3: drafts read your notes before writing/.test(f.testo)), JSON.stringify(cartella))
+  const p = daSe.promptVideo({ progetto: myynd, foto, progresso, cartella, post: daSe.suoiPost(ORA), lingua: 'en' })
+  assert.match(p.utente, /From the project folder \(commits and his notes\):\n\[C1\] /)
   const tutto = `${p.system}\n${p.utente}`
   assert.match(p.utente, /\[E1\] .*Launched the notes sync|\[E\d\] .*Shipped v0\.3/)
-  assert.match(p.utente, /\[P2\] Where it stands: Myynd drafts replies overnight/)
-  assert.match(p.system, /exactly 3 beats/)
+  assert.match(p.utente, /\[P2\] In short: Myynd drafts replies overnight/)
+  assert.match(p.system, /Exactly 3 beats, in this order/)
   assert.match(p.system, /150 to 230 words/)
-  assert.match(p.utente, /How he writes on X/)
+  assert.match(p.utente, /How he talks on X \(his voice only, not facts\)/)
   for (const segreto of ['SEGRETO-DELLA-POSTA', 'ntn_SEGRETO', 'sk-SEGRETO']) assert.ok(!tutto.includes(segreto))
 })
 
-test('il copione che regge: tre battute con le loro fonti, fra 120 e 260 parole', () => {
-  const fonti = new Map([['E1', { id: 'E1', testo: 'x', etichetta: 'Launched notes sync' }], ['P1', { id: 'P1', testo: 'x', etichetta: 'Myynd' }]])
-  const frase = 'This week the twin started to sync my notes overnight and I stopped copying things by hand every single morning. '
-  const buono = { titolo: 'Notes sync', gancio: 'I stopped copying notes by hand this week.', battute: [1, 2, 3].map(() => ({ testo: frase.repeat(2), fonti: ['E1'] })), chiusura: 'More next week — same time.', inquadrature: ['Me to camera', 'Screen recording of the sync'], perche: 'You launched notes sync.' }
-  const c = daSe.copioneValido(buono, fonti)!
-  assert.ok(c)
-  assert.ok(!c.chiusura.includes('—'))
-  assert.equal(daSe.copioneValido({ ...buono, battute: buono.battute.slice(0, 2) }, fonti), null, 'due battute')
-  assert.equal(daSe.copioneValido({ ...buono, battute: buono.battute.map(b => ({ ...b, fonti: ['Q1'] })) }, fonti), null, 'fonti inventate')
-  assert.equal(daSe.copioneValido({ ...buono, battute: buono.battute.map(b => ({ ...b, testo: 'Short.' })) }, fonti), null, 'troppo corto')
+test('il copione che regge: tre battute con le loro fonti, nessuna frase bandita, nessuna frase detta due volte', () => {
+  const fonti = new Map([['E1', { id: 'E1', testo: 'x', etichetta: 'Launched notes sync' }], ['P1', { id: 'P1', testo: 'x', etichetta: 'Myynd' }], ['P2', { id: 'P2', testo: 'x', etichetta: 'Myynd, where it stands' }]])
+  const problemi = (o: unknown) => { const p: string[] = []; daSe.copioneValido(o, fonti, p); return p.join(' | ') }
+  const c = daSe.copioneValido(COPIONE_BUONO, fonti)!
+  assert.ok(c, problemi(COPIONE_BUONO))
+  assert.match(problemi({ ...COPIONE_BUONO, battute: COPIONE_BUONO.battute.slice(0, 2) }), /2 beats instead of 3/)
+  assert.match(problemi({ ...COPIONE_BUONO, battute: COPIONE_BUONO.battute.map(b => ({ ...b, fonti: ['Q1'] })) }), /no label from the material/)
+  assert.match(problemi({ ...COPIONE_BUONO, battute: COPIONE_BUONO.battute.map(b => ({ ...b, testo: 'Short.' })) }), /words, it must be/)
+  assert.match(problemi({ ...COPIONE_BUONO, chiusura: 'Back to work. Stay tuned.' }), /banned phrase "Back to work"/i)
+  assert.match(problemi({ ...COPIONE_BUONO, titolo: 'No more guessing' }), /banned phrase "No more"/i, 'anche nel titolo')
+  const conProgetto: string[] = []
+  daSe.copioneValido({ ...COPIONE_BUONO, gancio: 'Myynd now reads your notes before it writes.' }, fonti, conProgetto, { progetto: 'Myynd' })
+  assert.match(conProgetto.join(' '), /the hook opens with the project name/)
+  // il gancio detto di nuovo nella prima battuta, con altre parole
+  const ripete = { ...COPIONE_BUONO, battute: [{ testo: 'My inbox and my notes finally talk to each other now. ' + COPIONE_BUONO.battute[0]!.testo, fonti: ['E1'] }, ...COPIONE_BUONO.battute.slice(1)] }
+  assert.match(problemi(ripete), /two sentences say the same thing/)
   const f = daSe.fileCopione(c, myynd, fonti, true)
   assert.match(f.testo, /## Hook[\s\S]*## Beat 1[\s\S]*## Beat 3[\s\S]*## Close[\s\S]*## Shots/)
+})
+
+test('le idee: angoli diversi, prime parole diverse, niente frasi bandite, nessun numero che il materiale non dica, mai il nome del progetto in apertura', () => {
+  const m = daSe.materialeX(ORA)!
+  const { fonti, utente } = daSe.promptX(m)
+  const scarti: string[] = []
+  const idee = daSe.ideeValide({ idee: [
+    { angolo: 'result', testo: 'Excited to share that the receipt is live.', perche: 'x', fonti: ['X1'] },
+    { angolo: 'result', testo: 'Myynd now writes the receipt of the night.', perche: 'x', fonti: ['X1'] },
+    { angolo: 'a number he gave', testo: '412 people asked for this and now it exists.', perche: 'x', fonti: ['X1'] },
+    { angolo: 'behind the scenes', testo: 'Day four of building in public and the inbox still answers itself.', perche: 'x', fonti: ['X1'] },
+    { angolo: 'behind the scenes', testo: 'Late night, one more fix, the drafts finally read my notes.', perche: 'x', fonti: ['X1'] },
+    { angolo: 'decision and reason', testo: 'Day five: I cut the settings page. Nobody opened it.', perche: 'x', fonti: ['X1'] },
+    { angolo: 'mistake or surprise', testo: 'The receipt went out twice this morning, and the second copy was the one I wanted.', perche: 'x', fonti: ['X1'] }
+  ] }, fonti, m, { materiale: utente, scarti })
+  assert.deepEqual(idee.map(i => i.testo), ['Day four of building in public and the inbox still answers itself.', 'The receipt went out twice this morning, and the second copy was the one I wanted.'], scarti.join('\n'))
+  const tutti = scarti.join('\n')
+  assert.match(tutti, /banned phrase/)
+  assert.match(tutti, /opens with the project name/)
+  assert.match(tutti, /numbers not in the material: 412/)
+  assert.match(tutti, /angle "behind the scenes" used twice/)
+  assert.match(tutti, /opens with the same word/)
+})
+
+test('la rilettura: una seconda chiamata riscrive il lotto con i problemi trovati, e vince se regge almeno quanto la stesura', async () => {
+  ripulisci()
+  const chiamate: { system: string; utente: string }[] = []
+  const deboli = { idee: [{ angolo: 'result', testo: 'Myynd got better this week.', perche: 'x', fonti: ['X1'] }] }
+  daSe.perProva({
+    chiedi: (async (o: { system: string; messages: { content: string }[] }) => { chiamate.push({ system: o.system, utente: o.messages[0]!.content }); return chiamate.length === 1 ? deboli : IDEE_BUONE }) as never,
+    salva: salvaFinta
+  })
+  const id = (await daSe.giro(ORA + 40 * GIORNO, { pronto: SI, pagina: () => false })).find(x => x.startsWith('idee-x-'))
+  assert.ok(id)
+  const e = await daSe.lavora(store.compito(id!)!, { adesso: ORA + 40 * GIORNO })
+  assert.equal(chiamate.length, 2)
+  assert.match(chiamate[1]!.system, /editor of X post drafts/)
+  assert.match(chiamate[1]!.system, /weakest idea/)
+  assert.match(chiamate[1]!.utente, /opens with the project name/, 'i problemi trovati arrivano alla rilettura')
+  assert.equal(e.consegna?.app, 'File')
+  chiudiLeMie()
+})
+
+test('quello che viene dalla posta non entra: un indirizzo, una cifra in denaro, il nome di chi ha scritto', () => {
+  const pulita = daSe.senzaPosta('The beta runs on two Macs. Marco Neri wants the quote by Friday. Pricing is 4900 euro. Write to marco@lumen.test.', ['marco neri', 'neri'])
+  assert.equal(pulita, 'The beta runs on two Macs.')
+  const f = daSe.fotoPulita({ sintesi: 'Beta on two Macs. Neri asked for a discount.', stato: '', traguardo: 'First paying founder', blocco: 'Lumen wants 4.900 € before Friday', mosse: ['Renew the certificate', 'Reply to Marco Neri'], domanda: '' }, ['marco neri', 'neri'])
+  assert.equal(f.sintesi, 'Beta on two Macs.')
+  assert.equal(f.blocco, '')
+  assert.deepEqual(f.mosse, ['Renew the certificate'])
+  // i nomi vengono dalla posta ricevuta, non da quella mandata da lui
+  store.salvaDocumenti([{ id: 'posta:INBOX:9', fonte: 'posta', tipo: 'email', titolo: 'Quote', corpo: 'x', autore: 'Giulia Bassi <giulia@harbor.test>', percorso: null, quando: new Date(ORA - GIORNO).toISOString(), gruppo: 'posta' } as never])
+  assert.ok(daSe.nomiDallaPosta(ORA).includes('giulia bassi'))
+  assert.ok(daSe.nomiDallaPosta(ORA).includes('bassi'))
 })
 
 // — 3 · Notion —
@@ -311,10 +453,10 @@ test('il lavoro delle idee: una chiamata al modello, un file nella cartella Myyn
     salva: o => { salvato = o; return { percorso: join(CASA, 'idee.docx'), nome: 'idee.docx', luogo: o.luogo } },
     scriviNotion: async () => { throw new Error('mai') }
   })
-  const nate = await daSe.giro(ORA + 3 * GIORNO, { pronto: SI, pagina: () => false })
+  const nate = await daSe.giro(ORA + 6 * GIORNO, { pronto: SI, pagina: () => false })
   const id = nate.find(i => i.startsWith('idee-x-'))!
-  const e = await daSe.lavora(store.compito(id)!, { adesso: ORA + 3 * GIORNO })
-  assert.deepEqual(chiamate, ['bozza'])
+  const e = await daSe.lavora(store.compito(id)!, { adesso: ORA + 6 * GIORNO })
+  assert.deepEqual(chiamate, ['bozza', 'bozza'], 'la stesura e la rilettura')
   assert.equal(salvato!.luogo, 'myynd')
   assert.equal(salvato!.sotto, 'X')
   assert.match(salvato!.testo, /Two Macs, zero inbox/)
@@ -391,7 +533,7 @@ test('il campione della sua voce dall\'archivio entra nei prompt come voce, non 
   const m = daSe.materialeX(ORA)!
   assert.equal(m.voce[0], 'Most founders don\'t need more tools. They need fewer tabs.')
   const p = daSe.promptX(m)
-  assert.match(p.utente, /His most engaged posts ever, from his archive \(for the voice only, not facts to cite\):\n- Most founders/)
+  assert.match(p.utente, /His most engaged posts ever, from his archive \(his voice; not facts to cite\):\n- Most founders/)
   assert.ok(![...p.fonti.values()].some(f => f.testo.includes('fewer tabs')), 'il campione non si cita')
   const v = daSe.promptVideo({ progetto: myynd, foto: null, progresso: [], post: daSe.suoiPost(ORA), lingua: 'en' })
   assert.match(v.utente, /Ship on Friday\. Fix on Saturday/)

@@ -1,38 +1,212 @@
 {
   "modello": "finto",
   "risposte": [
-    { "se": "You draft post ideas for X", "in": "system", "json": { "idee": [
-      { "testo": "Woke up to a card that said: 3 replies drafted, 1 file on your Desktop, 29 things set aside.\n\nThe morning receipt shipped this week. It's the first screen I actually want to open.", "perche": "You shipped the morning receipt card yesterday, and your post about the twin answering mail overnight is your best this month.", "fonti": ["L1", "X1"] },
-      { "testo": "Notes sync is live for the beta testers.\n\nMy notes, my mail, my projects. One brain that keeps them in step while I sleep.", "perche": "You launched notes sync to the beta testers two days ago.", "fonti": ["L2", "P1"] },
-      { "testo": "Next milestone for Myynd: the first founder who pays for it.\n\nNot a waitlist. Not a demo. One person who'd be annoyed if it stopped working.", "perche": "Your next milestone on Myynd is the first paying founder, and saying it in public keeps you honest.", "fonti": ["P1"] },
-      { "testo": "This one has no source and should be dropped.", "perche": "Invented.", "fonti": ["Z9"] }
-    ] } },
-    { "se": "talking-head video script", "in": "system", "json": {
-      "titolo": "The morning receipt",
-      "gancio": "My Mac now tells me what it did while I slept.",
-      "battute": [
-        { "testo": "This week I shipped the morning receipt in Myynd. When I open the app, one card says what got done overnight: replies drafted, files saved, things set aside. Nothing else on the screen.", "fonti": ["E1"] },
-        { "testo": "Two days before that, notes sync went out to the beta testers. My notes and my mail now live in the same brain, so the drafts know what I wrote down yesterday. That is the part that makes it feel like me, not like a tool.", "fonti": ["E2", "P2"] },
-        { "testo": "The next milestone is simple and a bit scary: the first founder who pays for it. Not a waitlist, not a demo. One person who would be annoyed if it stopped working tomorrow morning.", "fonti": ["P3"] }
-      ],
-      "chiusura": "If you run a company from your inbox, this is for you. I will show you the receipt again next week.",
-      "inquadrature": ["Me to camera at the desk", "Screen recording: the morning receipt card", "Close-up: the file on the Desktop", "Me to camera for the close"],
-      "perche": "Myynd moved the most this week: the morning receipt and notes sync both shipped."
-    } },
-    { "se": "one-page status of a project in Notion[\\s\\S]*Project: Myynd", "in": "tutto", "json": {
-      "sintesi": "Myynd is a Mac app that works as a digital twin: it reads mail and projects and drafts the replies overnight. The beta runs on two Macs.",
-      "stato": ["Beta on two Macs.", "Morning receipt shipped.", "Notes sync in beta."],
-      "prossimo": "Renew the Developer ID certificate.",
-      "cambiato": [],
-      "domande": ["How do we get past the expired Developer ID certificate?"]
-    } },
-    { "se": "one-page status of a project in Notion[\\s\\S]*Project: Evermute", "in": "tutto", "json": {
-      "sintesi": "Evermute is a sleep sounds app for iPhone. Version 1.0 is in App Store review.",
-      "stato": ["In App Store review since Friday."],
-      "prossimo": "Evermute 1.0 live on the App Store.",
-      "cambiato": [],
-      "domande": []
-    } }
+    {
+      "se": "editor of X post drafts",
+      "in": "system",
+      "json": {
+        "idee": [
+          {
+            "angolo": "result",
+            "testo": "Woke up to a card that said what got done overnight.\n\nRead it over coffee, changed two words, closed the laptop.",
+            "perche": "You shipped the morning receipt card yesterday, and your post about the twin answering mail overnight is your best this month.",
+            "fonti": [
+              "L1",
+              "X1"
+            ]
+          },
+          {
+            "angolo": "decision and reason",
+            "testo": "Notes sync went to the beta testers this week.\n\nI almost waited for it to be perfect. The testers would have waited forever.",
+            "perche": "You launched notes sync to the beta testers two days ago.",
+            "fonti": [
+              "L2"
+            ]
+          },
+          {
+            "angolo": "a belief his best posts share",
+            "testo": "The real product is the morning you don't spend in your inbox.",
+            "perche": "Your best posts keep coming back to the inbox, not the tool.",
+            "fonti": [
+              "X1",
+              "P1"
+            ]
+          },
+          {
+            "angolo": "a number he gave",
+            "testo": "9 emails answered while I slept was the post.\n\nThe receipt card is the part that makes me trust it.",
+            "perche": "Your best post this month had the 9 emails; the receipt is the follow up.",
+            "fonti": [
+              "X1",
+              "L1"
+            ]
+          },
+          {
+            "angolo": "result",
+            "testo": "This one has no source and should be dropped.",
+            "perche": "Invented.",
+            "fonti": [
+              "Z9"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "se": "editor of a talking-head video script",
+      "in": "system",
+      "json": {
+        "titolo": "The morning receipt",
+        "gancio": "My Mac now tells me what it did while I slept.",
+        "battute": [
+          {
+            "testo": "This week I shipped the morning receipt in Myynd. When I open the app, one card says what got done overnight: replies drafted, files saved, things set aside. Nothing else on the screen.",
+            "fonti": [
+              "E1"
+            ]
+          },
+          {
+            "testo": "Two days before that, notes sync went out to the beta testers. My notes and my mail now live in the same brain, so the drafts know what I wrote down yesterday. That is the part that makes it feel like me, not like a tool.",
+            "fonti": [
+              "E2",
+              "P2"
+            ]
+          },
+          {
+            "testo": "The next milestone is simple and a bit scary: the first founder who pays for it. Not a waitlist, not a demo. One person who would be annoyed if it stopped working tomorrow morning.",
+            "fonti": [
+              "P3"
+            ]
+          }
+        ],
+        "chiusura": "If you run a company from your inbox, this is for you. I will show you the receipt again next week.",
+        "inquadrature": [
+          "Me to camera at the desk",
+          "Screen recording: the morning receipt card",
+          "Close-up: the file on the Desktop",
+          "Me to camera for the close"
+        ],
+        "perche": "Myynd moved the most this week: the morning receipt and notes sync both shipped."
+      }
+    },
+    {
+      "se": "You write post ideas for X",
+      "in": "system",
+      "json": {
+        "idee": [
+          {
+            "angolo": "result",
+            "testo": "Woke up to a card that said what got done overnight.\n\nRead it over coffee, changed two words, closed the laptop.",
+            "perche": "You shipped the morning receipt card yesterday, and your post about the twin answering mail overnight is your best this month.",
+            "fonti": [
+              "L1",
+              "X1"
+            ]
+          },
+          {
+            "angolo": "decision and reason",
+            "testo": "Notes sync went to the beta testers this week.\n\nI almost waited for it to be perfect. The testers would have waited forever.",
+            "perche": "You launched notes sync to the beta testers two days ago.",
+            "fonti": [
+              "L2"
+            ]
+          },
+          {
+            "angolo": "a belief his best posts share",
+            "testo": "The real product is the morning you don't spend in your inbox.",
+            "perche": "Your best posts keep coming back to the inbox, not the tool.",
+            "fonti": [
+              "X1",
+              "P1"
+            ]
+          },
+          {
+            "angolo": "a number he gave",
+            "testo": "9 emails answered while I slept was the post.\n\nThe receipt card is the part that makes me trust it.",
+            "perche": "Your best post this month had the 9 emails; the receipt is the follow up.",
+            "fonti": [
+              "X1",
+              "L1"
+            ]
+          },
+          {
+            "angolo": "result",
+            "testo": "This one has no source and should be dropped.",
+            "perche": "Invented.",
+            "fonti": [
+              "Z9"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "se": "talking-head video script",
+      "in": "system",
+      "json": {
+        "titolo": "The morning receipt",
+        "gancio": "My Mac now tells me what it did while I slept.",
+        "battute": [
+          {
+            "testo": "This week I shipped the morning receipt in Myynd. When I open the app, one card says what got done overnight: replies drafted, files saved, things set aside. Nothing else on the screen.",
+            "fonti": [
+              "E1"
+            ]
+          },
+          {
+            "testo": "Two days before that, notes sync went out to the beta testers. My notes and my mail now live in the same brain, so the drafts know what I wrote down yesterday. That is the part that makes it feel like me, not like a tool.",
+            "fonti": [
+              "E2",
+              "P2"
+            ]
+          },
+          {
+            "testo": "The next milestone is simple and a bit scary: the first founder who pays for it. Not a waitlist, not a demo. One person who would be annoyed if it stopped working tomorrow morning.",
+            "fonti": [
+              "P3"
+            ]
+          }
+        ],
+        "chiusura": "If you run a company from your inbox, this is for you. I will show you the receipt again next week.",
+        "inquadrature": [
+          "Me to camera at the desk",
+          "Screen recording: the morning receipt card",
+          "Close-up: the file on the Desktop",
+          "Me to camera for the close"
+        ],
+        "perche": "Myynd moved the most this week: the morning receipt and notes sync both shipped."
+      }
+    },
+    {
+      "se": "one-page status of a project in Notion[\\s\\S]*Project: Myynd",
+      "in": "tutto",
+      "json": {
+        "sintesi": "Myynd is a Mac app that works as a digital twin: it reads mail and projects and drafts the replies overnight. The beta runs on two Macs.",
+        "stato": [
+          "Beta on two Macs.",
+          "Morning receipt shipped.",
+          "Notes sync in beta."
+        ],
+        "prossimo": "Renew the Developer ID certificate.",
+        "cambiato": [],
+        "domande": [
+          "How do we get past the expired Developer ID certificate?"
+        ]
+      }
+    },
+    {
+      "se": "one-page status of a project in Notion[\\s\\S]*Project: Evermute",
+      "in": "tutto",
+      "json": {
+        "sintesi": "Evermute is a sleep sounds app for iPhone. Version 1.0 is in App Store review.",
+        "stato": [
+          "In App Store review since Friday."
+        ],
+        "prossimo": "Evermute 1.0 live on the App Store.",
+        "cambiato": [],
+        "domande": []
+      }
+    }
   ],
   "predefinita": "Done.",
   "predefinitaJSON": {}
