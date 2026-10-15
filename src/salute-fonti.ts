@@ -61,7 +61,7 @@ export function nomeInFrase(id: string, nomeScheda: string): string {
 const due = (n: number) => String(n).padStart(2, '0')
 
 /** Il giorno corto, com'è scritto nella lingua dell'app: «22 set», «Sep 22». */
-function giornoCorto(d: Date): string {
+export function giornoCorto(d: Date): string {
   return d.toLocaleDateString(lingua() === 'en' ? 'en-US' : 'it-IT', { day: 'numeric', month: 'short' })
 }
 

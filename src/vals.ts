@@ -500,6 +500,20 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   }, [])
   useEffect(() => () => clearTimeout(tt.current), [])
 
+  /*
+   * L'archivio di X letto (dal bottone, o trovato da solo fra i download):
+   * una riga sola, una volta. Il server la tiene finché non si è vista, così
+   * un archivio arrivato con l'app chiusa si dice alla prima apertura.
+   */
+  const archivioDaDire = stato.connettori.find(c => c.id === 'x')?.archivio
+  const archivioDetto = useRef(false)
+  useEffect(() => {
+    if (!archivioDaDire?.daDire || archivioDetto.current) return
+    archivioDetto.current = true
+    mostraToast(frasi.archivioX(archivioDaDire.post))
+    void api.archivioXDetto().catch(() => {}).finally(() => { archivioDetto.current = false })
+  }, [archivioDaDire?.daDire, archivioDaDire?.post, mostraToast])
+
   // La tastiera. Un attrezzo che si usa tutti i giorni deve poter essere
   // guidato senza staccare le mani: ⌘K apre la ricerca da qualunque punto,
   // Esc chiude quello che è aperto. Il brief chiede una via rapida verso
@@ -819,6 +833,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const tornati = ripresi(prima, dopo, saniDi(stato))
     // i motori non sono fonti: «posso di nuovo leggere il modello sul tuo Mac» non vuol dire niente
     const fonti = tornati.filter(id => !['claude', 'openai', 'compatibile', 'incluso'].includes(id))
+      // X guarito da un archivio appena letto: lo dice la riga dell'archivio, una sola
+      .filter(id => !(id === 'x' && stato.connettori.find(c => c.id === 'x')?.archivio?.daDire))
     const detto: string[] = []
     if (fonti.length) detto.push(riempi(t('Posso di nuovo leggere {nome}.'), { nome: elenco(fonti.map(nomeDi)) }))
     if (tornati.includes('claude') && Date.now() - claudeDetto.current > 30_000) detto.push(t('Anthropic è di nuovo collegato.'))

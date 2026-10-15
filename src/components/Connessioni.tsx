@@ -8,7 +8,8 @@ import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
 import { letturaFonti, useLettura } from '../lettura-app'
 import { RigheLettura } from './RigheLettura'
 import { SaluteFonte } from './SaluteFonte'
-import { lineaPannello, mancanzeDi, parolaProblema } from '../salute-fonti'
+import { giornoCorto, lineaPannello, mancanzeDi, parolaProblema, riempi } from '../salute-fonti'
+import { desktop } from '../desktop'
 import { statoAccessoNote } from '../note-access'
 import { contaGenere } from '../conta-fonti.ts'
 import { genereDi } from '../../server/generi.ts'
@@ -16,6 +17,8 @@ import './connessioni.css'
 
 // Quelli che non portano documenti: niente «Rileggi», perché non c'è niente da rileggere.
 const MOTORI = ['claude', 'openai', 'compatibile']
+/** Dove X prepara l'archivio dei dati: si apre fuori, e solo con un clic. */
+const ARCHIVIO_X = 'https://x.com/settings/download_your_data'
 
 /**
  * Le fonti che si possono cambiare senza scollegarle prima.
@@ -77,6 +80,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
   const righe = righeQui || (lettura.occupato && lettura.inCorso === 'tutte') ? lettura.righe : null
   const [subito, setSubito] = useState<string[]>([])
   const [collegando, setCollegando] = useState(false)
+  const [importando, setImportando] = useState(false)
   const finestra = useRef<HTMLDivElement>(null)
   const indietro = useRef<HTMLButtonElement>(null)
   const ultimo = useRef(fonte || '')
@@ -139,6 +143,30 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
     finally { setCollegando(false) }
   }
 
+  /*
+   * L'archivio di X: la finestra di sistema per lo zip, poi il server lo
+   * legge. La riga «Imported …» la dice la pagina (`daDire`), come quando
+   * l'archivio arriva da solo fra i download.
+   */
+  const importaArchivio = async () => {
+    const d = desktop()
+    if (!d || importando) return
+    setGuaio(null)
+    try {
+      const [zip] = await d.scegliFile(['zip'])
+      if (!zip) return
+      setImportando(true)
+      await api.importaArchivioX(zip)
+      await ricarica()
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non riesco a leggere questo archivio di X.')) }
+    finally { setImportando(false) }
+  }
+  const scaricaArchivio = () => {
+    const d = desktop()
+    if (d) void d.apriFuori(ARCHIVIO_X).catch(() => {})
+    else window.open(ARCHIVIO_X, '_blank', 'noopener')
+  }
+
   const tutti = s?.connettori.filter(c => (c.pronto || c.collegato) && c.id !== 'mind2do') ?? []
   const scelta = tutti.find(c => c.id === soloQuesta)
   /*
@@ -167,6 +195,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
    */
   const problema = scelta?.problema && scelta.problema !== 'credito' ? scelta.problema : null
   const mancanza = scelta && s ? mancanzeDi(s).find(m => m.id === scelta.id) ?? null : null
+  /** X fermo: «Non aggiornata dal …» dice già il giorno in cui finiscono i dati; né la riga del guaio né la data dell'archivio lo ripetono. */
+  const xFermo = scelta?.id === 'x' && !!problema && !!scelta.fermoDal
   const daSistemare = problema === 'credenziale' || problema === 'amministratore' || problema === 'accedi'
   const moduloVisibile = !!scelta && (!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica) || daFinire || daSistemare)
   /** Con un guaio il modulo sta sopra i bottoni, come quando si collega. */
@@ -202,7 +232,10 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
         // quel numero basso non ha nessuna spiegazione
         scelta.id === 'desktop' && letturaDesk?.saltatiPerTipo
           ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
-          : null
+          : null,
+        // X dall'archivio: di quando è, che è quello che dice quanto è vecchio quello che sa
+        // con X fermo la data la dice già la parola in alto: una volta sola
+        scelta.id === 'x' && scelta.archivio && !xFermo ? riempi(t('archivio del {giorno}'), { giorno: giornoCorto(new Date(scelta.archivio.data)) }) : null
       ].filter(Boolean).join(' · ') || (moduloSopra ? '' : t(scelta.nota))
     : t(scelta.nota)
   const pronti = tutti
@@ -281,7 +314,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
           <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''} ${problema ? 'needs-access' : ''}`}>
             <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato && !problema} /></span>
             <div><span className="connection-detail-status">{problema ? parolaProblema(scelta.id, problema, scelta.fermoDal) : scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
-              {mancanza && <p className="connection-detail-since">{lineaPannello(mancanza)}</p>}
+              {mancanza && !xFermo && <p className="connection-detail-since">{lineaPannello(mancanza)}</p>}
               {/* cosa porta la fonte: vedi `descrizione` */}
               {descrizione && <p>{descrizione}</p>}
               {/* «perché lascia fuori così tanti file» è la domanda che segue il
@@ -289,6 +322,13 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
                   documento per Myynd invece di lasciarlo indovinare. */}
               {scelta.id === 'desktop' && !!letturaDesk?.saltatiPerTipo &&
                 <p>{t('Myynd legge i documenti: PDF, Word, Excel, PowerPoint, testo, Markdown, HTML e RTF. Immagini, video, codice e file di sistema non sono documenti.')}</p>}
+              {/* X vecchio (l'archivio passato un mese, o il motore fermo senza archivio): una riga, che apre X solo se la si preme */}
+              {scelta.id === 'x' && (scelta.archivio ? scelta.archivio.vecchio : !!scelta.fermoDal) &&
+                <p><button type="button" className="connection-detail-link" onClick={scaricaArchivio}>
+                  {scelta.archivio ? t('Scarica un archivio più recente da X') : t('Scarica il tuo archivio da X')}</button></p>}
+              {/* un archivio di un altro account fra i download non entra da solo */}
+              {scelta.id === 'x' && scelta.archivioAltro &&
+                <p>{riempi(t('Nei download c’è un archivio di @{maniglia}: se è tuo, importalo a mano.'), { maniglia: scelta.archivioAltro })}</p>}
             </div>
           </div>
           {/* i trenta giorni: solo le fonti che si leggono, non i motori */}
@@ -308,8 +348,9 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
               coda={t('Apri Impostazioni, aggiungi Myynd, poi torna qui.')} />
           </div>}
           {(scelta.collegato || !!problema) && <div className="connection-detail-actions">
-            {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} aria-busy={!!fonteInLettura || undefined} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id || (fonteInLettura === '*' && righe?.some(r => r.id === scelta.id && (r.stato === 'attesa' || r.stato === 'leggo'))) ? t('leggo…') : t('Rileggi')}</button>}
+            {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && !scelta.soloArchivio && <button className="connections-button" disabled={!!fonteInLettura} aria-busy={!!fonteInLettura || undefined} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id || (fonteInLettura === '*' && righe?.some(r => r.id === scelta.id && (r.stato === 'attesa' || r.stato === 'leggo'))) ? t('leggo…') : t('Rileggi')}</button>}
             {CAMBIABILI.includes(scelta.id) && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}
+            {scelta.id === 'x' && !!desktop() && <button className="connections-button" disabled={importando} aria-busy={importando || undefined} onClick={importaArchivio}>{importando ? t('Importo…') : t('Importa il tuo archivio di X')}</button>}
             <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica() }}>{t('Scollega')}</BottoneSicuro>
           </div>}
           {!scelta.collegato && subito.includes(scelta.id) && <div className="connection-quick">

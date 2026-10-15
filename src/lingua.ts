@@ -3432,6 +3432,18 @@ const EN: Record<string, string> = {
   '{nome} non si aggiorna {da}.': '{nome} hasn’t updated {da}.',
   'non si aggiorna più': 'it isn’t updating',
   'Il motore di X non scrive niente di nuovo da più di tre giorni.': 'The X engine hasn’t written anything new in more than three days.',
+  'Il tuo archivio di X ha più di un mese.': 'Your X archive is more than a month old.',
+  'archivio del {giorno}': 'archive of {giorno}',
+  'Scarica un archivio più recente da X': 'Download a newer archive from X',
+  'Scarica il tuo archivio da X': 'Download your archive from X',
+  'Importa il tuo archivio di X': 'Import your X archive',
+  'Nei download c’è un archivio di @{maniglia}: se è tuo, importalo a mano.': 'There’s an archive for @{maniglia} in your Downloads: if it’s yours, import it by hand.',
+  'Importo…': 'Importing…',
+  'Non trovo questo archivio.': 'I can’t find this archive.',
+  'Non riesco a leggere questo archivio di X.': 'I can’t read this X archive.',
+  'Questo non sembra un archivio di X.': 'This doesn’t look like an X archive.',
+  'L’archivio di X si importa dall’app sul tuo computer.': 'Import your X archive from the app on your computer.',
+  'Quello che pubblichi su X e quello che ti piace, dal tuo archivio di X.': 'What you post on X and what you like, from your X archive.',
   'Non riesco a leggere {nome}.': 'I can’t read {nome}.',
   'Leggo {nome} solo in parte.': 'I only read part of {nome}.',
   'Non ho letto tutto: {elenco}.': 'I couldn’t read everything: {elenco}.',
@@ -4130,6 +4142,10 @@ export const frasi = {
   segnataPer: (progetto: string) => corrente === 'en'
     ? `Marked done for ${progetto}. Looking at the next step.`
     : `Segnata come fatta per ${progetto}. Guardo il passo dopo.`,
+  /** L'archivio di X letto: «Imported 1,240 posts from your X archive.» */
+  archivioX: (n: number) => corrente === 'en'
+    ? (n === 1 ? 'Imported one post from your X archive.' : n ? `Imported ${n.toLocaleString('en-US')} posts from your X archive.` : 'Imported your X archive.')
+    : (n === 1 ? 'Ho importato un post dal tuo archivio di X.' : n ? `Ho importato ${n.toLocaleString('it-IT')} post dal tuo archivio di X.` : 'Ho importato il tuo archivio di X.'),
   coseNuove: (n: number) => corrente === 'en'
     ? (n === 1 ? 'One new thing in the feed.' : `${n} new things in the feed.`)
     : (n === 1 ? 'Una cosa nuova nel feed.' : `${n} cose nuove nel feed.`),
