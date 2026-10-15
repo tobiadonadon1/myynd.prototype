@@ -22,7 +22,7 @@ import { genereDi as genereDiFonte } from '../server/generi.ts'
 import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
 import { avvisiAccesi } from './desktop.ts'
-import { avvisa, dalFeed } from './avvisi.ts'
+import { avvisa, dalFeed, impostaSchermo } from './avvisi.ts'
 import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
 import { segna, tempiChat } from './tempi.ts'
 import { rigaImparata } from './gemello-frasi.ts'
@@ -727,6 +727,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     if (!prima) return
     for (const c of dalFeed(prima, aperti)) avvisa(c)
   }, [aperti])
+  // la schermata davanti a lui: tornato sulla finestra, quello che lei mostra l'ha visto
+  useEffect(() => { impostaSchermo(screen) }, [screen])
 
   // il grafo arriva quando si apre la Mappa, e una volta sola
   useEffect(() => {

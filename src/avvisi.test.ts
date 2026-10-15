@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 ;(globalThis as unknown as { document: unknown }).document = { documentElement: { lang: '' } }
 const { impostaLingua } = await import('./lingua.ts')
 const {
-  componi, daRiga, dalFeed, dallaMattina, decidi, fineDellaNotte, visto, vuota,
+  componi, daRiga, dalFeed, dallaMattina, decidi, fineDellaNotte, rimetti, senzaVecchie, visto, vuota,
   DOPO_LA_NOTTE_MS, MASSIMO_ORA, OGNI_GENERE_MS
 } = await import('./avvisi.ts')
 type Candidato = import('./avvisi.ts').Candidato
@@ -38,7 +38,7 @@ test('quello che arriva insieme esce in un avviso solo', () => {
   assert.equal(a.memoria.inviati.length, 1, 'un avviso, non tre')
   const n = componi(a.esce!)
   assert.equal(n.titolo, '3 things are ready.')
-  assert.equal(n.corpo, 'carta a · carta b · carta c')
+  assert.equal(n.corpo, 'carta b · carta c · carta a', 'prima la risposta e il file, poi il resto')
   // posti diversi: la prima pagina
   assert.equal(n.dove, 'casa')
 })
@@ -83,13 +83,55 @@ test('di notte niente suona: la mattina esce tutto in uno, col punto a parlare',
   const a = decidi(vuota(), [c('lavoro', 'a'), c('bozza', 'b')], alle3.getTime(), fine)
   assert.equal(a.esce, null)
   assert.equal(a.prossimo, fine + DOPO_LA_NOTTE_MS)
+  // il punto arriva trenta secondi dopo la fine: la notte vale ancora, e aspetta con le altre
   const punto = dallaMattina({ giorno: '2026-10-16', fatte: 2 })
-  const b = decidi(a.memoria, [punto], fine + 30_000, null)
-  assert.equal(b.esce?.length, 3)
-  const n = componi(b.esce!)
+  const dopo30 = fine + 30_000
+  const b = decidi(a.memoria, [punto], dopo30, fineDellaNotte(new Date(dopo30), notte))
+  assert.equal(b.esce, null)
+  assert.equal(b.prossimo, fine + DOPO_LA_NOTTE_MS)
+  const ora = fine + DOPO_LA_NOTTE_MS
+  const c3 = decidi(b.memoria, [], ora, fineDellaNotte(new Date(ora), notte))
+  assert.equal(c3.esce?.length, 3)
+  const n = componi(c3.esce!)
   assert.equal(n.titolo, 'Your morning briefing is ready.')
   assert.equal(n.corpo, '2 things done overnight.')
   assert.equal(n.dove, 'casa')
+  assert.deepEqual(n.fuori, [])
+})
+
+test('subito dopo la notte, una cosa nuova non scappa prima del punto', () => {
+  const notte = { da: '22:00', a: '07:00' }
+  const fine = new Date('2026-10-16T07:00:00').getTime()
+  const adesso = fine + 20_000
+  assert.equal(fineDellaNotte(new Date(adesso), notte), fine)
+  const r = decidi(vuota(), [c('bozza', 'b')], adesso, fineDellaNotte(new Date(adesso), notte))
+  assert.equal(r.esce, null)
+  assert.equal(r.prossimo, fine + DOPO_LA_NOTTE_MS)
+  // passato il minuto e mezzo, è giorno
+  assert.equal(fineDellaNotte(new Date(fine + DOPO_LA_NOTTE_MS + 60_000), notte), null)
+})
+
+test('col punto, una domanda e una carta del feed si nominano; non spariscono dentro il punto', () => {
+  const punto = dallaMattina({ giorno: '2026-10-16', fatte: 2, aspettano: 1 })
+  assert.equal(punto.corpo, '2 done overnight, 1 waiting for you.')
+  const n = componi([punto, c('lavoro', 'a'), c('chiede', 'q', 'Which build goes in the notes?'), c('feed', 'f', 'Invoice due today')])
+  assert.equal(n.titolo, 'Your morning briefing is ready.')
+  assert.equal(n.corpo, '2 done overnight, 1 waiting for you. · Which build goes in the notes? · Invoice due today')
+  assert.deepEqual(n.fuori, [])
+})
+
+test('quello che non entra nel corpo non è detto: torna ad aspettare, e non è visto', () => {
+  const lunghe = [c('chiede', 'q1', 'q'.repeat(120)), c('chiede', 'q2', 'w'.repeat(120)), c('lavoro', 'l', 'short')]
+  const r = decidi(vuota(), lunghe, T0)
+  const n = componi(r.esce!)
+  assert.equal(n.titolo, '2 things are ready.')
+  assert.deepEqual(n.fuori.map(x => x.id), ['q2'])
+  const m = rimetti(r.memoria, n.fuori, T0)
+  assert.ok(!m.visti.includes('chiede:q2'))
+  assert.deepEqual(m.attesa.map(x => x.id), ['q2'])
+  // al giro dopo il suo genere, esce
+  const d = decidi(m, [], T0 + OGNI_GENERE_MS)
+  assert.deepEqual(d.esce?.map(x => x.id), ['q2'])
 })
 
 test('la notte: fuori dalla finestra non c’è, e una finestra di giorno vale', () => {
@@ -101,13 +143,30 @@ test('la notte: fuori dalla finestra non c’è, e una finestra di giorno vale',
   assert.equal(fineDellaNotte(new Date('2026-10-15T13:00:00'), { da: '07:00', a: '07:00' }), null)
 })
 
-test('tornato sulla finestra: quello che aspettava non si dice più', () => {
+test('tornato sulla prima pagina: quello che aspettava l’ha visto, e non si dice più', () => {
   const a = decidi(vuota(), [c('bozza', 'a')], T0)
   const b = decidi(a.memoria, [c('bozza', 'b')], T0 + 1000)
-  const m = visto(b.memoria, [c('file', 'f')])
+  const m = visto(b.memoria, [c('file', 'f')], 'myynd', T0 + 2000)
   assert.equal(m.attesa.length, 0)
   const d = decidi(m, [c('bozza', 'b'), c('file', 'f')], T0 + OGNI_GENERE_MS)
   assert.equal(d.esce, null)
+})
+
+test('tornato sulla chat: una domanda o una carta del feed non le ha viste, e aspettano', () => {
+  const a = decidi(vuota(), [c('chiede', 'x'), c('feed', 'y')], T0)
+  const b = decidi(a.memoria, [c('chiede', 'q'), c('feed', 'f')], T0 + 1000)
+  assert.equal(b.memoria.attesa.length, 2)
+  const m = visto(b.memoria, [c('feed', 'g')], 'chat', T0 + 2000)
+  assert.deepEqual(m.attesa.map(x => x.id).sort(), ['f', 'g', 'q'])
+  // in To do la domanda si vede; il feed no
+  const oggi = visto(m, [], 'oggi', T0 + 3000)
+  assert.deepEqual(oggi.attesa.map(x => x.id).sort(), ['f', 'g'])
+  assert.ok(oggi.visti.includes('chiede:q'))
+})
+
+test('avvisi riaccesi: quello che aspetta da più di due ore se ne va, il resto resta', () => {
+  const m = { ...vuota(), attesa: [{ ...c('lavoro', 'vecchia'), dal: T0 }, { ...c('lavoro', 'nuova'), dal: T0 + 2.5 * 3_600_000 }] }
+  assert.deepEqual(senzaVecchie(m, T0 + 3 * 3_600_000).attesa.map(x => x.id), ['nuova'])
 })
 
 test('il punto si dice una volta al giorno, da qualunque strada arrivi', () => {

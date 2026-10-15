@@ -2227,6 +2227,7 @@ const EN: Record<string, string> = {
   '{n} cose sono pronte.': '{n} things are ready.',
   'Una cosa fatta stanotte.': 'One thing done overnight.',
   '{n} cose fatte stanotte.': '{n} things done overnight.',
+  '{n} fatte stanotte, {m} aspettano te.': '{n} done overnight, {m} waiting for you.',
   'Avvisami quando un lavoro è pronto': 'Tell me when work is ready',
   'Un avviso di sistema, solo se Myynd non è davanti. Vale anche per le domande che ti fa.': 'A system notification, only when Myynd is not in front. Also for the questions it asks you.',
   'Apre il richiamo da qualunque programma: una riga da segnare, o una domanda con «?». Premuta di nuovo, lo chiude.': 'Opens the quick bar from any program: a line to note, or a question with “?”. Pressed again, it closes it.',

@@ -939,8 +939,8 @@ export function useCompiti(
    */
   const inAttesa = quanteAspettano(compiti)
   useEffect(() => { desktop()?.segnala(inAttesa) }, [inAttesa])
-  // la notte del turno: dentro, gli avvisi aspettano la mattina
-  useEffect(() => { impostaNotte(turno?.notte ?? null) }, [turno?.notte?.da, turno?.notte?.a])
+  // la notte del turno: dentro, gli avvisi aspettano la mattina. Col turno spento non c'è notte
+  useEffect(() => { impostaNotte(turno?.acceso ? turno.notte : null) }, [turno?.acceso, turno?.notte?.da, turno?.notte?.a])
   useEffect(() => () => { desktop()?.segnala(0) }, [])
 
   return {

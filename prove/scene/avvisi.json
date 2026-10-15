@@ -232,6 +232,36 @@
    "quando": "-2h",
    "peso": 1,
    "stato": "aperto"
+  },
+  {
+   "id": "f-alto",
+   "tipo": "Priorità",
+   "titolo": "Pay the Harbor invoice before 5pm",
+   "testo": "Due today.",
+   "progetto": "hb",
+   "quando": "-1h",
+   "peso": 3,
+   "stato": "fatto"
+  },
+  {
+   "id": "f-medio",
+   "tipo": "Priorità",
+   "titolo": "Read the Lumen notes",
+   "testo": "Whenever.",
+   "progetto": "ls",
+   "quando": "-1h",
+   "peso": 1.5,
+   "stato": "fatto"
+  },
+  {
+   "id": "f-due",
+   "tipo": "Priorità",
+   "titolo": "Confirm the Northwind release date with Apple",
+   "testo": "Review closes tomorrow.",
+   "progetto": "nw",
+   "quando": "-1h",
+   "peso": 3,
+   "stato": "fatto"
   }
  ]
 }

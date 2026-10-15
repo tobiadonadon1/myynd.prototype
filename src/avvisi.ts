@@ -14,12 +14,16 @@
 // — non più di un avviso per genere ogni dieci minuti, e non più di sei
 //   all'ora in tutto: quello che non può uscire aspetta, non si butta;
 // — quello che arriva insieme esce insieme, in un avviso solo («3 things are
-//   ready»);
-// — di notte, nella finestra del turno, niente suona: quello che è pronto
-//   aspetta la fine della notte, e la mattina esce in un avviso solo.
+//   ready»), e quello che non entra nel corpo dell'avviso non conta come detto;
+// — di notte, nella finestra del turno (se il turno è acceso), niente suona:
+//   quello che è pronto aspetta la fine della notte, ed esce col punto della
+//   mattina;
+// — quando torna sulla finestra, quello che la schermata davanti a lui
+//   mostra l'ha visto; il resto aspetta ancora.
 //
-// La parte che decide è `decidi`, pura e provata da sola; il resto la chiama
-// con l'orologio e il deposito della finestra.
+// La parte che decide è `decidi`, pura e provata da sola, con `componi`,
+// `visto` e `rimetti`; il resto la chiama con l'orologio e il deposito della
+// finestra.
 
 import { avvisiAccesi, desktop, type Dove } from './desktop.ts'
 import { t } from './lingua.ts'
@@ -31,7 +35,7 @@ export type Candidato = { genere: Genere; id: string; corpo: string; dove: Dove;
 
 /** Quello che resta fra un giro e l'altro: sta nel deposito della sessione. */
 export type Memoria = {
-  /** Le chiavi già dette (o lasciate cadere perché lui stava guardando). */
+  /** Le chiavi già dette (o viste da lui sulla schermata). */
   visti: string[]
   /** L'ultimo avviso di ogni genere. */
   ultimo: Partial<Record<Genere, number>>
@@ -52,6 +56,8 @@ const VISTI_MAX = 400
 const ATTESA_MAX = 20
 /** Quello che aspetta da più di mezza giornata non è più una notizia. */
 const ATTESA_VECCHIA_MS = 12 * ORA_MS
+/** Gli avvisi erano spenti e tornano accesi: quello che aspetta da più di due ore non è più una notizia. */
+export const VECCHIE_ALLA_RIACCENSIONE_MS = 2 * ORA_MS
 /** Dopo la fine della notte si aspetta un poco: il punto della mattina arriva in quel minuto, ed esce insieme. */
 export const DOPO_LA_NOTTE_MS = 90_000
 /** Il peso da cui una carta del feed merita un avviso: «oggi, o in ritardo» (`PESO_CARTA` nel server). */
@@ -64,9 +70,9 @@ const chiave = (c: Pick<Candidato, 'genere' | 'id'>) => `${c.genere}:${c.id}`
 /**
  * Cosa esce adesso, e cosa aspetta.
  *
- * `fineNotte` è quando finisce la notte in corso, o null se non è notte.
- * Torna la memoria nuova, quello che esce in un avviso solo (o null), e
- * quando ripassare per quello che è rimasto ad aspettare.
+ * `fineNotte` è quando finisce (o è appena finita) la notte, o null: vedi
+ * `fineDellaNotte`. Torna la memoria nuova, quello che esce in un avviso solo
+ * (o null), e quando ripassare per quello che è rimasto ad aspettare.
  */
 export function decidi(m: Memoria, nuovi: readonly Candidato[], adesso: number, fineNotte: number | null = null): {
   memoria: Memoria; esce: Candidato[] | null; prossimo: number | null
@@ -89,7 +95,8 @@ export function decidi(m: Memoria, nuovi: readonly Candidato[], adesso: number, 
   const fermo = (prossimo: number | null) => ({ memoria: { ...m, inviati, attesa }, esce: null, prossimo: attesa.length ? prossimo : null })
 
   if (!attesa.length) return fermo(null)
-  if (fineNotte !== null && fineNotte > adesso) return fermo(fineNotte + DOPO_LA_NOTTE_MS)
+  // la notte vale fino a un minuto e mezzo dopo la sua fine: il punto della mattina arriva lì, ed esce insieme
+  if (fineNotte !== null && fineNotte + DOPO_LA_NOTTE_MS > adesso) return fermo(fineNotte + DOPO_LA_NOTTE_MS)
   if (inviati.length >= MASSIMO_ORA) return fermo(inviati[0] + ORA_MS)
 
   const libero = (g: Genere) => adesso - (m.ultimo[g] ?? -Infinity) >= OGNI_GENERE_MS
@@ -99,9 +106,8 @@ export function decidi(m: Memoria, nuovi: readonly Candidato[], adesso: number, 
 
   const ultimo = { ...m.ultimo }
   for (const c of esce) ultimo[c.genere] = adesso
-  const tuttiVisti = [...m.visti, ...esce.map(chiave)]
   const memoria: Memoria = {
-    visti: tuttiVisti.slice(-VISTI_MAX),
+    visti: [...m.visti, ...esce.map(chiave)].slice(-VISTI_MAX),
     ultimo,
     inviati: [...inviati, adesso],
     attesa: resta
@@ -110,11 +116,44 @@ export function decidi(m: Memoria, nuovi: readonly Candidato[], adesso: number, 
   return { memoria, esce, prossimo }
 }
 
-/** Lui sta guardando: quello che aspettava l'ha visto da sé, e non si dice più. */
-export function visto(m: Memoria, anche: readonly Candidato[] = []): Memoria {
-  const chiavi = [...m.attesa, ...anche].map(chiave)
-  if (!chiavi.length) return m
-  return { ...m, visti: [...m.visti, ...chiavi].slice(-VISTI_MAX), attesa: [] }
+/** Le schermate dell'app (`Screen` in data.ts). `myynd` è la prima pagina. */
+export type Schermo = 'myynd' | 'oggi' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto'
+/** Dove una cosa si vede da sé: le righe nella lista (a lato della prima pagina, o in To do), il resto sulla prima pagina. */
+const SI_VEDE: Record<Genere, readonly Schermo[]> = {
+  lavoro: ['myynd', 'oggi'], bozza: ['myynd', 'oggi'], file: ['myynd', 'oggi'], chiede: ['myynd', 'oggi'],
+  feed: ['myynd'], punto: ['myynd'], fonte: ['myynd']
+}
+
+/**
+ * Lui sta guardando la schermata `schermo`: quello che aspettava e che lei
+ * mostra l'ha visto da sé, e non si dice più. Il resto (e quello di `anche`
+ * che lei non mostra) aspetta ancora: una domanda arrivata mentre era sulla
+ * chat non l'ha vista nessuno.
+ */
+export function visto(m: Memoria, anche: readonly Candidato[], schermo: Schermo | null, adesso: number): Memoria {
+  const si = (c: Candidato) => !!schermo && SI_VEDE[c.genere].includes(schermo)
+  const note = new Set([...m.visti, ...m.attesa.map(chiave)])
+  const nuove = anche.filter(c => !note.has(chiave(c)))
+  const viste = [...m.attesa, ...nuove].filter(si).map(chiave)
+  const attesa = [...m.attesa.filter(c => !si(c)), ...nuove.filter(c => !si(c)).map(c => ({ ...c, dal: adesso }))]
+  if (!viste.length && attesa.length === m.attesa.length) return m
+  return { ...m, visti: [...m.visti, ...viste].slice(-VISTI_MAX), attesa }
+}
+
+/** Alla riaccensione degli avvisi: via quello che aspetta da troppo. */
+export function senzaVecchie(m: Memoria, adesso: number, ms = VECCHIE_ALLA_RIACCENSIONE_MS): Memoria {
+  const attesa = m.attesa.filter(c => c.dal > adesso - ms)
+  return attesa.length === m.attesa.length ? m : { ...m, attesa }
+}
+
+/**
+ * Rimette ad aspettare quello che è uscito ma l'avviso non ha potuto dire
+ * (il corpo era pieno): non è stato detto, quindi non è visto.
+ */
+export function rimetti(m: Memoria, fuori: readonly Candidato[], adesso: number): Memoria {
+  if (!fuori.length) return m
+  const via = new Set(fuori.map(chiave))
+  return { ...m, visti: m.visti.filter(k => !via.has(k)), attesa: [...m.attesa, ...fuori.map(c => ({ ...c, dal: adesso }))] }
 }
 
 /** Il titolo di ogni genere, in italiano: la lingua la mette `t()`. */
@@ -128,28 +167,50 @@ const TITOLI: Record<Genere, string> = {
   fonte: 'Una fonte non risponde.'
 }
 
+const CORPO_MAX = 200
 const taglia = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
+/** Prima quello che aspetta lui, poi il resto. */
+const ORDINE: Genere[] = ['chiede', 'feed', 'bozza', 'file', 'lavoro', 'fonte', 'punto']
 
 /**
- * L'avviso che esce, in parole.
+ * L'avviso che esce, in parole, e quello che non ci è stato.
  *
  * Uno: il titolo del suo genere, il suo titolo sotto, e un clic porta lì.
- * Tanti: quante sono, i loro titoli in fila, e un clic porta dove stanno
- * tutte — la prima pagina, se non stanno nello stesso posto. Con dentro il
- * punto della mattina, è il punto a parlare: le altre sono già dentro di lui.
+ * Tanti: quante sono, i loro titoli in fila (prima le domande e il feed), e
+ * un clic porta dove stanno tutte — la prima pagina, se non stanno nello
+ * stesso posto. Con dentro il punto della mattina, parla il punto: il lavoro
+ * della notte è già nel suo «fatte stanotte», ma una domanda o una carta del
+ * feed si nominano lo stesso. Quello che non entra nel corpo torna in
+ * `fuori`: non è stato detto, e aspetta il suo turno.
  */
-export function componi(esce: readonly Candidato[], tr: (s: string) => string = t): { titolo: string; corpo: string; dove: Dove } {
-  const punto = esce.find(c => c.genere === 'punto')
-  if (punto) return { titolo: punto.titolo ?? tr(TITOLI.punto), corpo: taglia(punto.corpo, 200), dove: punto.dove }
+export function componi(esce: readonly Candidato[], tr: (s: string) => string = t): { titolo: string; corpo: string; dove: Dove; fuori: Candidato[] } {
   if (esce.length === 1) {
     const c = esce[0]
-    return { titolo: c.titolo ?? tr(TITOLI[c.genere]), corpo: taglia(c.corpo, 200), dove: c.dove }
+    return { titolo: c.titolo ?? tr(TITOLI[c.genere]), corpo: taglia(c.corpo, CORPO_MAX), dove: c.dove, fuori: [] }
   }
-  const stesso = esce.every(c => JSON.stringify(c.dove) === JSON.stringify(esce[0].dove))
+  const punto = esce.find(c => c.genere === 'punto')
+  const altre = esce.filter(c => c !== punto).sort((a, b) => ORDINE.indexOf(a.genere) - ORDINE.indexOf(b.genere))
+  const daNominare = punto ? altre.filter(c => c.genere === 'chiede' || c.genere === 'feed') : altre
+  const pezzi: string[] = punto?.corpo ? [punto.corpo] : []
+  const dette: Candidato[] = []
+  const fuori: Candidato[] = []
+  for (const c of daNominare) {
+    const testo = c.corpo || c.titolo || ''
+    if (!testo) { dette.push(c); continue }
+    if (!pezzi.length) { pezzi.push(taglia(testo, CORPO_MAX)); dette.push(c) }
+    else if ([...pezzi, testo].join(' · ').length <= CORPO_MAX) { pezzi.push(testo); dette.push(c) }
+    else fuori.push(c)
+  }
+  const corpo = pezzi.join(' · ')
+  if (punto) return { titolo: punto.titolo ?? tr(TITOLI.punto), corpo, dove: punto.dove, fuori }
+  if (dette.length === 1) {
+    const c = dette[0]
+    return { titolo: c.titolo ?? tr(TITOLI[c.genere]), corpo, dove: c.dove, fuori }
+  }
+  const stesso = dette.every(c => JSON.stringify(c.dove) === JSON.stringify(dette[0].dove))
   return {
-    titolo: tr('{n} cose sono pronte.').replace('{n}', String(esce.length)),
-    corpo: taglia(esce.map(c => c.corpo || c.titolo || '').filter(Boolean).join(' · '), 200),
-    dove: stesso ? esce[0].dove : 'casa'
+    titolo: tr('{n} cose sono pronte.').replace('{n}', String(dette.length)),
+    corpo, dove: stesso ? dette[0].dove : 'casa', fuori
   }
 }
 
@@ -187,9 +248,12 @@ export function giornoDi(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/** Il punto della mattina: quante cose sono state fatte stanotte. */
-export function dallaMattina(e: { giorno: string; fatte: number }, tr: (s: string) => string = t): Candidato {
-  const corpo = e.fatte === 1 ? tr('Una cosa fatta stanotte.') : tr('{n} cose fatte stanotte.').replace('{n}', String(e.fatte))
+/** Il punto della mattina: quante cose sono state fatte stanotte, e quante aspettano lui. */
+export function dallaMattina(e: { giorno: string; fatte: number; aspettano?: number }, tr: (s: string) => string = t): Candidato {
+  const aspettano = e.aspettano ?? 0
+  const corpo = aspettano > 0
+    ? tr('{n} fatte stanotte, {m} aspettano te.').replace('{n}', String(e.fatte)).replace('{m}', String(aspettano))
+    : e.fatte === 1 ? tr('Una cosa fatta stanotte.') : tr('{n} cose fatte stanotte.').replace('{n}', String(e.fatte))
   return { genere: 'punto', id: e.giorno, titolo: tr('Il punto di stamattina è pronto.'), corpo, dove: 'casa' }
 }
 
@@ -200,22 +264,27 @@ const ORA = /^([01]\d|2[0-3]):([0-5]\d)$/
 const minuti = (s: string) => { const m = ORA.exec(s); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
 
 /**
- * Quando finisce la notte in corso, o null se adesso non è notte.
+ * Quando finisce la notte in corso, o quando è finita se è finita da meno
+ * di `DOPO_LA_NOTTE_MS`; null se non è notte.
  *
  * La stessa regola del turno (`server/turno-regole.ts`): una finestra che
- * scavalca la mezzanotte vale da tutte e due le parti.
+ * scavalca la mezzanotte vale da tutte e due le parti. Il minuto e mezzo
+ * dopo la fine conta ancora come notte: lì arriva il punto della mattina, e
+ * quello che la notte ha tenuto esce con lui, non un attimo prima.
  */
 export function fineDellaNotte(adesso: Date, f: Notte | null): number | null {
   if (!f) return null
   const da = minuti(f.da), a = minuti(f.a)
   if (da === null || a === null || da === a) return null
-  const m = adesso.getHours() * 60 + adesso.getMinutes()
-  const notte = da > a ? (m >= da || m < a) : (m >= da && m < a)
-  if (!notte) return null
-  const fine = new Date(adesso.getTime())
-  fine.setHours(Math.floor(a / 60), a % 60, 0, 0)
-  if (fine.getTime() <= adesso.getTime()) fine.setDate(fine.getDate() + 1)
-  return fine.getTime()
+  const fineDa = (d: Date): number | null => {
+    const m = d.getHours() * 60 + d.getMinutes()
+    if (!(da > a ? (m >= da || m < a) : (m >= da && m < a))) return null
+    const fine = new Date(d.getTime())
+    fine.setHours(Math.floor(a / 60), a % 60, 0, 0)
+    if (fine.getTime() <= d.getTime()) fine.setDate(fine.getDate() + 1)
+    return fine.getTime()
+  }
+  return fineDa(adesso) ?? fineDa(new Date(adesso.getTime() - DOPO_LA_NOTTE_MS))
 }
 
 /* — il giro vero: l'orologio, il deposito, il guscio — */
@@ -242,13 +311,27 @@ let raccolta: Candidato[] = []
 let timerRaccolta: ReturnType<typeof setTimeout> | undefined
 let timerProssimo: ReturnType<typeof setTimeout> | undefined
 let notte: Notte | null = null
+let schermo: Schermo | null = null
 let installato = false
+/** Gli avvisi erano spenti all'ultimo giro: alla riaccensione, quello che è vecchio se ne va. */
+let spenti = false
 
 /** Lui sta guardando Myynd: la finestra è davanti e ha il fuoco. */
 const davanti = () => typeof document !== 'undefined' && !document.hidden && document.hasFocus()
 
-/** La notte del turno, da quando la lista la porta: dentro, niente suona. */
+/** La notte del turno, da quando la lista la porta: dentro, niente suona. Null col turno spento. */
 export function impostaNotte(f: Notte | null) { notte = f }
+
+/**
+ * La schermata davanti a lui. Con la finestra davanti, quello che aspettava
+ * e che questa schermata mostra l'ha visto. È anche il primo segno di vita
+ * della pagina: dopo un ricaricamento, la coda salvata riparte da qui.
+ */
+export function impostaSchermo(s: Schermo) {
+  schermo = s
+  installa()
+  if (davanti()) scrivi(visto(memoria(), [], schermo, Date.now()))
+}
 
 /**
  * Una cosa da dire, se lui ha lasciato accesi gli avvisi e non sta guardando.
@@ -268,24 +351,41 @@ export function avvisa(c: Candidato) {
 function scarica() {
   const nuovi = raccolta
   raccolta = []
-  if (!avvisiAccesi()) return
-  if (davanti()) { scrivi(visto(memoria(), nuovi)); return }
-  const adesso = Date.now()
-  const r = decidi(memoria(), nuovi, adesso, fineDellaNotte(new Date(adesso), notte))
-  scrivi(r.memoria)
-  if (r.esce) desktop()?.notifica?.(componi(r.esce))
   clearTimeout(timerProssimo)
-  if (r.prossimo !== null) timerProssimo = setTimeout(scarica, Math.max(1000, r.prossimo - adesso))
+  if (!avvisiAccesi()) { spenti = true; return }
+  const adesso = Date.now()
+  let m = memoria()
+  if (spenti) { m = senzaVecchie(m, adesso); spenti = false }
+  if (davanti()) { scrivi(visto(m, nuovi, schermo, adesso)); return }
+  const r = decidi(m, nuovi, adesso, fineDellaNotte(new Date(adesso), notte))
+  let dopo = r.memoria
+  let prossimo = r.prossimo
+  if (r.esce) {
+    const { fuori, ...nota } = componi(r.esce)
+    desktop()?.notifica?.(nota)
+    // quello che non è entrato nel corpo non è detto: aspetta il suo genere, dieci minuti
+    dopo = rimetti(dopo, fuori, adesso)
+    if (fuori.length) prossimo = Math.min(prossimo ?? Infinity, adesso + OGNI_GENERE_MS)
+  }
+  scrivi(dopo)
+  if (prossimo !== null) timerProssimo = setTimeout(scarica, Math.max(1000, prossimo - adesso))
 }
 
-/** Tornato sulla finestra: quello che aspettava l'ha davanti agli occhi. */
+/**
+ * Tornato sulla finestra: quello che aspettava e che ha davanti agli occhi
+ * l'ha visto. Andato via: quello che è rimasto riparte. E al primo giro,
+ * dopo un ricaricamento, la coda salvata riprende il suo orologio.
+ */
 function installa() {
   if (installato || typeof window === 'undefined') return
   installato = true
   window.addEventListener('focus', () => {
     clearTimeout(timerRaccolta)
     clearTimeout(timerProssimo)
-    scrivi(visto(memoria(), raccolta))
+    scrivi(visto(memoria(), raccolta, schermo, Date.now()))
     raccolta = []
   })
+  const riparti = () => { clearTimeout(timerRaccolta); timerRaccolta = setTimeout(scarica, RACCOLTA_MS) }
+  window.addEventListener('blur', () => { if (memoria().attesa.length) riparti() })
+  if (memoria().attesa.length) riparti()
 }

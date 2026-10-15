@@ -1,0 +1,8 @@
+[
+  { "js": "JSON.stringify({ fuoco: document.hasFocus(), nascosta: document.hidden })" },
+  { "js": "fetch('/api/compiti/a1/delega', { method: 'POST', headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }, body: JSON.stringify({ modo: 'tutto' }) }).then(r => r.status)" },
+  { "js": "fetch('/api/feed/f-alto/aperto', { method: 'POST', headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }).then(r => r.status)" },
+  { "aspetta": 15000 },
+  { "js": "JSON.stringify({ avvisi: window.__avvisi, attesa: JSON.parse(sessionStorage.getItem('myynd.avvisi') || '{\"attesa\":[]}').attesa.map(c => c.genere + ':' + c.id) })" },
+  { "scatta": "notte" }
+]
