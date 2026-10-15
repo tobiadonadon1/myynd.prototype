@@ -35,6 +35,8 @@ export function CartaPacchetto({ v }: { v: Vals }) {
   const [righe, setRighe] = useState<DelPacchetto[] | null>(null)
   const [occupato, setOccupato] = useState(false)
   const [guaio, setGuaio] = useState('')
+  // piegata in una riga: in fondo alla prima pagina, sotto il lavoro, si apre a richiesta (15 ottobre 2026)
+  const [aperta, setAperta] = useState(false)
   useEffect(() => {
     let vivo = true
     api.pacchetto().then(r => { if (vivo && r.offerta) setRighe(r.pacchetto) }).catch(() => {})
@@ -54,15 +56,20 @@ export function CartaPacchetto({ v }: { v: Vals }) {
     setOccupato(false)
   }
   const presa = righe.some(p => p.accesa)
+  const vista = aperta || presa
   return (
     <section className="auto-pacchetto casa" aria-labelledby="casa-pacchetto-titolo">
       <div className="auto-pacchetto-testa">
-        <h2 id="casa-pacchetto-titolo">{t('Ordini fissi per cominciare')}</h2>
+        <h2 id="casa-pacchetto-titolo">
+          <button type="button" className="auto-pacchetto-apri" aria-expanded={vista} onClick={() => setAperta(x => !x)} disabled={presa}>
+            {t('Ordini fissi per cominciare')} <span>· {righe.length}</span>
+          </button>
+        </h2>
         {presa
           ? <button type="button" className="auto-link" onClick={() => v.goAuto()}>{t('Vai agli ordini fissi')}</button>
           : <button type="button" className="auto-link" disabled={occupato} onClick={() => { setRighe(null); api.pacchettoVisto().catch(() => {}) }}>{t('Non ora')}</button>}
       </div>
-      <RighePacchetto righe={righe} occupato={occupato} prendi={prendi} corte />
+      {vista && <RighePacchetto righe={righe} occupato={occupato} prendi={prendi} corte />}
       {guaio && <p role="alert" className="auto-error">{t(guaio)}</p>}
     </section>
   )

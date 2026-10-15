@@ -20,6 +20,8 @@ import { ListaDiLato } from './oggi/Calendario'
 import { Dettaglio } from './oggi/Dettaglio'
 import { useCompiti } from './oggi/useCompiti'
 import { blocchiFeed, blocchiInPagina, contaInPagina } from './blocchi-feed'
+import { piegaViste, statoLavoro } from './via'
+import { useVistiOra } from './visti'
 import { useMattina } from './useMattina'
 import { conLettera } from './mattina'
 import { Preferenze } from './screens/Preferenze'
@@ -320,8 +322,13 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   // e il menù ne conta le righe. Un conto solo, da un posto solo: «dice
   // quattro cose sul tavolo, io ne conto cinque» non può più succedere.
   // i progetti appena nati da qui hanno il loro blocco anche vuoti: vedi `vuoti`
-  const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite, corrette: lista.appenaCorrette, vuoti: v.progettiNuovi }),
-    [v.voci, lista.compiti, v.progetti, lista.appenaFinite, lista.appenaCorrette, v.progettiNuovi])
+  // e le cose fatte che ha già aperto si piegano in fondo al loro blocco (`via.ts`):
+  // fuori dal conto, fuori di vista, a un tocco; quelle aperte in questa visita restano dove sono
+  const visteOra = useVistiOra()
+  const blocchi = useMemo(() => piegaViste(
+    blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite, corrette: lista.appenaCorrette, vuoti: v.progettiNuovi }),
+    r => r.genere === 'compito' && statoLavoro(r.compito) === 'visto' && !visteOra.has(r.compito.id)),
+  [v.voci, lista.compiti, v.progetti, lista.appenaFinite, lista.appenaCorrette, v.progettiNuovi, visteOra])
 
   /**
    * Il giro è stato chiuso *adesso*, prima che il server lo racconti.

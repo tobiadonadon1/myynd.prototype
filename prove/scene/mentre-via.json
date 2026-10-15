@@ -1,0 +1,957 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "ruolo": "Founder",
+ "progetti": [
+  {
+   "chiave": "nw",
+   "nome": "Northwind",
+   "obiettivo": "Ship Northwind 1.0 on the App Store",
+   "alias": [
+    "northwind app",
+    "nw"
+   ],
+   "priorita": "alta"
+  },
+  {
+   "chiave": "hb",
+   "nome": "Harbor Labs",
+   "obiettivo": "Run a two-week AI pilot with the Harbor finance team"
+  },
+  {
+   "chiave": "ls",
+   "nome": "Lumen Studio",
+   "obiettivo": "Sell the first course on lumenstudio.example"
+  }
+ ],
+ "file": [
+  {
+   "nome": "northwind-launch-plan.md",
+   "testo": "# Northwind launch plan\n\n1. Fix the three account issues.\n2. Upload build 1.0.4.\n3. Record the review video.\n"
+  }
+ ],
+ "documenti": [
+  {
+   "id": "posta:INBOX:201",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "App Review: guideline 4.3",
+   "corpo": "Hello Alex, your submission Northwind 1.0.3 was rejected under guideline 4.3. Please reply with the differences from similar apps.",
+   "autore": "App Review <review@appstore.example>",
+   "percorso": "INBOX",
+   "gruppo": "posta",
+   "quando": "-5h",
+   "messageId": "ar201@appstore.example"
+  },
+  {
+   "id": "posta:INBOX:202",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Pilot scope for the finance team",
+   "corpo": "Hi Alex, can we agree the pilot scope by Thursday? Two engineers, supplier invoices first. Best, Nora",
+   "autore": "Nora Vance <nora@harbor.example>",
+   "percorso": "INBOX",
+   "gruppo": "posta",
+   "quando": "-3h",
+   "messageId": "nv202@harbor.example"
+  },
+  {
+   "id": "posta:Sent:31",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Re: Pilot scope for the finance team",
+   "corpo": "Hi Nora, Thursday works. I will send the outline tomorrow. Alex",
+   "autore": "Alex <alex@northwind.example>",
+   "percorso": "Sent",
+   "gruppo": "posta",
+   "quando": "-2h",
+   "inviato": true,
+   "messageId": "s31@northwind.example",
+   "risponde": "nv202@harbor.example",
+   "destinatari": "nora@harbor.example"
+  },
+  {
+   "id": "calendario:evt-9",
+   "fonte": "calendario",
+   "tipo": "evento",
+   "titolo": "Audit call with Priya",
+   "corpo": "Audit of the onboarding flow with Priya Shah.",
+   "quando": "+1d",
+   "gruppo": "agenda"
+  },
+  {
+   "id": "posta:INBOX:901",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Weekly product digest",
+   "corpo": "x",
+   "autore": "news@producthunt.example",
+   "quando": "-1h"
+  },
+  {
+   "id": "posta:INBOX:902",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Your receipt from Figma",
+   "corpo": "x",
+   "autore": "billing@figma.example",
+   "quando": "-2h"
+  },
+  {
+   "id": "posta:INBOX:903",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Webinar: AI for finance teams",
+   "corpo": "x",
+   "autore": "events@saas.example",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:904",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Ticket 4471 closed",
+   "corpo": "x",
+   "autore": "support@vercel.example",
+   "quando": "-4h"
+  },
+  {
+   "id": "posta:INBOX:905",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "LinkedIn: 12 new views",
+   "corpo": "x",
+   "autore": "notifications@linkedin.example",
+   "quando": "-5h"
+  },
+  {
+   "id": "posta:INBOX:906",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Lunch next week?",
+   "corpo": "x",
+   "autore": "sam@friends.example",
+   "quando": "-6h"
+  },
+  {
+   "id": "posta:INBOX:907",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Re: Harbor intro (cc)",
+   "corpo": "x",
+   "autore": "lee@harbor.example",
+   "quando": "-7h"
+  },
+  {
+   "id": "posta:INBOX:908",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Invoice 2291 paid",
+   "corpo": "x",
+   "autore": "accounts@stripe.example",
+   "quando": "-1h"
+  },
+  {
+   "id": "posta:INBOX:909",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Weekly product digest #8",
+   "corpo": "x",
+   "autore": "news@producthunt.example",
+   "quando": "-2h"
+  },
+  {
+   "id": "posta:INBOX:910",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Your receipt from Figma #9",
+   "corpo": "x",
+   "autore": "billing@figma.example",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:911",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Webinar: AI for finance teams #10",
+   "corpo": "x",
+   "autore": "events@saas.example",
+   "quando": "-4h"
+  },
+  {
+   "id": "posta:INBOX:912",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Ticket 4471 closed #11",
+   "corpo": "x",
+   "autore": "support@vercel.example",
+   "quando": "-5h"
+  },
+  {
+   "id": "posta:INBOX:913",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "LinkedIn: 12 new views #12",
+   "corpo": "x",
+   "autore": "notifications@linkedin.example",
+   "quando": "-6h"
+  },
+  {
+   "id": "posta:INBOX:914",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Lunch next week? #13",
+   "corpo": "x",
+   "autore": "sam@friends.example",
+   "quando": "-7h"
+  },
+  {
+   "id": "posta:INBOX:915",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Re: Harbor intro (cc) #14",
+   "corpo": "x",
+   "autore": "lee@harbor.example",
+   "quando": "-1h"
+  },
+  {
+   "id": "posta:INBOX:916",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Invoice 2291 paid #15",
+   "corpo": "x",
+   "autore": "accounts@stripe.example",
+   "quando": "-2h"
+  },
+  {
+   "id": "posta:INBOX:917",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Weekly product digest #16",
+   "corpo": "x",
+   "autore": "news@producthunt.example",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:918",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Your receipt from Figma #17",
+   "corpo": "x",
+   "autore": "billing@figma.example",
+   "quando": "-4h"
+  },
+  {
+   "id": "posta:INBOX:919",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Webinar: AI for finance teams #18",
+   "corpo": "x",
+   "autore": "events@saas.example",
+   "quando": "-5h"
+  },
+  {
+   "id": "posta:INBOX:920",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Ticket 4471 closed #19",
+   "corpo": "x",
+   "autore": "support@vercel.example",
+   "quando": "-6h"
+  },
+  {
+   "id": "posta:INBOX:921",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "LinkedIn: 12 new views #20",
+   "corpo": "x",
+   "autore": "notifications@linkedin.example",
+   "quando": "-7h"
+  },
+  {
+   "id": "posta:INBOX:922",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Lunch next week? #21",
+   "corpo": "x",
+   "autore": "sam@friends.example",
+   "quando": "-1h"
+  },
+  {
+   "id": "posta:INBOX:923",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Re: Harbor intro (cc) #22",
+   "corpo": "x",
+   "autore": "lee@harbor.example",
+   "quando": "-2h"
+  },
+  {
+   "id": "posta:INBOX:924",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Invoice 2291 paid #23",
+   "corpo": "x",
+   "autore": "accounts@stripe.example",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:925",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Weekly product digest #24",
+   "corpo": "x",
+   "autore": "news@producthunt.example",
+   "quando": "-4h"
+  },
+  {
+   "id": "posta:INBOX:926",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Your receipt from Figma #25",
+   "corpo": "x",
+   "autore": "billing@figma.example",
+   "quando": "-5h"
+  },
+  {
+   "id": "posta:INBOX:927",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Webinar: AI for finance teams #26",
+   "corpo": "x",
+   "autore": "events@saas.example",
+   "quando": "-6h"
+  },
+  {
+   "id": "posta:INBOX:928",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Ticket 4471 closed #27",
+   "corpo": "x",
+   "autore": "support@vercel.example",
+   "quando": "-7h"
+  },
+  {
+   "id": "posta:INBOX:929",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "LinkedIn: 12 new views #28",
+   "corpo": "x",
+   "autore": "notifications@linkedin.example",
+   "quando": "-1h"
+  },
+  {
+   "id": "posta:INBOX:930",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 1",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-2h"
+  },
+  {
+   "id": "posta:INBOX:931",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 2",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:932",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 3",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-4h"
+  },
+  {
+   "id": "posta:INBOX:933",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 4",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-5h"
+  },
+  {
+   "id": "posta:INBOX:934",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 5",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-6h"
+  },
+  {
+   "id": "posta:INBOX:935",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 6",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-7h"
+  },
+  {
+   "id": "posta:INBOX:936",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 7",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-8h"
+  },
+  {
+   "id": "posta:INBOX:937",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 8",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-9h"
+  },
+  {
+   "id": "posta:INBOX:938",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Calendar: standup 9",
+   "corpo": "x",
+   "autore": "calendar@x.example",
+   "quando": "-10h"
+  },
+  {
+   "id": "posta:INBOX:939",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Customer question 1",
+   "corpo": "x",
+   "autore": "c@x.example",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:940",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Customer question 2",
+   "corpo": "x",
+   "autore": "c@x.example",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:941",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Customer question 3",
+   "corpo": "x",
+   "autore": "c@x.example",
+   "quando": "-3h"
+  }
+ ],
+ "feed": [
+  {
+   "id": "f1",
+   "tipo": "Priorità",
+   "titolo": "Fix the three Northwind account issues and upload the build",
+   "testo": "Your partner is waiting on it to add the videos and submit.",
+   "fonte": "posta",
+   "doc": "posta:INBOX:201",
+   "progetto": "nw",
+   "quando": "-3h",
+   "peso": 2,
+   "offerta": "I can list the three fixes and the upload steps.",
+   "perche": "Unblocks the App Store submission"
+  },
+  {
+   "id": "f2",
+   "tipo": "Scadenza",
+   "titolo": "Prepare for the audit call with Priya",
+   "testo": "Tomorrow at 9:30. Priya booked it through the studio site.",
+   "urgenza": "Tomorrow 9:30",
+   "fonte": "calendario",
+   "doc": "calendario:evt-9",
+   "quando": "-2h",
+   "peso": 3,
+   "perche": "A direct prospect"
+  },
+  {
+   "id": "f3",
+   "tipo": "Da leggere",
+   "titolo": "Newsletter: App Review appeals changed",
+   "testo": "Worth ten minutes: the appeal path changed this month.",
+   "fonte": "posta",
+   "quando": "-1h",
+   "peso": 0,
+   "perche": "Touches the Northwind review"
+  },
+  {
+   "id": "f4",
+   "tipo": "Proposta",
+   "titolo": "Choose the first audience angle for Lumen Studio",
+   "testo": "Three unpublished drafts are ready to test an angle now.",
+   "fonte": "lavoro",
+   "progetto": "ls",
+   "quando": "-4h",
+   "peso": 1,
+   "offerta": "I can write the outline of the first one.",
+   "perche": "Builds the audience before selling"
+  },
+  {
+   "id": "f5",
+   "tipo": "Da decidere",
+   "titolo": "Approve the post on the founder workflow",
+   "testo": "The draft is ready. Approve it or ask for changes.",
+   "urgenza": "No rush",
+   "fonte": "x",
+   "quando": "-5h",
+   "peso": 1,
+   "perche": "Sets the public positioning"
+  }
+ ],
+ "compiti": [
+  {
+   "id": "c1",
+   "testo": "Reply to App Review about guideline 4.3",
+   "quando": "oggi",
+   "progetto": "nw",
+   "doc": "posta:INBOX:201"
+  },
+  {
+   "id": "c2",
+   "testo": "Write the pilot outline for Harbor Labs",
+   "quando": "oggi",
+   "progetto": "hb",
+   "stato": "pronto",
+   "modo": "bozza",
+   "risultato": "Done: the pilot outline is below.\n\nOwner: Alex. Team: two engineers. First workflow: supplier invoices.\n\nI assumed a Thursday kickoff.",
+   "revisione": {
+    "esito": "pass",
+    "comeTe": "ok",
+    "comeLoro": "ok",
+    "per": "the Harbor finance team",
+    "problemi": [],
+    "verificato": [],
+    "giri": 1
+   }
+  },
+  {
+   "id": "c3",
+   "testo": "Answer the App Review team with the build notes",
+   "quando": "oggi",
+   "progetto": "nw",
+   "stato": "chiede",
+   "modo": "bozza",
+   "risultato": "I read the rejection mail and the last build notes.\nWhich build should I point them to, 1.0.3 or the one in TestFlight?",
+   "chieste": [
+    {
+     "domanda": "Which build?",
+     "opzioni": [
+      "1.0.3",
+      "TestFlight build"
+     ],
+     "multipla": false
+    }
+   ]
+  },
+  {
+   "id": "c5",
+   "testo": "Renew the domain before the 30th",
+   "quando": "settimana"
+  },
+  {
+   "id": "n1",
+   "testo": "Write the first course outline",
+   "quando": "oggi",
+   "progetto": "ls",
+   "stato": "pronto",
+   "modo": "tutto",
+   "risultato": "Done: I saved Course outline.md to your Desktop.",
+   "consegna": {
+    "app": "File",
+    "titolo": "Course outline.md",
+    "percorso": "/tmp/myynd-scena-finta/Desktop/Course outline.md",
+    "dove": "scrivania"
+   },
+   "prova": {
+    "esito": "pass",
+    "perche": "Five modules, each with a goal and one exercise.",
+    "controlli": [
+     "The file is on your Desktop"
+    ],
+    "quando": "-3h"
+   },
+   "turno": {
+    "da": "tu",
+    "quando": "notte",
+    "dal": "-9h",
+    "tentativi": 1,
+    "ultimo": "-7h",
+    "notte": true
+   },
+   "diario": [
+    {
+     "t": "-7h",
+     "tipo": "turno",
+     "dettaglio": "notte"
+    },
+    {
+     "t": "-7h",
+     "tipo": "preso",
+     "dettaglio": "tutto"
+    },
+    {
+     "t": "-7h",
+     "tipo": "contratto",
+     "dettaglio": "A course outline file on your Desktop with five modules, each with its goal and one exercise."
+    },
+    {
+     "t": "-6h",
+     "tipo": "cerco",
+     "dettaglio": "course modules"
+    },
+    {
+     "t": "-6h",
+     "tipo": "scrivo"
+    },
+    {
+     "t": "-6h",
+     "tipo": "file",
+     "dettaglio": "/tmp/myynd-scena-finta/Desktop/Course research notes.md"
+    },
+    {
+     "t": "-6h",
+     "tipo": "nota",
+     "dettaglio": "Course ideas"
+    },
+    {
+     "t": "-5h",
+     "tipo": "rileggo"
+    },
+    {
+     "t": "-5h",
+     "tipo": "consegnato",
+     "dettaglio": "Course outline.md"
+    },
+    {
+     "t": "-5h",
+     "tipo": "prova",
+     "dettaglio": "pass: Five modules, each with a goal and one exercise."
+    }
+   ]
+  },
+  {
+   "id": "n2",
+   "testo": "Reply to Nora about the pilot scope",
+   "quando": "oggi",
+   "progetto": "hb",
+   "stato": "pronto",
+   "modo": "tutto",
+   "risultato": "Done: the reply is in your drafts.",
+   "prova": {
+    "esito": "pass",
+    "perche": "The reply confirms Thursday and the two engineers.",
+    "controlli": [],
+    "quando": "-4h"
+   },
+   "turno": {
+    "da": "tu",
+    "quando": "notte",
+    "dal": "-9h",
+    "tentativi": 1,
+    "ultimo": "-6h",
+    "notte": true
+   },
+   "email": {
+    "a": "nora@harbor.example",
+    "oggetto": "Re: pilot scope",
+    "corpo": "Hi Nora, Thursday works. Two engineers from our side.",
+    "casella": {
+     "stato": "salvata"
+    }
+   }
+  }
+ ],
+ "domande": [
+  {
+   "tema": "riferimento",
+   "testo": "To get my bearings: for each project, what are you working on right now? What is dead, and what is blocked?"
+  }
+ ],
+ "riferimento": "Northwind: fixing the review issues and shipping 1.0.4. Harbor Labs: pilot scope this week. Lumen Studio: course outline, not urgent.",
+ "punto": {
+  "progetti": [
+   {
+    "progetto": "nw",
+    "novita": "App Review rejected build 1.0.3 under guideline 4.3.",
+    "doc": "posta:INBOX:201"
+   },
+   {
+    "progetto": "hb",
+    "novita": "Nora wants the pilot scope agreed by Thursday.",
+    "doc": "posta:INBOX:202"
+   }
+  ]
+ },
+ "turno": {
+  "budget": 1.5,
+  "notte": "fuori"
+ },
+ "turnoNotte": {
+  "fermata": "budget",
+  "buchi": [
+   {
+    "da": "-6h",
+    "a": "-4.5h"
+   }
+  ]
+ },
+ "esame": [
+  {
+   "doc": "posta:INBOX:901",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:902",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:903",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:904",
+   "fase": "regole",
+   "motivo": "letta_senza_richiesta",
+   "quando": "-4h"
+  },
+  {
+   "doc": "posta:INBOX:905",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-5h"
+  },
+  {
+   "doc": "posta:INBOX:906",
+   "fase": "modello",
+   "motivo": null,
+   "quando": "-6h"
+  },
+  {
+   "doc": "posta:INBOX:907",
+   "fase": "non_suo",
+   "motivo": null,
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:908",
+   "fase": "regole",
+   "motivo": "letta_senza_richiesta",
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:909",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:910",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-4h"
+  },
+  {
+   "doc": "posta:INBOX:911",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-5h"
+  },
+  {
+   "doc": "posta:INBOX:912",
+   "fase": "regole",
+   "motivo": "letta_senza_richiesta",
+   "quando": "-6h"
+  },
+  {
+   "doc": "posta:INBOX:913",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:914",
+   "fase": "modello",
+   "motivo": null,
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:915",
+   "fase": "non_suo",
+   "motivo": null,
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:916",
+   "fase": "regole",
+   "motivo": "letta_senza_richiesta",
+   "quando": "-4h"
+  },
+  {
+   "doc": "posta:INBOX:917",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-5h"
+  },
+  {
+   "doc": "posta:INBOX:918",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-6h"
+  },
+  {
+   "doc": "posta:INBOX:919",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:920",
+   "fase": "regole",
+   "motivo": "letta_senza_richiesta",
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:921",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:922",
+   "fase": "modello",
+   "motivo": null,
+   "quando": "-4h"
+  },
+  {
+   "doc": "posta:INBOX:923",
+   "fase": "non_suo",
+   "motivo": null,
+   "quando": "-5h"
+  },
+  {
+   "doc": "posta:INBOX:924",
+   "fase": "regole",
+   "motivo": "letta_senza_richiesta",
+   "quando": "-6h"
+  },
+  {
+   "doc": "posta:INBOX:925",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:926",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:927",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:928",
+   "fase": "regole",
+   "motivo": "letta_senza_richiesta",
+   "quando": "-4h"
+  },
+  {
+   "doc": "posta:INBOX:929",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-5h"
+  },
+  {
+   "doc": "posta:INBOX:930",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:931",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:932",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:933",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-4h"
+  },
+  {
+   "doc": "posta:INBOX:934",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-5h"
+  },
+  {
+   "doc": "posta:INBOX:935",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-6h"
+  },
+  {
+   "doc": "posta:INBOX:936",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:937",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:938",
+   "fase": "regole",
+   "motivo": "evento",
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:939",
+   "fase": "carta",
+   "motivo": null,
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:940",
+   "fase": "carta",
+   "motivo": null,
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:941",
+   "fase": "carta",
+   "motivo": null,
+   "quando": "-2h"
+  }
+ ]
+}

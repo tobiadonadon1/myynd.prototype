@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, loc, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconDoc, IconOcchio, IconPiu, IconSpunta } from '../icons'
+import { IconAvanti, IconDoc, IconPiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
-import { Punto } from '../components/Punto'
+import { Punto, apriIlPunto } from '../components/Punto'
+import { MenuGiu } from '../components/MenuGiu'
 import { CartaSettimana } from '../components/Resoconto'
 import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaAllOrdineFisso, portaInChat, primoParagrafo, siPuoFareOgniSettimana, siPuoParlarne, taglia, type Vals } from '../vals'
 import { fraseOgniSettimana } from '../automazioni/quando'
@@ -36,6 +37,8 @@ import { CAMPO, Scatola } from '../oggi/Scatola'
 import { RigaIpotesi } from '../oggi/RigaIpotesi'
 import { LasciaConRagione, RigaGuadagnata, RigaImparato } from '../oggi/Imparato'
 import { Testo } from '../Testo'
+import { piegaViste, statoLavoro } from '../via'
+import { segnaVisto, useVistiOra } from '../visti'
 import { bloccoDi, mandataValida, notaPerLei, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
 export { CAMPO, Scatola }
 
@@ -901,10 +904,31 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const email = pronto && c.email && azioneEmail(c).tipo === 'invia' && puoMandare(c)
   const mandata = pronto && mandataValida(c)
   const bloccata = bloccoDi(c) && c.stato === 'aperto'
+  /*
+   * I tre stati di una cosa che ha fatto Myynd (`via.ts`): aspetta te, con un
+   * gesto solo e in vista; fatta e nuova, con un pallino e nient'altro; fatta
+   * e vista, che il blocco piega in fondo. Aprirla, in qualunque modo, la fa
+   * vista: il pallino se ne va adesso, la riga si piega alla prossima visita.
+   */
+  const visteOra = useVistiOra()
+  const lavoro = statoLavoro(c, !!bloccata, visteOra.has(c.id))
+  const nuova = lavoro === 'nuovo'
+  const consegnataFatta = lavoro === 'nuovo' || lavoro === 'visto'
+  // pronta e non andata da nessuna parte: il suo sì è il gesto, e si vede senza passarci sopra
+  const daDire = pronto && lavoro === 'te' && !c.proposta && c.prova?.esito !== 'fail' && !mandata
+  const vaBene = (
+    <Hov as="button" type="button" aria-label={`${pronto && !mandata ? t('Va bene') : t('Fatto')}: ${titolo}`}
+      onClick={fermo(() => (mandata ? l.chiudi(c.id, t('Mandata dalla tua posta.')) : pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
+      style={daDire && email ? GESTO : PILLOLA} hover={daDire && email ? { color: 'var(--rame-testo)' } : PILLOLA_SOPRA}>{pronto && !mandata ? t('Va bene') : t('Fatto')}</Hov>
+  )
+  const manda = email && (
+    <Hov as="button" type="button" onClick={fermo(() => { void l.manda(c.id) })} style={PILLOLA} hover={PILLOLA_SOPRA}>{c.email?.allegato ? t('Manda senza allegato') : t('Manda')}</Hov>
+  )
 
   return (
     <div className="task-aurora-host task-aurora-row" data-working={affidato || finita || undefined}
       {...(espandibile ? { role: 'button', tabIndex: 0, onClick: apri, onKeyDown: daTastiera(apri), 'aria-expanded': aperta } : {})}
+      onClickCapture={nuova ? () => segnaVisto(c.id) : undefined}
       style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'var(--riga-sopra)' : 'transparent' }}
       {...props}>
       {affidato && !finita && <AuroraCompito />}
@@ -913,6 +937,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ ...TITOLO, display: 'flex', alignItems: 'center', gap: 8 }}>
             {affidato && <Glifo tipo="penso" dim={12} colore="var(--inchiostro)" />}
+            {nuova && <span role="img" aria-label={t('Nuova')} title={t('Nuova')} style={{ flex: 'none', width: 6, height: 6, borderRadius: '50%', background: 'var(--rame)' }} />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
           {testo && (aperta && pronto && !c.consegna
@@ -929,9 +954,12 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           {/* F4: un lavoro che non ha passato il suo «fatto» porta la domanda per finirlo */}
           {(chiede || (c.stato === 'pronto' && c.prova?.esito === 'fail' && !!c.chieste?.length)) && <Domande c={c} l={l} />}
         </div>
-        {attesa
-          ? <span style={pronto ? PASTIGLIA_FATTA : PASTIGLIA}>{attesa}</span>
-          : <span style={QUANDO}>{didascalia(c, attivo)}</span>}
+        {/* fatta: il pallino basta, niente pastiglia; da dire: il gesto, in vista */}
+        {consegnataFatta ? null
+          : daDire ? <span style={{ flex: 'none', display: 'flex' }} onClick={e => e.stopPropagation()}>{manda || vaBene}</span>
+          : attesa
+            ? <span style={pronto ? PASTIGLIA_FATTA : PASTIGLIA}>{attesa}</span>
+            : <span style={QUANDO}>{didascalia(c, attivo)}</span>}
       </div>
       <Fascia attiva={attiva}
         sinistra={<><Prove c={c} v={v} l={l} inRiga /><VoceUsata c={c} v={v} /></>}
@@ -946,12 +974,9 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
               {/* su una bozza pronta «Fatto» sarebbe una bugia: quello che
                   chiudi lì è il testo che hai davanti, e va tenuto */}
               {/* partita dalla sua posta (P3): il testo tenuto è quello che ha mandato lei, e qui non c'è: si chiude e basta */}
-              <Hov as="button" type="button" aria-label={`${pronto && !mandata ? t('Va bene') : t('Fatto')}: ${titolo}`}
-                onClick={fermo(() => (mandata ? l.chiudi(c.id, t('Mandata dalla tua posta.')) : pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
-                style={PILLOLA} hover={PILLOLA_SOPRA}>{pronto && !mandata ? t('Va bene') : t('Fatto')}</Hov>
-              {email && (
-                <Hov as="button" type="button" onClick={fermo(() => { void l.manda(c.id) })} style={PILLOLA} hover={PILLOLA_SOPRA}>{c.email?.allegato ? t('Manda senza allegato') : t('Manda')}</Hov>
-              )}
+              {/* il gesto che sta già in vista sulla riga non si ripete qui */}
+              {!(daDire && !email) && vaBene}
+              {!daDire && manda}
               {pronto && (
                 <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, c.modo))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Rifallo')}</Hov>
               )}
@@ -996,7 +1021,8 @@ function Seguito({ c }: { c: Compito }) {
   )
 }
 
-export type BloccoPagina = BloccoFeed<VoceFeed, Compito>
+/** `piegate`: le righe fatte e già viste, che il blocco dice in una riga quieta in fondo (`via.ts`). */
+export type BloccoPagina = BloccoFeed<VoceFeed, Compito> & { piegate?: BloccoFeed<VoceFeed, Compito>['righe'] }
 
 /**
  * Un progetto, un blocco.
@@ -1030,6 +1056,7 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
   const [sopra, setSopra] = useState(false)
   /** Il primo passo ha una frase a metà (o in fila): la barra resta anche con le righe arrivate. */
   const [bozzaAperta, setBozzaAperta] = useState(false)
+  const [piegateAperte, setPiegateAperte] = useState(false)
   const suo = b.progetto !== null
   const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(var(--inchiostro-rgb),.5)'
   const filo = suo ? velato(colore, .18) : 'rgba(var(--inchiostro-rgb),.09)'
@@ -1113,6 +1140,17 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
           </div>
         )
       })}
+      {/* le cose fatte e già viste: una riga quieta, che apre le righe com'erano */}
+      {!!b.piegate?.length && lista && (
+        <div style={{ borderTop: `1px solid ${filo}` }}>
+          <button type="button" className="via-piegate" aria-expanded={piegateAperte} onClick={() => setPiegateAperte(x => !x)}>
+            <IconSpunta size={11} style={{ flex: 'none' }} />{frasi.fatteViste(b.piegate.length)}
+          </button>
+          {piegateAperte && b.piegate.map(r => r.genere === 'compito' && (
+            <div key={r.compito.id} style={{ borderTop: `1px solid ${filo}` }}><RigaCompito c={r.compito} l={lista} v={v} /></div>
+          ))}
+        </div>
+      )}
       {/* sotto le righe; resta anche quando il blocco ha già una riga, finché dentro c'è una
           frase a metà: arrivata la prima riga, la seconda non deve sparire */}
       {(!b.righe.length || bozzaAperta) && b.progetto && lista && (
@@ -1258,6 +1296,53 @@ function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
   )
 }
 
+/** Una voce del menù della testa: la cosa, e sotto una riga quieta se serve. */
+const VOCE_MENU: CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
+  padding: '7px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+  color: 'var(--inchiostro)', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+}
+
+/**
+ * Il «⋯» della testa: quello che si usa di rado, in un posto solo.
+ *
+ * Le fonti con il loro conto, «Leggi adesso» (la lettura parte già da sola
+ * ogni dieci minuti) e il foglio del punto. L'anello di rame resta sul bottone
+ * mentre legge: il gesto si vede nell'istante, anche col menù chiuso.
+ */
+function MenuTesta({ v, leggendo }: { v: Vals; leggendo: boolean }) {
+  const [aperto, setAperto] = useState(false)
+  const bottone = useRef<HTMLButtonElement | null>(null)
+  const fonti = frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)
+  const voce = (etichetta: string, fai: () => void, sotto?: ReactNode) => (
+    <Hov as="button" type="button" role="menuitem" onMouseDown={(e: MouseEvent) => e.preventDefault()}
+      onClick={() => { setAperto(false); fai() }} style={VOCE_MENU} hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{etichetta}</div>
+      {sotto && <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{sotto}</div>}
+    </Hov>
+  )
+  return (
+    <span style={{ flex: 'none', display: 'flex', marginTop: 6 }}>
+      <Hov as="button" type="button" ref={bottone} onClick={() => setAperto(x => !x)}
+        aria-label={t('Altro')} title={leggendo ? t('Leggo…') : t('Altro')} aria-haspopup="menu" aria-expanded={aperto} aria-busy={leggendo || undefined}
+        style={{
+          width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+          borderRadius: '50%', border: leggendo ? '1.5px solid var(--rame)' : '1px solid rgba(var(--inchiostro-rgb),.16)',
+          background: 'rgba(var(--luce-rgb),.7)', color: aperto || leggendo ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.6)',
+          cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, lineHeight: 1
+        }}
+        hover={{ background: 'var(--carta-alta)', color: 'var(--rame-testo)' }}>⋯</Hov>
+      {aperto && (
+        <MenuGiu ancora={bottone.current} chiudi={() => setAperto(false)} minLarghezza={220} allinea="destra">
+          {voce(t('Il punto di oggi'), apriIlPunto)}
+          {voce(leggendo ? t('Leggo…') : t('Leggi adesso'), v.genera)}
+          {voce(t('Fonti'), () => v.goConn(), fonti)}
+        </MenuGiu>
+      )}
+    </span>
+  )
+}
+
 export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriLavoro, mattina = null, ricevuta: dallaRicevuta }: {
   v: Vals; lista?: Lista; blocchi?: BloccoPagina[]
   /** La ricevuta in cima (`server/mattina.ts`), e quello che aspetta lui con la lettera: li tiene il guscio, che li conta nel menù. */
@@ -1274,7 +1359,9 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, corrette: lista?.appenaCorrette, vuoti: v.progettiNuovi })
+  const grezzi: BloccoPagina[] = dalGuscio ?? piegaViste(
+    blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, corrette: lista?.appenaCorrette, vuoti: v.progettiNuovi }),
+    r => r.genere === 'compito' && statoLavoro(r.compito) === 'visto')
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
   const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi, v.progettiNuovi)
@@ -1332,28 +1419,10 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
         </div>
         <div style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7, flexWrap: 'wrap' }}>
           <Rassegna />
-          <Hov as="a" href="#" onClick={v.goConn}
-            style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.78)', background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--luce-rgb),.9)', borderRadius: 99, padding: '5px 11px' }}
-            hover={{ background: 'var(--carta-alta)' }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? 'var(--salvia)' : 'var(--ambra)' }} />
-            {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)}
-          </Hov>
-          {/* «Leggi adesso» era un bottone pieno di rame che chiedeva attenzione:
-              «più piccolo, più umile». Un occhio accanto alle fonti, e basta:
-              la lettura ormai parte da sola ogni dieci minuti, questo è per
-              chi non vuole aspettarli. Il nome lo dice al passaggio. */}
-          {/* P10 · premuto nello stesso istante, mai spento: un anello di rame mentre legge (anche mentre P4 prepara la prima pagina) */}
-          <Hov as="button" type="button" onClick={v.genera}
-            title={leggendo ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
-            aria-pressed={leggendo} aria-busy={leggendo || undefined}
-            style={{
-              flex: 'none', marginTop: 6, width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: '50%', border: leggendo ? '1.5px solid var(--rame)' : '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.7)',
-              color: 'var(--rame)', cursor: 'pointer', padding: 0
-            }}
-            hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>
-            <IconOcchio size={15} />
-          </Hov>
+          {/* le fonti e «Leggi adesso» stavano in fila accanto alle notizie, tre
+              pastiglie in testa alla pagina: adesso dietro un «⋯» solo, con il
+              foglio del punto che la carta in cima non apre più (15 ottobre 2026) */}
+          <MenuTesta v={v} leggendo={leggendo} />
         </div>
       </div>
 
@@ -1385,8 +1454,6 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
         </div>
       )}
 
-      {/* E · le quattro di partenza: sotto la ricevuta, perché la risposta alla domanda con cui si torna viene prima */}
-      {v.feedCaricato && <CartaPacchetto v={v} />}
       <CartaSettimana v={v} />
 
       {/*
@@ -1415,6 +1482,10 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
           mi fa domande deve stare sotto le priorità», e «if it's multiple
           questions, don't stack them one over the other» */}
       <CartaDomande v={v} />
+
+      {/* E · le quattro di partenza: piegate in una riga, in fondo, sotto il lavoro e le domande.
+          Stavano sotto la ricevuta, quattro interruttori sopra la prima cosa da fare (15 ottobre 2026) */}
+      {v.feedCaricato && <div style={{ marginTop: 18 }}><CartaPacchetto v={v} /></div>}
 
       {blocchi.length === 0 && <Vuoto v={v} />}
 

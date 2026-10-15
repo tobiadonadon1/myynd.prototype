@@ -104,6 +104,7 @@ import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
 import * as misuraFeed from './misura-feed.ts'
 import * as resoconto from './resoconto.ts'
 import * as mattina from './mattina.ts'
+import * as mentreVia from './via.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -3532,6 +3533,26 @@ app.get('/api/mattina', (req, res) => {
   try { res.json(mattina.mattina(typeof req.query.dal === 'string' ? req.query.dal : null)) } catch (e) { errore(res, e) }
 })
 
+/**
+ * Mentre non c'eri (`via.ts`): l'elenco dietro un numero della ricevuta (le
+ * lette, o le messe da parte con il perché), contato dalla stessa ora.
+ */
+app.get('/api/mattina/elenco', (req, res) => {
+  const genere = req.query.genere === 'daParte' ? 'daParte' : req.query.genere === 'letti' ? 'letti' : null
+  if (!genere) { res.status(400).json({ error: 'genere: letti o daParte' }); return }
+  try { res.json({ righe: mattina.elencoVia(typeof req.query.dal === 'string' ? req.query.dal : null, genere) }) } catch (e) { errore(res, e) }
+})
+
+/**
+ * Le cose fatte che ha aperto: da qui in poi non portano più il pallino, e
+ * alla prossima volta si piegano fuori dai blocchi. Per conto, su disco.
+ */
+app.post('/api/lavoro/visti', (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0, 200) : null
+  if (!ids) { res.status(400).json({ error: 'ids: un elenco' }); return }
+  try { res.json({ ok: true, nuovi: mentreVia.segnaVisti(ids) }) } catch (e) { errore(res, e) }
+})
+
 app.post('/api/punto', async (req, res) => {
   const via = Number(req.body?.via)
   try {
@@ -3695,8 +3716,10 @@ app.post('/api/progetti/:id/unisci', (req, res) => {
 // `/api/compiti/flusso` finisce dentro `/api/compiti/:id`.
 
 app.get('/api/compiti', (_req, res) => {
+  // `visto`: le cose fatte che ha già aperto (`via.ts`), per il pallino e per piegarle
+  const visti = mentreVia.visti()
   res.json({
-    compiti: compitiAttuali(),
+    compiti: compitiAttuali().map(c => (visti.has(c.id) ? { ...c, visto: visti.get(c.id) } : c)),
     chiusi: store.compitiChiusi(),
     fuoco: timone.fuoco(),
     // il turno (F2), nella stessa risposta: la bacheca lo dice in una riga

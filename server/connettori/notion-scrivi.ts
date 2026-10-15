@@ -22,6 +22,7 @@ import * as cfg from '../config.ts'
 import { vietato } from '../prova-chiusa.ts'
 import { senzaTrattini, senzaTrattiniFuoriCodice } from '../testo.ts'
 import { cliente, conCalma, stessoId, titolo as titoloDi } from './notion.ts'
+import { segnaPagina } from '../via.ts'
 
 /** Quanti blocchi per richiesta: il tetto di Notion. */
 export const PER_RICHIESTA = 100
@@ -345,7 +346,12 @@ export async function scrivi(o: { chiave: string; titolo: string; markdown: stri
   // in fila dietro a quella di prima, che sia andata bene o no
   const lavoro = (gia ? gia.catch(() => null) : Promise.resolve(null)).then(() => scriviOra(chiave, o))
   inCorso.set(di, lavoro)
-  try { return await lavoro } finally { if (inCorso.get(di) === lavoro) inCorso.delete(di) }
+  try {
+    const r = await lavoro
+    // per «mentre non c'eri»: una pagina aggiornata è una cosa fatta, anche da un lavoro di fondo
+    try { segnaPagina({ chiave, titolo: senzaTrattini(String(o.titolo ?? '').replace(/\s+/g, ' ').trim()).slice(0, 200) || chiave, url: r.url }) } catch { /* il conto è un di più */ }
+    return r
+  } finally { if (inCorso.get(di) === lavoro) inCorso.delete(di) }
 }
 
 async function scriviOra(chiave: string, o: { titolo: string; markdown: string }): Promise<Scritta> {

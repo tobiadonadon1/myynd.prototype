@@ -3688,6 +3688,29 @@ const EN: Record<string, string> = {
   'Non sono riuscito ad aggiungerla.': 'Couldn’t add it.',
   'Questa cartella non è fra quelle proposte.': 'This folder isn’t among the suggestions.',
   // — la pagina dei Progetti: fine —
+
+  // — mentre non c'eri: inizio —
+  'Mentre non c’eri.': 'While you were away.',
+  'nella tua casella': 'in your drafts',
+  'su Notion': 'in Notion',
+  'in Note': 'in Notes',
+  'Letto': 'Read',
+  'Pagine di Notion': 'Notion pages',
+  'Messo da parte': 'Set aside',
+  'Sul tavolo': 'On your desk',
+  'Il punto di oggi': 'Today’s summary',
+  'Posta in serie: newsletter o avvisi automatici.': 'Bulk mail: newsletters or automatic notices.',
+  'L’avevi già letta, e non chiedeva niente.': 'You had already read it, and it asked for nothing.',
+  'Da un mittente che non conosci.': 'From a sender you don’t know.',
+  'Mittente che archivi sempre.': 'A sender you always archive.',
+  'Mittente che mi hai detto di tacere.': 'A sender you told me to mute.',
+  'Una regola che mi hai insegnato.': 'A rule you taught me.',
+  'Non era una cosa tua.': 'It wasn’t yours to handle.',
+  'Letta: niente da fare per te.': 'Read it: nothing for you to do.',
+  'Una carta che non reggeva alla verifica.': 'A card that didn’t hold up when checked.',
+  'Fuori dagli obiettivi dei tuoi progetti.': 'Outside your projects’ goals.',
+  'Meno urgente delle altre di oggi.': 'Less urgent than today’s others.',
+  // — mentre non c'eri: fine —
 }
 
 
@@ -4370,6 +4393,8 @@ export const frasi = {
     : `${nome} era chiuso: l’ho riaperto, con priorità normale.`,
   /** La riga dei progetti sotto i blocchi, quando i nomi sono tanti. */
   altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`),
+  /** Le cose fatte e già viste, piegate in fondo a un blocco. */
+  fatteViste: (n: number) => corrente === 'en' ? `${n} done, already seen` : `${n} ${n === 1 ? 'fatta' : 'fatte'}, già ${n === 1 ? 'vista' : 'viste'}`,
 
   // — F1: inizio —
   /** Il budget di tempo di una carta, nel dettaglio. */

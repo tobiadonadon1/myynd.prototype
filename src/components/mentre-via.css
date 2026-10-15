@@ -1,0 +1,31 @@
+/*
+ * Mentre non c'eri: la carta in cima alla prima pagina, e l'elenco dietro
+ * un conto. Una frase, dei numeri che si aprono, al più tre righe da una
+ * linea sola. Il rame solo dove si può premere, e il pallino delle cose nuove.
+ */
+.via-frase {margin:6px 0 0;font-size:14px;line-height:1.55;color:rgba(var(--inchiostro-rgb),.78);overflow-wrap:anywhere;text-wrap:pretty;}
+.via-conto {padding:0;margin:0;border:0;background:none;font:inherit;color:var(--inchiostro);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(var(--inchiostro-rgb),.22);text-underline-offset:3px;}
+.via-conto:hover {color:var(--rame-testo);text-decoration-color:currentColor;}
+.via-conto:focus-visible, .via-riga:focus-visible, .via-piegate:focus-visible {outline:2px solid var(--rame);outline-offset:2px;border-radius:10px;}
+
+.via-righe {list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;}
+.via-righe li {min-width:0;border-top:1px solid rgba(var(--inchiostro-rgb),.08);}
+.via-riga {width:100%;min-width:0;display:flex;align-items:center;gap:10px;padding:8px 0;margin:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer;text-decoration:none;}
+.via-riga:hover .via-titolo {color:var(--rame-testo);}
+.via-punto {flex:none;width:6px;height:6px;border-radius:50%;background:var(--rame);}
+.via-punto.spento {background:transparent;}
+.via-titolo {flex:0 1 auto;min-width:0;font-size:14px;font-weight:500;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.via-dove {flex:1 1 0;min-width:0;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* l'elenco dietro un conto: righe di due linee, la seconda quieta */
+.via-elenco {list-style:none;margin:18px 0 0;padding:0;}
+.via-elenco li {min-width:0;border-top:1px solid rgba(var(--inchiostro-rgb),.08);}
+.via-elenco li:first-child {border-top:0;}
+.via-elenco .via-riga {align-items:flex-start;padding:9px 0;}
+.via-elenco .via-testo {flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.via-elenco .via-titolo {font-weight:500;}
+.via-elenco .via-perche {font-size:12.5px;line-height:1.45;color:rgba(var(--inchiostro-rgb),.58);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* la riga quieta in fondo a un blocco: le cose fatte e già viste */
+.via-piegate {display:flex;align-items:center;gap:7px;width:100%;padding:9px 21px 11px;margin:0;border:0;background:none;font:inherit;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.5);cursor:pointer;text-align:left;}
+.via-piegate:hover {color:var(--rame-testo);}

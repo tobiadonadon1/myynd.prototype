@@ -42,6 +42,7 @@ import type { AspettaMattina, Compito, Mattina, Punto as PuntoDelGiorno, RigaPun
 import type { Lista } from '../oggi/useCompiti'
 import { RIGHE_IN_CARTA } from '../mattina'
 import { laNotte, ora, rigaDellaNotte, RigheAspettano, RigheFatte } from './Stanotte'
+import { MentreVia } from './MentreVia'
 
 /**
  * La lista delle righe e come si apre una carta: le righe della ricevuta
@@ -108,13 +109,6 @@ export const CARTA: CSSProperties = {
   border: '1px solid rgba(var(--luce-rgb),.75)', padding: '18px 22px', marginBottom: 14
 }
 
-/** Un bottone solo per carta, ed è questo. */
-const BOTTONE: CSSProperties = {
-  flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 8,
-  padding: '11px 20px', borderRadius: 99, border: 'none',
-  background: 'var(--gradiente-rame)', color: 'var(--avorio)',
-  fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
-}
 
 /** La riga sotto il titolo della carta: quello che il titolo non dice. */
 export const SOTTO: CSSProperties = {
@@ -124,8 +118,6 @@ export const SOTTO: CSSProperties = {
 /** Perché non è arrivato: si legge se lo si cerca, e non toglie il posto al resto. */
 const SPIEGA: CSSProperties = { ...SOTTO, color: 'rgba(var(--inchiostro-rgb),.5)' }
 
-/** «5 cose» comincia una frase: la maiuscola la mette la pagina, non il dizionario. */
-const maiuscola = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1)
 
 export function Sezione({ etichetta, children }: { etichetta: string; children: React.ReactNode }) {
   return (
@@ -312,15 +304,17 @@ export function prossimaCosa(m: Mattina | null): string | null {
   return frasi.prossimaNotte(ora(p.quando), p.carte)
 }
 
+const APRI_IL_PUNTO = 'myynd:apri-punto'
+/** Apre il foglio del punto da fuori (il menù della testa della prima pagina). */
+export function apriIlPunto() { window.dispatchEvent(new Event(APRI_IL_PUNTO)) }
+
 /**
  * La ricevuta in cima alla prima pagina.
  *
  * Sostituisce tre carte: «Il punto di oggi», «Mentre dormivi» (che stava nel
- * foglio del punto) e la fascia «Myynd ti ha scritto». Un titolo che dice da
- * quando, «Fatto mentre dormivi.» la mattina e «Da quando sei uscito.» il
- * resto del giorno, poi le prime tre cose fatte e le prime tre che aspettano
- * lui, e un bottone solo che apre il foglio intero. Senza niente da dire, una
- * riga sola con la prossima cosa che farà.
+ * foglio del punto) e la fascia «Myynd ti ha scritto». Dal 15 ottobre 2026 la
+ * faccia in pagina è `MentreVia`: i numeri di quello che ha fatto e al più tre
+ * cose da aprire; il foglio intero si apre dal menù della testa.
  *
  * Non dice mai che il punto di ieri è scaduto (9 ottobre 2026: «Why would you
  * tell me "just produce another one for today"?»): il punto di oggi si scrive
@@ -332,6 +326,12 @@ export function Punto({ v, mattina: m, ricevuta, notte }: {
 }) {
   const p = usePunto(v.claudeOn)
   const [aperto, setAperto] = useState(false)
+  // il menù della testa apre il foglio: la carta in pagina non ha più il suo bottone
+  useEffect(() => {
+    const apri = () => setAperto(true)
+    window.addEventListener(APRI_IL_PUNTO, apri)
+    return () => window.removeEventListener(APRI_IL_PUNTO, apri)
+  }, [])
   const chiudi = () => { setAperto(false); if (p.daVedere) p.nascondi() }
   const fatte = m?.done ?? []
   const nelPunto = p.punto ? righeDelPunto(p.punto) : 0
@@ -349,36 +349,13 @@ export function Punto({ v, mattina: m, ricevuta, notte }: {
   if (aperto || (p.daVedere && m && piuDellaCarta)) {
     return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={chiudi} m={m} ricevuta={ricevuta} notte={notte} />
   }
-  const qualcosa = fatte.length > 0 || ricevuta.length > 0
-  const settimana = m && m.week.mandate > 0 ? frasi.bozzePartite(m.week.mandate, m.week.comeEra, m.week.ritoccate) : null
-  const prossima = prossimaCosa(m)
-  // niente fatto, niente che aspetta, niente nel punto e niente in programma: nessuna cornice vuota
-  if (!qualcosa && !nelPunto && !settimana && !prossima) return null
-  const daAprire = qualcosa || nelPunto > 0 || !!settimana
-  const apriCarta = (c: Compito) => notte?.apri(c)
-  const oltre = Math.max(0, fatte.length - RIGHE_IN_CARTA) + Math.max(0, ricevuta.length - RIGHE_IN_CARTA)
-  return (
-    <section aria-labelledby="ricevuta-titolo" style={{ ...CARTA, flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <h2 id="ricevuta-titolo" style={{ margin: 0, fontSize: 15, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{titoloRicevuta(m)}</h2>
-          {/* senza righe, la riga sotto il titolo: quello che c'è nel punto, la settimana, o la prossima cosa che farà */}
-          {!qualcosa && (
-            <div style={SOTTO}>
-              {nelPunto > 0 ? `${maiuscola(frasi.coseNelPunto(nelPunto))}. ${t('Dieci secondi.')}` : settimana ?? prossima}
-            </div>
-          )}
-        </div>
-        {daAprire && <button type="button" onClick={() => setAperto(true)} style={BOTTONE}>{t('Apri')} <IconAvanti /></button>}
-      </div>
-      {fatte.length > 0 && <RigheFatte xs={fatte.slice(0, RIGHE_IN_CARTA)} l={notte?.l} apri={apriCarta} inCarta />}
-      {ricevuta.length > 0 && (
-        <RigheAspettano xs={ricevuta.slice(0, RIGHE_IN_CARTA)} l={notte?.l} apri={apriCarta} inCarta
-          apriChat={() => v.goChat()} apriDomande={vaiAlleDomande} />
-      )}
-      {/* il resto è nel foglio: si dice quante, non si mostrano */}
-      {oltre > 0 && <div style={{ ...SOTTO, marginTop: 0 }}>{frasi.altreNelFoglio(oltre)}</div>}
-    </section>
-  )
+  /*
+   * La faccia in prima pagina è «mentre non c'eri» (15 ottobre 2026): una
+   * frase con i numeri e al più tre cose fatte da aprire. Le righe che
+   * aspettano lui non stanno più qui: stavano anche nei blocchi sotto, con il
+   * loro gesto, ed erano la stessa cosa detta due volte in cima alla pagina.
+   * Il foglio resta, e si apre dal menù della testa («Il punto di oggi»).
+   */
+  return <MentreVia v={v} m={m} ricevuta={ricevuta} l={notte?.l} apri={c => notte?.apri(c)} />
 }
 

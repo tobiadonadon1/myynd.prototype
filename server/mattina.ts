@@ -30,6 +30,7 @@ import * as riferimento from './riferimento.ts'
 import { BLOCCHI, MANCA_UN_DATO } from './domanda-sola.ts'
 import { settimana, adesso as oraDelResoconto } from './resoconto.ts'
 import { iniziativeProgetti } from './attenzione.ts'
+import * as mentreVia from './via.ts'
 
 /** Per quante ore, dopo la fine della notte, il titolo è «mentre dormivi». */
 export const ORE_DI_MATTINA = 6
@@ -75,6 +76,8 @@ export type Mattina = {
   needsYou: Aspetta[]
   week: Settimana
   prossima: Prossima
+  /** Mentre non c'eri: i conti di quello che ha fatto da `dal`, e il lavoro con la sua bandiera di visto (`via.ts`). */
+  via?: mentreVia.Via
 }
 
 /** Quello che `componi` legge: righe già prese, niente database. */
@@ -200,11 +203,21 @@ export function mattina(chiesto?: string | null, adesso = oraDelResoconto()): Ma
   const d = riferimento.aggiornata(store.domandaAperta())
   let iniziative: Materiale['iniziative'] = []
   try { iniziative = iniziativeProgetti() } catch { /* senza progetti, nessuna domanda sui progetti */ }
-  return componi({
+  const m = componi({
     compiti, consegnati, invii, iniziative,
     domanda: d ? { id: d.id, testo: d.testo } : null,
     turno: { inCoda: s.inCoda, prossimaNotte: s.prossimaNotte, acceso: s.acceso, motore: s.motore, fermo: !!s.fermo }
   }, f)
+  return { ...m, via: mentreVia.via(f.dal, compiti, consegnati) }
+}
+
+/**
+ * L'elenco dietro un numero della ricevuta, contato dalla stessa ora: se
+ * la carta dice «messo da parte 29», l'elenco ne ha ventinove.
+ */
+export function elencoVia(chiesto: string | null | undefined, genere: 'letti' | 'daParte', adesso = oraDelResoconto()): mentreVia.RigaElenco[] {
+  const f = finestra(adesso, turno.stato(adesso).notte, chiesto)
+  return mentreVia.elenco(f.dal, genere)
 }
 
 /**

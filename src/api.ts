@@ -756,6 +756,8 @@ export type Compito = {
   tocca?: 'adesso' | 'notte' | 'via' | `prima:${string}` | null
   /** F9 · quanto è costata: le chiamate e i micro-dollari; `stimato` se la cifra è una stima. */
   costo?: CostoCompito
+  /** Quando l'ha aperta, se è una cosa fatta da Myynd e l'ha già vista (`server/via.ts`). */
+  visto?: string | null
 }
 
 export type CostoCompito = { chiamate: number; entrata: number; uscita: number; costo: number | null; stimato: boolean }
@@ -1685,6 +1687,11 @@ export const api = {
   punto: () => json<EsitoPunto>('/api/punto'),
   /** La ricevuta della prima pagina; `dal` è quando se n'è andato, se la finestra lo sa. */
   mattina: (dal: string | null) => json<Mattina>(`/api/mattina${dal ? `?dal=${encodeURIComponent(dal)}` : ''}`),
+  /** L'elenco dietro un conto di «mentre non c'eri», dalla stessa ora della ricevuta. */
+  elencoVia: (genere: 'letti' | 'daParte', dal: string | null) =>
+    json<{ righe: RigaElencoVia[] }>(`/api/mattina/elenco?genere=${genere}${dal ? `&dal=${encodeURIComponent(dal)}` : ''}`),
+  /** Le cose fatte che ha aperto: perdono il pallino, e alla prossima volta si piegano. */
+  lavoriVisti: (ids: string[]) => json<{ ok: true; nuovi: number }>('/api/lavoro/visti', { method: 'POST', body: JSON.stringify({ ids }) }),
   rifaiPunto: (forza = false, via: number | null = null) =>
     json<EsitoPunto>('/api/punto', { method: 'POST', body: JSON.stringify({ forza, via }) }),
   tieniAngolo: (nome: string, angolo: string) =>
@@ -2201,7 +2208,17 @@ export type Mattina = {
   needsYou: AspettaMattina[]
   week: { mandate: number; comeEra: number; ritoccate: number }
   prossima: { genere: 'notte'; quando: string; carte: number } | { genere: 'coda'; carte: number } | null
+  /** Mentre non c'eri: i conti da `dal`, e il lavoro con il suo visto (`server/via.ts`). */
+  via?: Via
 }
+/** Una cosa che Myynd ha fatto da quando lui non c'era: una carta, o una pagina di Notion (`notion:<chiave>`). */
+export type LavoroVia = {
+  id: string; titolo: string; genere: 'bozza' | 'file' | 'notion' | 'nota' | 'testo'
+  nome: string | null; quando: string; visto: boolean; aspetta: boolean; url?: string | null
+}
+export type Via = { dal: string; letti: number; daParte: number; lavori: LavoroVia[] }
+/** Una riga dietro «letto» o «messo da parte»: il documento, e perché non è diventato una carta. */
+export type RigaElencoVia = { doc: string; titolo: string; fonte: string; autore: string | null; quando: string; ragione: string | null; fase: string }
 /**
  * `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito.
  *
