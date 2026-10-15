@@ -11,6 +11,7 @@
 //   node --test src/via.test.ts
 
 import type { LavoroVia, Via } from './api'
+import { blocchiFeed, type Blocco, type CompitoDaBlocco, type ProgettoDaBlocco, type RigaBlocco, type VoceDaBlocco } from './blocchi-feed.ts'
 
 export type GenereConto = 'letti' | 'bozze' | 'file' | 'notion' | 'daParte'
 export type Conti = Record<GenereConto, number>
@@ -23,12 +24,15 @@ export const IN_CIMA = 3
 /**
  * I conti della frase. Bozze sono le risposte e i testi pronti da rileggere:
  * per lui sono la stessa cosa, una cosa scritta che aspetta il suo occhio.
+ * Il server li conta su tutto (`conti`): l'elenco `lavori` è tagliato, e
+ * contare da lì diceva «100» dove erano centoventi.
  */
-export function contiVia(v: Pick<Via, 'letti' | 'daParte' | 'lavori'> | null | undefined): Conti {
+export function contiVia(v: Pick<Via, 'letti' | 'daParte' | 'lavori' | 'conti'> | null | undefined): Conti {
   const c: Conti = { letti: 0, bozze: 0, file: 0, notion: 0, daParte: 0 }
   if (!v) return c
   c.letti = Math.max(0, v.letti | 0)
   c.daParte = Math.max(0, v.daParte | 0)
+  if (v.conti) return { ...c, bozze: v.conti.bozze, file: v.conti.file, notion: v.conti.notion }
   for (const x of v.lavori) {
     if (x.genere === 'file') c.file++
     else if (x.genere === 'notion') c.notion++
@@ -122,13 +126,18 @@ export type LavoroInRiga = {
   email?: { casella?: { stato?: string } | null } | null
   proposta?: unknown | null
   prova?: { esito?: string } | null
+  mandata?: unknown | null
   visto?: string | null
 }
 
 export type StatoLavoro = 'te' | 'nuovo' | 'visto'
 
-/** Consegnata da qualche parte: un file, la sua casella. */
-export const consegnata = (c: LavoroInRiga): boolean => !!c.consegna || c.email?.casella?.stato === 'salvata'
+/**
+ * Consegnata e finita lì: un file, o una bozza già partita. Una bozza salvata
+ * nella sua casella e non mandata aspetta lui finché non parte (o non la
+ * butta): aprirla una volta non la fa «vista», e non si piega.
+ */
+export const consegnata = (c: LavoroInRiga): boolean => !!c.consegna || (!!c.email && !!c.mandata)
 
 /**
  * Lo stato di una riga che Myynd ha prodotto, o null se la riga è sua e
@@ -151,22 +160,39 @@ export function statoLavoro(c: LavoroInRiga, bloccata = false, vistaOra = false)
  * I blocchi, con le cose viste piegate fuori.
  *
  * Una riga fatta e già aperta lascia il blocco: si piega in `piegate`, che il
- * blocco dice in una riga quieta («2 fatte») e apre a richiesta. Un blocco che
- * resta senza righe se ne va: tutto quello che aveva era già visto. Le righe
- * aperte in questa visita restano dove sono fino alla prossima: piegarle
- * sotto il dito sarebbe una riga che scappa.
+ * blocco dice in una riga quieta («2 fatte») e apre a richiesta. Si tolgono
+ * prima del tetto delle righe (`COMPITI_IN_PAGINA`): piegate dopo, le viste
+ * prendevano il posto di una carta che aspetta lui, che restava fuori dalla
+ * pagina e dentro il conto. Un blocco che ha solo cose viste non c'è. Le
+ * righe aperte in questa visita non sono «viste» qui (lo decide chi chiama):
+ * piegarle sotto il dito sarebbe una riga che scappa.
  */
-export function piegaViste<B extends { righe: unknown[] }>(
-  blocchi: readonly B[],
-  vista: (r: B['righe'][number]) => boolean
-): (B & { piegate: B['righe'] })[] {
-  const fuori: (B & { piegate: B['righe'] })[] = []
-  for (const b of blocchi) {
-    const piegate = b.righe.filter(vista)
-    if (!piegate.length) { fuori.push({ ...b, piegate }); continue }
-    const righe = b.righe.filter(r => !vista(r))
-    if (!righe.length) continue
-    fuori.push({ ...b, righe, piegate })
-  }
-  return fuori
+export function blocchiConViste<V extends VoceDaBlocco, C extends CompitoDaBlocco>(dati: {
+  voci: V[]; compiti: C[]; progetti: ProgettoDaBlocco[]; nomeResto: string
+  fermi?: ReadonlySet<string>; corrette?: ReadonlySet<string>; vuoti?: readonly string[]
+}, vista: (c: C) => boolean): (Blocco<V, C> & { piegate: RigaBlocco<V, C>[] })[] {
+  const viste = dati.compiti.filter(vista)
+  const blocchi = blocchiFeed({ ...dati, compiti: dati.compiti.filter(c => !vista(c)) })
+  if (!viste.length) return blocchi.map(b => ({ ...b, piegate: [] }))
+  const piegati = blocchiFeed({ ...dati, voci: [], compiti: viste, vuoti: [], massimoCompiti: Number.MAX_SAFE_INTEGER })
+  const per = new Map(piegati.map(b => [b.progetto, b.righe]))
+  return blocchi.map(b => ({ ...b, piegate: (b.righe.length ? per.get(b.progetto) : undefined) ?? [] }))
 }
+
+/**
+ * Le carte che aspettano lui e che i blocchi non mostrano: nella ricevuta, e
+ * in nessun blocco (oltre il tetto delle righe). Il titolo le conta, quindi
+ * la pagina le mostra, in una riga «altre N» che le apre sul posto.
+ */
+export function aspettanoFuori(
+  blocchi: readonly { righe: readonly RigaBlocco<{ id: string }, { id: string }>[] }[],
+  ricevuta: readonly { genere: string; id: string }[]
+): string[] {
+  const inPagina = new Set<string>()
+  for (const b of blocchi) for (const r of b.righe) if (r.genere === 'compito') inPagina.add(r.compito.id)
+  return ricevuta.filter(a => a.genere === 'carta' && !inPagina.has(a.id)).map(a => a.id)
+}
+
+/** Da piegare: fatta, consegnata e vista, ma non in questa visita. Lo stesso per il guscio e per la pagina. */
+export const vistaDaPiegare = (c: LavoroInRiga & { id: string }, oraViste: { has(id: string): boolean }): boolean =>
+  statoLavoro(c) === 'visto' && !oraViste.has(c.id)

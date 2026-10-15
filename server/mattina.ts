@@ -38,8 +38,8 @@ export const ORE_DI_MATTINA = 6
 export const ASPETTANO_MAX = 5
 /** Le cose fatte che si portano: il foglio le mostra tutte, la carta le prime. */
 export const FATTE_MAX = 20
-/** Quanto indietro può andare «da quando te ne sei andato»: oltre, vale l'inizio della giornata. */
-const DAL_MAX = 36 * 3_600_000
+/** Quanto indietro può andare «da quando te ne sei andato»: un'assenza intera, fino a una settimana. */
+const DAL_MAX = mentreVia.ASSENZA_MAX_GIORNI * 86_400_000
 
 /** Dove sta una cosa fatta: un file, la sua casella, o la carta stessa. */
 export type Dove =
@@ -178,16 +178,20 @@ export function componi(m: Materiale, o: { dal: string; mattina: boolean }): Mat
  * Da quando si conta, e se è mattina.
  *
  * Mattina sono le ore subito dopo la notte del turno: allora si conta dalla
- * notte, che è quando ha smesso di guardare. Il resto del giorno si conta da
- * quando se n'è andato (`chiesto`, dalla finestra), mai più indietro di un
- * giorno e mezzo e mai nel futuro; senza, dall'inizio della giornata.
+ * notte, o da prima se se n'è andato prima (il pomeriggio di ieri, un fine
+ * settimana). Il resto del giorno si conta da quando se n'è andato
+ * (`chiesto`, che il server sa da `via.qui`), mai più indietro di una
+ * settimana e mai nel futuro; senza, dall'inizio della giornata.
  */
 export function finestra(adesso: Date, notte: regole.Finestra, chiesto: string | null | undefined): { dal: string; mattina: boolean } {
   const giornata = regole.inizioGiornata(adesso, notte)
   const mattina = !regole.inNotte(adesso, notte) && adesso.getTime() - giornata.getTime() < ORE_DI_MATTINA * 3_600_000
-  if (mattina) return { dal: regole.inizioUltimaNotte(adesso, notte).toISOString(), mattina }
   const t = chiesto ? Date.parse(chiesto) : NaN
   const ok = Number.isFinite(t) && t <= adesso.getTime() && adesso.getTime() - t <= DAL_MAX
+  if (mattina) {
+    const notturna = regole.inizioUltimaNotte(adesso, notte).getTime()
+    return { dal: new Date(ok ? Math.min(t, notturna) : notturna).toISOString(), mattina }
+  }
   return { dal: ok ? new Date(t).toISOString() : giornata.toISOString(), mattina }
 }
 
@@ -212,13 +216,29 @@ export function mattina(chiesto?: string | null, adesso = oraDelResoconto()): Ma
 }
 
 /**
- * L'elenco dietro un numero della ricevuta, contato dalla stessa ora: se
- * la carta dice «messo da parte 29», l'elenco ne ha ventinove.
+ * L'elenco dietro un numero della ricevuta, dalla stessa ora e dalle stesse
+ * righe: `totale` è il numero sulla carta, le righe al più duecento.
  */
-export function elencoVia(chiesto: string | null | undefined, genere: 'letti' | 'daParte', adesso = oraDelResoconto()): mentreVia.RigaElenco[] {
-  const f = finestra(adesso, turno.stato(adesso).notte, chiesto)
+export function elencoVia(chiesto: string | null | undefined, genere: 'letti' | 'daParte', adesso = oraDelResoconto()): { righe: mentreVia.RigaElenco[]; totale: number } {
+  // senza un'ora detta, quella che sa il server: la stessa della carta
+  const f = finestra(adesso, turno.stato(adesso).notte, chiesto === undefined ? mentreVia.dalDelRitorno(adesso) : chiesto)
   return mentreVia.elenco(f.dal, genere)
 }
+
+/**
+ * La ricevuta di chi chiede, da quando il server sa che non c'era
+ * (`via.dalDelRitorno`): il client non dice più da quando. `qui`: la
+ * finestra ha il fuoco, e questa richiesta vale come «è qui» (dopo aver
+ * letto da quando, non prima: il ritorno è adesso).
+ */
+export function mattinaDelRitorno(o: { qui?: boolean } = {}, adesso = oraDelResoconto()): Mattina {
+  const m = mattina(mentreVia.dalDelRitorno(adesso), adesso)
+  if (o.qui) try { mentreVia.qui(adesso) } catch { /* al prossimo giro */ }
+  return m
+}
+
+/** È qui adesso, con l'orologio della ricevuta. */
+export function qui(adesso = oraDelResoconto()) { mentreVia.qui(adesso) }
 
 /**
  * Il punto della mattina, da dire una volta.

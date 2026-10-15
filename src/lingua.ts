@@ -4409,6 +4409,10 @@ export const frasi = {
     : `${nome} era chiuso: l’ho riaperto, con priorità normale.`,
   /** La riga dei progetti sotto i blocchi, quando i nomi sono tanti. */
   altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`),
+  /** Le carte che aspettano lui oltre il tetto dei blocchi. */
+  altreAspettano: (n: number) => corrente === 'en' ? `${n} more ${n === 1 ? 'needs' : 'need'} you` : `${n === 1 ? 'Un’altra aspetta' : `Altre ${n} aspettano`} te`,
+  /** L'elenco dietro un conto, oltre le righe che porta. */
+  eAltre: (n: number) => corrente === 'en' ? `and ${n} more` : `e altre ${n}`,
   /** Le cose fatte e già viste, piegate in fondo a un blocco. */
   fatteViste: (n: number) => corrente === 'en' ? `${n} done, already seen` : `${n} ${n === 1 ? 'fatta' : 'fatte'}, già ${n === 1 ? 'vista' : 'viste'}`,
 

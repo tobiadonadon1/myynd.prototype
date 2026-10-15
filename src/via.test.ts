@@ -6,7 +6,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { LavoroVia, Via } from './api.ts'
-import { contiVia, frase, inCima, lavoriDi, piegaViste, qualcosa, RAGIONI, statoLavoro } from './via.ts'
+import { aspettanoFuori, blocchiConViste, contiVia, frase, inCima, lavoriDi, qualcosa, RAGIONI, statoLavoro, vistaDaPiegare } from './via.ts'
+import { contaInPagina } from './blocchi-feed.ts'
 
 const lavoro = (id: string, x: Partial<LavoroVia> = {}): LavoroVia =>
   ({ id, titolo: id, genere: 'testo', nome: null, quando: '2026-10-15T03:00:00.000Z', visto: false, aspetta: false, ...x })
@@ -66,26 +67,60 @@ test('i tre stati: aspetta te, fatta e nuova, fatta e vista', () => {
   assert.equal(statoLavoro({ stato: 'pronto', consegna: file, prova: { esito: 'fail' } }), 'te', 'non regge')
   assert.equal(statoLavoro({ stato: 'pronto', consegna: file, proposta: {} }), 'te', 'da approvare')
   assert.equal(statoLavoro({ stato: 'pronto', consegna: file }), 'nuovo')
-  assert.equal(statoLavoro({ stato: 'pronto', email: { casella: { stato: 'salvata' } } }), 'nuovo', 'la bozza nella sua casella è consegnata')
   assert.equal(statoLavoro({ stato: 'pronto', email: { casella: null } }), 'te', 'una bozza da mandare aspetta lui')
   assert.equal(statoLavoro({ stato: 'pronto', consegna: file, visto: '2026-10-15T08:00:00.000Z' }), 'visto')
   assert.equal(statoLavoro({ stato: 'pronto', consegna: file }, false, true), 'visto', 'aperta in questa visita')
 })
 
-test('i blocchi: le viste si piegano in fondo, un blocco tutto visto se ne va, uno vuoto appena nato resta', () => {
-  type R = { genere: 'compito'; id: string; vista: boolean }
-  const r = (id: string, vista = false): R => ({ genere: 'compito', id, vista })
-  const blocchi = [
-    { progetto: 'nw', righe: [r('a'), r('b', true), r('c', true)] },
-    { progetto: 'hb', righe: [r('d', true)] },
-    { progetto: 'nuovo', righe: [] as R[] },
-    { progetto: null, righe: [r('e')] }
-  ]
-  const p = piegaViste(blocchi, x => x.vista)
-  assert.deepEqual(p.map(b => b.progetto), ['nw', 'nuovo', null])
-  assert.deepEqual(p[0]!.righe.map(x => x.id), ['a'])
-  assert.deepEqual(p[0]!.piegate.map(x => x.id), ['b', 'c'])
-  assert.deepEqual(p[1]!.piegate, [])
-  assert.deepEqual(p[2]!.piegate, [])
-  assert.equal(blocchi[0]!.righe.length, 3, 'non tocca i blocchi che riceve')
+test('una bozza salvata nella sua casella e non mandata aspetta lui, anche dopo averla aperta; mandata è fatta', () => {
+  const salvata = { id: 'b', stato: 'pronto', email: { casella: { stato: 'salvata' } } }
+  assert.equal(statoLavoro(salvata), 'te')
+  assert.equal(statoLavoro({ ...salvata, visto: '2026-10-15T08:00:00.000Z' }), 'te', 'aperta una volta: non si piega')
+  assert.equal(vistaDaPiegare({ ...salvata, visto: '2026-10-15T08:00:00.000Z' }, new Set()), false)
+  const partita = { ...salvata, mandata: { doc: 'posta:1', quando: '2026-10-15T09:00:00.000Z' } }
+  assert.equal(statoLavoro(partita), 'nuovo')
+  assert.equal(vistaDaPiegare({ ...partita, visto: '2026-10-15T09:30:00.000Z' }, new Set()), true)
+  assert.equal(vistaDaPiegare({ ...partita, visto: '2026-10-15T09:30:00.000Z' }, new Set(['b'])), false, 'aperta adesso: resta dov’è')
+})
+
+type C = { id: string; progetto: string | null; stato: string; origine: string; aggiornato: string; testo: string; modo: string; consegna?: unknown; visto?: string }
+const carta = (id: string, x: Partial<C> = {}): C => ({ id, progetto: 'nw', stato: 'chiede', origine: 'mano', aggiornato: '2026-10-15T08:00:00.000Z', testo: id, modo: 'tutto', ...x })
+const PROGETTI = [{ id: 'nw', nome: 'Northwind' }, { id: 'hb', nome: 'Harbor' }]
+const vista = (c: C) => vistaDaPiegare(c, new Set())
+
+test('le viste si piegano prima del tetto: non rubano il posto a una carta che aspetta lui', () => {
+  // sette cose fatte e viste, poi la carta che chiede: col tetto di sei, prima restava fuori
+  const viste = Array.from({ length: 7 }, (_, i) => carta(`v${i}`, { stato: 'pronto', consegna: { app: 'File' }, visto: '2026-10-15T07:00:00.000Z', aggiornato: `2026-10-15T09:0${i}:00.000Z` }))
+  const blocchi = blocchiConViste({ voci: [], compiti: [...viste, carta('chiede')], progetti: PROGETTI, nomeResto: 'Rest' }, vista)
+  assert.deepEqual(blocchi.map(b => b.progetto), ['nw'])
+  assert.deepEqual(blocchi[0]!.righe.map(r => r.genere === 'compito' && r.compito.id), ['chiede'])
+  assert.equal(blocchi[0]!.piegate.length, 7, 'tutte le viste, piegate, fuori dal tetto')
+  assert.equal(contaInPagina(blocchi, { domanda: null, iniziative: [], lettera: false }), 1, 'il conto è quello che si vede')
+})
+
+test('un blocco con sole cose viste non c’è; uno appena nato resta vuoto', () => {
+  const blocchi = blocchiConViste({
+    voci: [], progetti: PROGETTI, nomeResto: 'Rest', vuoti: ['hb'],
+    compiti: [carta('a'), carta('v', { progetto: 'hb', stato: 'pronto', consegna: { app: 'File' }, visto: '2026-10-15T07:00:00.000Z' })]
+  }, vista)
+  assert.deepEqual(blocchi.map(b => [b.progetto, b.righe.length, b.piegate.length]).sort(), [['hb', 0, 0], ['nw', 1, 0]])
+})
+
+test('le carte che aspettano lui oltre il tetto: contate dal titolo, quindi mostrate in «altre N»', () => {
+  const chiedono = Array.from({ length: 8 }, (_, i) => carta(`q${i}`, { aggiornato: `2026-10-15T09:0${i}:00.000Z` }))
+  const blocchi = blocchiConViste({ voci: [], compiti: chiedono, progetti: PROGETTI, nomeResto: 'Rest' }, vista)
+  const ricevuta = chiedono.slice(0, 5).map(c => ({ genere: 'carta', id: c.id }))
+  const fuori = aspettanoFuori(blocchi, ricevuta)
+  const inBlocchi = blocchi.flatMap(b => b.righe.map(r => r.genere === 'compito' ? r.compito.id : ''))
+  assert.equal(inBlocchi.length, 6, 'il tetto')
+  for (const id of fuori) assert.ok(!inBlocchi.includes(id))
+  // ogni cosa contata è raggiungibile: nei blocchi, o nella riga «altre N»
+  const contate = contaInPagina(blocchi, { domanda: null, iniziative: [], lettera: false }, ricevuta)
+  assert.equal(contate, inBlocchi.length + fuori.length)
+  assert.deepEqual(aspettanoFuori(blocchi, [{ genere: 'domanda', id: 'd' }, { genere: 'lettera', id: 'lettera' }]), [], 'le domande e la lettera hanno la loro carta')
+})
+
+test('i conti del server valgono su tutto: l’elenco tagliato non li accorcia', () => {
+  const v = { ...via(Array.from({ length: 3 }, (_, i) => lavoro(`f${i}`, { genere: 'file' }))), conti: { bozze: 4, file: 130, notion: 2 } }
+  assert.deepEqual(contiVia(v), { letti: 0, bozze: 4, file: 130, notion: 2, daParte: 0 })
 })

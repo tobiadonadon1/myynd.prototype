@@ -7,7 +7,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -129,4 +129,20 @@ test('GET /api/mattina/elenco: messe da parte con il perché, contate come sulla
   assert.equal((await chiama('/api/mattina/elenco?genere=tutto', uno)).status, 400)
   const altro = await (await chiama('/api/mattina/elenco?genere=daParte', due)).json() as { righe: unknown[] }
   assert.deepEqual(altro.righe, [], 'l’esame dell’altro conto è suo')
+  assert.equal((await (await chiama('/api/mattina/elenco?genere=daParte', uno)).json() as { totale: number }).totale, v.daParte, 'il totale è il numero sulla carta')
+})
+
+test('da quando non c’era lo sa il server: un’assenza di due giorni si conta tutta, e la finestra non lo decide', async () => {
+  // l'ultima volta che ha guardato: due giorni prima dell'orologio della scena
+  writeFileSync(join(cartellaUno, 'via-presenza.json'), JSON.stringify({ ultima: '2026-10-13T07:00:00.000Z' }))
+  const prima = await (await chiama('/api/mattina?dal=2026-10-15T06:59:00.000Z', uno)).json() as { dal: string; via: { dal: string } }
+  assert.equal(prima.dal, '2026-10-13T07:00:00.000Z', 'tutta l’assenza, non la sola notte; il `dal` della finestra non conta più')
+  assert.equal(prima.via.dal, prima.dal)
+  // con il fuoco, la richiesta vale come «è qui»
+  await chiama('/api/mattina?qui=1', uno)
+  const p = JSON.parse(readFileSync(join(cartellaUno, 'via-presenza.json'), 'utf8')) as { ultima: string; dal: string }
+  assert.equal(p.ultima, '2026-10-15T07:00:00.000Z')
+  assert.equal(p.dal, '2026-10-13T07:00:00.000Z', 'l’assenza appena finita resta quella da cui si conta')
+  assert.equal((await chiama('/api/mattina/qui', uno, 'POST', {})).status, 200)
+  assert.equal((await chiama('/api/mattina/qui', null, 'POST', {})).status, 401)
 })

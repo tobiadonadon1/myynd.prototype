@@ -4,48 +4,43 @@
 // conta (`firma`: le carte, la domanda di Myynd), con un attimo di respiro
 // perché uno spostamento di righe non faccia dieci richieste. Il guscio
 // (`App.tsx`) la tiene, perché la usa anche il numero nel menù.
+//
+// Da quando contare non lo dice più la finestra (15 ottobre 2026): lo sa il
+// server, che si segna quando lui guarda (`server/via.ts`). La finestra dice
+// solo «è qui», mentre ha il fuoco: ogni pochi minuti, e quando lo perde.
 
 import { useEffect, useRef, useState } from 'react'
 import { api, type Mattina } from './api'
-import { dalDopoIlRitorno } from './mattina'
 
-/** Quando ha lasciato la finestra l'ultima volta. */
-const CHIAVE_VIA = 'myynd.mattina.via'
-/** L'inizio dell'ultima assenza vera: da lì conta «da quando te ne sei andato». */
-const CHIAVE_DAL = 'myynd.mattina.dal'
+/** Ogni quanto, mentre ha il fuoco, la finestra dice che è qui. */
+const BATTITO_MS = 5 * 60_000
 
-function leggi(k: string): string | null {
-  try { return localStorage.getItem(k) } catch { return null }
-}
-function scrivi(k: string, v: string) {
-  try { localStorage.setItem(k, v) } catch { /* senza memoria conta dall'inizio della giornata, e basta */ }
-}
+const conIlFuoco = () => typeof document !== 'undefined' && !document.hidden && document.hasFocus()
 
 export function useMattina(firma: string): Mattina | null {
   const [m, setM] = useState<Mattina | null>(null)
-  const dal = useRef<string | null>(null)
   const ultima = useRef(0)
 
   useEffect(() => {
     let vivo = true
     const chiedi = () => {
       ultima.current = Date.now()
-      api.mattina(dal.current).then(x => { if (vivo) setM(x) }).catch(() => {
+      api.mattina(conIlFuoco()).then(x => { if (vivo) setM(x) }).catch(() => {
         // la ricevuta non è il motivo per cui si apre Myynd: resta quella di prima
       })
     }
-    const tornato = () => {
-      const prima = Number(leggi(CHIAVE_VIA) ?? 0) || null
-      dal.current = dalDopoIlRitorno(prima, leggi(CHIAVE_DAL), Date.now())
-      if (dal.current) scrivi(CHIAVE_DAL, dal.current)
-      chiedi()
-    }
-    const partito = () => scrivi(CHIAVE_VIA, String(Date.now()))
-    const seVisibile = () => { if (!document.hidden) tornato() }
-    tornato()
+    const qui = () => { api.qui().catch(() => { /* al prossimo battito */ }) }
+    const seVisibile = () => { if (!document.hidden) chiedi() }
+    chiedi()
+    const battito = setInterval(() => { if (conIlFuoco()) qui() }, BATTITO_MS)
     window.addEventListener('focus', seVisibile)
-    window.addEventListener('blur', partito)
-    return () => { vivo = false; window.removeEventListener('focus', seVisibile); window.removeEventListener('blur', partito) }
+    window.addEventListener('blur', qui)
+    return () => {
+      vivo = false
+      clearInterval(battito)
+      window.removeEventListener('focus', seVisibile)
+      window.removeEventListener('blur', qui)
+    }
   }, [])
 
   // quello che conta è cambiato: si richiede, ma non più di una volta al secondo
@@ -55,7 +50,7 @@ export function useMattina(firma: string): Mattina | null {
     let vivo = true
     const t = setTimeout(() => {
       ultima.current = Date.now()
-      api.mattina(dal.current).then(x => { if (vivo) setM(x) }).catch(() => {})
+      api.mattina(conIlFuoco()).then(x => { if (vivo) setM(x) }).catch(() => {})
     }, Math.max(400, 1000 - (Date.now() - ultima.current)))
     return () => { vivo = false; clearTimeout(t) }
   }, [firma])

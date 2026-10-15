@@ -20,7 +20,7 @@ import { quando } from '../data'
 import { dataFonte, testoCarta, secondaRiga, RAGIONI_NON_UTILE } from '../feed-carta'
 import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiFeed, blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, contaInPagina } from '../blocchi-feed'
+import { blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, contaInPagina } from '../blocchi-feed'
 import { conLettera } from '../mattina'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { RigaCheLavora } from '../components/RigaCheLavora'
@@ -37,7 +37,7 @@ import { CAMPO, Scatola } from '../oggi/Scatola'
 import { RigaIpotesi } from '../oggi/RigaIpotesi'
 import { LasciaConRagione, RigaGuadagnata, RigaImparato } from '../oggi/Imparato'
 import { Testo } from '../Testo'
-import { piegaViste, statoLavoro } from '../via'
+import { aspettanoFuori, blocchiConViste, statoLavoro, vistaDaPiegare } from '../via'
 import { segnaVisto, useVistiOra } from '../visti'
 import { bloccoDi, mandataValida, notaPerLei, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
 export { CAMPO, Scatola }
@@ -916,10 +916,12 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const consegnataFatta = lavoro === 'nuovo' || lavoro === 'visto'
   // pronta e non andata da nessuna parte: il suo sì è il gesto, e si vede senza passarci sopra
   const daDire = pronto && lavoro === 'te' && !c.proposta && c.prova?.esito !== 'fail' && !mandata
+  // in vista sulla riga il gesto è un verbo: «Approva», non un «Va bene» da solo che non dice cosa fa
+  const etichetta = daDire && !email ? t('Approva') : pronto && !mandata ? t('Va bene') : t('Fatto')
   const vaBene = (
-    <Hov as="button" type="button" aria-label={`${pronto && !mandata ? t('Va bene') : t('Fatto')}: ${titolo}`}
+    <Hov as="button" type="button" aria-label={`${etichetta}: ${titolo}`} title={daDire && !email ? `${etichetta}: ${titolo}` : undefined}
       onClick={fermo(() => (mandata ? l.chiudi(c.id, t('Mandata dalla tua posta.')) : pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
-      style={daDire && email ? GESTO : PILLOLA} hover={daDire && email ? { color: 'var(--rame-testo)' } : PILLOLA_SOPRA}>{pronto && !mandata ? t('Va bene') : t('Fatto')}</Hov>
+      style={daDire && email ? GESTO : PILLOLA} hover={daDire && email ? { color: 'var(--rame-testo)' } : PILLOLA_SOPRA}>{etichetta}</Hov>
   )
   const manda = email && (
     <Hov as="button" type="button" onClick={fermo(() => { void l.manda(c.id) })} style={PILLOLA} hover={PILLOLA_SOPRA}>{c.email?.allegato ? t('Manda senza allegato') : t('Manda')}</Hov>
@@ -1223,6 +1225,29 @@ function PrimoPasso({ progetto, lista, ultimo, primo, inCorso }: {
   )
 }
 
+/**
+ * Le carte che aspettano lui e che nessun blocco mostra.
+ *
+ * I blocchi portano al più sei righe sue; la ricevuta ne conta di più, e il
+ * titolo con lei. Una carta contata e invisibile è un numero che mente: qui
+ * stanno in una riga quieta, «altre N aspettano te», che le apre sul posto.
+ */
+function AltreCheAspettano({ ids, lista, v }: { ids: string[]; lista: Lista; v: Vals }) {
+  const [aperte, setAperte] = useState(false)
+  const carte = ids.map(id => lista.compiti.find(c => c.id === id)).filter((c): c is Compito => !!c)
+  if (!carte.length) return null
+  return (
+    <section aria-label={frasi.altreAspettano(carte.length)} style={{ flex: 'none', marginTop: 14, borderRadius: 20, overflow: 'hidden', background: 'rgba(var(--carta-rgb),.66)', border: '1px solid rgba(var(--luce-rgb),.7)' }}>
+      <button type="button" className="via-piegate" aria-expanded={aperte} onClick={() => setAperte(x => !x)}>
+        <span style={{ flex: 'none', width: 6, height: 6, borderRadius: '50%', background: 'var(--rame)' }} />{frasi.altreAspettano(carte.length)}
+      </button>
+      {aperte && carte.map(c => (
+        <div key={c.id} style={{ borderTop: '1px solid rgba(var(--inchiostro-rgb),.09)' }}><RigaCompito c={c} l={lista} v={v} /></div>
+      ))}
+    </section>
+  )
+}
+
 /** Quanti nomi di progetti sta nella riga sotto i blocchi prima di «altri N». */
 const ALTRI_IN_RIGA = 6
 
@@ -1359,9 +1384,11 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const grezzi: BloccoPagina[] = dalGuscio ?? piegaViste(
-    blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, corrette: lista?.appenaCorrette, vuoti: v.progettiNuovi }),
-    r => r.genere === 'compito' && statoLavoro(r.compito) === 'visto')
+  // (la stessa strada del guscio: le viste fuori prima del tetto, e non quelle aperte adesso)
+  const visteOra = useVistiOra()
+  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiConViste(
+    { voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, corrette: lista?.appenaCorrette, vuoti: v.progettiNuovi },
+    c => vistaDaPiegare(c, visteOra))
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
   const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi, v.progettiNuovi)
@@ -1473,6 +1500,9 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
         <Blocco key={b.progetto ? v.chiaveDiNascita(b.progetto) : chiaveBlocco(b)} b={b} v={v} lista={lista}
           indice={i} su={stessoGruppo(blocchi, i, i - 1)} giu={stessoGruppo(blocchi, i, i + 1)} muovi={muovi} />
       ))}
+
+      {/* le carte che aspettano lui oltre il tetto dei blocchi: il titolo le conta, quindi stanno qui */}
+      {lista && <AltreCheAspettano ids={aspettanoFuori(blocchi, ricevuta)} lista={lista} v={v} />}
 
       {/* i progetti che oggi non hanno un blocco, e «Nuovo progetto»: finché
           non ce n'è nessuno lo dice la carta qui sopra, con il primo avvio */}

@@ -11,7 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { lingua, t } from '../lingua'
+import { frasi, lingua, t } from '../lingua'
 import { useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
 import { api, type AspettaMattina, type Compito, type LavoroVia, type Mattina, type RigaElencoVia } from '../api'
@@ -74,14 +74,17 @@ function Elenco({ conto, m, apri, apriDoc, chiudi }: {
   useFocoDialogo(foglio, chiudi)
   const esame = conto === 'letti' || conto === 'daParte'
   const [righe, setRighe] = useState<RigaElencoVia[] | null>(esame ? null : [])
+  const [totale, setTotale] = useState(0)
   const visteOra = useVistiOra()
   useEffect(() => {
     if (!esame) return
     let vivo = true
-    api.elencoVia(conto, m.dal).then(r => { if (vivo) setRighe(r.righe) }).catch(() => { if (vivo) setRighe([]) })
+    api.elencoVia(conto).then(r => { if (vivo) { setRighe(r.righe); setTotale(r.totale) } }).catch(() => { if (vivo) setRighe([]) })
     return () => { vivo = false }
-  }, [conto, esame, m.dal])
+  }, [conto, esame])
   const lavori = lavoriDi(m.via, conto)
+  // il numero sulla carta, e quante righe l'elenco ne porta: quello che resta si dice, non si tace
+  const oltre = esame ? Math.max(0, totale - (righe?.length ?? 0)) : Math.max(0, contiVia(m.via)[conto] - lavori.length)
   // in fondo alla pagina: la carta ha il vetro sfocato, e un velo fisso dentro di lei resterebbe chiuso nella carta
   return createPortal(
     <div style={VELO} onMouseDown={e => { if (e.target === e.currentTarget) chiudi() }}>
@@ -116,6 +119,7 @@ function Elenco({ conto, m, apri, apriDoc, chiudi }: {
             ))}
           </ul>
         )}
+        {oltre > 0 && <div className="via-oltre">{frasi.eAltre(oltre)}</div>}
       </div>
     </div>,
     document.body
@@ -125,9 +129,12 @@ function Elenco({ conto, m, apri, apriDoc, chiudi }: {
 /**
  * La carta. `lettera` è la riga «Myynd ti ha scritto»: sta solo qui, perché
  * la chat non ha un blocco. Le altre cose che aspettano lui stanno nei blocchi.
+ * `riassunto`: il punto di oggi, finché non l'ha aperto: una riga quieta in
+ * fondo, perché la carta non ha più il bottone che lo apriva.
  */
-export function MentreVia({ v, m, ricevuta, l, apri }: {
+export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
   v: Vals; m: Mattina | null; ricevuta: readonly AspettaMattina[]; l?: Lista; apri: (c: Compito) => void
+  riassunto?: { cose: number; apri: () => void } | null
 }) {
   const [aperto, setAperto] = useState<GenereConto | null>(null)
   const visteOra = useVistiOra()
@@ -136,7 +143,7 @@ export function MentreVia({ v, m, ricevuta, l, apri }: {
   const pezzi = frase(conti, lingua())
   const cima = inCima(m?.via, visteOra)
   const lettera = ricevuta.find(a => a.genere === 'lettera')
-  if (!m || (!qualcosa(conti) && !cima.length && !lettera)) return null
+  if (!m || (!qualcosa(conti) && !cima.length && !lettera && !riassunto)) return null
   return (
     <section aria-labelledby="via-titolo" style={{ ...CARTA, flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
       <h2 id="via-titolo" style={{ margin: 0, fontSize: 15, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{t('Mentre non c’eri.')}</h2>
@@ -161,6 +168,11 @@ export function MentreVia({ v, m, ricevuta, l, apri }: {
             </li>
           )}
         </ul>
+      )}
+      {riassunto && (
+        <button type="button" className="via-riassunto" onClick={riassunto.apri}>
+          {t('Il punto di oggi')} <span>· {frasi.coseNelPunto(riassunto.cose)}</span>
+        </button>
       )}
       {aperto && (
         <Elenco conto={aperto} m={m} apri={x => { setAperto(null); apriLavoro(x) }}

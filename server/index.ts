@@ -3586,11 +3586,17 @@ app.get('/api/punto', async (_req, res) => {
 
 /**
  * La ricevuta in cima alla prima pagina: cosa è stato fatto, cosa aspetta
- * lui, e le bozze partite questa settimana (`mattina.ts`). `dal` è quando se
- * n'è andato, se la finestra lo sa: lo sa solo lei.
+ * lui, e le bozze partite questa settimana (`mattina.ts`). Da quando lo sa
+ * il server (`via.ts`, l'ultima volta che ha guardato); `qui=1` vuol dire che
+ * la finestra ha il fuoco, e vale come «è qui».
  */
 app.get('/api/mattina', (req, res) => {
-  try { res.json(mattina.mattina(typeof req.query.dal === 'string' ? req.query.dal : null)) } catch (e) { errore(res, e) }
+  try { res.json(mattina.mattinaDelRitorno({ qui: req.query.qui === '1' })) } catch (e) { errore(res, e) }
+})
+
+/** È qui: la finestra lo dice ogni pochi minuti mentre ha il fuoco, e quando lo perde. */
+app.post('/api/mattina/qui', (_req, res) => {
+  try { mattina.qui(); res.json({ ok: true }) } catch (e) { errore(res, e) }
 })
 
 /**
@@ -3600,7 +3606,7 @@ app.get('/api/mattina', (req, res) => {
 app.get('/api/mattina/elenco', (req, res) => {
   const genere = req.query.genere === 'daParte' ? 'daParte' : req.query.genere === 'letti' ? 'letti' : null
   if (!genere) { res.status(400).json({ error: 'genere: letti o daParte' }); return }
-  try { res.json({ righe: mattina.elencoVia(typeof req.query.dal === 'string' ? req.query.dal : null, genere) }) } catch (e) { errore(res, e) }
+  try { res.json(mattina.elencoVia(undefined, genere)) } catch (e) { errore(res, e) }
 })
 
 /**

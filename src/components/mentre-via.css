@@ -26,6 +26,13 @@
 .via-elenco .via-titolo {font-weight:500;}
 .via-elenco .via-perche {font-size:12.5px;line-height:1.45;color:rgba(var(--inchiostro-rgb),.58);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
+/* oltre le righe che l'elenco porta, e il punto di oggi non ancora aperto: due righe quiete */
+.via-oltre {margin-top:10px;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.5);}
+.via-riassunto {align-self:flex-start;max-width:100%;margin:8px 0 0;padding:0;border:0;background:none;font:inherit;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.6);cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.via-riassunto span {color:rgba(var(--inchiostro-rgb),.45);}
+.via-riassunto:hover {color:var(--rame-testo);}
+.via-riassunto:focus-visible {outline:2px solid var(--rame);outline-offset:2px;border-radius:10px;}
+
 /* la riga quieta in fondo a un blocco: le cose fatte e già viste */
 .via-piegate {display:flex;align-items:center;gap:7px;width:100%;padding:9px 21px 11px;margin:0;border:0;background:none;font:inherit;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.5);cursor:pointer;text-align:left;}
 .via-piegate:hover {color:var(--rame-testo);}

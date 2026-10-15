@@ -19,8 +19,8 @@ import { Foglio, Oggi } from './oggi/Oggi'
 import { ListaDiLato } from './oggi/Calendario'
 import { Dettaglio } from './oggi/Dettaglio'
 import { useCompiti } from './oggi/useCompiti'
-import { blocchiFeed, blocchiInPagina, contaInPagina } from './blocchi-feed'
-import { piegaViste, statoLavoro } from './via'
+import { blocchiInPagina, contaInPagina } from './blocchi-feed'
+import { blocchiConViste, vistaDaPiegare } from './via'
 import { useVistiOra } from './visti'
 import { useMattina } from './useMattina'
 import { conLettera } from './mattina'
@@ -325,9 +325,9 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   // e le cose fatte che ha già aperto si piegano in fondo al loro blocco (`via.ts`):
   // fuori dal conto, fuori di vista, a un tocco; quelle aperte in questa visita restano dove sono
   const visteOra = useVistiOra()
-  const blocchi = useMemo(() => piegaViste(
-    blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite, corrette: lista.appenaCorrette, vuoti: v.progettiNuovi }),
-    r => r.genere === 'compito' && statoLavoro(r.compito) === 'visto' && !visteOra.has(r.compito.id)),
+  const blocchi = useMemo(() => blocchiConViste(
+    { voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite, corrette: lista.appenaCorrette, vuoti: v.progettiNuovi },
+    c => vistaDaPiegare(c, visteOra)),
   [v.voci, lista.compiti, v.progetti, lista.appenaFinite, lista.appenaCorrette, v.progettiNuovi, visteOra])
 
   /**

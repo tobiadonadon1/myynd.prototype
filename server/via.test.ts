@@ -88,7 +88,7 @@ test('il lavoro da quando non c’era: file, bozze, Notion; la più recente prim
   assert.equal(per.file.visto, true, 'aperta: vista')
   assert.equal(per.bozza.genere, 'bozza')
   assert.equal(per.bozza.visto, false)
-  assert.equal(per.bozza.aspetta, false, 'nella casella: fatta')
+  assert.equal(per.bozza.aspetta, true, 'nella casella e non mandata: aspetta lui finché non parte')
   assert.equal(per.testo.aspetta, true, 'pronta e non andata da nessuna parte: aspetta il suo sì')
   assert.equal(per.chiusa.visto, true, 'chiusa da lui: l’ha avuta davanti')
   assert.equal(per['notion:progetto:nw'].genere, 'notion')
@@ -133,10 +133,55 @@ test('dal database: letti e messi da parte contano dalla stessa ora dell’elenc
     { doc: 'posta:3', fase: 'carta' }
   ], new Date(ora.getTime() - 60_000).toISOString())
   segnaEsame([{ doc: 'posta:4', fase: 'regole', motivo: 'posta_in_serie' }], ieri)
+  store.default.prepare('UPDATE documenti SET indicizzato = ? WHERE id = ?').run(ieri, 'posta:4')
   const m = mattina.mattina(unOraFa, ora)
   assert.equal(m.via?.letti, 3)
   assert.equal(m.via?.daParte, 2)
   const daParte = mattina.elencoVia(unOraFa, 'daParte', ora)
-  assert.deepEqual(daParte.map(r => [r.titolo, r.ragione]).sort(), [['Lunch on Friday?', 'niente_da_fare'], ['Weekly digest', 'in_serie']])
-  assert.equal(mattina.elencoVia(unOraFa, 'letti', ora).length, 3)
+  assert.deepEqual(daParte.righe.map(r => [r.titolo, r.ragione]).sort(), [['Lunch on Friday?', 'niente_da_fare'], ['Weekly digest', 'in_serie']])
+  assert.equal(daParte.totale, 2, 'il numero sulla carta')
+  assert.equal(mattina.elencoVia(unOraFa, 'letti', ora).totale, 3)
+
+  // un giudizio rifatto adesso su una mail letta ieri non è una lettura nuova: si conta alla prima
+  segnaEsame([{ doc: 'posta:4', fase: 'modello' }], ora.toISOString())
+  assert.equal(mattina.mattina(unOraFa, ora).via?.letti, 3, 'posta:4 non torna «letta» per un giudizio rifatto')
+  // e due giudizi sulla stessa mail nella finestra la contano una volta
+  segnaEsame([{ doc: 'posta:2', fase: 'verifica', motivo: 'senza_fonte' }], ora.toISOString())
+  assert.equal(mattina.mattina(unOraFa, ora).via?.letti, 3)
+})
+
+test('il conto e l’elenco dicono la stessa cosa anche oltre le duecento righe', () => {
+  const ora = new Date()
+  const unOraFa = new Date(ora.getTime() - 3_600_000).toISOString()
+  const tante = Array.from({ length: via.ELENCO_MAX + 25 }, (_, i) => ({ id: `massa:${i}`, fonte: 'email', tipo: 'email', titolo: `Promo ${i}`, corpo: 'x', autore: 'promo@x.example', quando: ora.toISOString() }))
+  store.salvaDocumenti(tante as Parameters<typeof store.salvaDocumenti>[0])
+  segnaEsame(tante.map(d => ({ doc: d.id, fase: 'regole', motivo: 'posta_in_serie' })), new Date(ora.getTime() - 60_000).toISOString())
+  const m = mattina.mattina(unOraFa, ora)
+  const e = mattina.elencoVia(unOraFa, 'daParte', ora)
+  assert.equal(e.totale, m.via?.daParte, 'il numero sulla carta è il totale dell’elenco')
+  assert.equal(e.righe.length, via.ELENCO_MAX)
+  assert.ok(e.totale - e.righe.length >= 25, 'quello che resta si dice: «and N more»')
+})
+
+test('i conti del lavoro valgono su tutto, l’elenco si taglia', () => {
+  const tanti = Array.from({ length: via.LAVORI_MAX + 20 }, (_, i) => carta({ id: `f${i}`, stato: 'pronto', consegna: { app: 'File', titolo: `f${i}.md`, percorso: `/x/f${i}.md` } as C['consegna'], aggiornato: DOPO }))
+  const tutti = via.lavoriVia(tanti, { dal: DAL, visti: new Set() })
+  assert.equal(via.contiLavoro(tutti).file, via.LAVORI_MAX + 20)
+})
+
+test('da quando non c’era lo sa il server: mezz’ora di assenza apre una ricevuta nuova, sette giorni al più', () => {
+  const ore = (h: number) => new Date(Date.parse('2026-10-15T09:00:00.000Z') + h * 3_600_000)
+  assert.equal(via.dalDa({}, ore(0)), null, 'mai guardato: conta la giornata')
+  // guardava fino alle 9:00, torna alle 9:10: è la stessa visita, vale l'assenza di prima
+  assert.equal(via.dalDa({ ultima: ore(0).toISOString(), dal: ore(-20).toISOString() }, ore(1 / 6)), ore(-20).toISOString())
+  // torna alle 13:00: l'assenza comincia quando ha smesso di guardare
+  assert.equal(via.dalDa({ ultima: ore(0).toISOString(), dal: ore(-20).toISOString() }, ore(4)), ore(0).toISOString())
+  // via dieci giorni: si conta da sette giorni fa, non da niente
+  assert.equal(via.dalDa({ ultima: ore(-240).toISOString() }, ore(0)), ore(-168).toISOString())
+  // su disco, per conto: `qui` fissa l'inizio dell'assenza che finisce
+  via.qui(ore(0))
+  assert.equal(via.dalDelRitorno(ore(0.25)), null, 'un quarto d’ora: niente assenza ancora')
+  assert.equal(via.dalDelRitorno(ore(3)), ore(0).toISOString())
+  via.qui(ore(3))
+  assert.equal(via.dalDelRitorno(ore(3.1)), ore(0).toISOString(), 'tornato: l’assenza resta quella, finché non ne fa un’altra')
 })

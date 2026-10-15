@@ -28,8 +28,8 @@ import * as cfg from './config.ts'
 export const GIORNI_VISTI = 60
 /** Quante bandiere al più, per conto. */
 export const VISTI_MAX = 2000
-/** Quante cose fatte porta la ricevuta: il resto si conta e basta. */
-export const LAVORI_MAX = 40
+/** Quante cose fatte porta la ricevuta, per gli elenchi: i conti si fanno su tutte (`conti`). */
+export const LAVORI_MAX = 100
 /** Quante righe porta l'elenco di un numero. */
 export const ELENCO_MAX = 200
 /** Quante pagine di Notion si ricordano. */
@@ -51,7 +51,9 @@ export type LavoroVia = {
   aspetta: boolean
   url?: string | null
 }
-export type Via = { dal: string; letti: number; daParte: number; lavori: LavoroVia[] }
+/** I conti del lavoro, fatti su tutto quello che è stato fatto, prima di tagliare l'elenco. */
+export type ContiLavoro = { bozze: number; file: number; notion: number }
+export type Via = { dal: string; letti: number; daParte: number; conti: ContiLavoro; lavori: LavoroVia[] }
 
 /**
  * Perché una cosa è stata messa da parte, in una parola che la pagina
@@ -104,8 +106,12 @@ export function contaEsame(righe: readonly { fase: string; motivo: string | null
   return { letti, daParte }
 }
 
-/** Una carta consegnata da qualche parte: un file, la casella, Notion. */
-const consegnata = (c: Compito): boolean => !!c.consegna || c.email?.casella?.stato === 'salvata'
+/**
+ * Una carta consegnata e finita lì: un file, o una bozza già partita. Una
+ * bozza salvata nella sua casella e non mandata non è finita: aspetta che lui
+ * la mandi (o la butti), e non si piega come «vista» per averla aperta una volta.
+ */
+const consegnata = (c: Compito): boolean => !!c.consegna || (!!c.email && !!c.mandata)
 
 function genereDi(c: Compito): { genere: GenereLavoro; nome: string | null } {
   if (c.consegna) return { genere: 'file', nome: c.consegna.titolo }
@@ -149,7 +155,18 @@ export function lavoriVia(compiti: readonly Compito[], o: {
     const id = `notion:${p.chiave}`
     fuori.push({ id, titolo: p.titolo, genere: 'notion', nome: p.titolo, quando: p.quando, visto: o.visti.has(id), aspetta: false, url: p.url })
   }
-  return fuori.sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, LAVORI_MAX)
+  return fuori.sort((a, b) => b.quando.localeCompare(a.quando))
+}
+
+/** I conti del lavoro, su tutto: bozze sono risposte e testi, file e Notion a parte. */
+export function contiLavoro(xs: readonly LavoroVia[]): ContiLavoro {
+  const c: ContiLavoro = { bozze: 0, file: 0, notion: 0 }
+  for (const x of xs) {
+    if (x.genere === 'file') c.file++
+    else if (x.genere === 'notion') c.notion++
+    else c.bozze++
+  }
+  return c
 }
 
 // — su disco, per conto —
@@ -207,43 +224,92 @@ export function segnaPagina(p: { chiave: string; titolo: string; url: string | n
 
 // — dal registro dell'esame —
 
-type RigaEsame = { doc: string; fase: string; motivo: string | null; quando: string }
+/**
+ * Le righe dell'esame nella finestra, una per documento, contate dalla prima
+ * lettura: `indicizzato`, quando Myynd ha preso il documento. La `quando`
+ * dell'esame no: il modello la riscrive a ogni giudizio rifatto, e la stessa
+ * mail giudicata tre volte restava «letta adesso» per sempre. Solo i
+ * documenti che hanno un titolo, cioè quelli che l'elenco sa mostrare: il
+ * conto e l'elenco vengono dalle stesse righe.
+ */
+type RigaEsame = { doc: string; fase: string; motivo: string | null; quando: string; titolo: string; fonte: string | null; autore: string | null }
 
 function esameDal(dal: string): RigaEsame[] {
   try {
-    return db.prepare('SELECT doc, fase, motivo, quando FROM feed_esame WHERE quando >= ?').all(dal) as RigaEsame[]
+    return db.prepare(`
+      SELECT e.doc, e.fase, e.motivo, COALESCE(d.indicizzato, e.quando) AS quando, d.titolo, d.fonte, d.autore
+      FROM feed_esame e JOIN documenti d ON d.id = e.doc
+      WHERE COALESCE(d.indicizzato, e.quando) >= ? AND TRIM(COALESCE(d.titolo, '')) != ''
+      ORDER BY quando DESC
+    `).all(dal) as RigaEsame[]
   } catch { return [] }
 }
 
-/** I conti e il lavoro di chi chiede, da `dal`. */
+/** I conti e il lavoro di chi chiede, da `dal`. I conti su tutto, l'elenco tagliato. */
 export function via(dal: string, compiti: readonly Compito[], consegnati?: ReadonlyMap<string, string>): Via {
   const { letti, daParte } = contaEsame(esameDal(dal))
   const v = new Set(visti().keys())
-  return { dal, letti, daParte, lavori: lavoriVia(compiti, { dal, consegnati, visti: v, pagine: pagineNotion() }) }
+  const tutti = lavoriVia(compiti, { dal, consegnati, visti: v, pagine: pagineNotion() })
+  return { dal, letti, daParte, conti: contiLavoro(tutti), lavori: tutti.slice(0, LAVORI_MAX) }
 }
 
 export type RigaElenco = { doc: string; titolo: string; fonte: string; autore: string | null; quando: string; ragione: Ragione | null; fase: string }
 
 /**
- * L'elenco dietro un numero: le lette, o le messe da parte con il perché.
- * La più recente prima, e solo quelle che hanno un titolo da dire.
+ * L'elenco dietro un numero: le lette, o le messe da parte con il perché, la
+ * più recente prima. `totale` è il numero sulla carta, contato dalle stesse
+ * righe; le righe sono al più `ELENCO_MAX`, e il foglio dice quante restano.
  */
-export function elenco(dal: string, genere: 'letti' | 'daParte'): RigaElenco[] {
-  let righe: (RigaEsame & { titolo: string | null; fonte: string | null; autore: string | null })[] = []
-  try {
-    righe = db.prepare(`
-      SELECT e.doc, e.fase, e.motivo, e.quando, d.titolo, d.fonte, d.autore
-      FROM feed_esame e LEFT JOIN documenti d ON d.id = e.doc
-      WHERE e.quando >= ? ORDER BY e.quando DESC
-    `).all(dal) as typeof righe
-  } catch { return [] }
-  const fuori: RigaElenco[] = []
-  for (const r of righe) {
-    if (!letta(r.fase, r.motivo) || !r.titolo?.trim()) continue
+export function elenco(dal: string, genere: 'letti' | 'daParte'): { righe: RigaElenco[]; totale: number } {
+  const righe: RigaElenco[] = []
+  let totale = 0
+  for (const r of esameDal(dal)) {
+    if (!letta(r.fase, r.motivo)) continue
     const ragione = ragioneDaParte(r.fase, r.motivo)
     if (genere === 'daParte' && !ragione) continue
-    fuori.push({ doc: r.doc, titolo: r.titolo.trim(), fonte: r.fonte ?? '', autore: r.autore ?? null, quando: r.quando, ragione, fase: r.fase })
-    if (fuori.length >= ELENCO_MAX) break
+    totale++
+    if (righe.length < ELENCO_MAX) righe.push({ doc: r.doc, titolo: r.titolo.trim(), fonte: r.fonte ?? '', autore: r.autore ?? null, quando: r.quando, ragione, fase: r.fase })
   }
-  return fuori
+  return { righe, totale }
+}
+
+// — da quando non c'è: lo sa il server —
+
+/** Quanto deve mancare perché «da quando non c'eri» ricominci. */
+export const ASSENZA_MIN = 30
+/** Più indietro di così non si conta: un'assenza più lunga comincia da qui. */
+export const ASSENZA_MAX_GIORNI = 7
+const FILE_PRESENZA = 'via-presenza.json'
+export type Presenza = { ultima?: string; dal?: string }
+
+/**
+ * Da quando contare, da quello che il server sa: l'ultima volta che ha
+ * guardato (`ultima`, scritta da `qui`) e l'inizio dell'assenza di prima
+ * (`dal`). Se l'ultima volta è più vecchia di mezz'ora, l'assenza è quella
+ * che finisce adesso; se no, vale quella di prima. Mai oltre sette giorni.
+ * Null: non l'ha mai guardato, e conta la giornata.
+ */
+export function dalDa(p: Presenza, adesso: Date): string | null {
+  const ora = adesso.getTime()
+  const tetto = ora - ASSENZA_MAX_GIORNI * GIORNO
+  const ultima = p.ultima ? Date.parse(p.ultima) : NaN
+  const dal = p.dal ? Date.parse(p.dal) : NaN
+  const nel = (t: number) => Number.isFinite(t) && t <= ora
+  if (nel(ultima) && ora - ultima >= ASSENZA_MIN * 60_000) return new Date(Math.max(ultima, tetto)).toISOString()
+  if (nel(dal)) return new Date(Math.max(dal, tetto)).toISOString()
+  return null
+}
+
+/** Da quando contare per chi chiede adesso. */
+export function dalDelRitorno(adesso = new Date()): string | null {
+  return dalDa(leggiJson<Presenza>(FILE_PRESENZA, {}), adesso)
+}
+
+/**
+ * È qui: lo dice la finestra mentre ha il fuoco, ogni pochi minuti e quando
+ * lo perde. Un ritorno dopo mezz'ora fissa l'inizio dell'assenza che finisce.
+ */
+export function qui(adesso = new Date()) {
+  const dal = dalDelRitorno(adesso)
+  scriviJson(FILE_PRESENZA, { ultima: adesso.toISOString(), ...(dal ? { dal } : {}) })
 }

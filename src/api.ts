@@ -1698,10 +1698,13 @@ export const api = {
   // pagina li sa: il saluto li dice con le sue parole.
   punto: () => json<EsitoPunto>('/api/punto'),
   /** La ricevuta della prima pagina; `dal` è quando se n'è andato, se la finestra lo sa. */
-  mattina: (dal: string | null) => json<Mattina>(`/api/mattina${dal ? `?dal=${encodeURIComponent(dal)}` : ''}`),
+  /** Da quando contare lo sa il server; `qui`: la finestra ha il fuoco, e la richiesta vale come «è qui». */
+  mattina: (qui: boolean) => json<Mattina>(`/api/mattina${qui ? '?qui=1' : ''}`),
+  /** È qui: mentre la finestra ha il fuoco, ogni pochi minuti, e quando lo perde. */
+  qui: () => json<{ ok: true }>('/api/mattina/qui', { method: 'POST', body: '{}' }),
   /** L'elenco dietro un conto di «mentre non c'eri», dalla stessa ora della ricevuta. */
-  elencoVia: (genere: 'letti' | 'daParte', dal: string | null) =>
-    json<{ righe: RigaElencoVia[] }>(`/api/mattina/elenco?genere=${genere}${dal ? `&dal=${encodeURIComponent(dal)}` : ''}`),
+  elencoVia: (genere: 'letti' | 'daParte') =>
+    json<{ righe: RigaElencoVia[]; totale: number }>(`/api/mattina/elenco?genere=${genere}`),
   /** Le cose fatte che ha aperto: perdono il pallino, e alla prossima volta si piegano. */
   lavoriVisti: (ids: string[]) => json<{ ok: true; nuovi: number }>('/api/lavoro/visti', { method: 'POST', body: JSON.stringify({ ids }) }),
   rifaiPunto: (forza = false, via: number | null = null) =>
@@ -2228,7 +2231,8 @@ export type LavoroVia = {
   id: string; titolo: string; genere: 'bozza' | 'file' | 'notion' | 'nota' | 'testo'
   nome: string | null; quando: string; visto: boolean; aspetta: boolean; url?: string | null
 }
-export type Via = { dal: string; letti: number; daParte: number; lavori: LavoroVia[] }
+/** `conti` su tutto il lavoro fatto; `lavori` è l'elenco, tagliato a cento. */
+export type Via = { dal: string; letti: number; daParte: number; conti?: { bozze: number; file: number; notion: number }; lavori: LavoroVia[] }
 /** Una riga dietro «letto» o «messo da parte»: il documento, e perché non è diventato una carta. */
 export type RigaElencoVia = { doc: string; titolo: string; fonte: string; autore: string | null; quando: string; ragione: string | null; fase: string }
 /**
