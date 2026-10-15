@@ -117,7 +117,7 @@ export function decidi(m: Memoria, nuovi: readonly Candidato[], adesso: number, 
 }
 
 /** Le schermate dell'app (`Screen` in data.ts). `myynd` è la prima pagina. */
-export type Schermo = 'myynd' | 'oggi' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto'
+export type Schermo = 'myynd' | 'oggi' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto' | 'progetti'
 /** Dove una cosa si vede da sé: le righe nella lista (a lato della prima pagina, o in To do), il resto sulla prima pagina. */
 const SI_VEDE: Record<Genere, readonly Schermo[]> = {
   lavoro: ['myynd', 'oggi'], bozza: ['myynd', 'oggi'], file: ['myynd', 'oggi'], chiede: ['myynd', 'oggi'],
