@@ -54,6 +54,7 @@ import * as riferimento from './riferimento.ts'
 import { cartella, nellaLingua } from './config.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
+import { FONTI_POSTA } from './connettori/registro.ts'
 import { conGergo } from './rifinitura.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { normalizzata, stessaCosa, testoDelProgetto, PROVA_MIN, PROVA_MAX } from './priorita.ts'
@@ -131,6 +132,10 @@ export type Quadro = {
   versione?: number
   /** I titoli delle mosse già messe sul feed: non si rimettono al giro dopo, anche se la rifinitura le ha riscritte. */
   messe?: string[]
+  /** Il succo del progetto in un paragrafo, per la pagina dei Progetti. I quadri di prima non ce l'hanno: lì vale `stato`. */
+  sintesi?: string
+  /** Cosa ha letto per farlo, contato per genere di fonte (`tipoDiFonte`). */
+  letto?: Record<string, number>
 }
 
 // — dove si tengono —
@@ -201,6 +206,17 @@ export function sessioneRidotta(corpo: string, tetto = 3200): string {
   return `Le sue parole:\n${sueTesto || '(nessuna)\n'}Come è finita:\n${fine}`
 }
 
+/**
+ * L'ultima volta che si è lavorato in una cartella: il commit più recente se
+ * è un repository (un programma che scrive i suoi registri cambia la data dei
+ * file ogni dieci minuti, e non è lavoro suo), sennò la data del documento.
+ */
+export function ultimaDellaCartella(d: Pick<store.Documento, 'corpo' | 'quando'>): string | null {
+  const m = d.corpo.match(/Ultimi commit:\n(\d{4}-\d{2}-\d{2})/)
+  if (m) return `${m[1]}T12:00:00.000Z`
+  return d.quando ?? null
+}
+
 // — la lettura profonda di una cartella —
 
 async function testoFile(p: string, quanto: number): Promise<string> {
@@ -258,10 +274,31 @@ export type Materiale = {
   impronta: string
   /** L'ultima volta che il progetto si è mosso, per scegliere chi rifare prima. */
   ultima: string
+  /** Il materiale più recente (una cartella vale per il suo ultimo commit), o null se non ce n'è. */
+  recente: string | null
   /** L'impronta della pagina pubblica, se è stata letta. */
   fuori?: string
   /** Gli indirizzi pubblici trovati, anche se non letti questa volta. */
   indirizzi?: string[]
+  /** Quante fonti sono entrate davvero nel testo, per genere: «cosa ha letto», sulla pagina dei Progetti. */
+  letto: Record<string, number>
+}
+
+/**
+ * Il genere di una fonte, come lo dice la pagina dei Progetti: le cartelle di
+ * codice, le sessioni, la posta, le note, i file, l'agenda, i messaggi. Una
+ * fonte che non si conosce è «altro», mai un nome di servizio sulla pagina.
+ */
+export function tipoDiFonte(fonte: string): string {
+  if (fonte === 'lavoro') return 'cartelle'
+  if (fonte === 'conversazioni' || fonte === 'claude') return 'sessioni'
+  if ((FONTI_POSTA as readonly string[]).includes(fonte) || fonte === 'gmail') return 'posta'
+  if (['note', 'apple', 'notion', 'granola'].includes(fonte)) return 'note'
+  if (['desktop', 'drive', 'dropbox', 'sharepoint'].includes(fonte)) return 'file'
+  if (['calendario', 'ical', 'agendamac'].includes(fonte)) return 'agenda'
+  if (['slack', 'whatsapp'].includes(fonte)) return 'messaggi'
+  if (fonte === 'memoria' || fonte === 'riferimento' || fonte === 'sito') return fonte
+  return 'altro'
 }
 
 function hash(s: string): string {
@@ -339,10 +376,15 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
    * solo per quelli che entrano davvero nel testo: una fonte tagliata via non
    * può reggere una mossa che il modello non ha potuto leggere.
    */
-  const blocchi: { testo: string; id: string; fonte: string }[] = []
-  const metti = (id: string, testo: string, fonte: string) => blocchi.push({ id, testo, fonte })
+  const blocchi: { testo: string; id: string; fonte: string; tipo: string }[] = []
+  const metti = (id: string, testo: string, fonte: string, tipo: string) => blocchi.push({ id, testo, fonte, tipo })
   let ultima = p.aggiornato || ''
-  const segna = (q: string | null | undefined) => { if (q && q > ultima) ultima = q }
+  // il materiale più recente, senza la riga del progetto: quella cambia anche quando lui ne tocca solo il nome
+  let recente = ''
+  const segna = (q: string | null | undefined, lavoro = q) => {
+    if (q && q > ultima) ultima = q
+    if (lavoro && lavoro > recente) recente = lavoro
+  }
 
   // le cartelle
   const cartelle = docs.filter(d => d.fonte === 'lavoro' && cartellaDel(p, basename(d.id.slice('lavoro:'.length)), d.corpo))
@@ -350,8 +392,8 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   for (const d of cartelle) {
     const percorso = d.id.slice('lavoro:'.length)
     const t = ((await leggi(percorso)) || d.corpo).slice(0, TETTO_CARTELLA)
-    segna(d.quando)
-    metti(d.id, `[${d.id}] Cartella di codice ${basename(percorso)} (ultima modifica ${(d.quando ?? '').slice(0, 10)})\n${t}`, t)
+    segna(d.quando, ultimaDellaCartella(d))
+    metti(d.id, `[${d.id}] Cartella di codice ${basename(percorso)} (ultima modifica ${(d.quando ?? '').slice(0, 10)})\n${t}`, t, 'cartelle')
   }
 
   // le sessioni con gli assistenti: in una sua cartella, o che lo nominano nel titolo
@@ -364,7 +406,7 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   for (const d of sessioni) {
     const t = sessioneRidotta(d.corpo)
     segna(d.quando)
-    metti(d.id, `[${d.id}] Sessione con un assistente: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`)
+    metti(d.id, `[${d.id}] Sessione con un assistente: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`, 'sessioni')
   }
 
   // la posta, le note, i file, l'agenda che lo toccano
@@ -375,7 +417,7 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   for (const d of altri) {
     const t = d.corpo.replace(/\s+/g, ' ').trim().slice(0, 700)
     segna(d.quando)
-    metti(d.id, `[${d.id}] ${d.fonte}${d.autore ? ` da ${d.autore.slice(0, 60)}` : ''}${d.inviato ? ' (scritta da lui)' : ''}: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`)
+    metti(d.id, `[${d.id}] ${d.fonte}${d.autore ? ` da ${d.autore.slice(0, 60)}` : ''}${d.inviato ? ' (scritta da lui)' : ''}: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`, tipoDiFonte(d.fonte))
   }
 
   // la cosa vista da fuori, come la vede un cliente: il sito vero, e se il blog è fermo.
@@ -391,10 +433,10 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
 
   // la memoria del progetto e quello che ha scritto lui
   const memoria = testoDelProgetto(p.id).slice(0, 3000)
-  if (memoria) blocchi.unshift({ id: 'memoria', testo: `[memoria] Obiettivo e memoria del progetto\n${memoria}`, fonte: memoria })
+  if (memoria) blocchi.unshift({ id: 'memoria', testo: `[memoria] Obiettivo e memoria del progetto\n${memoria}`, fonte: memoria, tipo: 'memoria' })
   const nomi = [p.nome, ...p.alias, ...[...riferimento.alias()].filter(([, id]) => id === p.id).map(([n]) => n)]
   const suoi = riferimento.leggi().testo.split('\n').filter(r => nomi.some(n => nominaAmbito(r, n))).join('\n').slice(0, 1500)
-  if (suoi) blocchi.unshift({ id: 'riferimento', testo: `[riferimento] Quello che ha scritto lui su questo progetto, di suo pugno (vale più di tutto il resto)\n${suoi}`, fonte: suoi })
+  if (suoi) blocchi.unshift({ id: 'riferimento', testo: `[riferimento] Quello che ha scritto lui su questo progetto, di suo pugno (vale più di tutto il resto)\n${suoi}`, fonte: suoi, tipo: 'riferimento' })
 
   // la lista, e com'è andata con le carte di prima: è così che impara
   const aperti = store.elencoCompiti().filter(c => c.progetto === p.id).map(c => `— ${c.testo}${c.stato !== 'aperto' ? ` (${c.stato})` : ''}`)
@@ -410,17 +452,19 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
 
   // in ordine: quello che ha scritto lui, la memoria, le cartelle, le sessioni, la posta
   const dentro: string[] = []
+  const letto: Record<string, number> = {}
   let lungo = 0
   for (const b of blocchi) {
     if (lungo + b.testo.length > TETTO_MATERIALE) continue
     dentro.push(b.testo); lungo += b.testo.length + 2
     fonti.set(b.id, b.fonte)
+    letto[b.tipo] = (letto[b.tipo] ?? 0) + 1
   }
   let testo = dentro.join('\n\n')
   if (lista) testo += `\n\n${lista}`
   const impronta = hash(`${VERSIONE}|${p.nome}|${p.obiettivo}|${testo}`)
-  for (const f of fuori) { testo += `\n\n${f.testo}`; fonti.set(f.id, f.testo) }
-  return { testo, fonti, impronta, ultima, indirizzi, ...(fuori.length ? { fuori: hash(fuori.map(f => f.testo).join('|')) } : {}) }
+  for (const f of fuori) { testo += `\n\n${f.testo}`; fonti.set(f.id, f.testo); letto.sito = (letto.sito ?? 0) + 1 }
+  return { testo, fonti, impronta, ultima, recente: recente || null, indirizzi, letto, ...(fuori.length ? { fuori: hash(fuori.map(f => f.testo).join('|')) } : {}) }
 }
 
 // — la domanda al modello —
@@ -441,6 +485,7 @@ const FORMA = {
     domanda: { type: 'string', description: 'Una domanda sola, e solo se serve davvero: sull\'obiettivo se la certezza è sotto 0,5, oppure su una cosa precisa che hai visto (nel sito, nel lavoro) e che non sai se è voluta. Corta, gentile, che nomina la cosa. Stringa vuota altrimenti.' },
     domandaTipo: { type: 'string', enum: ['obiettivo', 'osservazione', ''], description: '«obiettivo» o «osservazione» se hai scritto una domanda, vuoto altrimenti.' },
     stato: { type: 'string', description: 'Dove sta davvero il progetto, in due o tre frasi corte con i fatti: cosa è fatto, cosa no, da quando.' },
+    sintesi: { type: 'string', description: 'Il succo del progetto in un paragrafo solo, da tre a cinque frasi piane: cos\'è, a cosa punta, dove sta adesso, cosa viene dopo. Come lo diresti a un collega che arriva domani: niente nomi di file, rami o servizi tecnici.' },
     traguardo: { type: 'string', description: 'Il prossimo traguardo che conta per l\'obiettivo, in al massimo quattordici parole: pubblicato, venduto, mandato, firmato, un utente vero.' },
     blocco: { type: 'string', description: 'Cosa lo ferma adesso, in al massimo venti parole, o una stringa vuota.' },
     mosse: {
@@ -463,11 +508,11 @@ const FORMA = {
       }
     }
   },
-  required: ['obiettivo', 'domanda', 'domandaTipo', 'stato', 'traguardo', 'blocco', 'mosse'],
+  required: ['obiettivo', 'domanda', 'domandaTipo', 'stato', 'sintesi', 'traguardo', 'blocco', 'mosse'],
   additionalProperties: false
 }
 
-type Grezzo = { obiettivo?: { testo?: unknown; certezza?: unknown }; domanda?: unknown; domandaTipo?: unknown; stato?: unknown; traguardo?: unknown; blocco?: unknown; mosse?: unknown }
+type Grezzo = { obiettivo?: { testo?: unknown; certezza?: unknown }; domanda?: unknown; domandaTipo?: unknown; stato?: unknown; sintesi?: unknown; traguardo?: unknown; blocco?: unknown; mosse?: unknown }
 type MossaGrezza = Partial<Record<'genere' | 'titolo' | 'testo' | 'leva' | 'urgenza' | 'offerta' | 'prova' | 'fonte', unknown>>
 
 type Ferri = { chiediJSON: typeof chiediJSON; collegato: typeof collegato; leggi: Leggi; guarda: Guarda }
@@ -575,6 +620,7 @@ export async function quadroDi(p: progetti.Progetto, m: Materiale): Promise<Quad
   // sull'obiettivo solo sotto la soglia; su una cosa vista sempre, se il modello la ritiene necessaria
   const tipo = out.domandaTipo === 'osservazione' ? 'osservazione' : 'obiettivo'
   const domanda = tipo === 'osservazione' || certezza < CERTEZZA_MINIMA ? (testoDi(out.domanda, 10, 260) ?? '') : ''
+  const sintesi = testoDi(out.sintesi, 20, 900)
   return {
     progetto: p.id, nome: p.nome,
     ...(obiettivo ? { obiettivo: { testo: obiettivo, certezza } } : {}),
@@ -583,6 +629,9 @@ export async function quadroDi(p: progetti.Progetto, m: Materiale): Promise<Quad
     conSito: !!m.indirizzi?.length,
     versione: VERSIONE,
     stato: testoDi(out.stato, 1, 600) ?? '',
+    // un modello che non la scrive lascia il quadro com'era prima: la pagina ripiega su `stato`
+    ...(sintesi ? { sintesi } : {}),
+    letto: m.letto,
     traguardo: testoDi(out.traguardo, 1, 160) ?? '',
     blocco: testoDi(out.blocco, 0, 200) ?? '',
     mosse, quando: new Date().toISOString(), impronta: m.impronta
@@ -590,7 +639,7 @@ export async function quadroDi(p: progetti.Progetto, m: Materiale): Promise<Quad
 }
 
 /** I progetti che hanno diritto a un quadro: vivi, e non morti secondo lui. */
-function progettiDaGuardare(): progetti.Progetto[] {
+export function progettiDaGuardare(): progetti.Progetto[] {
   const attivi = progetti.elenco('attivo')
   const morti = riferimento.progettiMorti(riferimento.leggi().testo, attivi)
   return attivi.filter(p => !morti.has(p.id))

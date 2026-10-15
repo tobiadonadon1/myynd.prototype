@@ -33,7 +33,7 @@
 // scrivania piena. Con «punto» si scrive il foglio di oggi com'è su disco, fatto
 // adesso, e il server non lo rifà per tre ore.
 
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { readFileSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { userInfo } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -778,6 +778,55 @@ if (sd.gradini || sd.imparate) {
   console.log(`semina · D: ${sd.gradini?.length ?? 0} gradini, ${sd.imparate?.length ?? 0} convinzioni seguite`)
 }
 // — D: fine —
+// — Progetti: inizio —
+// La pagina dei Progetti: le cartelle di lavoro vere (repository git con i
+// commit datati, dentro Documents, dove le trova «Il mio Mac») e i quadri
+// com'è su disco `quadri.json`. Un quadro fatto da meno di due ore non si rifà
+// all'avvio: il modello finto non lo sovrascrive con uno vuoto.
+//   "cartelle": [{ "nome": "harbor-api", "dentro": "Code", "readme": "…", "commit": [{ "quando": "-2d", "messaggio": "…" }] }]
+//   "quadri":   [{ "progetto": "nw", "sintesi": "…", "stato": "…", "traguardo": "…", "mosse": [{ "titolo": "…", "testo": "…" }], "letto": { "posta": 2 }, "quando": "-40m" }]
+type ScenaProgetti = {
+  cartelle?: { nome: string; dentro?: string; readme?: string; commit?: { quando: string; messaggio: string }[] }[]
+  quadri?: { progetto: string; sintesi?: string; stato?: string; traguardo?: string; blocco?: string; mosse?: { titolo: string; testo: string; leva?: number; urgenza?: string; genere?: string }[]; letto?: Record<string, number>; quando?: string }[]
+}
+const sp = scena as unknown as ScenaProgetti
+if (sp.cartelle?.length || sp.quadri?.length) {
+  const { execFileSync } = await import('node:child_process')
+  for (const c of sp.cartelle ?? []) {
+    const dove = join(cartella, c.dentro ?? '', c.nome)
+    mkdirSync(dove, { recursive: true })
+    writeFileSync(join(dove, 'README.md'), c.readme ?? `# ${c.nome}\n`)
+    const repo = (args: string[], quando?: string) => execFileSync('git', ['-C', dove, '-c', 'user.name=Alex', '-c', 'user.email=alex@example.test', '-c', 'commit.gpgsign=false', ...args],
+      { stdio: 'ignore', env: { PATH: process.env.PATH, HOME: CASA, ...(quando ? { GIT_AUTHOR_DATE: quando, GIT_COMMITTER_DATE: quando } : {}) } })
+    repo(['init', '-q'])
+    const commit = [...(c.commit ?? [])].sort((a, b) => tempo(a.quando).localeCompare(tempo(b.quando)))
+    for (const k of commit) { repo(['add', '-A']); repo(['commit', '-q', '--allow-empty', '-m', k.messaggio], tempo(k.quando)) }
+    // i file hanno l'età dell'ultimo commit, non quella della semina
+    const ultimo = commit.at(-1)
+    if (ultimo) { const d = new Date(tempo(ultimo.quando)); utimesSync(join(dove, 'README.md'), d, d) }
+  }
+  const desktopSemina = await import(join(SERVER, 'connettori', 'desktop.ts'))
+  const lavoro = await desktopSemina.documentiDiLavoro([cartella])
+  chi.dentro(conto.id, () => {
+    store.salvaDocumenti(lavoro)
+    const tutti = progetti.elenco() as { id: string; nome: string }[]
+    const idDi = (k: string) => tutti.find(p => p.nome === ((scena.progetti ?? []).find(q => (q.chiave ?? q.nome) === k)?.nome ?? k))?.id
+    const quadri: Record<string, unknown> = {}
+    for (const q of sp.quadri ?? []) {
+      const id = idDi(q.progetto)
+      if (!id) continue
+      quadri[id] = {
+        progetto: id, nome: tutti.find(p => p.id === id)!.nome, quando: tempo(q.quando ?? '-40m'), impronta: 'semina', versione: 3,
+        stato: q.stato ?? '', traguardo: q.traguardo ?? '', blocco: q.blocco ?? '',
+        ...(q.sintesi ? { sintesi: q.sintesi } : {}), ...(q.letto ? { letto: q.letto } : {}),
+        mosse: (q.mosse ?? []).map(m => ({ genere: m.genere ?? 'consiglio', titolo: m.titolo, testo: m.testo, leva: m.leva ?? 2, urgenza: m.urgenza ?? 'settimana', offerta: 'I prepare it.', prova: m.testo, doc: null, origine: 'memoria' }))
+      }
+    }
+    writeFileSync(join(cfg.cartella(), 'quadri.json'), JSON.stringify({ quadri }, null, 2), { mode: 0o600 })
+  })
+  console.log(`semina · Progetti: ${sp.cartelle?.length ?? 0} cartelle (${lavoro.length} di lavoro), ${sp.quadri?.length ?? 0} quadri`)
+}
+// — Progetti: fine —
 
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

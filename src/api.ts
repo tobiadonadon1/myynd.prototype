@@ -468,6 +468,23 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
   return new Error(frasi.nonRiuscito(r.status))
 }
 
+/** Un progetto come lo mostra la pagina dei Progetti (`server/vista-progetti.ts`). */
+export type ProgettoVisto = {
+  id: string
+  nome: string
+  obiettivo: string
+  priorita: 'alta' | null
+  /** Il succo in un paragrafo; vuoto se non l'ha ancora capito. */
+  sintesi: string
+  capito: string | null
+  ultima: string | null
+  mossa: { titolo: string; testo: string } | null
+  traguardo: string
+  letto: { tipo: string; quanti: number }[]
+}
+export type CartellaSuggerita = { nome: string; percorso: string; dove: string; ultima: string }
+export type VistaProgetti = { progetti: ProgettoVisto[]; suggeriti: CartellaSuggerita[] }
+
 async function json<T>(url: string, opz?: RequestInit): Promise<T> {
   const t = sessione.token()
   let r: Response
@@ -1666,6 +1683,11 @@ export const api = {
   progetti: (collegato?: string) => json<{ progetti: Progetto[] }>(`/api/progetti${collegato ? `?collegato=${encodeURIComponent(collegato)}` : ''}`),
   memoriaProgetto: (id: string) => json<{ records: ProjectEvidence[] }>(`/api/progetti/${encodeURIComponent(id)}/memoria`),
   attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
+  /** La pagina dei Progetti: il succo di ogni progetto vivo, e le cartelle in cui lavora che non sono di nessuno. */
+  vistaProgetti: () => json<VistaProgetti>('/api/progetti/quadro'),
+  /** Una cartella proposta diventa progetto, col suo nome: solo se è fra le proposte di adesso. */
+  progettoDaCartella: (percorso: string) =>
+    json<{ ok: true; progetto: Progetto; esisteva?: boolean; riaperto?: boolean }>('/api/progetti/suggeriti', { method: 'POST', body: JSON.stringify({ percorso }) }),
   /** `esisteva`: quel nome c'era già, ed è lui; `riaperto`: era chiuso, e adesso è aperto (normale). */
   nuovoProgetto: (nome: string, obiettivo = '') =>
     json<{ ok: true; progetto: Progetto; esisteva?: boolean; riaperto?: boolean }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),

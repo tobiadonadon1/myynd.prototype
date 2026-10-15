@@ -1,0 +1,9 @@
+[
+  { "aspetta": 2500 },
+  { "clicca": "Projects" },
+  { "aspetta": 1500 },
+  { "scatta": "progetti-vuoto" },
+  { "clicca": "Add a project" },
+  { "scrivi": "Website relaunch" },
+  { "scatta": "progetti-vuoto-scrivo" }
+]

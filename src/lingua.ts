@@ -3644,6 +3644,23 @@ const EN: Record<string, string> = {
   'Claude Code non riceve immagini da Myynd.': 'Claude Code doesn’t receive images from Myynd.',
   'Claude Code non è pronto su questo computer.': 'Claude Code isn’t ready on this computer.',
   // — F8: fine —
+  // — la pagina dei Progetti: inizio —
+  'Quello che hai scritto': 'What you wrote',
+  'Memoria del progetto': 'Project memory',
+  'Cartelle di codice': 'Code folders',
+  'Sessioni con gli assistenti': 'Assistant sessions',
+  'Messaggi': 'Messages',
+  'Sito pubblico': 'Public website',
+  'Prossimo passo': 'Next step',
+  'Cosa ha letto': 'What it read',
+  'Non ancora letto': 'Not read yet',
+  'Cartelle in cui stai lavorando': 'Folders you’re working in',
+  'Ancora nessun progetto.': 'No projects yet.',
+  'Aggiungi un progetto': 'Add a project',
+  'Non sono riuscito a leggere i progetti.': 'Couldn’t load your projects.',
+  'Non sono riuscito ad aggiungerla.': 'Couldn’t add it.',
+  'Questa cartella non è fra quelle proposte.': 'This folder isn’t among the suggestions.',
+  // — la pagina dei Progetti: fine —
 }
 
 
@@ -4457,6 +4474,12 @@ export const frasi = {
 
   // — F8: inizio —
   /** La dose dell'AI inclusa, nella riga del motore: «41k of 200k today». */
-  inclusoOggi: (usati: string, tetto: string) => corrente === 'en' ? `${usati} of ${tetto} today` : `${usati} di ${tetto} oggi`
+  inclusoOggi: (usati: string, tetto: string) => corrente === 'en' ? `${usati} of ${tetto} today` : `${usati} di ${tetto} oggi`,
   // — F8: fine —
+  // — la pagina dei Progetti: inizio —
+  /** Corto, sulla destra di una riga: «3 days ago». */
+  giorniFa: (n: number) => corrente === 'en' ? `${n} days ago` : `${n} giorni fa`,
+  /** Quando ha capito il progetto l'ultima volta: «Last read yesterday». */
+  lettoUltimaVolta: (quando: string) => corrente === 'en' ? `Last read ${quando}` : `Letto l’ultima volta ${quando}`
+  // — la pagina dei Progetti: fine —
 }

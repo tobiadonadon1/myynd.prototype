@@ -37,6 +37,7 @@ import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
 import * as progetti from './progetti.ts'
+import * as vistaProgetti from './vista-progetti.ts'
 import * as avvio from './avvio.ts'
 import { leggiSeAncoraCollegata } from './fonti-collegate.ts'
 import * as compiti from './compiti.ts'
@@ -3514,6 +3515,20 @@ app.get('/api/progetti', (req, res) => {
   if (collegato && !elenco.some(p => p.id === collegato.id)) elenco.push(collegato)
   const ricordi = projectMemorySummaries(elenco.map(p => p.id))
   res.json({ progetti: elenco.map(p => ({ ...p, memoria: ricordi[p.id] ?? null })) })
+})
+
+// la pagina dei Progetti: il succo di ogni progetto vivo e le cartelle senza
+// progetto. Si legge e basta; una cartella diventa progetto solo col tocco suo
+app.get('/api/progetti/quadro', async (_req, res) => {
+  try { res.json(await vistaProgetti.vista()) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/progetti/suggeriti', (req, res) => {
+  try {
+    const r = vistaProgetti.aggiungiCartella(String(req.body?.percorso ?? ''))
+    if (!r) return res.status(404).json({ errore: 'Questa cartella non è fra quelle proposte.' })
+    res.json({ ok: true, progetto: r.progetto, esisteva: r.esisteva, riaperto: r.riaperto })
+  } catch (e) { errore(res, e, 400) }
 })
 
 app.get('/api/progetti/:id/memoria', (req, res) => {
