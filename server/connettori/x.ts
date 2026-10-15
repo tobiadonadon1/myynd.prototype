@@ -192,25 +192,41 @@ function lunedi(iso: string): number {
 
 // — i numeri di un post —
 
-export type Numeri = { visualizzazioni: number; mipiace: number; repost: number; risposte: number; segnalibri: number }
+/**
+ * I numeri di un post. Un numero che chi legge non conosce è `null`, non
+ * zero: l'archivio di X non porta le visualizzazioni, e uno zero finto
+ * direbbe a chi guarda «cosa funziona» che nessuno l'ha visto.
+ */
+export type Numeri = { visualizzazioni: number | null; mipiace: number | null; repost: number | null; risposte: number | null; segnalibri: number | null }
+
+const VOCI_NUMERI: [keyof Numeri, string, string][] = [
+  ['visualizzazioni', 'visualizzazioni', 'views'], ['mipiace', 'mi piace', 'likes'], ['repost', 'repost', 'reposts'],
+  ['risposte', 'risposte', 'replies'], ['segnalibri', 'segnalibri', 'bookmarks']
+]
 
 /**
  * La riga dei numeri, sempre nello stesso ordine: visualizzazioni, mi piace,
- * repost, risposte, segnalibri. La scrive chiunque scriva un post (vedi in
- * testa), e `numeriDa` la rilegge in tutte e due le lingue.
+ * repost, risposte, segnalibri; quelli che non si sanno non ci sono. La
+ * scrive chiunque scriva un post (vedi in testa), e `numeriDa` la rilegge in
+ * tutte e due le lingue. Nessun numero, nessuna riga.
  */
 export function rigaNumeri(n: Numeri, it = lingua() === 'it'): string {
-  return it
-    ? `Numeri: ${n.visualizzazioni} visualizzazioni · ${n.mipiace} mi piace · ${n.repost} repost · ${n.risposte} risposte · ${n.segnalibri} segnalibri`
-    : `Numbers: ${n.visualizzazioni} views · ${n.mipiace} likes · ${n.repost} reposts · ${n.risposte} replies · ${n.segnalibri} bookmarks`
+  const voci = VOCI_NUMERI.filter(([k]) => typeof n[k] === 'number').map(([k, vIt, vEn]) => `${n[k]} ${it ? vIt : vEn}`)
+  return voci.length ? `${it ? 'Numeri' : 'Numbers'}: ${voci.join(' · ')}` : ''
 }
 
-/** I numeri scritti da `rigaNumeri` dentro il corpo di un post, o niente. */
+/** I numeri scritti da `rigaNumeri` dentro il corpo di un post, per nome (quelli che mancano restano `null`), o niente. */
 export function numeriDa(corpo: string): Numeri | null {
   const riga = corpo.split('\n').find(r => /^(?:Numeri|Numbers): \d/.test(r))
-  const c = riga?.match(/\d+/g)?.map(Number)
-  if (!c || c.length !== 5) return null
-  return { visualizzazioni: c[0]!, mipiace: c[1]!, repost: c[2]!, risposte: c[3]!, segnalibri: c[4]! }
+  if (!riga) return null
+  const n: Numeri = { visualizzazioni: null, mipiace: null, repost: null, risposte: null, segnalibri: null }
+  let trovati = 0
+  for (const pezzo of riga.replace(/^(?:Numeri|Numbers): /, '').split(' · ')) {
+    const m = /^(\d+) (.+)$/.exec(pezzo.trim())
+    const voce = m ? VOCI_NUMERI.find(([, vIt, vEn]) => m[2] === vIt || m[2] === vEn) : null
+    if (m && voce && n[voce[0]] === null) { n[voce[0]] = Number(m[1]); trovati++ }
+  }
+  return trovati ? n : null
 }
 
 // — i documenti —

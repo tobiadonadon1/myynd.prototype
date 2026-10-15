@@ -871,7 +871,9 @@ app.get('/api/stato', async (_req, res) => {
       ...(problemaDi('x') ? { problema: problemaDi('x') } : {}),
       ...(problemaDi('x') && store.cursore('x:fermo') ? { fermoDal: store.cursore('x:fermo')! } : {}),
       ...(c.x ? {} : { soloArchivio: true }),
-      ...(archivio ? { archivio: { data: archivioX.dataDi(archivio), post: archivio.post, vecchio: !archivioX.fresco(archivio), daDire: !archivio.detto } } : {})
+      ...(archivio ? { archivio: { data: archivioX.dataDi(archivio), post: archivio.post, vecchio: !archivioX.fresco(archivio), daDire: !archivio.detto } } : {}),
+      // un archivio di un altro account fra i download: non entra da solo, la scheda chiede di sceglierlo a mano
+      ...(archivioX.altroAccount() ? { archivioAltro: archivioX.altroAccount()!.maniglia } : {})
     }] : []),
     // su un server sarebbero le cartelle di root dentro il contenitore: non
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
@@ -6300,13 +6302,17 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   /*
    * L'archivio di X fra i download: X lo manda per email, lui lo scarica, e
    * Myynd lo legge da solo, una volta (vedi `x-archivio.ts`). Costa una lettura
-   * della cartella ogni dieci minuti. Solo in casa, e solo per chi ha già X o
-   * il suo Mac collegato: un conto di prova non si prende l'archivio di un altro.
+   * della cartella ogni dieci minuti. Solo in casa, solo per il conto del
+   * proprietario del Mac (quello nella radice: i download sono i suoi), e
+   * solo se X c'è già, dal motore o da un archivio importato a mano. Un altro
+   * conto con una sessione aperta non si prende l'archivio di chi usa il Mac.
    */
   const archivioNeiDownload = perOgnuno('l’archivio di X non si è letto', async () => {
-    if (ospitato.OSPITATO) return
-    const c = cfg.leggi()
-    if (!c.x && !c.desktop && !archivioX.stato()) return
+    const utente = chi.adesso()
+    if (!archivioX.guardaPer({
+      ospitato: ospitato.OSPITATO, utente, cartella: utente ? conti.cartellaDi(utente) : null, radice: cfg.RADICE,
+      motore: !!cfg.leggi().x, archivio: !!archivioX.stato()
+    })) return
     const e = await archivioX.guardaDownload()
     if (e) dopoArchivioX(e)
   })

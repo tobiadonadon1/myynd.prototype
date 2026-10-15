@@ -17,7 +17,8 @@
 //   episodi       [{ fonte, motivo?, rimedio, dal: "-26h", fila?, visto?: "-15m", frase? }]
 //   saltaGiornaliero  true: il giro del giorno risulta già fatto (niente sonda di WhatsApp durante la scena)
 //   x             { fermoGiorni: 25, archivi: [{ nome: "x-fresco", generatoGiorniFa: 2 }] }: il motore di X fermo
-//                 da tanti giorni (config `x` accesa), e archivi di X scompattati in <casa>/Downloads/<nome>
+//                 da tanti giorni (config `x` accesa), e archivi di X scompattati in <casa>/Downloads/<nome>;
+//                 `altro: "maniglia"`: un archivio di un altro account trovato fra i download
 
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -53,7 +54,7 @@ export type P8 = {
   config?: Record<string, unknown>; togli?: string[]; claude?: 'fuori'; noteNegate?: boolean
   versioni?: Record<string, string>; indicizzati?: Record<string, string>; storia?: Storia[]; episodi?: Episodio[]
   saltaGiornaliero?: boolean
-  x?: { fermoGiorni?: number; archivi?: { nome: string; generatoGiorniFa: number }[] }
+  x?: { fermoGiorni?: number; archivi?: { nome: string; generatoGiorniFa: number }[]; altro?: string }
 }
 
 /** «-26h», «-6d», «-15m»: un istante ISO. */
@@ -138,6 +139,7 @@ export function semina(p8: P8, o: { casa: string }) {
       finto.motoreFermo(db, adesso, p8.x.fermoGiorni)
       cfg.aggiorna({ x: { db } })
     }
+    if (p8.x.altro) store.segnaCursore('x:archivio:visti', JSON.stringify({ altra: { nome: `twitter-2026-10-14-${p8.x.altro}.zip`, maniglia: p8.x.altro } }))
     for (const a of p8.x.archivi ?? []) {
       finto.scriviCartella(join(o.casa, 'Downloads', a.nome), finto.fileArchivio({
         adesso, generatoGiorniFa: a.generatoGiorniFa,

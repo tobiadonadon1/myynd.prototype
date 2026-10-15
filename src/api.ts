@@ -28,6 +28,8 @@ export type Connettore = {
   soloArchivio?: boolean
   /** X: l'archivio importato, di quando è, quanti suoi post; `vecchio` oltre un mese, `daDire` finché la riga non si è vista. */
   archivio?: { data: string; post: number; vecchio: boolean; daDire: boolean }
+  /** X: un archivio di un altro account (questa maniglia) aspetta fra i download: si importa solo a mano. */
+  archivioAltro?: string
 }
 
 export type FattoAvvio = {

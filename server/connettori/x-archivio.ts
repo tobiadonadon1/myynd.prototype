@@ -25,7 +25,8 @@
 // un documento solo. Le finestre sono quelle: i post degli ultimi novanta
 // giorni, i mi piace dell'ultimo mese e al massimo duecento. Quando il motore
 // ha già scritto un post, i suoi numeri restano (lui vede le visualizzazioni,
-// l'archivio no): per ogni numero si tiene il più alto. L'archivio non dice
+// l'archivio no): per ogni numero si tiene il più alto, e quello che l'archivio
+// non sa non diventa uno zero, manca. L'archivio non dice
 // quando è stato messo un mi piace, solo l'ordine: la data è quella del post,
 // che sta dentro il suo id.
 //
@@ -66,6 +67,10 @@ const VOCE_CARATTERI = 600
 const TETTO_SEGNALIBRI = 200
 /** Una voce dello zip o un file della cartella oltre questo non si legge: nessun archivio vero ci arriva per i testi. */
 export const TETTO_VOCE = 256 * 1024 * 1024
+/** Tutti i file letti insieme: oltre, il resto si salta. È la memoria che un archivio può chiedere al server. */
+export const TETTO_TOTALE = 600 * 1024 * 1024
+/** Le parti di un tipo (`tweets-part1`…): oltre, si saltano. X le divide a cinquanta giga, e nessuno ne ha tante. */
+export const PARTI_MAX = 20
 /** L'indice in fondo allo zip: duecentomila file di media stanno in una ventina di mega. */
 const TETTO_INDICE = 64 * 1024 * 1024
 const GIORNO = 86_400_000
@@ -80,6 +85,22 @@ export function nomeUtile(percorso: string): string | null {
   // `data/x.js`, o una cartella sopra se lo zip l'ha rifatto lui da una cartella scompattata
   const m = /^(?:[^/]+\/)?data\/((?:tweets?|like|bookmarks?|account|manifest)(?:-part\d{1,3})?)\.js$/.exec(p)
   return m ? m[1]! : null
+}
+
+/** Il numero della parte: `tweets` è la zero, `tweets-part3` la tre. */
+const numeroParte = (nome: string) => Number(/-part(\d+)$/.exec(nome)?.[1] ?? 0)
+
+/**
+ * Il conto di quello che si è letto: le parti per tipo e i byte in tutto.
+ * Una voce che sfora l'uno o l'altro si salta e si dice, le altre entrano.
+ */
+function contatore() {
+  let totale = 0
+  return (nome: string, byte: number): boolean => {
+    if (numeroParte(nome) >= PARTI_MAX || byte > TETTO_VOCE || totale + byte > TETTO_TOTALE) return false
+    totale += byte
+    return true
+  }
 }
 
 type Voce = { nome: string; metodo: number; compressa: number; intera: number; locale: number; cifrata: boolean }
@@ -172,9 +193,12 @@ async function daZip(percorso: string): Promise<Letto> {
     const { size } = await fd.stat()
     const file = new Map<string, string>()
     const illeggibili: string[] = []
+    const entra = contatore()
     for (const v of await indice(fd, size)) {
       const nome = nomeUtile(v.nome)
       if (!nome || file.has(nome)) continue
+      // la misura dichiarata decide prima di leggere; quella vera la conferma
+      if (!entra(nome, Math.max(v.intera, v.compressa))) { illeggibili.push(nome); continue }
       try { file.set(nome, await contenutoVoce(fd, v, size)) }
       catch { illeggibili.push(nome) }
     }
@@ -190,12 +214,13 @@ async function daCartella(percorso: string): Promise<Letto> {
   const dati = dentro ? join(percorso, 'data') : percorso
   const file = new Map<string, string>()
   const illeggibili: string[] = []
-  for (const n of await readdir(dati)) {
+  const entra = contatore()
+  for (const n of (await readdir(dati)).sort()) {
     const nome = nomeUtile(`data/${n}`)
     if (!nome) continue
     const s = await lstat(join(dati, n))
     if (!s.isFile()) continue
-    if (s.size > TETTO_VOCE) { illeggibili.push(nome); continue }
+    if (!entra(nome, s.size)) { illeggibili.push(nome); continue }
     try { file.set(nome, await readFile(join(dati, n), 'utf8')) } catch { illeggibili.push(nome) }
   }
   return { file, illeggibili }
@@ -289,8 +314,7 @@ export type Contenuto = {
 
 /** Le parti di un tipo, nell'ordine: `tweets`, `tweets-part1`, `tweets-part2`… */
 function parti(file: Map<string, string>, tipi: string[]): [string, string][] {
-  const num = (n: string) => Number(/-part(\d+)$/.exec(n)?.[1] ?? 0)
-  return [...file].filter(([n]) => tipi.includes(n.replace(/-part\d+$/, ''))).sort((a, b) => num(a[0]) - num(b[0]) || a[0].localeCompare(b[0]))
+  return [...file].filter(([n]) => tipi.includes(n.replace(/-part\d+$/, ''))).sort((a, b) => numeroParte(a[0]) - numeroParte(b[0]) || a[0].localeCompare(b[0]))
 }
 
 function cosa(v: Grezzo): CosaArchivio | null {
@@ -342,9 +366,9 @@ export function interpreta(l: Letto): Contenuto {
   return c
 }
 
-/** È un archivio di X: ha i post, i mi piace o l'account. Uno zip qualunque non entra. */
+/** È un archivio di X: ha il manifesto di X, e i post, i mi piace o l'account. Uno zip qualunque non entra. */
 export function eArchivio(l: Letto): boolean {
-  return [...l.file.keys(), ...l.illeggibili].some(n => /^(tweets?|like|account)(-part\d+)?$/.test(n))
+  return l.file.has('manifest') && [...l.file.keys(), ...l.illeggibili].some(n => /^(tweets?|like|account)(-part\d+)?$/.test(n))
 }
 
 // — i documenti —
@@ -383,9 +407,11 @@ export function documentiVoce(post: PostArchivio[], it: boolean, quando: string)
   return docs
 }
 
+/** Il più alto di ogni numero; uno che nessuno dei due sa resta sconosciuto. */
+const piu = (x: number | null, y: number | null) => x === null ? y : y === null ? x : Math.max(x, y)
 const piuAlto = (a: Numeri, b: Numeri): Numeri => ({
-  visualizzazioni: Math.max(a.visualizzazioni, b.visualizzazioni), mipiace: Math.max(a.mipiace, b.mipiace),
-  repost: Math.max(a.repost, b.repost), risposte: Math.max(a.risposte, b.risposte), segnalibri: Math.max(a.segnalibri, b.segnalibri)
+  visualizzazioni: piu(a.visualizzazioni, b.visualizzazioni), mipiace: piu(a.mipiace, b.mipiace),
+  repost: piu(a.repost, b.repost), risposte: piu(a.risposte, b.risposte), segnalibri: piu(a.segnalibri, b.segnalibri)
 })
 
 export type Documenti = { docs: Documento[]; post: number; mipiace: number; segnalibri: number; voce: number; ultimoPost: string | null }
@@ -408,7 +434,8 @@ export function documenti(c: Contenuto, o: { adesso?: number; it?: boolean; esis
     if (!esito.ultimoPost || p.quando > esito.ultimoPost) esito.ultimoPost = p.quando
     if (p.quando < soglia) continue
     const prima = esistente(`x:mio:${p.postId}`)
-    const suoi: Numeri = { visualizzazioni: 0, mipiace: p.mipiace, repost: p.repost, risposte: 0, segnalibri: 0 }
+    // l'archivio sa i mi piace e i repost, non le visualizzazioni, le risposte né i segnalibri
+    const suoi: Numeri = { visualizzazioni: null, mipiace: p.mipiace, repost: p.repost, risposte: null, segnalibri: null }
     const delMotore = prima ? numeriDa(prima.corpo) : null
     const d = documentoMio({
       postId: p.postId, testo: p.testo, risposta: p.risposta, quando: p.quando,
@@ -505,19 +532,39 @@ export function scorda(): void {
   store.segnaCursore(CURSORE, null)
 }
 
-type Visti = { impronte: string[]; file: string[] }
-function visti(): Visti {
-  try {
-    const v = JSON.parse(store.cursore(CURSORE_VISTI) ?? '{}') as Partial<Visti>
-    return { impronte: Array.isArray(v.impronte) ? v.impronte : [], file: Array.isArray(v.file) ? v.file : [] }
-  } catch { return { impronte: [], file: [] } }
+/**
+ * Quello che i download hanno già mostrato, e che resta anche se la fonte si
+ * scollega: le impronte lette, i file guardati, la data del più nuovo (uno
+ * zip più vecchio non si riapre più), l'account dell'ultimo archivio, il
+ * file visto una volta che aspetta il secondo giro, e un archivio di un
+ * altro account trovato fra i download.
+ */
+type Visti = {
+  impronte: string[]; file: string[]; mtime: number; maniglia: string | null
+  attesa: string | null; altra: { nome: string; maniglia: string } | null
 }
-function segnaVisto(o: { impronta?: string; file?: string }) {
-  const v = visti()
-  if (o.impronta && !v.impronte.includes(o.impronta)) v.impronte = [...v.impronte, o.impronta].slice(-50)
-  if (o.file && !v.file.includes(o.file)) v.file = [...v.file, o.file].slice(-50)
+function visti(): Visti {
+  let v: Partial<Visti> = {}
+  try { v = JSON.parse(store.cursore(CURSORE_VISTI) ?? '{}') as Partial<Visti> } catch { /* da capo */ }
+  return {
+    impronte: Array.isArray(v.impronte) ? v.impronte : [], file: Array.isArray(v.file) ? v.file : [],
+    mtime: typeof v.mtime === 'number' ? v.mtime : 0, maniglia: typeof v.maniglia === 'string' ? v.maniglia : null,
+    attesa: typeof v.attesa === 'string' ? v.attesa : null, altra: v.altra && typeof v.altra.maniglia === 'string' ? v.altra : null
+  }
+}
+function segnaVisti(cambio: Partial<Visti>) {
+  const v = { ...visti(), ...cambio }
+  v.impronte = [...new Set(v.impronte)].slice(-200)
+  v.file = [...new Set(v.file)].slice(-200)
   store.segnaCursore(CURSORE_VISTI, JSON.stringify(v))
 }
+
+/** Un archivio di un altro account aspetta fra i download: la scheda chiede di importarlo a mano, se è suo. */
+export function altroAccount(): { nome: string; maniglia: string } | null {
+  return visti().altra
+}
+
+const stessaManiglia = (a: string | null, b: string | null) => !a || !b || a.toLowerCase() === b.toLowerCase()
 
 // — importare —
 
@@ -529,18 +576,19 @@ const inCorso = new Map<string, Promise<EsitoImport>>()
 /**
  * Legge un archivio e lo mette nell'indice. Lo stesso archivio una seconda
  * volta riscrive gli stessi documenti (`gia` lo dice); un archivio che non è
- * di X è un errore da dire.
+ * di X è un errore da dire. `letto` è l'archivio già letto da chi chiama
+ * (i download): non si rilegge.
  */
-export function importa(percorso: string, o: { adesso?: number } = {}): Promise<EsitoImport> {
+export function importa(percorso: string, o: { adesso?: number; letto?: { l: Letto; impronta: string; contenuto: Contenuto } } = {}): Promise<EsitoImport> {
   const chiave = chi.adesso() ?? ''
   const prima = inCorso.get(chiave)
   if (prima) return prima
   const p = (async () => {
-    const l = await leggiArchivio(percorso)
+    const l = o.letto?.l ?? await leggiArchivio(percorso)
     if (!eArchivio(l)) throw new Error('Questo non sembra un archivio di X.')
-    const imp = impronta(l)
+    const imp = o.letto?.impronta ?? impronta(l)
     const gia = stato()?.impronta === imp
-    const c = interpreta(l)
+    const c = o.letto?.contenuto ?? interpreta(l)
     const d = documenti(c, { adesso: o.adesso, esistente: id => store.documento(id) })
     await store.salvaDocumentiAPezzi(d.docs)
     // quello che solo l'archivio scrive: il campione e i segnalibri dell'archivio di prima
@@ -552,27 +600,42 @@ export function importa(percorso: string, o: { adesso?: number } = {}): Promise<
       detto: gia ? (stato()?.detto ?? true) : false
     }
     store.segnaCursore(CURSORE, JSON.stringify(s))
-    segnaVisto({ impronta: imp })
+    // scelto a mano o no, adesso è questo l'account: la domanda sull'altro è chiusa
+    const v = visti()
+    segnaVisti({ impronte: [...v.impronte, imp], maniglia: c.maniglia ?? v.maniglia, altra: null })
     return { ...d, stato: s, guasti: c.guasti, gia }
   })()
   inCorso.set(chiave, p)
   return p.finally(() => { if (inCorso.get(chiave) === p) inCorso.delete(chiave) })
 }
 
-/** I nomi che X dà allo zip: `twitter-2026-10-01-<impronta>.zip`, e `x-…` se un giorno cambia. */
-const NOME_ZIP = /^(?:twitter|x)-[\w.-]*\.zip$/i
+/**
+ * Chi può prendersi un archivio dai download: solo in casa, solo il conto del
+ * proprietario del Mac (quello che vive nella radice, o nessun conto), e solo
+ * se X c'è già, dal motore o da un archivio importato a mano. Un altro conto
+ * con una sessione aperta su questo Mac non si prende l'archivio di chi lo usa.
+ */
+export function guardaPer(o: { ospitato: boolean; utente: string | null; cartella: string | null; radice: string; motore: boolean; archivio: boolean }): boolean {
+  if (o.ospitato) return false
+  if (o.utente && o.cartella !== o.radice) return false
+  return o.motore || o.archivio
+}
+
+/** Il nome che X dà allo zip: `twitter-2026-10-01-<impronta>.zip` (e `x-…` se un giorno cambia). */
+export const NOME_ZIP = /^(?:twitter|x)-\d{4}-\d\d-\d\d-[A-Za-z0-9]+\.zip$/i
 
 /**
  * Guarda nei download se è arrivato un archivio di X, e lo legge, una volta.
  *
- * Costa una lettura della cartella: ogni file si guarda per nome, misura e
- * data, e uno già guardato non si riapre. Un file appena toccato aspetta il
- * giro dopo (il browser potrebbe starlo ancora scrivendo). Un archivio più
- * vecchio di quello che c'è non lo rimpiazza; uno uguale non si rilegge.
+ * Costa una lettura della cartella: ogni zip col nome di X si guarda per
+ * misura e data, e uno già guardato, o più vecchio dell'ultimo guardato, non
+ * si riapre più. Il più nuovo entra solo se al giro dopo misura e data sono
+ * ancora quelle (il browser potrebbe starlo ancora scrivendo). Non entra uno
+ * più vecchio di quello che c'è, uno uguale, uno senza il manifesto di X, né
+ * uno di un altro account: quello lo deve scegliere lui (`altroAccount`).
  */
 export async function guardaDownload(o: { cartella?: string; adesso?: number } = {}): Promise<EsitoImport | null> {
   const cartella = o.cartella ?? join(homedir(), 'Downloads')
-  const adesso = o.adesso ?? Date.now()
   let nomi: string[]
   try { nomi = (await readdir(cartella)).filter(n => NOME_ZIP.test(n)) } catch { return null }
   if (!nomi.length) return null
@@ -581,24 +644,32 @@ export async function guardaDownload(o: { cartella?: string; adesso?: number } =
   for (const n of nomi) {
     const percorso = join(cartella, n)
     const s = await lstat(percorso).catch(() => null)
-    if (!s?.isFile() || adesso - s.mtimeMs < 60_000) continue
+    if (!s?.isFile() || s.mtimeMs <= v.mtime) continue
     const segno = `${n}|${s.size}|${Math.round(s.mtimeMs)}`
     if (!v.file.includes(segno)) candidati.push({ percorso, segno, quando: s.mtimeMs })
   }
-  // il più nuovo per primo: uno per giro basta
+  // il più nuovo: uno per giro basta
   const c = candidati.sort((a, b) => b.quando - a.quando)[0]
   if (!c) return null
-  segnaVisto({ file: c.segno })
+  // la prima volta si guarda e basta: entra se al giro dopo è uguale
+  if (v.attesa !== c.segno) { segnaVisti({ attesa: c.segno }); return null }
+  segnaVisti({ attesa: null, file: [...v.file, c.segno], mtime: Math.max(v.mtime, c.quando) })
   let l: Letto
   try { l = await leggiArchivio(c.percorso) } catch { return null }
-  if (!eArchivio(l) || v.impronte.includes(impronta(l))) return null
+  if (!eArchivio(l)) return null
+  const imp = impronta(l)
+  if (v.impronte.includes(imp)) return null
+  const contenuto = interpreta(l)
+  if (!stessaManiglia(stato()?.maniglia ?? v.maniglia, contenuto.maniglia)) {
+    segnaVisti({ altra: { nome: basename(c.percorso), maniglia: contenuto.maniglia! } })
+    return null
+  }
   const attuale = stato()
   if (attuale) {
-    const nuovo = interpreta(l)
-    const data = nuovo.generato ?? nuovo.post.map(p => p.quando).sort().at(-1) ?? null
+    const data = contenuto.generato ?? contenuto.post.map(p => p.quando).sort().at(-1) ?? null
     if (data && data <= dataDi(attuale)) return null
   }
-  return importa(c.percorso, { adesso })
+  return importa(c.percorso, { adesso: o.adesso, letto: { l, impronta: imp, contenuto } })
 }
 
 /**

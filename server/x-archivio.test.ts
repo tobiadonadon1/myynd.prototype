@@ -100,6 +100,19 @@ test('una parte si legge come JSON, mai eseguita', () => {
   assert.throws(() => a.parte('window.YTD.like.part0 = {"non": "elenco"}'))
 })
 
+test('i numeri che non si sanno mancano dalla riga, e si rileggono come sconosciuti', () => {
+  const pochi = { visualizzazioni: null, mipiace: 12, repost: 3, risposte: null, segnalibri: null }
+  assert.equal(x.rigaNumeri(pochi, false), 'Numbers: 12 likes · 3 reposts')
+  assert.equal(x.rigaNumeri(pochi, true), 'Numeri: 12 mi piace · 3 repost')
+  assert.deepEqual(x.numeriDa(`ciao\n\n${x.rigaNumeri(pochi, false)}`), pochi)
+  assert.deepEqual(x.numeriDa(`ciao\n\n${x.rigaNumeri(pochi, true)}`), pochi)
+  assert.equal(x.rigaNumeri({ visualizzazioni: null, mipiace: null, repost: null, risposte: null, segnalibri: null }, false), '')
+  // la riga intera del motore, scritta prima di questo cambio, si rilegge uguale
+  assert.deepEqual(x.numeriDa('a\n\nNumeri: 9 visualizzazioni · 0 mi piace · 0 repost · 0 risposte · 0 segnalibri\n'), { visualizzazioni: 9, mipiace: 0, repost: 0, risposte: 0, segnalibri: 0 })
+  const d = x.documentoMio({ postId: '77', testo: 'Only likes known.', url: null, risposta: false, quando: '2026-10-01T10:00:00Z', numeri: pochi }, false)!
+  assert.doesNotMatch(d.corpo, /views/)
+})
+
 test('le date di X e gli id che portano il giorno', () => {
   assert.equal(a.dataX('Wed Sep 18 14:02:11 +0000 2024'), '2024-09-18T14:02:11.000Z')
   assert.equal(a.dataX('Thu Oct 01 08:00:00 +0200 2026'), '2026-10-01T06:00:00.000Z')
@@ -139,6 +152,32 @@ test('una voce che dichiara più del tetto non si gonfia, e uno zip qualunque no
   await assert.rejects(a.importa(altro), /non sembra un archivio di X/)
   writeFileSync(join(CASA, 'rotto.zip'), 'non sono uno zip')
   await assert.rejects(a.leggiArchivio(join(CASA, 'rotto.zip')), /Non riesco a leggere/)
+  // i post di X ma senza il manifesto di X: non è un archivio
+  const senza: Record<string, string | Buffer> = { ...archivio() }
+  delete senza['data/manifest.js']
+  writeFileSync(join(CASA, 'senza-manifesto.zip'), zip(senza))
+  assert.equal(a.eArchivio(await a.leggiArchivio(join(CASA, 'senza-manifesto.zip'))), false)
+  await assert.rejects(a.importa(join(CASA, 'senza-manifesto.zip')), /non sembra un archivio di X/)
+})
+
+test('un tetto per tutto l’archivio e uno per le parti: il resto si salta, quello che sta sotto entra', async () => {
+  // tre voci da 250 MB dichiarati: le prime due stanno nei 600, la terza no
+  const MB = 1024 * 1024
+  const f = join(CASA, 'tre-grosse.zip')
+  writeFileSync(f, zip(archivio(), { dichiarata: { 'data/account.js': 250 * MB, 'data/tweets.js': 250 * MB, 'data/like.js': 250 * MB } }))
+  const l = await a.leggiArchivio(f)
+  assert.ok(l.file.has('account') && l.file.has('tweets'))
+  assert.ok(l.illeggibili.includes('like'))
+  assert.ok(!l.file.has('like'))
+  // le parti oltre il massimo, nella cartella e nello zip
+  const oltre = `tweets-part${a.PARTI_MAX}`
+  const tante = join(CASA, 'tante-parti')
+  scriviCartella(tante, { ...archivio(), [`data/${oltre}.js`]: parte('tweets', a.PARTI_MAX, [tweet(ADESSO, { giorni: 1, testo: 'Too far down the parts.', n: 77 })]) })
+  const lc = await a.leggiArchivio(tante)
+  assert.ok(lc.illeggibili.includes(oltre))
+  assert.ok(!a.interpreta(lc).post.some(p => p.testo === 'Too far down the parts.'))
+  writeFileSync(join(CASA, 'tante.zip'), zip({ ...archivio(), [`data/${oltre}.js`]: parte('tweets', a.PARTI_MAX, []) }))
+  assert.ok((await a.leggiArchivio(join(CASA, 'tante.zip'))).illeggibili.includes(oltre))
 })
 
 test('importa: gli stessi documenti del motore, uniti a quelli che c’erano', async () => {
@@ -167,6 +206,11 @@ test('importa: gli stessi documenti del motore, uniti a quelli che c’erano', a
   const unito = store.documento(`x:mio:${suo.postId}`)!
   assert.deepEqual(x.numeriDa(unito.corpo), { visualizzazioni: 512, mipiace: 7, repost: 1, risposte: 2, segnalibri: 0 })
   assert.ok(unito.inviato)
+  // un post che il motore non ha visto: quello che l'archivio non sa manca, non è uno zero
+  const soloArchivio = store.documento(`x:mio:${z.post.find(p => p.testo.startsWith('Part two'))!.postId}`)!
+  assert.deepEqual(x.numeriDa(soloArchivio.corpo), { visualizzazioni: null, mipiace: 3, repost: 0, risposte: null, segnalibri: null })
+  assert.match(soloArchivio.corpo, /\nNumbers: 3 likes · 0 reposts\n/)
+  assert.doesNotMatch(soloArchivio.corpo, /views|replies|bookmarks/)
   const risposta = store.documento(`x:mio:${z.post.find(p => p.risposta)!.postId}`)!
   assert.equal(risposta.tipo, 'risposta')
   assert.equal(risposta.percorso, `https://x.com/tobia/status/${z.post.find(p => p.risposta)!.postId}`)
@@ -214,43 +258,89 @@ test('la riconciliazione del motore non toglie quello che l’archivio ha messo'
   assert.equal(store.idsConPrefisso('x:segnalibro:').length, 1)
 })
 
-test('i download: un archivio nuovo entra una volta, uno vecchio o uguale no, e un file appena scritto aspetta', async () => {
+test('i download: entra solo uno zip col nome di X, fermo per due giri, nuovo, dello stesso account, e una volta sola', async () => {
   const scaricati = join(CASA, 'Downloads')
   mkdirSync(scaricati, { recursive: true })
   const vecchio = Date.now() / 1000 - 3600
-  // lo stesso archivio di prima, con un altro nome: già visto
-  const uguale = join(scaricati, 'twitter-2026-10-13-copia.zip')
-  writeFileSync(uguale, zip(archivio()))
-  utimesSync(uguale, vecchio, vecchio)
-  assert.equal(await a.guardaDownload({ cartella: scaricati }), null)
+  const metti = (nome: string, contenuto: Buffer, piu: number) => {
+    const f = join(scaricati, nome)
+    writeFileSync(f, contenuto)
+    utimesSync(f, vecchio + piu, vecchio + piu)
+    return f
+  }
+  const giro = () => a.guardaDownload({ cartella: scaricati })
+  // il nome non è quello che dà X: non si guarda nemmeno
+  metti('twitter-archive.zip', zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 0, post: [{ giorni: 1, testo: 'Wrong name.', n: 11 }] })), 0)
+  assert.equal(await giro(), null)
+  assert.equal(await giro(), null)
 
-  // uno più nuovo, appena scritto: aspetta il giro dopo
-  const nuovo = join(scaricati, 'twitter-2026-10-15-nuovo.zip')
-  writeFileSync(nuovo, zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 0, post: [{ giorni: 1, testo: 'Fresh from the newest archive.', mipiace: 1, n: 8 }] })))
-  assert.equal(await a.guardaDownload({ cartella: scaricati }), null)
-  utimesSync(nuovo, vecchio + 10, vecchio + 10)
-  const e = await a.guardaDownload({ cartella: scaricati })
+  // lo stesso archivio di prima, con un altro nome: già visto
+  metti('twitter-2026-10-13-copia.zip', zip(archivio()), 1)
+  assert.equal(await giro(), null)
+  assert.equal(await giro(), null)
+
+  // uno nuovo: il primo giro lo guarda; cambiato intanto, aspetta ancora; uguale al giro dopo, entra
+  const nuovo = metti('twitter-2026-10-15-nuovo.zip', zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 0, post: [{ giorni: 1, testo: 'Half written', n: 8 }] })), 10)
+  assert.equal(await giro(), null)
+  metti('twitter-2026-10-15-nuovo.zip', zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 0, post: [{ giorni: 1, testo: 'Fresh from the newest archive.', mipiace: 1, n: 8 }] })), 11)
+  assert.equal(await giro(), null)
+  const e = await giro()
   assert.ok(e)
   assert.equal(e.stato.nome, 'twitter-2026-10-15-nuovo.zip')
   assert.equal(e.stato.detto, false)
   assert.ok(store.idsConPrefisso('x:mio:').length >= 4)
   // e una volta sola
-  assert.equal(await a.guardaDownload({ cartella: scaricati }), null)
+  assert.equal(await giro(), null)
+  assert.equal(await giro(), null)
 
-  // uno più vecchio di quello che c'è non lo rimpiazza
-  const antico = join(scaricati, 'twitter-2026-08-01-antico.zip')
-  writeFileSync(antico, zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 70, post: [{ giorni: 70, testo: 'From an old archive.', n: 9 }] })))
-  utimesSync(antico, vecchio + 20, vecchio + 20)
-  assert.equal(await a.guardaDownload({ cartella: scaricati }), null)
+  // uno più vecchio per data dell'archivio non lo rimpiazza
+  metti('twitter-2026-08-01-antico.zip', zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 70, post: [{ giorni: 70, testo: 'From an old archive.', n: 9 }] })), 20)
+  assert.equal(await giro(), null)
+  assert.equal(await giro(), null)
+  assert.equal(a.stato()!.nome, 'twitter-2026-10-15-nuovo.zip')
+  // e uno zip più vecchio, su disco, dell'ultimo guardato non si riapre più
+  metti('twitter-2026-10-16-ritardo.zip', zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 0, post: [{ giorni: 0, testo: 'Late but older on disk.', n: 12 }] })), 5)
+  assert.equal(await giro(), null)
+  assert.equal(await giro(), null)
   assert.equal(a.stato()!.nome, 'twitter-2026-10-15-nuovo.zip')
 
-  // un altro zip che si chiama come X ma non lo è: niente, e nessun errore
-  const finto = join(scaricati, 'x-photos.zip')
-  writeFileSync(finto, zip({ 'a.txt': 'no' }))
-  utimesSync(finto, vecchio + 30, vecchio + 30)
-  assert.equal(await a.guardaDownload({ cartella: scaricati }), null)
+  // col nome di X ma senza il manifesto: niente, e nessun errore
+  const senza: Record<string, string | Buffer> = fileArchivio({ adesso: ADESSO, generatoGiorniFa: 0, post: [{ giorni: 0, testo: 'No manifest here.', n: 13 }] })
+  delete senza['data/manifest.js']
+  metti('x-2026-10-15-foto.zip', zip(senza), 30)
+  assert.equal(await giro(), null)
+  assert.equal(await giro(), null)
+  assert.equal(a.stato()!.nome, 'twitter-2026-10-15-nuovo.zip')
+
+  // un altro account: non entra da solo, e la scheda lo chiede
+  const altro = metti('twitter-2026-10-15-altro.zip', zip(fileArchivio({ adesso: ADESSO, generatoGiorniFa: 0, maniglia: 'qualcunaltro', post: [{ giorni: 0, testo: 'Someone else.', n: 14 }] })), 40)
+  assert.equal(await giro(), null)
+  assert.equal(await giro(), null)
+  assert.deepEqual(a.altroAccount(), { nome: 'twitter-2026-10-15-altro.zip', maniglia: 'qualcunaltro' })
+  assert.equal(a.stato()!.maniglia, 'tobia')
+  // scelto a mano entra, e la domanda si chiude
+  await a.importa(altro, { adesso: ADESSO })
+  assert.equal(a.altroAccount(), null)
+  assert.equal(a.stato()!.maniglia, 'qualcunaltro')
+  // si torna al suo, per le prove che seguono
+  await a.importa(nuovo, { adesso: ADESSO })
+  assert.equal(a.stato()!.maniglia, 'tobia')
+
   // una cartella che non c'è
   assert.equal(await a.guardaDownload({ cartella: join(CASA, 'nessuna') }), null)
+})
+
+test('i download li guarda solo il proprietario del Mac, e solo con X già acceso', () => {
+  const base = { ospitato: false, utente: 'u1', cartella: '/r', radice: '/r', motore: true, archivio: false }
+  assert.equal(a.guardaPer(base), true)
+  assert.equal(a.guardaPer({ ...base, motore: false, archivio: true }), true)
+  // il Mac collegato non basta: senza X niente
+  assert.equal(a.guardaPer({ ...base, motore: false, archivio: false }), false)
+  // un altro conto con una sessione aperta su questo Mac
+  assert.equal(a.guardaPer({ ...base, utente: 'u2', cartella: '/r/utenti/u2' }), false)
+  // in casa senza conti è lui
+  assert.equal(a.guardaPer({ ...base, utente: null, cartella: null }), true)
+  assert.equal(a.guardaPer({ ...base, ospitato: true }), false)
 })
 
 test('il campione della voce si rifà col nuovo archivio, e scollegando si scorda l’archivio ma non i visti', async () => {

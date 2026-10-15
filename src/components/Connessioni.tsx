@@ -195,6 +195,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
    */
   const problema = scelta?.problema && scelta.problema !== 'credito' ? scelta.problema : null
   const mancanza = scelta && s ? mancanzeDi(s).find(m => m.id === scelta.id) ?? null : null
+  /** X fermo: «Non aggiornata dal …» dice già il giorno in cui finiscono i dati; né la riga del guaio né la data dell'archivio lo ripetono. */
+  const xFermo = scelta?.id === 'x' && !!problema && !!scelta.fermoDal
   const daSistemare = problema === 'credenziale' || problema === 'amministratore' || problema === 'accedi'
   const moduloVisibile = !!scelta && (!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica) || daFinire || daSistemare)
   /** Con un guaio il modulo sta sopra i bottoni, come quando si collega. */
@@ -232,7 +234,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
           ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
           : null,
         // X dall'archivio: di quando è, che è quello che dice quanto è vecchio quello che sa
-        scelta.id === 'x' && scelta.archivio ? riempi(t('archivio del {giorno}'), { giorno: giornoCorto(new Date(scelta.archivio.data)) }) : null
+        // con X fermo la data la dice già la parola in alto: una volta sola
+        scelta.id === 'x' && scelta.archivio && !xFermo ? riempi(t('archivio del {giorno}'), { giorno: giornoCorto(new Date(scelta.archivio.data)) }) : null
       ].filter(Boolean).join(' · ') || (moduloSopra ? '' : t(scelta.nota))
     : t(scelta.nota)
   const pronti = tutti
@@ -311,7 +314,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
           <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''} ${problema ? 'needs-access' : ''}`}>
             <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato && !problema} /></span>
             <div><span className="connection-detail-status">{problema ? parolaProblema(scelta.id, problema, scelta.fermoDal) : scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
-              {mancanza && <p className="connection-detail-since">{lineaPannello(mancanza)}</p>}
+              {mancanza && !xFermo && <p className="connection-detail-since">{lineaPannello(mancanza)}</p>}
               {/* cosa porta la fonte: vedi `descrizione` */}
               {descrizione && <p>{descrizione}</p>}
               {/* «perché lascia fuori così tanti file» è la domanda che segue il
@@ -323,6 +326,9 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
               {scelta.id === 'x' && (scelta.archivio ? scelta.archivio.vecchio : !!scelta.fermoDal) &&
                 <p><button type="button" className="connection-detail-link" onClick={scaricaArchivio}>
                   {scelta.archivio ? t('Scarica un archivio più recente da X') : t('Scarica il tuo archivio da X')}</button></p>}
+              {/* un archivio di un altro account fra i download non entra da solo */}
+              {scelta.id === 'x' && scelta.archivioAltro &&
+                <p>{riempi(t('Nei download c’è un archivio di @{maniglia}: se è tuo, importalo a mano.'), { maniglia: scelta.archivioAltro })}</p>}
             </div>
           </div>
           {/* i trenta giorni: solo le fonti che si leggono, non i motori */}

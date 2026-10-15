@@ -3437,6 +3437,7 @@ const EN: Record<string, string> = {
   'Scarica un archivio più recente da X': 'Download a newer archive from X',
   'Scarica il tuo archivio da X': 'Download your archive from X',
   'Importa il tuo archivio di X': 'Import your X archive',
+  'Nei download c’è un archivio di @{maniglia}: se è tuo, importalo a mano.': 'There’s an archive for @{maniglia} in your Downloads: if it’s yours, import it by hand.',
   'Importo…': 'Importing…',
   'Non trovo questo archivio.': 'I can’t find this archive.',
   'Non riesco a leggere questo archivio di X.': 'I can’t read this X archive.',
