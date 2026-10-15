@@ -15,6 +15,8 @@ let corrente: Lingua = 'it'
 
 const EN: Record<string, string> = {
   'Myynd si sta svegliando.': 'Waking up.',
+  // più avvisi arrivati insieme, in uno (`avvisi-coda.ts`)
+  '{n} cose sono pronte.': '{n} things are ready.',
   'Il server di Myynd si è fermato.': 'The Myynd server stopped.',
   'Riapri': 'Reopen',
   'Esci': 'Quit',

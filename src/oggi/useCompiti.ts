@@ -17,7 +17,8 @@ import type { RagioneNonUtile } from '../feed-carta'
 import { appenaFinite as appenaFiniteFra, siRivede, testoMostrato } from '../lavoro-affidato'
 import { quanteAspettano } from '../blocchi-feed'
 import { frasi, t } from '../lingua'
-import { avvisiAccesi, desktop } from '../desktop'
+import { desktop } from '../desktop'
+import { avvisa, dallaMattina, daRiga, impostaNotte } from '../avvisi'
 import { copia as negliAppunti } from './prompt'
 import { segna } from '../tempi'
 import { giornoLocale } from './giorni'
@@ -161,17 +162,15 @@ export function useCompiti(
       /*
        * Un avviso di sistema, se la persona l'ha chiesto e non sta guardando.
        *
-       * Sono le stesse due cose che accendono il punto nella barra: una bozza
-       * pronta, una domanda. Con la finestra davanti la riga si apre da sola
-       * e basta; nascosta o dietro un'altra app, chi ha acceso gli avvisi
-       * vuole saperlo. Il guscio mostra e basta: la scelta sta qui.
+       * Sono le stesse due cose che accendono il punto nella barra: un lavoro
+       * pronto (un file, una risposta a una mail, o altro), una domanda. Con
+       * la finestra davanti la riga si apre da sola e basta; nascosta o dietro
+       * un'altra app, chi ha acceso gli avvisi vuole saperlo. Quando e come
+       * dirlo lo decide `avvisi.ts`; il clic apre proprio quella riga.
        */
-      if ((e.fase === 'pronto' || e.fase === 'chiede') && avvisiAccesi() && (document.hidden || !document.hasFocus())) {
-        desktop()?.notifica?.({
-          titolo: e.fase === 'pronto' ? t('Il lavoro è pronto.') : t('Myynd ti chiede una cosa.'),
-          corpo: e.compito.testo, dove: 'oggi'
-        })
-      }
+      if (e.fase === 'pronto' || e.fase === 'chiede') avvisa(daRiga(e.fase, e.compito))
+      // il punto della mattina: quello che la notte ha fatto, in un avviso solo
+      if (e.fase === 'mattina') avvisa(dallaMattina(e))
       // una domanda si apre da sola come una bozza: in tutti e due i casi
       // c'è qualcosa che aspetta te
       if (e.fase === 'chiede') {
@@ -940,6 +939,8 @@ export function useCompiti(
    */
   const inAttesa = quanteAspettano(compiti)
   useEffect(() => { desktop()?.segnala(inAttesa) }, [inAttesa])
+  // la notte del turno: dentro, gli avvisi aspettano la mattina
+  useEffect(() => { impostaNotte(turno?.notte ?? null) }, [turno?.notte?.da, turno?.notte?.a])
   useEffect(() => () => { desktop()?.segnala(0) }, [])
 
   return {

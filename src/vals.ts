@@ -21,7 +21,8 @@ import { contaGenere } from './conta-fonti.ts'
 import { genereDi as genereDiFonte } from '../server/generi.ts'
 import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
-import { avvisiAccesi, desktop } from './desktop.ts'
+import { avvisiAccesi } from './desktop.ts'
+import { avvisa, dalFeed } from './avvisi.ts'
 import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
 import { segna, tempiChat } from './tempi.ts'
 import { rigaImparata } from './gemello-frasi.ts'
@@ -595,11 +596,14 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const inSospeso = useRef<EventoLettura | null>(null)
   const iniziativeOra = useRef<ProjectInitiative[]>([])
 
+  /** Il feed è arrivato almeno una volta: da lì in poi una carta nuova è davvero nuova. */
+  const feedLetto = useRef(false)
   const caricaFeed = useCallback(async () => {
     let f: Awaited<ReturnType<typeof api.feed>>
     const miaAllInvio = mia.current
     try {
       f = await api.feed()
+      feedLetto.current = true
       setGuastoFeed(null)
       segna('feed')
     } catch (e) {
@@ -707,6 +711,23 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     return () => { clearTimeout(attesa); chiudi() }
   }, [caricaFeed])
 
+  /*
+   * Una carta che oggi conta davvero, nata mentre lui non guarda.
+   *
+   * La prima lettura del feed è come stanno le cose, e non si dice niente; da
+   * lì, una carta nuova col peso più alto («oggi, o in ritardo») diventa un
+   * avviso di sistema, se gli avvisi sono accesi e la finestra non è davanti.
+   * Il clic porta su quella carta. Le altre no: il feed non è un campanello.
+   */
+  const vociNote = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    if (!feedLetto.current) return
+    const prima = vociNote.current
+    vociNote.current = new Set([...(prima ?? []), ...aperti.map(v => v.id)])
+    if (!prima) return
+    for (const c of dalFeed(prima, aperti)) avvisa(c)
+  }, [aperti])
+
   // il grafo arriva quando si apre la Mappa, e una volta sola
   useEffect(() => {
     if (mappaInVista && !grafo) caricaMente(true).catch(() => {})
@@ -808,7 +829,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         titoliNegati: false, dopoImpostazioni: false, puoAprire: false, puoRiavviare: false
       })
       if (r) {
-        desktop()?.notifica?.({ titolo: r.frase, corpo: '', dove: 'oggi' })
+        avvisa({ genere: 'fonte', id: [...nuovi].sort().join(','), titolo: r.frase, corpo: '', dove: 'oggi' })
         for (const id of nuovi) notificati.current.add(id)
       }
     }

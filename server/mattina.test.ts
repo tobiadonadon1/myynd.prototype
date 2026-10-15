@@ -167,3 +167,30 @@ test('la proposta di un ordine fisso aspetta il suo «Approva»: è fra le cose 
   }, { dal: DAL, mattina: true })
   assert.deepEqual(m.needsYou.map(a => [a.id, a.genere === 'carta' ? a.motivo : '']), [['ordine', 'approva']], 'la riga sua, senza proposta, non aspetta nessuno')
 })
+
+test('il punto della mattina si dice una volta: solo di mattina, solo se la notte ha fatto qualcosa', () => {
+  const fatta = { id: 'x', titolo: 'x', dove: { genere: 'carta' as const }, quando: ADESSO, notte: true }
+  assert.equal(mattina.daAnnunciare({ mattina: false, done: [fatta], needsYou: [] }, '2026-10-09', undefined), null, 'di pomeriggio no')
+  assert.equal(mattina.daAnnunciare({ mattina: true, done: [], needsYou: [] }, '2026-10-09', undefined), null, 'una notte vuota non è una notizia')
+  assert.equal(mattina.daAnnunciare({ mattina: true, done: [fatta], needsYou: [] }, '2026-10-09', '2026-10-09'), null, 'già detto oggi')
+  assert.deepEqual(mattina.daAnnunciare({ mattina: true, done: [fatta, fatta], needsYou: [] }, '2026-10-09', '2026-10-08'), { giorno: '2026-10-09', fatte: 2, aspettano: 0 })
+
+  // dal vivo: la notte è finita un'ora fa, e una carta è stata fatta
+  const ora = new Date()
+  const hh = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  const fine = new Date(ora.getTime() - 3_600_000), inizio = new Date(ora.getTime() - 7 * 3_600_000)
+  cfg.scrivi({ lingua: 'en', turno: { notteDa: hh(inizio), notteA: hh(fine) } } as Parameters<typeof cfg.scrivi>[0])
+  store.scriviCompito({ id: 'm1', testo: 'Write the summary', quando: 'oggi', ordine: 'c' })
+  store.affidaCompito('m1', 'tutto')
+  store.risultatoCompito('m1', 'Saved the summary.', [])
+  store.scriviConsegnaCompito('m1', { app: 'File', titolo: 'Summary.md', percorso: '/tmp/Summary.md', dove: 'scrivania' })
+  const detti: { giorno: string; fatte: number }[] = []
+  // nessuno in ascolto: non è detto, e al giro dopo si riprova
+  assert.equal(mattina.annunciaSeMattina(() => false, ora), false)
+  assert.equal(mattina.annunciaSeMattina(e => { detti.push(e) }, ora), true)
+  assert.equal(detti.length, 1)
+  assert.ok(detti[0].fatte >= 1)
+  // il minuto dopo, niente: una volta al giorno
+  assert.equal(mattina.annunciaSeMattina(e => { detti.push(e) }, new Date(ora.getTime() + 60_000)), false)
+  assert.equal(detti.length, 1)
+})

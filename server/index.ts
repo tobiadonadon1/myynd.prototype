@@ -6112,7 +6112,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const sondaMotori = perOgnuno('la salute dei motori non ha bussato', () => saluteTeste.sonda())
   setTimeout(sondaMotori, 30_000)
   setInterval(sondaMotori, 60_000)
-  const giroDelTurno = perOgnuno('il turno non ha finito il giro', async () => { await store.senzaToccare(() => turno.giro()) })
+  const giroDelTurno = perOgnuno('il turno non ha finito il giro', async () => {
+    await store.senzaToccare(() => turno.giro())
+    // la mattina dopo una notte di lavoro: il punto è pronto, e lo si dice una volta
+    store.senzaToccare(() => mattina.annunciaSeMattina(compiti.annunciaMattina))
+  })
   setTimeout(giroDelTurno, 45_000)
   setInterval(giroDelTurno, 60_000)
 

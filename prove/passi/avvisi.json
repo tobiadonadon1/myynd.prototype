@@ -1,0 +1,14 @@
+[
+  { "js": "JSON.stringify({ fuoco: document.hasFocus(), nascosta: document.hidden, avvisi: localStorage.getItem('myynd.avvisi') })" },
+  { "js": "fetch('/api/compiti/a1/delega', { method: 'POST', headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }, body: JSON.stringify({ modo: 'tutto' }) }).then(r => r.status)" },
+  { "aspetta": 52000 },
+  { "js": "JSON.stringify(window.__avvisi)" },
+  { "js": "window.__naviga.forEach(f => f({ dove: 'voce', id: 'f-alto' })); 1" },
+  { "aspetta": 800 },
+  { "js": "JSON.stringify({ voce: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.voce : null })" },
+  { "scatta": "voce" },
+  { "js": "window.__naviga.forEach(f => f({ dove: 'compito', id: 'a1' })); 1" },
+  { "aspetta": 800 },
+  { "scatta": "compito" },
+  { "js": "JSON.stringify(window.__avvisi)" }
+]

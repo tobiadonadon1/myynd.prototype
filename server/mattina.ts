@@ -20,6 +20,7 @@
 // `componi`, pura e provata da sola; `mattina` legge e la chiama.
 
 import * as store from './store.ts'
+import * as chi from './chi.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as turno from './turno.ts'
 import * as regole from './turno-regole.ts'
@@ -202,4 +203,38 @@ export function mattina(chiesto?: string | null, adesso = oraDelResoconto()): Ma
     domanda: d ? { id: d.id, testo: d.testo } : null,
     turno: { inCoda: s.inCoda, prossimaNotte: s.prossimaNotte, acceso: s.acceso, motore: s.motore, fermo: !!s.fermo }
   }, f)
+}
+
+/**
+ * Il punto della mattina, da dire una volta.
+ *
+ * Pura: dalla ricevuta di adesso, il giorno, e il giorno in cui è già stato
+ * detto. Si dice solo di mattina, solo se la notte ha fatto qualcosa — una
+ * mattina senza niente di fatto non è una notizia — e una volta al giorno.
+ */
+export function daAnnunciare(m: Pick<Mattina, 'mattina' | 'done' | 'needsYou'>, giorno: string, gia: string | undefined): { giorno: string; fatte: number; aspettano: number } | null {
+  if (!m.mattina || !m.done.length || gia === giorno) return null
+  return { giorno, fatte: m.done.length, aspettano: m.needsYou.length }
+}
+
+/** Il giorno in cui il punto della mattina è già stato detto, per conto: `chi.adesso()`. */
+const annunciate = new Map<string, string>()
+
+/**
+ * Lo chiama il giro del turno, ogni minuto: se è mattina e la notte ha fatto
+ * qualcosa, lo dice sul filo (`compiti.annunciaMattina`). Il conto in memoria
+ * vale per il processo: dopo un riavvio la pagina ricorda da sé il giorno già
+ * detto, e non suona due volte.
+ */
+export function annunciaSeMattina(annuncia: (e: { giorno: string; fatte: number; aspettano: number }) => boolean | void, adesso = oraDelResoconto()): boolean {
+  const s = turno.stato(adesso)
+  if (!finestra(adesso, s.notte, null).mattina) return false
+  const chiave = chi.adesso() ?? ''
+  const giorno = regole.giornoDi(adesso)
+  if (annunciate.get(chiave) === giorno) return false
+  const e = daAnnunciare(mattina(null, adesso), giorno, annunciate.get(chiave))
+  // detto solo se qualcuno l'ha sentito: con l'app che sta partendo, si riprova al minuto dopo
+  if (!e || annuncia(e) === false) return false
+  annunciate.set(chiave, giorno)
+  return true
 }

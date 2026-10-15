@@ -22,8 +22,13 @@ export type Aggiornamento =
   | { stato: 'pronta'; versione: string }
   | { stato: 'errore'; messaggio: string }
 
-/** Dove il guscio può mandare la pagina: un posto dell'app, o una chat precisa. */
-export type Dove = 'preferenze' | 'chat' | 'oggi' | 'aiuto' | 'nuova-chat' | { dove: 'chat'; id: string }
+/**
+ * Dove il guscio può mandare la pagina: un posto dell'app, una chat precisa,
+ * o la cosa precisa di cui parla un avviso — una riga della lista, una carta
+ * del feed. `casa` è la prima pagina.
+ */
+export type Dove = 'preferenze' | 'chat' | 'oggi' | 'aiuto' | 'nuova-chat' | 'casa'
+  | { dove: 'chat'; id: string } | { dove: 'compito'; id: string } | { dove: 'voce'; id: string }
 
 export type Desktop = {
   /** La versione dell'app, dal package.json. */

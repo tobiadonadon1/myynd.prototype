@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Punto } from './api'
 import { guaioDelPunto } from './collegamenti'
+import { avvisa, giornoDi } from './avvisi'
 
 /** Da quante ore di assenza si rifà il punto al ritorno. */
 const ORE_VIA = 3
@@ -73,6 +74,12 @@ export function usePunto(ragiona: boolean) {
        * di ieri: la pagina deve credergli anche quando dice «niente».
        */
       setPunto(r.punto)
+      // scritto adesso mentre lui non guarda (l'app che parte nascosta, la mattina): glielo si dice,
+      // con la sua prima riga. Un punto senza righe non è una notizia
+      if (r.generatoAdesso && r.punto) {
+        const prima = (r.punto.progetti[0]?.novita || r.punto.risposte[0]?.testo || r.punto.github[0]?.testo || r.punto.aggiornamenti?.[0]?.testo || '').trim()
+        if (prima) avvisa({ genere: 'punto', id: giornoDi(new Date()), corpo: prima, dove: 'casa' })
+      }
       setVecchio(r.vecchio ?? null)
       setGuaio(r.guaio ?? null)
       if (r.tetto) setTetto(true)

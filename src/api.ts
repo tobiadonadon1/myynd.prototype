@@ -881,6 +881,8 @@ export type EventoCompito =
   | { fase: 'usata'; id: string; regola: RegolaSeguita }
   /** Un documento corretto ha fatto nascere una convinzione: «Lo faccio sempre?» con un tocco. */
   | { fase: 'sempre'; convinzione: { id: string; enunciato: string } }
+  /** La mattina dopo una notte di lavoro: quante cose sono state fatte, e quante aspettano lui. Una volta al giorno. */
+  | { fase: 'mattina'; giorno: string; fatte: number; aspettano: number }
   | EventoLettura
 
 export type Accesso = {
