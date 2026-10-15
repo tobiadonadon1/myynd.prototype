@@ -154,7 +154,7 @@ test('le idee per X: una carta in coda per il turno, con la mano del file, prior
   chiudiLeMie()
 })
 
-test('una carta caduta non brucia il suo giorno: il modello giù, o nessuna idea che regga, e domani ne nasce un\'altra col materiale di oggi', async () => {
+test('una carta caduta non brucia il suo giorno: col modello giù domani ne nasce un\'altra; «niente che regga» aspetta materiale nuovo', async () => {
   ripulisci()
   const id = (await daSe.giro(ORA + 2 * GIORNO, { pronto: SI, pagina: () => false })).find(x => x.startsWith('idee-x-'))!
   assert.ok(id)
@@ -169,10 +169,13 @@ test('una carta caduta non brucia il suo giorno: il modello giù, o nessuna idea
   daSe.perProva({ chiedi: (async () => ({ idee: [] })) as never, salva: salvaFinta })
   const e = await daSe.lavora(store.compito(domani!)!, { adesso: ORA + 3 * GIORNO })
   assert.ok(e.ritira)
-  assert.equal(daSe.leggiStato().x?.visto, undefined, 'nessuna idea non segna il materiale come visto')
+  assert.ok(daSe.leggiStato().x?.visto, 'niente che regga: quel materiale è guardato, non si ritenta ogni giorno')
+  assert.equal(daSe.leggiStato().x?.ultimo, undefined, 'e il ritmo non si scrive: non è stato consegnato niente')
   chiudiLeMie()
-  assert.ok((await daSe.giro(ORA + 4 * GIORNO, { pronto: SI, pagina: () => false })).some(x => x.startsWith('idee-x-')))
+  assert.equal((await daSe.giro(ORA + 4 * GIORNO, { pronto: SI, pagina: () => false })).filter(x => x.startsWith('idee-x-')).length, 0, 'stesso materiale: nessuna carta nuova')
   // una carta ferma su un guaio da più di dodici ore si ritira, e non tiene il posto
+  ripulisci()
+  assert.ok((await daSe.giro(ORA + 4 * GIORNO, { pronto: SI, pagina: () => false })).some(x => x.startsWith('idee-x-')))
   const ferma = mie().find(c => c.origine === 'idee-x')!
   store.default.prepare("UPDATE compiti SET guaio = 'x', aggiornato = ? WHERE id = ?").run(new Date(ORA).toISOString(), ferma.id)
   await daSe.giro(ORA + 5 * GIORNO, { pronto: SI, pagina: () => false })

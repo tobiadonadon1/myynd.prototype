@@ -308,8 +308,20 @@ export function nomiDallaPosta(adesso = Date.now()): string[] {
 }
 
 /** Il testo senza le frasi che vengono dalla posta (vedi sopra). */
+const espressioni = new Map<string, RegExp>()
+const espressione = (n: string) => {
+  let r = espressioni.get(n)
+  if (!r) {
+    if (espressioni.size > 4000) espressioni.clear()
+    r = new RegExp(`(?:^|[^\\p{L}])${perRegex(n)}(?:$|[^\\p{L}])`, 'iu')
+    espressioni.set(n, r)
+  }
+  return r
+}
+
 export function senzaPosta(testo: string, nomi: readonly string[]): string {
-  const nominati = nomi.map(n => new RegExp(`(?:^|[^\\p{L}])${perRegex(n)}(?:$|[^\\p{L}])`, 'iu'))
+  // le espressioni si fanno una volta per nome, non a ogni frase di ogni quadro
+  const nominati = nomi.map(espressione)
   return testo.split(/(?<=[.!?])\s+/)
     .filter(f => !INDIRIZZO.test(f) && !SOLDI.test(f) && !nominati.some(r => r.test(f)))
     .join(' ').trim()
@@ -1185,7 +1197,8 @@ export async function lavora(c: store.Compito, o: { signal?: AbortSignal; adesso
     const m = materialeX(adesso)
     if (!m) return { testo: '', fatti: [], ritira: 'Not enough posts to learn the voice' }
     const { idee: scelte, fonti } = await idee(m, o)
-    if (!scelte.length) return { testo: '', fatti: [], ritira: 'Nothing new worth posting' }
+    // niente che regga: questo materiale è stato guardato, e non si ritenta domani sullo stesso
+    if (!scelte.length) { aggiorna(st => { st.x = { ...st.x, visto: m.impronta } }); return { testo: '', fatti: [], ritira: 'Nothing new worth posting' } }
     const f = fileIdee(scelte, fonti, adesso)
     const salvato = ferri.salva({ titolo: f.titolo, testo: f.testo, luogo: 'myynd', sotto: 'X' })
     aggiorna(st => { st.x = { ultimo: new Date(adesso).toISOString(), visto: m.impronta, idee: [...scelte.map(i => i.testo), ...(st.x?.idee ?? [])].slice(0, 10) } })
