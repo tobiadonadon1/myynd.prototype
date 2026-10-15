@@ -65,6 +65,22 @@ test('il materiale di un progetto: la sua cartella letta a fondo, le sue session
   assert.ok(m.fonti.has('conversazioni:codice:e1') && m.fonti.has('memoria'))
 })
 
+test('i suoi post su X che nominano il progetto entrano nel materiale; la timeline e i post che non lo nominano no', async () => {
+  const x = (id: string, corpo: string, tipo = 'post') => ({ id, fonte: 'x', tipo, titolo: corpo.split('\n')[0]!, corpo, quando: giorniFa(1), gruppo: 'note', inviato: true })
+  const docs = [
+    ...store.recenti(100),
+    x('x:mio:111', 'The Evermute deck goes out tonight.\n\nPost published on X.\nhttps://x.com/t/status/111'),
+    x('x:mio:112', 'Nothing about any project here.\n\nPost published on X.'),
+    x('x:timeline:2026-10-01', '3 posts seen in your timeline.\n\nMost engaged:\n1. @someone · Evermute deck is a scam', 'riepilogo'),
+    x('x:like:113', 'Evermute deck looks great\n\nYou liked a post by @a on X.', 'mipiace')
+  ]
+  const m = await quadro.materiale(evermute, docs as never, async () => '')
+  assert.match(m.testo, /\[x:mio:111\] Post suo su X/)
+  assert.ok(m.fonti.has('x:mio:111'))
+  assert.doesNotMatch(m.testo, /Nothing about any project/, 'controcaso: un suo post che non lo nomina')
+  assert.doesNotMatch(m.testo, /scam|looks great/, 'controcaso: la timeline e i mi piace sono parole d\'altri')
+})
+
 test('una mossa regge solo con la prova nella fonte che nomina', () => {
   const fonti = new Map([['conversazioni:codice:e1', FINE_EVERMUTE], ['memoria', 'Ship Evermute 1.0 on the App Store']])
   const buona = { genere: 'sblocco', titolo: 'Sign in to Xcode so build 15 can upload', testo: 'Claude is waiting on your Apple ID sign-in to upload build 15 and resubmit.', leva: 3, urgenza: 'oggi', offerta: 'I upload build 15 and resubmit as soon as you sign in.', prova: 'Upload build 15.', fonte: 'conversazioni:codice:e1' }

@@ -15,7 +15,7 @@ import { lingua, t } from './lingua.ts'
 import type { Rimedio, RispostaSalute, Silenzio, Stato, TestaGuasta, ViaMotore } from './api.ts'
 
 /** Una fonte da dire nella riga fissa, col nome che ha la sua scheda. */
-export type Mancanza = { id: string; nome: string; motivo: 'non-disponibile' | 'incompleta'; rimedio: Rimedio; dal: string; dopoAggiornamento: boolean }
+export type Mancanza = { id: string; nome: string; motivo: 'non-disponibile' | 'incompleta'; rimedio: Rimedio; dal: string; dopoAggiornamento: boolean; fermo?: boolean }
 
 /** L'unico controllo della riga: quello che sistema la prima frase che ha un guaio. */
 export type Controllo =
@@ -103,6 +103,8 @@ function fraseDisco(ms: Mancanza[], dopoImpostazioni: boolean): string {
 /** La frase di una fonte sola, per motivo e rimedio. */
 function fraseUna(m: Mancanza, adesso: Date): string {
   const nome = m.nome
+  // il motore di X gira ma non scrive: non è che non si legge, è che non c'è niente di nuovo
+  if (m.fermo) return riempi(t('{nome} non si aggiorna {da}.'), { nome, da: da(m.dal, adesso) }).replace(/\s+\./, '.')
   switch (m.rimedio) {
     case 'accedi': return riempi(t('Devo accedere di nuovo a {nome}.'), { nome })
     case 'credenziale':
@@ -261,7 +263,8 @@ export function rigaFonti(o: {
 }
 
 /** La causa, come la dice il pannello di una fonte. */
-function causa(m: Pick<Mancanza, 'id' | 'motivo' | 'rimedio'>): string {
+function causa(m: Pick<Mancanza, 'id' | 'motivo' | 'rimedio' | 'fermo'>): string {
+  if (m.fermo) return t('non si aggiorna più')
   if (m.motivo === 'incompleta' && (m.rimedio === 'attendi' || m.rimedio === 'guarda')) return t('si legge solo in parte')
   switch (m.rimedio) {
     case 'permesso-disco': return t('manca l’accesso completo al disco')
@@ -377,7 +380,8 @@ export function mancanzeDi(s: Stato): Mancanza[] {
     motivo: f.motivo,
     rimedio: f.rimedio ?? (f.motivo === 'incompleta' ? 'attendi' : 'guarda'),
     dal: f.dal ?? '',
-    dopoAggiornamento: !!f.dopoAggiornamento
+    dopoAggiornamento: !!f.dopoAggiornamento,
+    ...(f.fermo ? { fermo: true } : {})
   }))
 }
 
@@ -389,8 +393,12 @@ export function mancanzeDi(s: Stato): Mancanza[] {
  * il modello collegato che tace è «Non risponde»;
  * password, token e il via libera dell'amministratore sono «Da sistemare»;
  * tutto il resto «Non letta». Il credito non è mai un guaio di scheda.
+ * Una fonte che non si aggiorna più (il motore di X fermo) dice da quando:
+ * «Non aggiornata dal 20 set».
  */
-export function parolaProblema(id: string, r: Rimedio): string {
+export function parolaProblema(id: string, r: Rimedio, fermoDal?: string | null): string {
+  const fermo = fermoDal ? new Date(fermoDal) : null
+  if (fermo && !Number.isNaN(fermo.getTime())) return riempi(t('Non aggiornata dal {giorno}'), { giorno: giornoCorto(fermo) })
   // il modello collegato non si «legge»: quando ha un guaio è che non risponde
   if (id === 'compatibile') return t('Non risponde')
   switch (r) {

@@ -180,6 +180,12 @@ export function avanzaLettura(righe: RigaLettura[], m: Record<string, unknown>):
     const stato: StatoRiga = lettaAMeta(m) ? (niente ? 'guaio' : 'avviso') : 'fatto'
     return righe.map(r => r.id === id ? { id, stato, testo: dettaglioSincronizzazione(visti, stato !== 'guaio'), ultimo: visti } : r)
   }
+  /*
+   * X fermo: i documenti sono arrivati, quello che non va è il motore che non
+   * scrive più. La riga dice la fonte letta; il guaio lo dice la scheda
+   * («Not updated since…»), una volta sola.
+   */
+  if (m.stato === 'guaio' && m.fermo) return avanzaLettura(righe, { ...m, stato: 'fatto', fermo: undefined })
   const stato: StatoRiga = m.stato === 'guaio' ? 'guaio' : 'leggo'
   return righe.map(r => r.id === id ? { id, stato, testo: dettaglioSincronizzazione(m), ultimo: m } : r)
 }

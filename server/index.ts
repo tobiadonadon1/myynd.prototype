@@ -848,7 +848,20 @@ app.get('/api/stato', async (_req, res) => {
       // (un fatto, non un guasto): solo quando ci sono
       ...(problemaDi(v.id) ? { problema: problemaDi(v.id) } : {}),
       ...(silenzi.has(v.id) ? { silenzio: silenzi.get(v.id) } : {})
-    })),
+    })).concat(c.x && !ospitato.OSPITATO ? [{
+      /*
+       * X non sta nel catalogo: non si collega, si accende da solo quando sul
+       * Mac c'è il motore che scrive per lui. Ma una volta acceso è una fonte
+       * come le altre, e quando il motore si ferma deve dirlo fra quelle da
+       * sistemare, con il giorno dell'ultima cosa scritta (`fermoDal`).
+       */
+      id: 'x', nome: 'X', gruppo: 'Comunicazione', pronto: true, legge: true,
+      nota: 'Quello che pubblichi su X, quello che ti piace e la tua timeline, dal motore di X su questo Mac.',
+      collegato: true,
+      documenti: n.perFonte.find(f => f.fonte === 'x')?.n ?? 0,
+      ...(problemaDi('x') ? { problema: problemaDi('x') } : {}),
+      ...(problemaDi('x') && store.cursore('x:fermo') ? { fermoDal: store.cursore('x:fermo')! } : {})
+    }] : []),
     // su un server sarebbero le cartelle di root dentro il contenitore: non
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
     /*
@@ -891,7 +904,8 @@ app.get('/api/stato', async (_req, res) => {
     accessoNote,
     // le fonti che l'ultima lettura non ha letto per intero: la prima pagina
     // le scrive in una riga fissa finché una lettura non le trova a posto
-    letturaIncompleta: fontiIncomplete(chi.adesso() ?? ''),
+    // X fermo: il guaio è da quando il motore non scrive più, non da quando ce ne siamo accorti
+    letturaIncompleta: fontiIncomplete(chi.adesso() ?? '').map(f => f.fonte === 'x' && store.cursore('x:fermo') ? { ...f, dal: store.cursore('x:fermo')!, fermo: true } : f),
     // il guaio del motore che lavora (accesso o chiave), per la stessa riga
     testa: saluteTeste.testaDaMostrare(),
     // i titoli delle finestre accesi: allora la pagina chiede al guscio se il
@@ -2139,6 +2153,8 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'drive') { delete c.drive; drive.scordaIlToken() }
   else if (id === 'dropbox') { delete c.dropbox; dropbox.scordaIlToken() }
   else if (id === 'whatsapp') delete c.whatsapp
+  // X si era acceso da solo: scollegato, resta spento (è in `accesiDaSoli`, l'avvio non lo riaccende)
+  else if (id === 'x') delete c.x
   /*
     Le due metà di Microsoft si staccano una per volta, e non passano di qui:
     `scollega` sa che quando resta l'altra il token va tenuto. Scriverle in
@@ -2437,11 +2453,33 @@ async function leggiTuttoDentro(
   if (x && !ospitato.OSPITATO) await fonte('x', async () => {
     avvisa({ fase: 'x', stato: 'leggo X' })
     const motore = await import('./connettori/x.ts')
-    const e = await motore.sincronizza(x)
+    let e: Awaited<ReturnType<typeof motore.sincronizza>>
+    try { e = await motore.sincronizza(x) }
+    catch (err) {
+      // un altro guaio (il database sparito, illeggibile): non è più «fermo dal…», e la scheda non deve dirlo
+      store.segnaCursore(motore.CURSORE_FERMO, null)
+      throw err
+    }
     await store.salvaDocumentiAPezzi(e.docs)
-    // il database è un insieme intero: quello che non c'è più dentro non c'è più
-    const tolti = store.riconcilia('x', { completo: true }, e.docs.map(d => d.id))
-    avvisa({ fase: 'x', stato: 'fatto', documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, tolti })
+    // quello che solo il motore scrive si riconcilia per intero; i suoi post,
+    // i mi piace e la timeline escono quando escono dalla loro finestra (vedi x.ts)
+    const tolti = motore.riconcilia(e.docs.map(d => d.id))
+    /*
+     * Un motore fermo: quello che c'era si è letto, ma la fonte va fra quelle
+     * da sistemare, con il giorno dell'ultima cosa che ha scritto. Il cursore
+     * lo tiene per la scheda; una lettura che lo trova vivo lo cancella.
+     *
+     * Non si lancia: i documenti sono arrivati, la lettura non è fallita (né
+     * per la prima lettura né per il totale). Il guaio si dice con un avviso
+     * marcato `fermo`, che la salute delle fonti registra come ogni guaio e
+     * la riga di lettura nella pagina tratta da fonte letta.
+     */
+    store.segnaCursore(motore.CURSORE_FERMO, e.fermoDal)
+    const conti = { documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, mipiace: e.mipiace, timeline: e.timeline, tolti }
+    if (e.fermoDal) {
+      const g = motore.guaioFermo()
+      avvisa({ fase: 'x', stato: 'guaio', fermo: true, errore: g.message, rimedio: g.rimedio, frase: g.message, ...conti })
+    } else avvisa({ fase: 'x', stato: 'fatto', ...conti })
     return e.docs.length
   })
   const cal = c.calendario
@@ -2856,8 +2894,9 @@ async function leggiUna(fonte: string): Promise<'letta' | 'occupato' | 'guaio'> 
   try {
     await withBackgroundWork(() => store.senzaToccare(() => leggiTutto(fonte, e => {
       v.avvisa(e)
-      const x = e as { fase?: string; stato?: string; errore?: string; saltata?: boolean }
-      if (x.fase === fonte && x.stato === 'guaio') { guaio = true; console.error(`myynd · prima lettura · ${fonte}: ${x.errore}`) }
+      const x = e as { fase?: string; stato?: string; errore?: string; saltata?: boolean; fermo?: boolean }
+      // X fermo si è letto: è un guaio da dire, non una lettura da rifare
+      if (x.fase === fonte && x.stato === 'guaio' && !x.fermo) { guaio = true; console.error(`myynd · prima lettura · ${fonte}: ${x.errore}`) }
       // saltata (Calendario chiuso): per questo giro si mette da parte, come un guaio, invece di riprovarla dodici volte
       if (x.fase === fonte && x.saltata) guaio = true
     }, () => cancellati.cancellata(cfg.cartella()), { sfondo: true })))

@@ -82,16 +82,16 @@ test('post e note diventano documenti con il link; le bozze si contano e non ent
   assert.equal(e.note, 2)
   assert.equal(e.settimane, 2)
   const ids = e.docs.map(d => d.id)
-  for (const id of ['x:posted:1', 'x:posted:4', 'x:nota:1', 'x:nota:2', 'x:settimana:2026-38', 'x:settimana:2026-37']) {
+  for (const id of ['x:mio:1001', 'x:mio:1004', 'x:nota:1', 'x:nota:2', 'x:settimana:2026-38', 'x:settimana:2026-37']) {
     assert.ok(ids.includes(id), `manca ${id}`)
   }
   // il post vecchio, quello senza testo, e nessuna bozza: la coda del motore non è un documento
-  for (const id of ['x:posted:5', 'x:posted:6', 'x:draft:1', 'x:draft:2', 'x:draft:3', 'x:draft:4', 'x:draft:5']) {
+  for (const id of ['x:mio:900', 'x:mio:1005', 'x:posted:2', 'x:draft:1', 'x:draft:2', 'x:draft:3', 'x:draft:4', 'x:draft:5']) {
     assert.ok(!ids.includes(id), `${id} non doveva entrare`)
   }
   assert.ok(e.docs.every(d => d.fonte === 'x' && d.gruppo === 'note'))
 
-  const p = e.docs.find(d => d.id === 'x:posted:2')!
+  const p = e.docs.find(d => d.id === 'x:mio:1002')!
   assert.equal(p.tipo, 'post')
   assert.equal(p.titolo, 'Attention belongs where a suggestion becomes your decision.')
   // niente numeri nel corpo: cambiano a ogni giro e farebbero risultare il post «cambiato» dieci volte al giorno
@@ -102,7 +102,8 @@ test('post e note diventano documenti con il link; le bozze si contano e non ent
   // l'ha scritto lei (il suo motore): non è una novità arrivata
   assert.equal(p.inviato, true)
   // una risposta si dice, e la data con sei decimali si legge lo stesso
-  const r = e.docs.find(d => d.id === 'x:posted:1')!
+  const r = e.docs.find(d => d.id === 'x:mio:1001')!
+  assert.equal(r.tipo, 'risposta')
   assert.equal(r.titolo, 'The MD file is the part that matters.')
   assert.match(r.corpo, /Risposta pubblicata su X\./)
   assert.equal(r.quando, '2026-09-15T14:31:56.222Z')
@@ -158,4 +159,162 @@ test('il database si apre in sola lettura, e se manca si dice invece di crearlo'
   // la strada di casa
   assert.equal(x.percorsoPredefinito(), join(CASA, 'x-engine', 'data', 'engine.db'))
   assert.equal(x.possibile(), false)
+})
+
+test('i numeri di un post entrano quando si sono fermati, e si rileggono in tutte e due le lingue', () => {
+  const e = x.leggi({ db: DB }, ADESSO)
+  // l'8 settembre, nove giorni prima: il motore non lo rilegge più
+  const vecchio = e.docs.find(d => d.id === 'x:mio:1004')!
+  assert.match(vecchio.corpo, /\nNumeri: 9 visualizzazioni · 0 mi piace · 0 repost · 0 risposte · 0 segnalibri\n/)
+  assert.deepEqual(x.numeriDa(vecchio.corpo), { visualizzazioni: 9, mipiace: 0, repost: 0, risposte: 0, segnalibri: 0 })
+  assert.equal(x.numeriDa(e.docs.find(d => d.id === 'x:mio:1002')!.corpo), null)
+  const n = { visualizzazioni: 410, mipiace: 3, repost: 1, risposte: 2, segnalibri: 5 }
+  assert.deepEqual(x.numeriDa(`ciao\n\n${x.rigaNumeri(n, false)}`), n)
+  assert.deepEqual(x.numeriDa(`ciao\n\n${x.rigaNumeri(n, true)}`), n)
+  // la data di SQLite, senza fuso, è UTC
+  assert.equal(x.istante('2026-09-15 17:29:52'), '2026-09-15T17:29:52.000Z')
+  assert.equal(x.idPost('browser:12'), null)
+  assert.equal(x.idDaLink('https://x.com/bob/status/503?s=20'), '503')
+})
+
+/** Un motore più nuovo: i mi piace, l'impegno, la timeline e i post studiati. */
+function motorePieno(percorso: string) {
+  motore(percorso)
+  const db = new DatabaseSync(percorso)
+  db.exec(`
+    CREATE TABLE likes (tweet_id text primary key, liked_at text, why text);
+    CREATE TABLE engagement (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, kind TEXT NOT NULL, url TEXT NOT NULL, author TEXT, UNIQUE(kind, url));
+    CREATE TABLE feed_posts (id integer primary key, seen_at text not null, author text, tweet_id text unique, body text,
+      replies integer default 0, reposts integer default 0, likes integer default 0, bookmarks integer default 0, views integer default 0);
+    CREATE TABLE scraped (id INTEGER PRIMARY KEY AUTOINCREMENT, scraped_at TEXT NOT NULL, niche TEXT NOT NULL, url TEXT UNIQUE, author TEXT, text TEXT);
+  `)
+  const visto = db.prepare('INSERT INTO feed_posts (seen_at, author, tweet_id, body, replies, reposts, likes, views) VALUES (?,?,?,?,?,?,?,?)')
+  visto.run('2026-09-05T10:00:00.123456+00:00', 'vecchio', '400', 'Too old for the digest.', 0, 0, 0, 0)
+  visto.run('2026-09-19T08:00:00.123456+00:00', 'alice', '501', 'Agents need a boundary before they need a prompt.', 4, 1, 80, 9000)
+  visto.run('2026-09-19T09:00:00+00:00', 'alice', '504', 'Second post by alice that day.', 0, 0, 2, 100)
+  visto.run('2026-09-19T21:00:00+00:00', 'carol', '505', 'Carol talks about launch week.', 30, 10, 500, 40000)
+  visto.run('2026-09-20T10:00:00+00:00', 'dave', '506', 'Dave on Sunday.', 0, 0, 1, 10)
+  // oggi: il giorno non è chiuso, non entra
+  visto.run('2026-09-21T09:00:00+00:00', 'erin', '507', 'Erin this morning.', 0, 0, 1, 10)
+  const like = db.prepare('INSERT INTO likes (tweet_id, liked_at, why) VALUES (?,?,?)')
+  like.run('501', '2026-09-20T15:56:18.151762+00:00', 'inbound @alice')
+  like.run('502', '2026-08-01T10:00:00+00:00', 'pre-reply @zed') // più di trenta giorni prima
+  like.run('browser:9', '2026-09-20T10:00:00+00:00', 'inbound @nessuno') // non è un id di X
+  db.prepare('INSERT INTO engagement (at, kind, url, author) VALUES (?,?,?,?)').run('2026-09-19 10:00:00', 'like', 'https://x.com/bob/status/503', 'bob')
+  db.prepare('INSERT INTO engagement (at, kind, url, author) VALUES (?,?,?,?)').run('2026-09-19 11:00:00', 'repost', 'https://x.com/bob/status/508', 'bob')
+  db.prepare('INSERT INTO scraped (scraped_at, niche, url, author, text) VALUES (?,?,?,?,?)').run('2026-09-18T18:00:00+00:00', 'tech_ai', 'https://x.com/bob/status/503', 'bob', 'Shipping agents that ask before they act.')
+  db.close()
+}
+
+const PIENO = join(CASA, 'pieno.db')
+motorePieno(PIENO)
+/** Lunedì 21 settembre: il 19 e il 20 sono chiusi, il 21 no. */
+const LUNEDI = Date.parse('2026-09-21T12:00:00Z')
+
+test('i mi piace diventano documenti con l’id del post e il testo se qualcuno l’ha visto; la timeline è un documento per giorno chiuso', () => {
+  const e = x.leggi({ db: PIENO }, LUNEDI)
+  assert.equal(e.mipiace, 2)
+  assert.equal(e.timeline, 2)
+  assert.equal(e.fermoDal, null)
+  const ids = e.docs.map(d => d.id)
+  for (const id of ['x:like:501', 'x:like:503', 'x:timeline:2026-09-19', 'x:timeline:2026-09-20']) assert.ok(ids.includes(id), `manca ${id}`)
+  for (const id of ['x:like:502', 'x:like:508', 'x:timeline:2026-09-21', 'x:timeline:2026-09-05']) assert.ok(!ids.includes(id), `${id} non doveva entrare`)
+  assert.ok(!ids.some(id => id.startsWith('x:like:browser')))
+
+  const a = e.docs.find(d => d.id === 'x:like:501')!
+  assert.equal(a.tipo, 'mipiace')
+  assert.equal(a.titolo, '@alice: Agents need a boundary before they need a prompt.')
+  assert.equal(a.autore, '@alice')
+  assert.equal(a.percorso, 'https://x.com/alice/status/501')
+  assert.equal(a.inviato, true)
+  assert.match(a.corpo, /^Agents need a boundary before they need a prompt\.\n\nTi è piaciuto un post di @alice su X\.\nhttps:\/\/x\.com\/alice\/status\/501$/)
+  // dal giro di impegno, con il testo dei post studiati e la data di SQLite
+  const b = e.docs.find(d => d.id === 'x:like:503')!
+  assert.match(b.corpo, /^Shipping agents that ask before they act\./)
+  assert.equal(b.quando, '2026-09-19T10:00:00.000Z')
+
+  const g = e.docs.find(d => d.id === 'x:timeline:2026-09-19')!
+  assert.equal(g.tipo, 'riepilogo')
+  assert.equal(g.titolo, 'X, la tua timeline del 19 set')
+  assert.equal(g.inviato, true)
+  assert.match(g.corpo, /^3 post visti nella tua timeline, da 2 autori\./)
+  assert.match(g.corpo, /Chi è comparso di più: @alice \(2\), @carol \(1\)/)
+  // il più ripreso per primo, con il link
+  assert.match(g.corpo, /I più ripresi:\n1\. @carol · 500 mi piace · 30 risposte · Carol talks about launch week\. · https:\/\/x\.com\/carol\/status\/505\n2\. @alice/)
+  assert.equal(g.quando, '2026-09-19T21:00:00.000Z')
+})
+
+test('un motore che non scrive niente da più di tre giorni è fermo, e lo dice con un guaio da guardare', () => {
+  const e = x.leggi({ db: PIENO }, Date.parse('2026-10-15T12:00:00Z'))
+  // l'ultima cosa vera: il post visto il 21 mattina
+  assert.equal(e.fermoDal, '2026-09-21T09:00:00.000Z')
+  const g = x.guaioFermo()
+  assert.equal(g.rimedio, 'guarda')
+  assert.match(g.message, /non scrive niente di nuovo/)
+  // tre giorni dopo l'ultima cosa: ancora vivo
+  assert.equal(x.leggi({ db: PIENO }, Date.parse('2026-09-24T08:00:00Z')).fermoDal, null)
+})
+
+test('la riconciliazione toglie quello che solo il motore scrive e lascia stare quello che un altro lettore può aver scritto; recenti legge l’indice', async () => {
+  const store = await import('./store.ts')
+  const e = x.leggi({ db: PIENO }, LUNEDI)
+  store.salvaDocumenti([
+    ...e.docs,
+    // una versione vecchia, con l'id della riga del motore
+    { id: 'x:posted:2', fonte: 'x', tipo: 'post', titolo: 'vecchio', corpo: 'vecchio', quando: '2026-09-16T09:00:00.000Z', gruppo: 'note', inviato: true },
+    // un post scritto da un altro lettore, nella finestra
+    x.documentoMio({ postId: '999', testo: 'Written by hand, read by the browser.', url: 'https://x.com/tobiadonadon_/status/999', risposta: false, quando: '2026-09-20T08:00:00Z', numeri: null }, false)!,
+    // un mi piace uscito dalla finestra
+    x.documentoLike({ postId: '300', autore: 'old', testo: 'old', url: null, quando: '2026-07-01T00:00:00Z' }, false)!
+  ])
+  const tolti = x.riconcilia(e.docs.map(d => d.id), LUNEDI)
+  assert.equal(tolti, 2)
+  assert.equal(store.documento('x:posted:2'), null)
+  assert.equal(store.documento('x:like:300'), null)
+  assert.ok(store.documento('x:mio:999'))
+  assert.ok(store.documento('x:like:501'))
+
+  const r = x.recenti(30, LUNEDI)
+  assert.deepEqual(r.post.map(p => p.postId), ['999', '1003', '1002', '1001', '1004'])
+  assert.equal(r.post[0]!.testo, 'Written by hand, read by the browser.')
+  const vecchio = r.post.find(p => p.postId === '1004')!
+  assert.equal(vecchio.testo, 'A post from the week before.')
+  assert.deepEqual(vecchio.numeri, { visualizzazioni: 9, mipiace: 0, repost: 0, risposte: 0, segnalibri: 0 })
+  assert.equal(r.post.find(p => p.postId === '1001')!.risposta, true)
+  assert.equal(r.mipiace, 2)
+  assert.deepEqual(r.autori, [{ autore: '@alice', n: 1 }, { autore: '@bob', n: 1 }])
+  // «agents» torna in tutti e due i post piaciuti; le parole vuote no
+  assert.deepEqual(r.parole, [{ parola: 'agents', n: 2 }])
+  // una finestra corta lascia fuori il post dell'8 settembre
+  assert.ok(!x.recenti(7, LUNEDI).post.some(p => p.postId === '1004'))
+})
+
+test('il tetto dei mi piace vale anche nell’indice: oltre duecento escono i più vecchi, da chiunque scritti', async () => {
+  const store = await import('./store.ts')
+  const tanti = Array.from({ length: x.TETTO_MIPIACE + 5 }, (_, i) =>
+    x.documentoLike({ postId: String(7000 + i), autore: 'molti', testo: `post ${i}`, url: null, quando: new Date(LUNEDI - (i + 1) * 3_600_000).toISOString() }, false)!)
+  store.salvaDocumenti(tanti)
+  const prima = store.idsConPrefisso('x:like:').length
+  assert.ok(prima > x.TETTO_MIPIACE)
+  x.riconcilia([], LUNEDI)
+  const restano = new Set(store.idsConPrefisso('x:like:'))
+  assert.equal(restano.size, x.TETTO_MIPIACE)
+  // i più nuovi restano, i più vecchi no
+  assert.ok(restano.has('x:like:7000'))
+  assert.ok(!restano.has(`x:like:${7000 + x.TETTO_MIPIACE + 4}`))
+})
+
+test('un motore fermo si dice senza lanciare, e un altro guaio cancella il «fermo dal…» (la lettura in index.ts)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const indice = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+  const passo = indice.slice(indice.indexOf("await fonte('x'"), indice.indexOf("const cal = c.calendario"))
+  // i documenti sono arrivati: niente throw, quindi niente prima lettura fallita e il totale li conta
+  assert.doesNotMatch(passo, /throw motore\.guaioFermo/)
+  assert.match(passo, /stato: 'guaio', fermo: true/)
+  // il database sparito o illeggibile non è «fermo dal 20 set»
+  assert.match(passo, /catch \(err\) \{[^}]*segnaCursore\(motore\.CURSORE_FERMO, null\)[^}]*throw err/)
+  const { esitoLettura } = await import('./lettura-feed.ts')
+  const e = esitoLettura({ fase: 'x', stato: 'guaio', fermo: true, rimedio: 'guarda', frase: x.guaioFermo().message, documenti: 3 })
+  assert.equal(e?.esito, 'guaio', 'la salute delle fonti lo registra come ogni guaio')
+  assert.equal(e?.rimedio, 'guarda')
 })

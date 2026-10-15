@@ -6,6 +6,8 @@ export type FonteIncompleta = {
   fonte: string; motivo: 'non-disponibile' | 'incompleta'
   /** Cosa serve perché torni a leggersi, da quando, e se è cominciato con un aggiornamento dell'app (P8). */
   rimedio?: Rimedio; dal?: string; dopoAggiornamento?: boolean
+  /** La fonte risponde ma non scrive più niente di nuovo (il motore di X fermo): `dal` è l'ultima cosa scritta. */
+  fermo?: boolean
 }
 
 export type Connettore = {
@@ -20,6 +22,8 @@ export type Connettore = {
   problema?: Rimedio
   /** La fonte tace da più del solito: un fatto da dire sulla scheda, mai un guasto (P8). */
   silenzio?: Silenzio
+  /** X: il motore non scrive più niente da questo istante; la scheda lo dice al posto della parola del guaio. */
+  fermoDal?: string
 }
 
 export type FattoAvvio = {

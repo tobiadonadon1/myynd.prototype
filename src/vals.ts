@@ -1997,7 +1997,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       id: c.id, nome: c.nome,
       problema: !!c.problema || (c.id === 'note' && statoAccessoNote(stato).problema),
       // la parola della scheda dice cosa serve: l'accesso, un nuovo accesso, un campo da sistemare
-      parola: c.problema ? parolaProblema(c.id, c.problema) : t('Serve l’accesso'),
+      parola: c.problema ? parolaProblema(c.id, c.problema, c.fermoDal) : t('Serve l’accesso'),
       // il desktop dice anche se lo sta guardando dal vivo: è la differenza
       // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
       // a zero documenti «collegato» ripeteva il «Collegato» della tessera, una riga sotto
