@@ -58,6 +58,25 @@ export type Blocco<V, C> = {
  */
 export const COMPITI_IN_PAGINA = 6
 
+/**
+ * Le origini del lavoro che Myynd fa da sé (`server/da-se.ts`): le idee per X,
+ * il copione di un video, la pagina di Notion di un progetto. Nascono senza
+ * che lui le chieda e lavorano di notte: in coda o al lavoro non sono cose sue
+ * da guardare, e sul tavolo farebbero solo mucchio. Ci arrivano quando sono
+ * pronte (il file, la pagina cambiata di molto), quando chiedono, o quando si
+ * sono fermate; in coda restano nella lista, dove sta il lavoro del turno.
+ */
+export const DA_SE = ['idee-x', 'copione-video', 'pagina-notion']
+/**
+ * Un blocco che tiene solo lavoro fatto da sé: la priorità del progetto non
+ * ci si legge. Quelle carte hanno priorità bassa (passano dopo le risposte
+ * alla posta), e «Priorità alta» sopra di loro direbbe il contrario.
+ */
+export const soloDaSe = (righe: readonly RigaBlocco<unknown, Pick<CompitoDaBlocco, 'origine'>>[]) =>
+  righe.length > 0 && righe.every(r => r.genere === 'compito' && DA_SE.includes(r.compito.origine))
+export const daSeInAttesa = (c: Pick<CompitoDaBlocco, 'origine' | 'stato' | 'guaio'>) =>
+  DA_SE.includes(c.origine) && c.stato !== 'pronto' && c.stato !== 'chiede' && !c.guaio
+
 const ATTESA: Record<string, number> = { pronto: 0, chiede: 0, delegato: 1 }
 /**
  * Quanto aspetta lui una riga della lista: zero è «adesso», due è la lista.
@@ -134,6 +153,8 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
    */
   vuoti?: readonly string[]
 }): Blocco<V, C>[] {
+  // il lavoro che Myynd fa da sé sta sul tavolo solo quando c'è qualcosa da guardare
+  dati = { ...dati, compiti: dati.compiti.filter(c => !daSeInAttesa(c)) }
   const attivi = new Map(dati.progetti.filter(p => !p.stato || p.stato === 'attivo').map(p => [p.id, p.nome]))
   const alti = new Set(dati.progetti.filter(p => p.priorita === 'alta').map(p => p.id))
   // un progetto fermo o chiuso, o un id che non si conosce, non ha un blocco:

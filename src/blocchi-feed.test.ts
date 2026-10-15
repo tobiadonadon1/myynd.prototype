@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, blocchiInPagina, cheAspettano, chiaveBlocco, contaInPagina, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, blocchiInPagina, cheAspettano, chiaveBlocco, contaInPagina, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, soloDaSe, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -460,4 +460,31 @@ test('(P3) quanteAspettano: le pronte, le domande e le righe ferme su un blocco 
     { stato: 'fatto', guaio: 'Collega la posta e la riprendo da qui.' }
   ]), 4)
   assert.equal(quanteAspettano([]), 0)
+})
+
+test('il lavoro che Myynd fa da sé sta sul tavolo solo pronto, con una domanda, o fermo; in coda o al lavoro no', () => {
+  const b = blocchiFeed({
+    voci: [],
+    compiti: [
+      compito('x-coda', null, { origine: 'idee-x' }),
+      compito('v-lavoro', 'hf', { origine: 'copione-video', stato: 'delegato' }),
+      compito('n-coda', 'hf', { origine: 'pagina-notion' }),
+      compito('x-pronta', null, { origine: 'idee-x', stato: 'pronto' }),
+      compito('n-pronta', 'hf', { origine: 'pagina-notion', stato: 'pronto' }),
+      { ...compito('v-ferma', 'nx', { origine: 'copione-video' }), guaio: 'Ci ha messo più del tempo che aveva.' },
+      compito('sua', 'nx')
+    ],
+    progetti: PROGETTI,
+    nomeResto: 'Il resto'
+  })
+  assert.deepEqual(b.flatMap(ids).sort(), ['n-pronta', 'sua', 'v-ferma', 'x-pronta'])
+})
+
+test('un blocco con solo lavoro fatto da sé non dice la priorità del progetto: quelle carte passano per ultime', () => {
+  const riga = (origine: string) => ({ genere: 'compito' as const, compito: compito(origine, 'hf', { origine, stato: 'pronto' }), seguito: null })
+  assert.equal(soloDaSe([riga('copione-video')]), true)
+  assert.equal(soloDaSe([riga('copione-video'), riga('idee-x')]), true)
+  assert.equal(soloDaSe([riga('copione-video'), riga('mano')]), false)
+  assert.equal(soloDaSe([riga('copione-video'), { genere: 'voce' as const, voce: voce('v1', 'hf', '2026-09-16T10:00:00Z') }]), false)
+  assert.equal(soloDaSe([]), false)
 })

@@ -104,6 +104,7 @@ import { segnaViste, risposteFuori } from './feed-dati.ts'
 import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
 import * as misuraFeed from './misura-feed.ts'
 import * as resoconto from './resoconto.ts'
+import * as daSe from './da-se.ts'
 import * as mattina from './mattina.ts'
 import * as mentreVia from './via.ts'
 
@@ -5498,7 +5499,13 @@ app.post('/api/gradino/ritira', (req, res) => {
 })
 
 /** La preparazione discreta di ogni quarto d'ora (`iniziativa.preparazione`). */
-const preparazione = () => iniziativa.preparazione()
+const preparazione = async () => {
+  const r = await iniziativa.preparazione()
+  // e il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione, le pagine di Notion, in coda per il turno
+  const nate = await daSe.giro()
+  if (nate.length) compiti.annunciaCambio()
+  return r
+}
 // — D: rotte, fine —
 
 const senzaOsservatore = (res: express.Response) => res.status(404).json({ disponibile: false })

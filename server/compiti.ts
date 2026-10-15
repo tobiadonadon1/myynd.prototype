@@ -47,6 +47,7 @@ import * as voce from './voce.ts'
 import * as abitudini from './abitudini.ts'
 import * as regoleTono from './regole-tono.ts'
 import * as gradino from './gradino.ts'
+import * as daSe from './da-se.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi, type Stesa } from './stesura.ts'
 import { conCompito, fuoriDalCompito } from './etichetta-uso.ts'
@@ -400,6 +401,8 @@ type Ferri = {
   distilla: typeof memoria.distilla
   /** Il lavoro finito scritto come file nel luogo scelto: le prove lo fanno in una cartella loro. */
   salvaConsegna: typeof mani.salvaConsegna
+  /** Il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione, la pagina di Notion. */
+  daSe: typeof daSe.lavora
   /** Di che genere è il dato che manca, e se sbagliarlo costa (P3): ottava, per la stessa ragione. */
   pesaLaDomanda: typeof claude.pesaLaDomanda
   /** Come scrive a chi riceve (P3): senza modello, ma legge l'indice, e le prove vogliono poterlo dire. */
@@ -424,6 +427,7 @@ const VERI: Ferri = {
   imparaDalDocumento: (...a) => memoria.imparaDalDocumento(...a),
   giudica: (...a) => giudica(...a),
   salvaConsegna: (...a) => mani.salvaConsegna(...a),
+  daSe: (...a) => daSe.lavora(...a),
   prossimoPasso: (...a) => prossimoPasso(...a),
   distilla: (...a) => memoria.distilla(...a),
   postaCollegata: () => {
@@ -531,6 +535,21 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
       scadenza = setTimeout(() => { scaduto = true; controller.abort() }, k.budget.minuti * 60_000)
       scadenza.unref?.()
     }
+    /*
+     * Il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione di un
+     * video, la pagina di Notion. Non passa dalla stesura di sempre, che cerca
+     * nell'indice intero (la posta compresa) e chiede: ha un prompt suo, stretto
+     * sul suo materiale, e una forma che si controlla. Il budget della notte, il
+     * richiamo e i guai restano quelli di qui.
+     */
+    if (daSe.suo(c.origine)) {
+      const esito = await ferri.daSe(c, { signal: controller.signal })
+      if (richiamati.has(chiave(id))) return
+      if (turno && budgetNotte.sforato()) throw new Error(BUDGET_NOTTE)
+      clearTimeout(scadenza)
+      consegnaDaSe(c, esito)
+      return
+    }
     console.info(`myynd · worker · entering-production · ${id} · elapsed_ms=${Date.now() - iniziato}`)
     // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da
     // sola non diceva se stesse cercando, leggendo o scrivendo. Dopo un
@@ -589,6 +608,8 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
         ...(k?.criterio ? { criterio: k.criterio } : {}),
         // F3: le mani del contratto sono le sue, anche per una carta scritta da Myynd
         ...(k?.mani?.length ? { mani: k.mani } : {}),
+        // una pagina di Notion per progetto, sempre la stessa: la chiave è il progetto
+        ...(c.progetto && k?.mani?.includes('notion') ? { chiaveNotion: `progetto:${c.progetto}` } : {}),
         ...(giriDelBudget ? { giri: giriDelBudget } : {}),
         ...(extra ?? {}),
         ...(extra?.giri && giriDelBudget ? { giri: Math.min(extra.giri, giriDelBudget) } : {}),
@@ -689,6 +710,34 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     const k = chiave(id)
     if (fermati.has(k) && tornataInCoda(id)) buttaIFileDelGiro(id, alLavoro.get(k)?.dal ?? new Date(iniziato).toISOString())
   }
+}
+
+/**
+ * Il lavoro da sé, scritto sulla carta: il file e la sua prova, e l'annuncio
+ * che fa partire l'avviso del file pronto. Una pagina di Notion senza niente
+ * di grosso si chiude da sola, senza carta: resta fra le cose fatte della
+ * notte. Una carta senza niente da fare (nessuna idea che regga) si ritira.
+ */
+function consegnaDaSe(c: store.Compito, e: daSe.Esito) {
+  const id = c.id
+  if (e.ritira) {
+    store.cambiaStatoCompito(id, 'ritirato', e.ritira)
+    console.info(`myynd · da sé · ${id} · ritirata: ${e.ritira}`)
+    annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
+  }
+  if (!store.risultatoCompito(id, e.testo, [], 'pronto')) return
+  if (e.consegna) store.scriviConsegnaCompito(id, e.consegna)
+  for (const f of e.fatti) if (f.attrezzo === 'scrivi_file' && f.esito === 'ok') store.segnaNelDiario(id, { tipo: 'file', dettaglio: f.dettaglio })
+  const scritta = store.compito(id)
+  const p = e.prova ?? (scritta ? contratto.prova({ compito: scritta, verdetto: null, fatti: e.fatti, lingua: cfg.lingua() }) : null)
+  store.scriviProvaCompito(id, p)
+  store.segnaNelDiario(id, { tipo: 'consegnato', dettaglio: e.consegna?.titolo })
+  if (p) store.segnaNelDiario(id, { tipo: 'prova', dettaglio: `${p.esito}: ${p.perche}` })
+  console.info(`myynd · da sé · ${id} · consegnata${e.consegna ? ` · ${e.consegna.percorso}` : ''}${e.chiudi ? ' · chiusa' : ''}`)
+  if (e.chiudi) { store.cambiaStatoCompito(id, 'fatto', e.chiudi); annuncia({ fase: 'richiamato', id }); annunciaCambio(); return }
+  const fatto = store.compito(id)
+  if (fatto) annuncia({ fase: 'pronto', id, compito: fatto })
+  annunciaCambio()
 }
 
 /** La carta è tornata in coda (aperta o di nuovo affidata), non consegnata né chiusa. */

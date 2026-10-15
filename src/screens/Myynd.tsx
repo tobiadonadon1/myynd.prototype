@@ -20,7 +20,7 @@ import { quando } from '../data'
 import { dataFonte, testoCarta, secondaRiga, RAGIONI_NON_UTILE } from '../feed-carta'
 import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, contaInPagina } from '../blocchi-feed'
+import { blocchiInPagina, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, contaInPagina, soloDaSe } from '../blocchi-feed'
 import { conLettera } from '../mattina'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { RigaCheLavora } from '../components/RigaCheLavora'
@@ -357,6 +357,7 @@ function provenienza(c: Compito, v: Vals, l?: Lista): { testo: string; apri?: ()
   // quindi quelle righe non dicevano da dove venivano
   if (c.origine === 'chat' || c.origine === 'conversazione') return { testo: t('la chat'), apri: () => v.goChat() }
   if (c.origine === 'iniziativa') return { testo: t('Prepara in anticipo') }
+  if (c.origine === 'idee-x') return { testo: t('i tuoi post su X') }
   if (c.origine === 'punto') return { testo: t('il punto del giorno') }
   if (c.origine === 'avvio' || c.origine === 'onboarding') return { testo: t('il primo progetto') }
   if (c.origine?.startsWith('auto:') || c.origine === 'automazione') return { testo: t('un’automazione') }
@@ -1118,7 +1119,7 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
               hover={{ textDecorationColor: 'currentColor' }}>{b.nome}</Hov>
           )
           : <span style={{ ...NOME, color: colore }}>{b.nome}</span>}
-        {suo && !b.progetto!.startsWith('nuovo-') && (
+        {suo && !b.progetto!.startsWith('nuovo-') && !soloDaSe(b.righe) && (
           <PrioritaProgetto alta={!!b.alto} visibile={attiva} nome={b.nome}
             cambia={alta => { v.cambiaProgetto(b.progetto!, { priorita: alta ? 'alta' : null }).catch(() => v.mostraToast(t('Non sono riuscito a salvarlo.'))) }} />
         )}

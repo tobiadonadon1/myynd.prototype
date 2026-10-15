@@ -1,0 +1,37 @@
+{
+  "lingua": "en",
+  "nome": "Tobia",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "my", "nome": "Myynd", "obiettivo": "Sell the Myynd Mac app to founders", "priorita": "alta" },
+    { "chiave": "ev", "nome": "Evermute", "obiettivo": "Ship Evermute 1.0 on the App Store" }
+  ],
+  "documenti": [
+    { "id": "x:mio:1846000000000000001", "fonte": "x", "tipo": "post", "titolo": "My twin answered 9 emails while I slept", "corpo": "My twin answered 9 emails while I slept.\n\nI read them over coffee, changed two words, sent them.\n\nThat's the whole product.\n\nPost published on X.\nNumbers: 18400 views · 412 likes · 37 reposts · 58 replies · 96 bookmarks\nhttps://x.com/tobia/status/1846000000000000001", "quando": "-9d", "gruppo": "note", "inviato": true },
+    { "id": "x:mio:1846000000000000002", "fonte": "x", "tipo": "post", "titolo": "Building a digital twin is mostly saying no", "corpo": "Building a digital twin is mostly saying no.\n\nNo dashboards. No settings page with 40 toggles. One card that says what it did.\n\nPost published on X.\nNumbers: 9100 views · 204 likes · 15 reposts · 31 replies · 40 bookmarks\nhttps://x.com/tobia/status/1846000000000000002", "quando": "-7d", "gruppo": "note", "inviato": true },
+    { "id": "x:mio:1846000000000000003", "fonte": "x", "tipo": "post", "titolo": "Shipped a Mac app with no build step", "corpo": "Shipped a Mac app with no build step on the server.\n\nNode strips the types and runs. That's it.\n\nPost published on X.\nNumbers: 3200 views · 61 likes · 4 reposts · 12 replies · 9 bookmarks\nhttps://x.com/tobia/status/1846000000000000003", "quando": "-6d", "gruppo": "note", "inviato": true },
+    { "id": "x:mio:1846000000000000004", "fonte": "x", "tipo": "post", "titolo": "Evermute is in App Store review", "corpo": "Evermute is in App Store review.\n\nFingers crossed, again.\n\nPost published on X.\nNumbers: 1400 views · 22 likes · 1 reposts · 6 replies · 2 bookmarks\nhttps://x.com/tobia/status/1846000000000000004", "quando": "-5d", "gruppo": "note", "inviato": true },
+    { "id": "x:mio:1846000000000000005", "fonte": "x", "tipo": "post", "titolo": "The best feature is the one that runs at 3am", "corpo": "The best feature is the one that runs at 3am and leaves a file on your Desktop.\n\nPost published on X.\nhttps://x.com/tobia/status/1846000000000000005", "quando": "-1d", "gruppo": "note", "inviato": true },
+    { "id": "x:voce:1", "fonte": "x", "tipo": "voce", "titolo": "Your voice on X, 1 of 1", "corpo": "Your most engaged posts on X, from your archive.\n\n1. Nobody wants an AI assistant. Everybody wants their inbox to be done. (1840 likes, 220 repost)\n2. If your app needs a tutorial, the app is the tutorial you haven't written yet. (930 likes, 88 repost)\n3. I build in public because private feedback is too polite. (610 likes, 41 repost)", "quando": "-3d", "gruppo": "note", "inviato": true },
+    { "id": "x:like:1846000000000000901", "fonte": "x", "tipo": "mipiace", "titolo": "@levelsio: ship it ugly, fix it live", "corpo": "ship it ugly, fix it live\n\nYou liked a post by @levelsio on X.\nhttps://x.com/levelsio/status/1846000000000000901", "autore": "@levelsio", "quando": "-2d", "gruppo": "note", "inviato": true },
+    { "id": "posta:INBOX:7", "fonte": "posta", "tipo": "email", "titolo": "Myynd pricing for Lumen", "corpo": "Hi Tobia, about Myynd: our board approved 4900 euro, CONFIDENTIAL until Friday. Marco", "autore": "Marco Neri <marco@lumen.test>", "quando": "-1d", "gruppo": "posta" }
+  ],
+  "compiti": [
+    { "id": "fatta-1", "testo": "Ship the morning receipt card", "progetto": "my", "stato": "fatto", "chiuso": "-1d" },
+    { "id": "fatta-2", "testo": "Launch notes sync to the beta testers", "progetto": "my", "stato": "fatto", "chiuso": "-2d" },
+    { "id": "fatta-3", "testo": "Fix the onboarding copy", "progetto": "ev", "stato": "fatto", "chiuso": "-3d" }
+  ],
+  "turno": { "notte": "dentro" },
+  "dase": {
+    "quadri": [
+      { "progetto": "my", "sintesi": "Myynd is a Mac app that works as a digital twin: it reads mail and projects and drafts the replies overnight. The beta runs on two Macs, and the morning receipt shipped this week.", "stato": "Beta on two Macs. Morning receipt shipped. Notes sync in beta.", "traguardo": "First paying founder", "blocco": "The Developer ID certificate expired", "mosse": ["Renew the Developer ID certificate", "Write the pricing page"] },
+      { "progetto": "ev", "sintesi": "Evermute is a sleep sounds app for iPhone. Version 1.0 is in App Store review.", "stato": "In App Store review since Friday.", "traguardo": "Evermute 1.0 live on the App Store", "blocco": "" }
+    ]
+  },
+  "p8": {
+    "config": {
+      "notion": { "token": "ntn_finto", "paginaMyynd": { "id": "11111111-1111-4111-8111-111111111111", "titolo": "Myynd" } }
+    },
+    "saltaGiornaliero": true
+  }
+}
