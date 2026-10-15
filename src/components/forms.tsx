@@ -19,6 +19,7 @@ import { preparaApertura } from '../navigazione.ts'
 import { controllaAccessoChatGPT, nomePianoChatGPT } from '../chatgpt-accesso.ts'
 import {statoAccessoNote} from '../note-access.ts'
 import { gmailPerLeApp, type Strada } from '../onboarding/primo-avvio.ts'
+import { Scatola } from './forme'
 
 export type Tema = 'scuro' | 'chiaro'
 
@@ -1968,6 +1969,55 @@ export function FormNotion({ tema, ok, collegato }: Props) {
           t('Nella scheda «Content access» premi «Edit access» e scegli le pagine da leggere.')
         ]} />
       </Aiuto>
+    </div>
+  )
+}
+
+type PaginaNotion = { id: string; titolo: string }
+
+/**
+ * La riga «Myynd scrive in»: la sola pagina di Notion dove Myynd può mettere
+ * le sue, scelta fra quelle condivise con l'integrazione. «Da nessuna parte»
+ * è la scrittura spenta, e non dice altro.
+ *
+ * La scelta si vede subito; se il server dice no, torna quella di prima con
+ * la sua riga di errore. Le pagine arrivano da Notion dopo: fino ad allora,
+ * e se Notion non risponde, nell'elenco c'è almeno quella scelta.
+ */
+export function ScriveInNotion({ scelta: iniziale, cambiata }: { scelta: PaginaNotion | null; cambiata?: () => void }) {
+  const [pagine, setPagine] = useState<PaginaNotion[]>([])
+  const [scelta, setScelta] = useState(iniziale?.id ?? '')
+  const [conosciuta, setConosciuta] = useState<PaginaNotion | null>(iniziale)
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    api.pagineNotion().then(r => { if (vivo) setPagine(r.pagine) }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  const opzioni = conosciuta && !pagine.some(p => p.id === conosciuta.id) ? [conosciuta, ...pagine] : pagine
+  const cambia = async (id: string) => {
+    const prima = scelta
+    setScelta(id); setErr(''); setOccupato(true)
+    try {
+      const r = await api.scriveInNotion(id || null)
+      setConosciuta(r.scelta)
+      cambiata?.()
+    } catch (e) { setScelta(prima); setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+  return (
+    <div className="connection-writes">
+      <div className="connection-writes-row">
+        <span id="notion-scrive">{t('Myynd scrive in')}</span>
+        <Scatola spento={occupato}>
+          <select aria-labelledby="notion-scrive" value={scelta} disabled={occupato} onChange={e => void cambia(e.target.value)}>
+            <option value="">{t('Da nessuna parte')}</option>
+            {opzioni.map(p => <option key={p.id} value={p.id}>{p.titolo}</option>)}
+          </select>
+        </Scatola>
+      </div>
+      <Errore testo={err} />
     </div>
   )
 }

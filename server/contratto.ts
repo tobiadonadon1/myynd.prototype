@@ -36,6 +36,7 @@ import { senzaTrattini } from './testo.ts'
 import { tipoDiLavoro, type Tipo } from './domanda-sola.ts'
 import { luogoPreferito, scriviFile, sembraLavoroDiCodice, type Luogo } from './mani.ts'
 import { destinatario } from './revisione-lavoro.ts'
+import * as notionScrivi from './connettori/notion-scrivi.ts'
 
 export type Contratto = store.Contratto
 export type Mano = store.ManoContratto
@@ -54,6 +55,8 @@ type Ferri = {
   bozzeInMail: () => boolean
   codiceDisponibile: () => boolean
   esiste: (percorso: string) => boolean
+  /** La pagina di Notion scelta per Myynd: senza, la mano `notion` non c'è. */
+  paginaNotion: () => notionScrivi.Pagina | null
 }
 const VERI: Ferri = {
   chiediJSON: o => chiediJSON(o),
@@ -67,13 +70,23 @@ const VERI: Ferri = {
     if (OSPITATO) return false
     try { return !!lavoro.installato() } catch { return false }
   },
-  esiste: p => { try { return existsSync(p) } catch { return false } }
+  esiste: p => { try { return existsSync(p) } catch { return false } },
+  paginaNotion: () => { try { return notionScrivi.paginaMyynd() } catch { return null } }
 }
 let ferri: Ferri = VERI
 
 /** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
 export function perProva(f: Partial<Ferri> | null) {
   ferri = f ? { ...VERI, ...f } : VERI
+}
+
+/**
+ * La mano c'è davvero, adesso. Tutte ci sono, tranne `notion`: quella solo
+ * quando lei ha scelto la pagina dove Myynd scrive. Una carta che la chiede
+ * senza pagina non deve promettere una pagina che nessuno scriverà.
+ */
+export function manoDisponibile(m: Mano): boolean {
+  return m !== 'notion' || !!ferri.paginaNotion()
 }
 
 /** I giri, come in `claude.svolgi`: il budget non può chiederne di più. */
@@ -176,6 +189,10 @@ export function criterioDiBase(c: Pick<store.Compito, 'testo' | 'modo'>, f: Form
         ? `A short summary of ${corto.replace(/^summari[sz]e\s+/i, '')} with the decisions and next steps, each with an owner.`
         : `Un riassunto breve di ${corto.replace(/^riassum\w*\s+/i, '')} con le decisioni e i passi dopo, ognuno con chi lo fa.`
     default:
+      if (f.mani.includes('notion') && manoDisponibile('notion')) {
+        const dove = ferri.paginaNotion()?.titolo
+        return en ? `A page in Notion${dove ? ` under ${dove}` : ''}: ${corto}, complete and up to date.` : `Una pagina in Notion${dove ? ` dentro ${dove}` : ''}: ${corto}, completa e aggiornata.`
+      }
       if (f.mani.includes('nota')) return en ? `A note in Notes: ${corto}, complete and readable on its own.` : `Una nota in Note: ${corto}, completa e leggibile da sola.`
       if (f.mani.includes('file')) {
         const dove = doveVaIlFile(en)
@@ -256,7 +273,8 @@ export async function criterioDalModello(c: Pick<store.Compito, 'testo' | 'nota'
     file: `un file ${doveVaIlFile(false)}`,
     nota: 'una nota in Note',
     web: 'letture dal web come fonti',
-    codice: 'una modifica in una copia del progetto, posata solo se i controlli passano'
+    codice: 'una modifica in una copia del progetto, posata solo se i controlli passano',
+    notion: `una pagina in Notion${ferri.paginaNotion()?.titolo ? ` dentro «${ferri.paginaNotion()!.titolo}»` : ''}, aggiornata per intero`
   }
   const sistema =
     'Scrivi il criterio di «fatto» per un lavoro che un assistente farà per una persona, prima ' +

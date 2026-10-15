@@ -658,7 +658,15 @@ export type ConfigDesktop = {
  * note aveva l'ultima volta.
  */
 export type ConfigNote = { note?: number }
-export type ConfigNotion = { token: string }
+/**
+ * Notion: il token, e — se lui l'ha scelta — la pagina dove Myynd scrive.
+ *
+ * `paginaMyynd` è l'unico posto di Notion che Myynd tocca: ci mette dentro le
+ * sue pagine figlie e non scrive altrove (`connettori/notion-scrivi.ts`).
+ * Senza, la scrittura è spenta. Il titolo è quello che aveva quando l'ha
+ * scelta, per mostrarlo senza chiedere a Notion.
+ */
+export type ConfigNotion = { token: string; paginaMyynd?: { id: string; titolo: string } }
 
 /**
  * GitHub: un token incollato, in sola lettura.
@@ -747,6 +755,13 @@ export type Config = {
   posta?: ConfigPosta
   desktop?: ConfigDesktop
   notion?: ConfigNotion
+  /**
+   * Le pagine che Myynd ha scritto in Notion: chiave stabile (`progetto:<id>`)
+   * → id della pagina. Fuori da `notion` apposta: scollegare e ricollegare non
+   * deve far nascere un doppione di ogni pagina. Una voce che punta fuori
+   * dalla pagina scelta non vale (`notion-scrivi.ts` lo controlla ogni volta).
+   */
+  notionScritte?: Record<string, string>
   github?: ConfigGithub
   granola?: ConfigGranola
   /**
@@ -1291,7 +1306,8 @@ export function pubblica(c: Config = leggi()) {
       : null,
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
     desktop: c.desktop ? { cartelle: c.desktop.cartelle, tutto: c.desktop.tutto === true } : null,
-    notion: c.notion ? { collegato: true } : null,
+    // la pagina dove scrive esce col suo titolo; il token no
+    notion: c.notion ? { collegato: true, scrive: c.notion.paginaMyynd ? { id: c.notion.paginaMyynd.id, titolo: c.notion.paginaMyynd.titolo } : null } : null,
     // esce il numero, non le chiavi: con l'account dentro c'è un refresh
     granola: c.granola ? { collegato: true, note: c.granola.note ?? 0 } : null,
     note: c.note ? { collegato: true, note: c.note.note ?? 0 } : null,

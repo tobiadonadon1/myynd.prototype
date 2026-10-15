@@ -1,0 +1,14 @@
+[
+  { "aspetta": 2000 },
+  { "vai": "Sources" },
+  { "aspetta": 800 },
+  { "clicca": "Notion" },
+  { "aspetta": 1500 },
+  { "js": "(() => { const s = document.querySelector('.connection-writes select'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, '11111111-1111-4111-8111-111111111111'); s.dispatchEvent(new Event('change', { bubbles: true })); return s.value })()" },
+  { "aspetta": 1500 },
+  { "scatta": "scelta-myynd" },
+  { "js": "fetch('/api/stato', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }).then(r => r.json()).then(j => JSON.stringify(j.config.notion))" },
+  { "js": "(() => { const s = document.querySelector('.connection-writes select'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ''); s.dispatchEvent(new Event('change', { bubbles: true })); return s.value })()" },
+  { "aspetta": 1500 },
+  { "js": "fetch('/api/stato', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }).then(r => r.json()).then(j => JSON.stringify(j.config.notion))" }
+]

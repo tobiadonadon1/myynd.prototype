@@ -37,7 +37,8 @@ const NOME_MANO: Record<ManoCompito, string> = {
   file: 'File sul disco',
   nota: 'Nota',
   web: 'Web',
-  codice: 'Codice, in una copia'
+  codice: 'Codice, in una copia',
+  notion: 'Pagina in Notion'
 }
 
 const NOME_PROVENIENZA: Record<Provenienza, string> = {

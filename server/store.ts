@@ -3760,9 +3760,13 @@ export type TurnoCompito = {
   notte?: boolean
 }
 
-/** Le mani di una carta: dove può arrivare il lavoro, oltre a leggere. Nessuna manda niente. */
-export type ManoContratto = 'posta' | 'file' | 'nota' | 'web' | 'codice'
-export const MANI_CONTRATTO: readonly ManoContratto[] = ['posta', 'file', 'nota', 'web', 'codice']
+/**
+ * Le mani di una carta: dove può arrivare il lavoro, oltre a leggere. Nessuna manda niente.
+ * `notion` scrive solo dentro la pagina di Notion che lei ha scelto per Myynd, e c'è solo
+ * quando l'ha scelta (`connettori/notion-scrivi.ts`).
+ */
+export type ManoContratto = 'posta' | 'file' | 'nota' | 'web' | 'codice' | 'notion'
+export const MANI_CONTRATTO: readonly ManoContratto[] = ['posta', 'file', 'nota', 'web', 'codice', 'notion']
 
 export type Contratto = {
   /** «Fatto vuol dire»: la cosa finita e dove arriva, in una riga che si controlla con un sì o un no. */

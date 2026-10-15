@@ -85,7 +85,7 @@ export const PORTE_CHIUSE: readonly string[] = [
   'google.cestina', 'google.archivia', 'google.salvaBozza', 'google.aggiornaBozza',
   'google.verificaEArchiviaPerRegola', 'google.mettiInAgenda',
   'mani.salvaConsegna', 'mani.crea_nota', 'mani.scrivi_file', 'mani.lavora_nel_codice', 'mani.crea_documento_app',
-  'lavoro.fai', 'config.aggiorna'
+  'lavoro.fai', 'config.aggiorna', 'notion.scrivi', 'mani.scrivi_notion'
 ]
 
 export const CHIUSA = 'Nella prova questa porta resta chiusa.'

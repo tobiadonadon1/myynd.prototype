@@ -20,8 +20,12 @@ const TETTO = 800
  */
 let fabbrica: ((c: ConfigNotion) => Client) | null = null
 export function usaCliente(f: ((c: ConfigNotion) => Client) | null) { fabbrica = f }
-function cliente(c: ConfigNotion): Client {
-  return fabbrica ? fabbrica(c) : new Client({ auth: c.token })
+export function cliente(c: ConfigNotion): Client {
+  if (fabbrica) return fabbrica(c)
+  // le prove dal vivo (`prove/scena.sh`) parlano con una Notion finta: solo
+  // col server di sviluppo, perché altrove l'indirizzo vero non si sposta
+  const finta = process.env.MYYND_DEV === '1' ? process.env.MYYND_NOTION_URL : undefined
+  return new Client({ auth: c.token, ...(finta ? { baseUrl: finta } : {}) })
 }
 
 /**
@@ -42,7 +46,7 @@ function quandoLAvevamoLetta(id: string): string | null {
   try { return store.documento(id)?.quando ?? null } catch { return null }
 }
 
-function titolo(p: any): string {
+export function titolo(p: any): string {
   const props = p.properties ?? {}
   for (const v of Object.values<any>(props)) {
     if (v?.type === 'title' && Array.isArray(v.title) && v.title.length) {
@@ -66,7 +70,7 @@ function titolo(p: any): string {
 const ultimaChiamata = new Map<string, number>()
 const PASSO = 350
 
-async function conCalma<T>(f: () => Promise<T>): Promise<T> {
+export async function conCalma<T>(f: () => Promise<T>): Promise<T> {
   const di = chi.adesso() ?? ''
   const attesa = (ultimaChiamata.get(di) ?? 0) + PASSO - Date.now()
   if (attesa > 0) await new Promise(r => setTimeout(r, attesa))

@@ -82,6 +82,7 @@ import * as desktopRemoto from './connettori/desktopRemoto.ts'
 import * as vedetta from './connettori/vedetta.ts'
 import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
+import * as notionScrivi from './connettori/notion-scrivi.ts'
 import * as granola from './connettori/granola.ts'
 import * as granolaMcp from './connettori/granolaMcp.ts'
 import * as note from './connettori/note.ts'
@@ -1633,9 +1634,30 @@ app.post('/api/connettori/notion', async (req, res) => {
   try {
     const esito = await notion.prova({ token })
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    cfg.aggiorna({ notion: { token } })
+    // la pagina dove Myynd scrive resta scelta: ricollegare non è cambiarla
+    cfg.aggiorna({ notion: { ...cfg.leggi().notion, token } })
     res.json({ ok: true, pagine: esito.pagine })
   } catch (e) { errore(res, e) }
+})
+
+/**
+ * La pagina di Notion dove Myynd scrive: le pagine che si possono scegliere
+ * (quelle condivise con l'integrazione, solo i titoli) e quella scelta. Si
+ * sceglie con un id, o si spegne con `null`: senza pagina non si scrive.
+ */
+app.get('/api/connettori/notion/pagine', async (_req, res) => {
+  try {
+    const pagine = await notionScrivi.candidate()
+    res.json({ pagine, scelta: notionScrivi.paginaMyynd() })
+  } catch (e) { errore(res, e, e instanceof notionScrivi.NonScrive ? 400 : 502) }
+})
+
+app.post('/api/connettori/notion/scrive', async (req, res) => {
+  const id = req.body?.id
+  if (id !== null && typeof id !== 'string') return res.status(400).json({ errore: 'Questa non è una pagina di Notion.' })
+  try {
+    res.json({ ok: true, scelta: await notionScrivi.scegli(id || null) })
+  } catch (e) { errore(res, e, e instanceof notionScrivi.NonScrive ? 400 : 502) }
 })
 
 /**

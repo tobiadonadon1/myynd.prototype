@@ -25,6 +25,7 @@ const posta = await import('./connettori/posta.ts')
 const google = await import('./connettori/google.ts')
 const mani = await import('./mani.ts')
 const lavoro = await import('./lavoro.ts')
+const notionScrivi = await import('./connettori/notion-scrivi.ts')
 const cfg = await import('./config.ts')
 const store = await import('./store.ts')
 
@@ -67,7 +68,9 @@ const PORTE: Record<string, () => unknown> = {
   'mani.scrivi_file': () => mani.esegui('scrivi_file', { percorso: 'a.md', testo: 'x' }),
   'mani.lavora_nel_codice': () => mani.esegui('lavora_nel_codice', { richiesta: 'x' }, { cartella: CASA }),
   'lavoro.fai': () => lavoro.fai(null, { cartella: CASA, richiesta: 'x', passo: 'piano' as never }),
-  'config.aggiorna': () => cfg.aggiorna({ lingua: 'en' })
+  'config.aggiorna': () => cfg.aggiorna({ lingua: 'en' }),
+  'notion.scrivi': () => notionScrivi.scrivi({ chiave: 'progetto:x', titolo: 't', markdown: 'x' }),
+  'mani.scrivi_notion': () => mani.esegui('scrivi_notion', { titolo: 't', testo: 'x' })
 }
 
 async function lancia(f: () => unknown): Promise<unknown> {
@@ -95,7 +98,7 @@ test('ogni porta dell\'elenco ha il suo vietato() nel codice', () => {
   const file: Record<string, string> = {
     agenda: 'agenda.ts', microsoft: 'connettori/microsoft.ts', 'mailbox-drafts': 'mailbox-drafts.ts', invio: 'invio.ts',
     postaUscita: 'postaUscita.ts', posta: 'connettori/posta.ts', google: 'connettori/google.ts', mani: 'mani.ts',
-    lavoro: 'lavoro.ts', config: 'config.ts'
+    lavoro: 'lavoro.ts', config: 'config.ts', notion: 'connettori/notion-scrivi.ts'
   }
   for (const nome of pc.PORTE_CHIUSE) {
     const [mod] = nome.split('.')

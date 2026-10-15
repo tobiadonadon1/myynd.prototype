@@ -1,0 +1,14 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" }
+  ],
+  "p8": {
+    "config": {
+      "notion": { "token": "ntn_finto", "paginaMyynd": { "id": "33333333-3333-4333-8333-333333333333", "titolo": "Reading list and notes from the spring conference season" } }
+    },
+    "saltaGiornaliero": true
+  }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, letturaDesktop, type Stato } from '../api'
 import { moduloDaFinire } from '../collegamenti'
-import { AccessoDisco, Form } from './forms'
+import { AccessoDisco, Form, ScriveInNotion } from './forms'
 import { frasi, t } from '../lingua'
 import { BottoneSicuro, useFocoDialogo } from '../ui'
 import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
@@ -293,6 +293,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
           </div>
           {/* i trenta giorni: solo le fonti che si leggono, non i motori */}
           {!MOTORI.includes(scelta.id) && (scelta.collegato || !!problema) && <SaluteFonte id={scelta.id} rileggi={`${scelta.documenti}:${problema ?? ''}:${fonteInLettura ?? ''}`} />}
+          {/* Notion collegato: la sola pagina dove Myynd può scrivere, o nessuna */}
+          {scelta.id === 'notion' && scelta.collegato && !problema && <ScriveInNotion scelta={s?.config.notion?.scrive ?? null} cambiata={() => void ricarica().catch(() => {})} />}
           {moduloSopra && <div className="connection-detail-form" style={{ borderTop: 0, paddingTop: 0, marginBottom: 16 }}><Form id={scelta.id} tema="chiaro" ok={formOk} collegato={formCollegato} /></div>}
           {/* le Note senza il permesso restano a zero: la riga con la strada sta qui, dove si guarda */}
           {scelta.id === 'note' && s?.accessoDisco === 'no' && <div className="connection-detail-form"><AccessoDisco tema="chiaro" /></div>}

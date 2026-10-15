@@ -86,7 +86,8 @@ export type Stato = {
     diSerie: boolean
     posta: { host: string; utente: string; giorni: number } | null
     desktop: { cartelle: string[]; tutto: boolean } | null
-    notion: { collegato: boolean } | null
+    /** `scrive`: la pagina di Notion dove Myynd scrive, se lui l'ha scelta. */
+    notion: { collegato: boolean; scrive?: { id: string; titolo: string } | null } | null
     /** Granola: quante riunioni ha letto. Le chiavi dell'account non escono dal server. */
     granola: { collegato: boolean; note: number } | null
     note: { collegato: boolean; note: number } | null
@@ -766,7 +767,7 @@ export type StatoTurno = {
     costo?: number; limite?: number; rimaste?: number; fermata?: 'budget' | 'stop' | null; buchi?: { da: string; a: string }[] }
 }
 
-export type ManoCompito = 'posta' | 'file' | 'nota' | 'web' | 'codice'
+export type ManoCompito = 'posta' | 'file' | 'nota' | 'web' | 'codice' | 'notion'
 export type ContrattoCompito = {
   criterio: string
   mani: ManoCompito[]
@@ -1497,6 +1498,14 @@ export const api = {
 
   collegaNotion: (token: string) =>
     json<{ ok: true; pagine: number }>('/api/connettori/notion', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  /** Le pagine di Notion dove Myynd può scrivere (solo i titoli), e quella scelta. */
+  pagineNotion: () =>
+    json<{ pagine: { id: string; titolo: string }[]; scelta: { id: string; titolo: string } | null }>('/api/connettori/notion/pagine'),
+
+  /** Sceglie la pagina di Notion dove Myynd scrive; `null` spegne la scrittura. */
+  scriveInNotion: (id: string | null) =>
+    json<{ ok: true; scelta: { id: string; titolo: string } | null }>('/api/connettori/notion/scrive', { method: 'POST', body: JSON.stringify({ id }) }),
 
   collegaCalendario: (p: { url: string; giorni: number }) =>
     json<{ ok: true; nome: string; eventi: number }>('/api/connettori/calendario', { method: 'POST', body: JSON.stringify(p) }),

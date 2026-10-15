@@ -15,6 +15,7 @@
 #   COSTRUISCI  auto | si | no: la UI con `vite build`              (auto: solo se dist/ è più vecchia dei sorgenti)
 #   TIENI=1     lascia server e modello accesi, e dice come spegnerli
 #   INCLUSO=1   (F8) il ponte dell'AI inclusa è il modello finto (MYYND_INCLUSO_URL)
+#   NOTION_URL  una Notion finta (prove/finto-notion.mjs), accesa da chi chiama (MYYND_NOTION_URL)
 #
 # Non legge mai .env.local: il server parte con `env -i` e solo le variabili
 # scritte qui, con una casa finta (HOME) e dati finti (MYYND_DATI). Se una
@@ -90,6 +91,7 @@ fi
 env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA MYYND_PROVA_NIENTE_OPEN=1 MYYND_SENZA_APP_MAC=1 ${APP:+MYYND_APP=1} ${MYYND_ADESSO:+MYYND_ADESSO=$MYYND_ADESSO} \
   ${MYYND_PRIMA_RILETTURA_MS:+MYYND_PRIMA_RILETTURA_MS=$MYYND_PRIMA_RILETTURA_MS} \
   ${INCLUSO:+MYYND_INCLUSO_URL=http://127.0.0.1:$PORTA_MODELLO} \
+  ${NOTION_URL:+MYYND_NOTION_URL=$NOTION_URL} \
   node --disable-warning=ExperimentalWarning server/index.ts > "$OUT/server.log" 2>&1 &
 SRV=$!
 aspetta_riga "$OUT/server.log" 'server su http' 40

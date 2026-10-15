@@ -1,0 +1,9 @@
+[
+  { "aspetta": 2000 },
+  { "vai": "Sources" },
+  { "aspetta": 800 },
+  { "clicca": "Notion" },
+  { "aspetta": 1500 },
+  { "scatta": "pannello-notion" },
+  { "js": "JSON.stringify([...document.querySelectorAll('.connection-writes option')].map(o => o.textContent + (o.selected ? ' *' : '')))" }
+]

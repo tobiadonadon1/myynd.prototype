@@ -22,6 +22,9 @@
 //     Scrivania o in una copia di lavoro. Mai altrove.
 //   · `lavora_nel_codice`: Claude Code dentro una copia della cartella del
 //     progetto; la cartella vera non si tocca.
+//   · `scrivi_notion`: una pagina figlia della pagina di Notion che lui ha
+//     scelto per Myynd (`connettori/notion-scrivi.ts`), e solo se l'ha scelta.
+//     Mai altrove, mai una pagina cancellata.
 //
 // Ogni mano torna con un `Fatto`: cosa ha usato e cosa ha restituito. È la
 // lista che permette di scrivere una frase di chiusura vera («Fatto: la nota
@@ -50,10 +53,11 @@ import { landReport } from './esecuzione-isolata.ts'
 import { detectRuntime } from './agent-runtime.ts'
 import { openInProva } from './senza-open.ts'
 import { vietato } from './prova-chiusa.ts'
+import * as notionScrivi from './connettori/notion-scrivi.ts'
 
 // — cosa è stato fatto —
 
-export type Attrezzo = 'leggi_file' | 'leggi_pagina' | 'cerca_web' | 'crea_nota' | 'scrivi_file' | 'lavora' | 'crea_documento_app' | 'cerca' | 'apri'
+export type Attrezzo = 'leggi_file' | 'leggi_pagina' | 'cerca_web' | 'crea_nota' | 'scrivi_file' | 'lavora' | 'crea_documento_app' | 'cerca' | 'apri' | 'scrivi_notion'
 
 /**
  * Un attrezzo usato, e cosa ha restituito.
@@ -80,7 +84,7 @@ export type Fatto = {
 export const TETTO_LETTURA = 6000
 
 /** Le mani che producono qualcosa fuori da Myynd: quelle che una frase di chiusura può nominare. */
-export const CHE_PRODUCONO: Attrezzo[] = ['crea_documento_app', 'crea_nota', 'scrivi_file', 'lavora']
+export const CHE_PRODUCONO: Attrezzo[] = ['crea_documento_app', 'crea_nota', 'scrivi_file', 'lavora', 'scrivi_notion']
 
 // — le mani sostituibili —
 
@@ -105,6 +109,8 @@ type Ferri = {
   copie: () => string
   piattaforma: () => string
   ospitato: () => boolean
+  /** Notion in scrittura: accesa solo con una pagina scelta. */
+  notion: { attiva: () => boolean; scrivi: typeof notionScrivi.scrivi; pagina: () => notionScrivi.Pagina | null }
 }
 const VERI: Ferri = {
   rete: (...a) => fetch(...a),
@@ -129,7 +135,8 @@ const VERI: Ferri = {
   apri: percorso => apriSulMac(percorso),
   copie: () => join(cartellaProfilo(), 'project-work'),
   piattaforma: () => process.platform,
-  ospitato: () => OSPITATO
+  ospitato: () => OSPITATO,
+  notion: { attiva: () => notionScrivi.attiva(), scrivi: o => notionScrivi.scrivi(o), pagina: () => { try { return notionScrivi.paginaMyynd() } catch { return null } } }
 }
 let ferri: Ferri = VERI
 
@@ -886,6 +893,19 @@ export const LAVORA_NEL_CODICE: Anthropic.Tool = {
   input_schema: schema({ richiesta: { type: 'string', description: 'Cosa deve fare nel progetto: cosa cambiare, dove, e come si verifica.' } }, ['richiesta'])
 }
 
+export const SCRIVI_NOTION: Anthropic.Tool = {
+  name: 'scrivi_notion',
+  description:
+    'Scrivi una pagina in Notion, dentro la pagina che lei ha scelto per Myynd, e da nessun\'altra ' +
+    'parte. Se la pagina di questo lavoro c\'è già, ne sostituisci il contenuto: scrivila sempre ' +
+    'intera, non solo la parte nuova. Il testo è in Markdown (titoli, elenchi, cose da fare con ' +
+    '- [ ], grassetto, link). Usala solo se il compito chiede una pagina in Notion. Torna il titolo.',
+  input_schema: schema({
+    titolo: { type: 'string', description: 'Il titolo della pagina, una riga.' },
+    testo: { type: 'string', description: 'Il contenuto completo della pagina, in Markdown.' }
+  }, ['titolo', 'testo'])
+}
+
 /** Le mani che una riga si porta dietro, decise dal testo del compito e dal contesto. */
 /*
  * Le mani del contratto (F3). Il contratto di una carta (`contratto.ts`) dice
@@ -897,7 +917,7 @@ export const LAVORA_NEL_CODICE: Anthropic.Tool = {
  * consegne, il codice cambia in una copia e si posa solo se i controlli
  * passano.
  */
-export type ManoDelContratto = 'posta' | 'file' | 'nota' | 'web' | 'codice'
+export type ManoDelContratto = 'posta' | 'file' | 'nota' | 'web' | 'codice' | 'notion'
 
 export function perQuestoCompito(o: { compito: string; nota?: string | null; cartella?: string | null; ospitato?: boolean; mani?: readonly ManoDelContratto[] | null }): Anthropic.Tool[] {
   const testo = `${o.compito}\n${o.nota ?? ''}`
@@ -908,10 +928,12 @@ export function perQuestoCompito(o: { compito: string; nota?: string | null; car
   if (!ospitato && ferri.piattaforma() === 'darwin' && (dal.has('nota') || /\b(?:apple notes|notes app|note app|nota|note|appunt[oi])\b/i.test(testo))) mani.push(CREA_NOTA)
   if (!ospitato && (dal.has('file') || /\b(?:file|files|save|salva\w*|markdown|\.md|\.txt|\.csv|\.json|csv|json|yaml|on (?:my |the )?desktop|sulla scrivania|sul desktop|myynd folder|cartella myynd)\b/i.test(testo))) mani.push(SCRIVI_FILE)
   if (!ospitato && o.cartella && (dal.has('codice') || sembraLavoroDiCodice(o.compito, o.nota)) && ferri.installato()) mani.push(LAVORA_NEL_CODICE)
+  // Notion solo se il contratto lo dice e lui ha scelto la pagina: mai dedotta dal testo
+  if (dal.has('notion') && ferri.notion.attiva()) mani.push(SCRIVI_NOTION)
   return mani
 }
 
-const NOMI = new Set([LEGGI_FILE.name, LEGGI_PAGINA.name, CERCA_WEB.name, CREA_NOTA.name, SCRIVI_FILE.name, LAVORA_NEL_CODICE.name])
+const NOMI = new Set([LEGGI_FILE.name, LEGGI_PAGINA.name, CERCA_WEB.name, CREA_NOTA.name, SCRIVI_FILE.name, LAVORA_NEL_CODICE.name, SCRIVI_NOTION.name])
 export function eUnaMano(nome: string): boolean { return NOMI.has(nome) }
 
 /** Cosa si dice al modello delle mani che ha. */
@@ -929,6 +951,8 @@ export function spiega(mani: Anthropic.Tool[]): string {
 }
 
 export type Contesto = { cartella?: string | null; copia?: string | null; signal?: AbortSignal; luogo?: Luogo
+  /** La chiave stabile della pagina in Notion (`progetto:<id>`): senza, vale il titolo. */
+  chiaveNotion?: string | null
   /** F9 · il lavoro sul codice resta nella copia (di notte, per una carta del turno). */
   soloCopia?: boolean }
 export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: string }
@@ -941,7 +965,7 @@ export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: stri
  */
 export async function esegui(nome: string, input: unknown, contesto: Contesto = {}): Promise<Uscita> {
   // nella prova (P6) le mani che scrivono non si aprono: si lancia fuori, non è un guaio della mano
-  if (nome === CREA_NOTA.name || nome === SCRIVI_FILE.name || nome === LAVORA_NEL_CODICE.name) vietato(`mani.${nome}`)
+  if (nome === CREA_NOTA.name || nome === SCRIVI_FILE.name || nome === LAVORA_NEL_CODICE.name || nome === SCRIVI_NOTION.name) vietato(`mani.${nome}`)
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
   const s = (k: string) => typeof i[k] === 'string' ? i[k] as string : ''
   const guaio = (attrezzo: Attrezzo, dettaglio: string, e: unknown): Uscita =>
@@ -974,6 +998,17 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
       const percorso = scriviFile({ percorso: s('percorso'), testo: s('testo') }, contesto.copia, contesto.luogo)
       return { testo: `File scritto: ${percorso}`, fatto: { attrezzo: 'scrivi_file', esito: 'ok', dettaglio: percorso } }
     }
+    if (nome === SCRIVI_NOTION.name) {
+      const titolo = s('titolo').replace(/\s+/g, ' ').trim()
+      if (!titolo) return guaio('scrivi_notion', '', new Error('Serve un titolo per la pagina.'))
+      const chiave = contesto.chiaveNotion?.trim() || `titolo:${titolo.toLowerCase().slice(0, 120)}`
+      const r = await ferri.notion.scrivi({ chiave, titolo, markdown: s('testo') })
+      const dove = ferri.notion.pagina()?.titolo
+      return {
+        testo: `Pagina ${r.creata ? 'creata' : 'aggiornata'} in Notion: «${titolo}»${dove ? ` dentro «${dove}»` : ''}.`,
+        fatto: { attrezzo: 'scrivi_notion', esito: 'ok', dettaglio: titolo }
+      }
+    }
     if (nome === LAVORA_NEL_CODICE.name) {
       if (!contesto.cartella) return guaio('lavora', '', new Error('Questa riga non ha una cartella di progetto.'))
       const r = await lavoraNelCodice({ cartella: contesto.cartella, richiesta: s('richiesta'), signal: contesto.signal, ...(contesto.soloCopia ? { soloCopia: true } : {}) })
@@ -990,7 +1025,7 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
   } catch (e) {
     if (contesto.signal?.aborted) throw e
     const attrezzo: Attrezzo = nome === LEGGI_FILE.name ? 'leggi_file' : nome === LEGGI_PAGINA.name ? 'leggi_pagina' : nome === CERCA_WEB.name ? 'cerca_web'
-      : nome === CREA_NOTA.name ? 'crea_nota' : nome === SCRIVI_FILE.name ? 'scrivi_file' : 'lavora'
+      : nome === CREA_NOTA.name ? 'crea_nota' : nome === SCRIVI_FILE.name ? 'scrivi_file' : nome === SCRIVI_NOTION.name ? 'scrivi_notion' : 'lavora'
     return guaio(attrezzo, s('percorso') || s('url') || s('query') || s('titolo') || '', e)
   }
 }
@@ -1021,6 +1056,7 @@ export function fraseDaiFatti(fatti: Fatto[], lingua: 'it' | 'en'): string {
       const [app, titolo] = f.dettaglio.includes(': ') ? f.dettaglio.split(/: (.*)/s) : ['', f.dettaglio]
       parti.push(e ? `the document ${virgolette(titolo)} is saved in ${app || 'the app'}` : `il documento ${virgolette(titolo)} è salvato in ${app || 'app'}`)
     } else if (f.attrezzo === 'crea_nota') parti.push(e ? `the note ${virgolette(f.dettaglio)} is in Apple Notes` : `la nota ${virgolette(f.dettaglio)} è in Note`)
+    else if (f.attrezzo === 'scrivi_notion') parti.push(e ? `the page ${virgolette(f.dettaglio)} is in Notion` : `la pagina ${virgolette(f.dettaglio)} è in Notion`)
     else if (f.attrezzo === 'scrivi_file') {
       const luogo = luogoDelPercorso(f.dettaglio)
       parti.push(luogo

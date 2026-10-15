@@ -129,7 +129,8 @@ const NOME_MANO: Record<ManoCompito, string> = {
   file: 'File sul disco',
   nota: 'Nota',
   web: 'Web',
-  codice: 'Codice, in una copia'
+  codice: 'Codice, in una copia',
+  notion: 'Pagina in Notion'
 }
 
 /** F9 · per quanti giorni dopo la chiusura il lavoro di Myynd si disfa ancora: la stessa regola di `server/disfa.ts`. */

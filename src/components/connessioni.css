@@ -62,6 +62,11 @@
 .connection-detail-overview.needs-access .connector-tile-mark{color:var(--rame-testo);border-color:rgba(var(--rame-rgb),.3)}
 .connection-detail-overview p.connection-detail-since{color:var(--rame-testo)}
 .connection-health{margin:0 0 18px}
+.connection-writes{margin:0 0 18px}
+.connection-writes-row{display:flex;align-items:center;gap:14px;min-width:0}
+.connection-writes-row>span{flex:1;min-width:0;font-size:13px;color:var(--inchiostro);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.connection-writes-row .f-scatola{flex:0 1 260px;width:auto;padding:7px 12px;align-items:center}
+.connection-writes-row select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden;font-size:13px}
 .connection-health p{margin:0 0 8px;font-size:12px;line-height:1.5;color:rgba(var(--inchiostro-rgb),.7);font-variant-numeric:tabular-nums}
 .connection-health-strip{display:grid;gap:3px}
 .connection-health-strip span{height:12px;min-width:0;border-radius:99px;box-sizing:border-box}
