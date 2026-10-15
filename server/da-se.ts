@@ -57,6 +57,7 @@ import * as store from './store.ts'
 import * as progetti from './progetti.ts'
 import * as quadro from './quadro.ts'
 import * as x from './connettori/x.ts'
+import { campioneVoce } from './connettori/x-archivio.ts'
 import * as mani from './mani.ts'
 import * as contratto from './contratto.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
@@ -149,11 +150,20 @@ export function permesso(pronto: () => boolean = collegato): boolean {
 
 /** Un fatto che il modello può citare: un'etichetta, il testo per lui, e come si dice nel file. */
 export type Fatto = { id: string; testo: string; etichetta: string }
-export type PostX = { id: string; testo: string; quando: string; risposta: boolean; numeri: x.Numeri | null; punti: number }
+/** `punti` è null quando dei suoi gesti non si sa niente: un numero sconosciuto non è uno zero. */
+export type PostX = { id: string; testo: string; quando: string; risposta: boolean; numeri: x.Numeri | null; punti: number | null }
 
-/** Quanto è andato un post: i gesti contano più delle visualizzazioni, e il repost più del mi piace. */
-export function punti(n: x.Numeri | null): number {
-  return n ? n.mipiace + 2 * n.repost + 2 * n.risposte + n.segnalibri + n.visualizzazioni / 200 : 0
+/**
+ * Quanto è andato un post: i gesti contano più delle visualizzazioni, e il
+ * repost più del mi piace. Un numero che non si sa (le visualizzazioni
+ * dell'archivio) non conta né in più né in meno; senza nessun gesto noto il
+ * post non ha punti, e non entra fra i migliori.
+ */
+export function punti(n: x.Numeri | null): number | null {
+  if (!n) return null
+  const gesti = [n.mipiace, n.repost === null ? null : 2 * n.repost, n.risposte === null ? null : 2 * n.risposte, n.segnalibri].filter((v): v is number => v !== null)
+  if (!gesti.length) return null
+  return gesti.reduce((a, b) => a + b, 0) + (n.visualizzazioni ?? 0) / 200
 }
 
 /** Il quadro di un progetto, letto senza fidarsi: la `sintesi` può non esserci ancora. */
@@ -189,9 +199,11 @@ export function suoiPost(adesso = Date.now()): PostX[] {
   return x.recenti(GIORNI_POST, adesso).post.map(p => ({ id: p.id, testo: p.testo, quando: p.quando, risposta: p.risposta, numeri: p.numeri, punti: punti(p.numeri) }))
 }
 
-/** I campioni di voce che lui ha messo da parte (`x:voce:*`), se ci sono. */
-export function campioniDiVoce(): store.Documento[] {
-  return [...store.quandoPerPrefisso('x:voce:').keys()].map(id => store.documento(id)).filter((d): d is store.Documento => !!d).slice(0, 5)
+/** Quanti post del campione della sua voce (`x:voce:*`, dall'archivio) entrano in un prompt: i più ripresi di sempre. */
+export const VOCE_NEL_PROMPT = 25
+/** Il campione della sua voce, se ha importato l'archivio: i post più ripresi di sempre, il primo il più ripreso. */
+export function campioniDiVoce(): string[] {
+  try { return campioneVoce().slice(0, VOCE_NEL_PROMPT) } catch { return [] }
 }
 
 const CARTA_DI_POSTA = /^(?:posta|postamac|gmail|outlook|imap|whatsapp|imessage|slack)/
@@ -266,7 +278,8 @@ function conQuadro(): { p: progetti.Progetto; q: quadro.Quadro | null; foto: Fot
 
 export type MaterialeX = {
   post: PostX[]
-  voce: store.Documento[]
+  /** I post più ripresi di sempre, dall'archivio: la sua voce, non fatti da citare. */
+  voce: string[]
   gusti: { autori: string[]; parole: string[] }
   progetti: Fatto[]
   lavoro: Fatto[]
@@ -281,7 +294,9 @@ export type MaterialeX = {
 /** Il materiale per le idee, o null se non si sa ancora come scrive. */
 export function materialeX(adesso = Date.now()): MaterialeX | null {
   const post = suoiPost(adesso)
-  if (post.filter(p => !p.risposta).length < POST_MIN) return null
+  const voce = campioniDiVoce()
+  // senza tre post recenti né il campione dell'archivio non si sa come scrive
+  if (post.filter(p => !p.risposta).length < POST_MIN && voce.length < POST_MIN) return null
   const r = x.recenti(x.GIORNI_MIPIACE, adesso)
   const vivi = conQuadro()
   const fattiP: Fatto[] = vivi.slice(0, 6).map(({ p, foto }, i) => ({
@@ -298,7 +313,7 @@ export function materialeX(adesso = Date.now()): MaterialeX | null {
   const ultimoLike = [...store.quandoPerPrefisso('x:like:').values()].filter(Boolean).sort().pop() ?? ''
   const impronta = hash(JSON.stringify([post[0]?.id ?? '', post[0]?.quando ?? '', ultimoLike, lavoro.map(l => l.testo), vivi.map(v => v.foto ? [v.foto.sintesi, v.foto.traguardo] : null)]))
   return {
-    post, voce: campioniDiVoce(),
+    post, voce,
     gusti: { autori: r.autori.slice(0, 6).map(a => a.autore), parole: r.parole.slice(0, 10).map(p => p.parola) },
     progetti: fattiP, lavoro,
     prima: leggiStato().x?.idee ?? [],
@@ -310,14 +325,14 @@ export function materialeX(adesso = Date.now()): MaterialeX | null {
 /** I post che fanno da modello: i migliori per numeri, e i più recenti per come scrive adesso. */
 export function postModello(post: PostX[]): { migliori: PostX[]; recenti: PostX[] } {
   const originali = post.filter(p => !p.risposta)
-  const migliori = originali.filter(p => p.numeri).sort((a, b) => b.punti - a.punti).slice(0, 6)
+  const migliori = originali.filter(p => p.punti !== null).sort((a, b) => b.punti! - a.punti!).slice(0, 6)
   const recenti = originali.filter(p => !migliori.includes(p)).slice(0, 4)
   return { migliori, recenti }
 }
 
 /** Usa gli hashtag, le emoji? Lo si guarda nei suoi post, non lo si chiede. */
-export function abitudini(post: PostX[]): { hashtag: boolean; emoji: boolean; lunghezza: number; massimo: number } {
-  const t = post.filter(p => !p.risposta).map(p => p.testo)
+export function abitudini(post: PostX[], voce: readonly string[] = []): { hashtag: boolean; emoji: boolean; lunghezza: number; massimo: number } {
+  const t = [...post.filter(p => !p.risposta).map(p => p.testo), ...voce]
   const lunghezze = t.map(s => s.length).sort((a, b) => a - b)
   return {
     hashtag: t.some(s => /(?:^|\s)#[\p{L}\d_]+/u.test(s)),
@@ -328,14 +343,15 @@ export function abitudini(post: PostX[]): { hashtag: boolean; emoji: boolean; lu
 }
 
 const NOMI_LINGUA = { it: 'Italian', en: 'English' } as const
-const numeriInRiga = (n: x.Numeri | null) => n ? `${n.visualizzazioni} views, ${n.mipiace} likes, ${n.repost} reposts, ${n.risposte} replies, ${n.segnalibri} bookmarks` : 'numbers not settled yet'
+const numero = (v: number | null, nome: string) => `${v === null ? 'unknown' : v} ${nome}`
+const numeriInRiga = (n: x.Numeri | null) => n ? [numero(n.visualizzazioni, 'views'), numero(n.mipiace, 'likes'), numero(n.repost, 'reposts'), numero(n.risposte, 'replies'), numero(n.segnalibri, 'bookmarks')].join(', ') : 'numbers not settled yet'
 
 /** Il prompt delle idee: il sistema, il messaggio, e le etichette che si possono citare. */
 export function promptX(m: MaterialeX, o: { nome?: string; lingua?: 'it' | 'en' } = {}): { system: string; utente: string; fonti: Map<string, Fatto> } {
   const nome = o.nome || cfg.leggi().nome || 'the user'
   const app = o.lingua ?? cfg.lingua()
   const { migliori, recenti } = postModello(m.post)
-  const a = abitudini(m.post)
+  const a = abitudini(m.post, m.voce)
   const fonti = new Map<string, Fatto>()
   const voce = [...migliori, ...recenti].map((p, i) => {
     const f: Fatto = { id: `X${i + 1}`, testo: p.testo, etichetta: `your post of ${p.quando.slice(0, 10)}` }
@@ -363,7 +379,7 @@ export function promptX(m: MaterialeX, o: { nome?: string; lingua?: 'it' | 'en' 
   ].join('\n')
   const utente = [
     `His posts (best by numbers first, then the latest):\n\n${voce.join('\n\n')}`,
-    m.voce.length ? `Voice samples he kept:\n${m.voce.map(d => `"""\n${d.corpo.slice(0, 600)}\n"""`).join('\n')}` : '',
+    m.voce.length ? `His most engaged posts ever, from his archive (for the voice only, not facts to cite):\n${m.voce.map(t => `- ${t}`).join('\n')}` : '',
     m.gusti.autori.length || m.gusti.parole.length ? `What he liked lately: accounts ${m.gusti.autori.join(', ') || 'none'}; words that come back ${m.gusti.parole.join(', ') || 'none'}.` : '',
     m.progetti.length ? `His active projects:\n${m.progetti.map(f => `[${f.id}] ${f.testo}`).join('\n')}` : '',
     m.lavoro.length ? `Work he finished in the last ${GIORNI_LAVORO} days:\n${m.lavoro.map(f => `[${f.id}] ${f.testo}`).join('\n')}` : `No finished work recorded in the last ${GIORNI_LAVORO} days.`,
@@ -412,12 +428,13 @@ function etichette(v: unknown, fonti: Map<string, Fatto>): string[] {
  * hashtag se lui non li usa, non più lunghe dei suoi post più lunghi, e non
  * già scritte da lui o nel lotto di prima.
  */
-export function ideeValide(r: unknown, fonti: Map<string, Fatto>, m: Pick<MaterialeX, 'post' | 'prima'>): Idea[] {
+export function ideeValide(r: unknown, fonti: Map<string, Fatto>, m: Pick<MaterialeX, 'post' | 'prima'> & { voce?: string[] }): Idea[] {
   const lista = (r as { idee?: unknown } | null)?.idee
   if (!Array.isArray(lista)) return []
-  const a = abitudini(m.post)
+  const a = abitudini(m.post, m.voce)
   const tetto = Math.max(280, Math.round(a.massimo * 1.2))
-  const gia = [...m.post.map(p => p.testo), ...m.prima]
+  // né un post suo recente, né uno del campione di sempre, né il lotto di prima
+  const gia = [...m.post.map(p => p.testo), ...(m.voce ?? []), ...m.prima]
   const out: Idea[] = []
   for (const i of lista) {
     const o = i as Record<string, unknown>
@@ -492,6 +509,7 @@ export function promptVideo(o: { progetto: progetti.Progetto; foto: Foto | null;
   const progresso = o.progresso.map(e => metti({ id: e.id, testo: `${e.quando.slice(0, 10)} · ${e.testo}`, etichetta: `${e.testo.slice(0, 90)} (${e.quando.slice(5, 10)})` }))
   const { migliori, recenti } = postModello(o.post)
   const voce = [...migliori.slice(0, 4), ...recenti.slice(0, 2)].map(x => `"""\n${x.testo}\n"""`)
+  for (const t of campioniDiVoce().slice(0, 8)) voce.push(`"""\n${t}\n"""`)
   const system = [
     `You write a 60 to 90 second talking-head video script for ${nome}, about his project ${p.nome}. He records it himself, to camera. Nothing is published: you only write the script.`,
     '',

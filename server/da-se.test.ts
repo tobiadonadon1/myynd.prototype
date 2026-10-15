@@ -371,3 +371,30 @@ test('niente pubblica: da-se.ts non tocca la posta, l\'invio o X in scrittura, e
   const xs = readFileSync(new URL('./connettori/x.ts', import.meta.url), 'utf8')
   assert.ok(!/\b(?:fetch|request)\([^)]*(?:tweets|statuses\/update|CreateTweet)/i.test(xs), 'x.ts legge soltanto')
 })
+
+test('i numeri che non si sanno non sono zeri: un post senza gesti noti non è fra i migliori', () => {
+  assert.equal(daSe.punti({ visualizzazioni: null, mipiace: null, repost: null, risposte: null, segnalibri: null }), null)
+  assert.equal(daSe.punti({ visualizzazioni: null, mipiace: 10, repost: 2, risposte: null, segnalibri: null }), 14)
+  const post = [
+    { id: 'a', testo: 'archivio', quando: '2026-10-01', risposta: false, numeri: { visualizzazioni: null, mipiace: null, repost: null, risposte: null, segnalibri: null }, punti: null },
+    { id: 'b', testo: 'pochi', quando: '2026-10-02', risposta: false, numeri: { visualizzazioni: 10, mipiace: 1, repost: 0, risposte: 0, segnalibri: 0 }, punti: 1.05 }
+  ]
+  assert.deepEqual(daSe.postModello(post).migliori.map(p => p.id), ['b'])
+})
+
+test('il campione della sua voce dall\'archivio entra nei prompt come voce, non come fatto da citare', async () => {
+  const archivio = await import('./connettori/x-archivio.ts')
+  store.salvaDocumenti(archivio.documentiVoce([
+    { postId: '1', testo: 'Most founders don\'t need more tools. They need fewer tabs.', quando: '2024-03-01T10:00:00.000Z', risposta: false, mipiace: 900, repost: 120 },
+    { postId: '2', testo: 'Ship on Friday. Fix on Saturday. Sleep on Sunday.', quando: '2025-05-01T10:00:00.000Z', risposta: false, mipiace: 600, repost: 80 }
+  ], false, new Date(ORA).toISOString()))
+  const m = daSe.materialeX(ORA)!
+  assert.equal(m.voce[0], 'Most founders don\'t need more tools. They need fewer tabs.')
+  const p = daSe.promptX(m)
+  assert.match(p.utente, /His most engaged posts ever, from his archive \(for the voice only, not facts to cite\):\n- Most founders/)
+  assert.ok(![...p.fonti.values()].some(f => f.testo.includes('fewer tabs')), 'il campione non si cita')
+  const v = daSe.promptVideo({ progetto: myynd, foto: null, progresso: [], post: daSe.suoiPost(ORA), lingua: 'en' })
+  assert.match(v.utente, /Ship on Friday\. Fix on Saturday/)
+  // un'idea uguale a un post del campione non passa
+  assert.equal(daSe.ideeValide({ idee: [{ testo: 'Ship on Friday. Fix on Saturday. Sleep on Sunday.', perche: 'x', fonti: ['P1'] }] }, p.fonti, m).length, 0)
+})
