@@ -378,6 +378,22 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     metti(d.id, `[${d.id}] ${d.fonte}${d.autore ? ` da ${d.autore.slice(0, 60)}` : ''}${d.inviato ? ' (scritta da lui)' : ''}: ${d.titolo} (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`)
   }
 
+  /*
+   * I suoi post su X che nominano il progetto: è lui che ne parla in
+   * pubblico, e una mossa può partire da lì. Solo i suoi (`x:mio:`), e solo
+   * per nome: la timeline e i mi piace sono parole d'altri, e restano fuori
+   * come tutto il resto di X.
+   */
+  const suoiSuX = docs.filter(d => d.fonte === 'x' && d.id.startsWith('x:mio:')
+    && Date.parse(d.quando ?? '') >= soglia
+    && progetti.nominaProgetto(d.corpo, p))
+    .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 6)
+  for (const d of suoiSuX) {
+    const t = d.corpo.replace(/\s+/g, ' ').trim().slice(0, 600)
+    segna(d.quando)
+    metti(d.id, `[${d.id}] Post suo su X (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`)
+  }
+
   // la cosa vista da fuori, come la vede un cliente: il sito vero, e se il blog è fermo.
   // Non entra nell'impronta (una pagina viva cambia a ogni visita): il quadro non si rifà per questo.
   const fuori: { id: string; testo: string }[] = []

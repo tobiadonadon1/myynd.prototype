@@ -847,7 +847,20 @@ app.get('/api/stato', async (_req, res) => {
       // (un fatto, non un guasto): solo quando ci sono
       ...(problemaDi(v.id) ? { problema: problemaDi(v.id) } : {}),
       ...(silenzi.has(v.id) ? { silenzio: silenzi.get(v.id) } : {})
-    })),
+    })).concat(c.x && !ospitato.OSPITATO ? [{
+      /*
+       * X non sta nel catalogo: non si collega, si accende da solo quando sul
+       * Mac c'è il motore che scrive per lui. Ma una volta acceso è una fonte
+       * come le altre, e quando il motore si ferma deve dirlo fra quelle da
+       * sistemare, con il giorno dell'ultima cosa scritta (`fermoDal`).
+       */
+      id: 'x', nome: 'X', gruppo: 'Comunicazione', pronto: true, legge: true,
+      nota: 'Quello che pubblichi su X, quello che ti piace e la tua timeline, dal motore di X su questo Mac.',
+      collegato: true,
+      documenti: n.perFonte.find(f => f.fonte === 'x')?.n ?? 0,
+      ...(problemaDi('x') ? { problema: problemaDi('x') } : {}),
+      ...(problemaDi('x') && store.cursore('x:fermo') ? { fermoDal: store.cursore('x:fermo')! } : {})
+    }] : []),
     // su un server sarebbero le cartelle di root dentro il contenitore: non
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
     /*
@@ -890,7 +903,8 @@ app.get('/api/stato', async (_req, res) => {
     accessoNote,
     // le fonti che l'ultima lettura non ha letto per intero: la prima pagina
     // le scrive in una riga fissa finché una lettura non le trova a posto
-    letturaIncompleta: fontiIncomplete(chi.adesso() ?? ''),
+    // X fermo: il guaio è da quando il motore non scrive più, non da quando ce ne siamo accorti
+    letturaIncompleta: fontiIncomplete(chi.adesso() ?? '').map(f => f.fonte === 'x' && store.cursore('x:fermo') ? { ...f, dal: store.cursore('x:fermo')!, fermo: true } : f),
     // il guaio del motore che lavora (accesso o chiave), per la stessa riga
     testa: saluteTeste.testaDaMostrare(),
     // i titoli delle finestre accesi: allora la pagina chiede al guscio se il
@@ -2116,6 +2130,8 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'drive') { delete c.drive; drive.scordaIlToken() }
   else if (id === 'dropbox') { delete c.dropbox; dropbox.scordaIlToken() }
   else if (id === 'whatsapp') delete c.whatsapp
+  // X si era acceso da solo: scollegato, resta spento (è in `accesiDaSoli`, l'avvio non lo riaccende)
+  else if (id === 'x') delete c.x
   /*
     Le due metà di Microsoft si staccano una per volta, e non passano di qui:
     `scollega` sa che quando resta l'altra il token va tenuto. Scriverle in
@@ -2416,9 +2432,17 @@ async function leggiTuttoDentro(
     const motore = await import('./connettori/x.ts')
     const e = await motore.sincronizza(x)
     await store.salvaDocumentiAPezzi(e.docs)
-    // il database è un insieme intero: quello che non c'è più dentro non c'è più
-    const tolti = store.riconcilia('x', { completo: true }, e.docs.map(d => d.id))
-    avvisa({ fase: 'x', stato: 'fatto', documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, tolti })
+    // quello che solo il motore scrive si riconcilia per intero; i suoi post,
+    // i mi piace e la timeline escono quando escono dalla loro finestra (vedi x.ts)
+    const tolti = motore.riconcilia(e.docs.map(d => d.id))
+    /*
+     * Un motore fermo: quello che c'era si è letto, ma la fonte va fra quelle
+     * da sistemare, con il giorno dell'ultima cosa che ha scritto. Il cursore
+     * lo tiene per la scheda; una lettura che lo trova vivo lo cancella.
+     */
+    store.segnaCursore(motore.CURSORE_FERMO, e.fermoDal)
+    if (e.fermoDal) throw motore.guaioFermo()
+    avvisa({ fase: 'x', stato: 'fatto', documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, mipiace: e.mipiace, timeline: e.timeline, tolti })
     return e.docs.length
   })
   const cal = c.calendario

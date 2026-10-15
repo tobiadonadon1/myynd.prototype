@@ -33,7 +33,8 @@ const DI_MARCA: Record<string, string> = {
   // le due teste: la scheda porta il nome della casa, e il segno della casa
   claude: 'anthropic',
   openai: 'openai',
-  teams: 'microsoftteams'
+  teams: 'microsoftteams',
+  x: 'x'
 }
 
 /**

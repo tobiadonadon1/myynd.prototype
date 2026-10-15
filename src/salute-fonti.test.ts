@@ -332,6 +332,15 @@ test('la parola della scheda con un guaio', () => {
   assert.equal(in_('it', () => sf.parolaProblema('posta', 'amministratore')), 'Da sistemare')
   assert.equal(in_('en', () => sf.parolaProblema('slack', 'attendi')), 'Not read')
   assert.equal(in_('en', () => sf.parolaProblema('note', 'aggiorna')), 'Not read')
+  // il motore di X fermo dice da quando non scrive, non «Not read»
+  assert.equal(in_('en', () => sf.parolaProblema('x', 'guarda', '2026-09-20T13:00:00.000Z')), 'Not updated since Sep 20')
+  assert.equal(in_('it', () => sf.parolaProblema('x', 'guarda', '2026-09-20T13:00:00.000Z')), 'Non aggiornata dal 20 set')
+  assert.equal(in_('en', () => sf.parolaProblema('x', 'guarda', 'boh')), 'Not read')
+  // e la riga fissa e il pannello dicono che non si aggiorna, non che non si legge
+  const fermo = { id: 'x', nome: 'X', motivo: 'non-disponibile' as const, rimedio: 'guarda' as const, dal: '2026-09-20T13:00:00.000Z', dopoAggiornamento: false, fermo: true }
+  const ottobre = new Date('2026-10-15T12:00:00')
+  assert.equal(in_('en', () => sf.lineaPannello(fermo, ottobre)), 'Since Sep 20: it isn’t updating.')
+  assert.equal(in_('en', () => sf.rigaFonti({ ragiona: true, testa: null, guastoLettura: null, chiedeClaude: '', mancanze: [fermo], titoliNegati: false, dopoImpostazioni: false, puoAprire: false, puoRiavviare: false, adesso: ottobre })?.frase), 'X hasn’t updated since Sep 20.')
 })
 
 test('l’AI inclusa nelle Preferenze dice il perché del ponte, come la riga fissa', () => {

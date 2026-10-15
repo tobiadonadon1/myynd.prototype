@@ -273,14 +273,14 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
               <h3 className="connections-group-heading" id={`gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h3>
               <div className="connector-tiles compact">{quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} nota={t(c.nota)} collegata={c.collegato || !!c.problema}
                 problema={!!c.problema || (c.id === 'note' && c.collegato && statoAccessoNote(s).problema)}
-                parola={c.problema ? parolaProblema(c.id, c.problema) : undefined} apri={() => apri(c.id)} />)}</div>
+                parola={c.problema ? parolaProblema(c.id, c.problema, c.fermoDal) : undefined} apri={() => apri(c.id)} />)}</div>
             </section>)}
           {!!dopo.length && <details className="connections-future"><summary>{t('Più avanti')} <span>{dopo.length}</span></summary><div>{dopo.map(c => <span key={c.id} title={t(c.nota)}>{t(c.nome)}</span>)}</div></details>}
         </>}
         {scelta && <div className="connection-detail">
           <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''} ${problema ? 'needs-access' : ''}`}>
             <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato && !problema} /></span>
-            <div><span className="connection-detail-status">{problema ? parolaProblema(scelta.id, problema) : scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
+            <div><span className="connection-detail-status">{problema ? parolaProblema(scelta.id, problema, scelta.fermoDal) : scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
               {mancanza && <p className="connection-detail-since">{lineaPannello(mancanza)}</p>}
               {/* cosa porta la fonte: vedi `descrizione` */}
               {descrizione && <p>{descrizione}</p>}
