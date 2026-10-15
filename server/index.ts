@@ -1634,8 +1634,9 @@ app.post('/api/connettori/notion', async (req, res) => {
   try {
     const esito = await notion.prova({ token })
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    // la pagina dove Myynd scrive resta scelta: ricollegare non è cambiarla
-    cfg.aggiorna({ notion: { ...cfg.leggi().notion, token } })
+    // la pagina dove Myynd scrive resta scelta solo se il token nuovo la vede ancora
+    const paginaMyynd = await notionScrivi.tienePagina(cfg.leggi().notion, token)
+    cfg.aggiorna({ notion: { token, ...(paginaMyynd ? { paginaMyynd } : {}) } })
     res.json({ ok: true, pagine: esito.pagine })
   } catch (e) { errore(res, e) }
 })

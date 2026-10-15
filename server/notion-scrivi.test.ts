@@ -46,6 +46,8 @@ function finto() {
   const pagine = new Map<string, PaginaFinta>()
   const blocchi: BloccoFinto[] = []
   const chiamate: { metodo: string; id?: string; quanti?: number }[] = []
+  /** `append: n`: la n-esima aggiunta di blocchi da qui in poi cade. */
+  const guasti = { append: 0 }
   pagine.set(MADRE, { id: MADRE, parent: { type: 'workspace' }, titolo: 'Myynd' })
   pagine.set(ALTRA, { id: ALTRA, parent: { type: 'workspace' }, titolo: 'Diario' })
   const vista = (p: PaginaFinta) => ({
@@ -96,10 +98,11 @@ function finto() {
       children: {
         list: async (a: { block_id: string }) => {
           chiamate.push({ metodo: 'blocks.children.list', id: a.block_id })
-          return { results: blocchi.filter(b => b.dentro === a.block_id && !b.archiviato).map(b => ({ id: b.id, type: b.type })), has_more: false, next_cursor: null }
+          return { results: blocchi.filter(b => b.dentro === a.block_id && !b.archiviato).map(b => ({ id: b.id, type: b.type, [b.type]: b.corpo, has_children: false })), has_more: false, next_cursor: null }
         },
         append: async (a: any) => {
           chiamate.push({ metodo: 'blocks.children.append', id: a.block_id, quanti: a.children.length })
+          if (guasti.append > 0 && --guasti.append === 0) throw Object.assign(new Error('Notion è caduta'), { status: 502 })
           aggiungi(a.block_id, a.children)
           return { results: [] }
         }
@@ -116,7 +119,7 @@ function finto() {
   }
   notion.usaCliente(() => cl as unknown as Client)
   const corpo = (id: string) => blocchi.filter(b => b.dentro === id && !b.archiviato && b.type !== 'child_page')
-  return { pagine, blocchi, chiamate, corpo }
+  return { pagine, blocchi, chiamate, corpo, guasti, cl }
 }
 
 const scritture = (f: ReturnType<typeof finto>) => f.chiamate.filter(c => !/retrieve|list|search/.test(c.metodo))
@@ -354,4 +357,55 @@ test('la mano scrive con la chiave del contesto e dice cosa ha fatto', async () 
   const no = await mani.esegui('scrivi_notion', { titolo: 'Sito', testo: 'x' }, { chiaveNotion: 'progetto:sito' })
   assert.equal(no.male, true)
   assert.equal(no.fatto.esito, 'errore')
+})
+
+test('una pagina nuova si ricorda appena creata: se un pezzo dopo cade, il giro dopo la riscrive invece di farne due', async () => {
+  const f = finto()
+  await ns.scegli(MADRE)
+  const md = Array.from({ length: 150 }, (_, i) => `Riga ${i + 1}`).join('\n\n')
+  f.guasti.append = 1
+  await assert.rejects(() => ns.scrivi({ chiave: 'progetto:caduta', titolo: 'Caduta', markdown: md }))
+  const id = cfg.leggi().notionScritte?.['progetto:caduta']
+  assert.ok(id, 'la pagina creata è ricordata anche se il secondo pezzo non è passato')
+  const r = await ns.scrivi({ chiave: 'progetto:caduta', titolo: 'Caduta', markdown: 'Corta adesso.' })
+  assert.equal(r.creata, false)
+  assert.equal(r.id, id)
+  assert.equal(f.chiamate.filter(c => c.metodo === 'pages.create').length, 1)
+  assert.deepEqual(f.corpo(id).map(b => b.corpo.rich_text[0].text.content), ['Corta adesso.'])
+})
+
+test('ricollegando con un altro token, la pagina scelta resta solo se il token nuovo la vede', async () => {
+  const f = finto()
+  const prima = { token: 'ntn_finto', paginaMyynd: { id: MADRE, titolo: 'Myynd' } }
+  // stesso token: resta, senza chiedere a Notion
+  assert.deepEqual(await ns.tienePagina(prima, 'ntn_finto'), { id: MADRE, titolo: 'Myynd' })
+  assert.equal(f.chiamate.length, 0)
+  // token nuovo che la vede: resta, col titolo di adesso
+  f.pagine.get(MADRE)!.titolo = 'Myynd scrive qui'
+  assert.deepEqual(await ns.tienePagina(prima, 'ntn_nuovo'), { id: MADRE, titolo: 'Myynd scrive qui' })
+  // token nuovo che non la vede (un altro spazio): se ne va
+  f.pagine.delete(MADRE)
+  assert.equal(await ns.tienePagina(prima, 'ntn_altro'), undefined)
+  // nel cestino: se ne va
+  f.pagine.set(MADRE, { id: MADRE, parent: { type: 'workspace' }, titolo: 'Myynd', in_trash: true })
+  assert.equal(await ns.tienePagina(prima, 'ntn_altro'), undefined)
+  assert.equal(await ns.tienePagina({ token: 'x' }, 'y'), undefined)
+})
+
+test('la lettura di Notion salta le pagine che Myynd ha scritto, e solo quelle', async () => {
+  const f = finto()
+  const ripresa = await import('./connettori/ripresa.ts')
+  ripresa.scorda('notion')
+  store.svuotaFonte('notion')
+  await ns.scegli(MADRE)
+  const r = await ns.scrivi({ chiave: 'progetto:letta', titolo: 'Scritta da Myynd', markdown: 'Il punto del progetto.' })
+  f.blocchi.push({ id: 'bbbbbbbb-0000-0000-0000-000000000001', type: 'paragraph', dentro: MADRE, corpo: { rich_text: [{ plain_text: 'Le sue note sulla pagina madre.' }] } })
+  f.blocchi.push({ id: 'bbbbbbbb-0000-0000-0000-000000000002', type: 'paragraph', dentro: ALTRA, corpo: { rich_text: [{ plain_text: 'Il suo diario.' }] } })
+  for (const b of f.blocchi) for (const x of b.corpo?.rich_text ?? []) x.plain_text ??= x.text?.content
+  const e = await notion.sincronizza(cfg.leggi().notion!)
+  const letti = e.docs.map(d => d.id)
+  assert.ok(letti.includes(`notion:${MADRE}`), 'la pagina madre è sua: si legge')
+  assert.ok(letti.includes(`notion:${ALTRA}`))
+  assert.ok(!letti.includes(`notion:${r.id}`), 'la pagina di Myynd non torna come fonte')
+  assert.ok(!e.visti.includes(`notion:${r.id}`), 'e non è fra le viste: se era nell\'indice, ne esce')
 })

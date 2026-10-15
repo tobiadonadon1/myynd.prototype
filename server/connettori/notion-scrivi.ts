@@ -21,7 +21,7 @@ import * as chi from '../chi.ts'
 import * as cfg from '../config.ts'
 import { vietato } from '../prova-chiusa.ts'
 import { senzaTrattini, senzaTrattiniFuoriCodice } from '../testo.ts'
-import { cliente, conCalma, titolo as titoloDi } from './notion.ts'
+import { cliente, conCalma, stessoId, titolo as titoloDi } from './notion.ts'
 
 /** Quanti blocchi per richiesta: il tetto di Notion. */
 export const PER_RICHIESTA = 100
@@ -184,11 +184,7 @@ export function aPezzi<T>(xs: readonly T[], n = PER_RICHIESTA): T[][] {
 
 // — la pagina scelta —
 
-/** Gli id di Notion arrivano con e senza trattini: si confrontano senza. */
-export function stessoId(a: string | null | undefined, b: string | null | undefined): boolean {
-  const n = (x: string | null | undefined) => String(x ?? '').replace(/-/g, '').toLowerCase()
-  return !!a && !!b && n(a) === n(b)
-}
+export { stessoId }
 
 /** La pagina dove Myynd scrive, se lui l'ha scelta. */
 export function paginaMyynd(c: cfg.Config = cfg.leggi()): Pagina | null {
@@ -260,6 +256,25 @@ export async function scegli(id: string | null): Promise<Pagina | null> {
   const scelta = { id: p.id as string, titolo: titoloDi(p) }
   cfg.aggiorna({ notion: { ...c.notion, paginaMyynd: scelta } })
   return scelta
+}
+
+/**
+ * Ricollegando Notion con un token nuovo, la pagina scelta resta solo se il
+ * token nuovo la vede ancora, viva: un altro spazio di lavoro, o una pagina
+ * non più condivisa, la toglie, e la scheda non mostra una scelta che non
+ * vale più. Lo stesso token la tiene senza chiedere niente.
+ */
+export async function tienePagina(prima: cfg.ConfigNotion | undefined, token: string): Promise<Pagina | undefined> {
+  const p = prima?.paginaMyynd
+  if (!p?.id) return undefined
+  if (prima?.token === token) return p
+  try {
+    const r: any = await conCalma(() => cliente({ token }).pages.retrieve({ page_id: p.id }))
+    if (r?.object !== 'page' || r.archived || r.in_trash) return undefined
+    return { id: r.id, titolo: titoloDi(r) }
+  } catch {
+    return undefined
+  }
 }
 
 function nonTrovata(e: unknown): boolean {
@@ -352,8 +367,9 @@ async function scriviOra(chiave: string, o: { titolo: string; markdown: string }
       properties: { title: titoloNotion(titolo) },
       ...(primi.length ? { children: primi } : {})
     } as any))
-    for (const pezzo of resto) await conCalma(() => notion.blocks.children.append({ block_id: p.id, children: pezzo } as any))
+    // ricordata subito: se un pezzo dopo non passa, il giro dopo la riscrive invece di farne un'altra
     ricorda(chiave, p.id)
+    for (const pezzo of resto) await conCalma(() => notion.blocks.children.append({ block_id: p.id, children: pezzo } as any))
     return { id: p.id, url: p.url ?? null, creata: true, blocchi: corpo.length }
   }
 

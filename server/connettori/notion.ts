@@ -155,6 +155,12 @@ export type EsitoNotion = {
   resto: Resto
 }
 
+/** Gli id di Notion arrivano con e senza trattini: si confrontano senza. */
+export function stessoId(a: string | null | undefined, b: string | null | undefined): boolean {
+  const n = (x: string | null | undefined) => String(x ?? '').replace(/-/g, '').toLowerCase()
+  return !!a && !!b && n(a) === n(b)
+}
+
 /** Notion ha detto che il token non vale: `unauthorized`, o la sua frase. */
 function tokenRifiutato(e: unknown): boolean {
   const x = e as { code?: unknown; message?: unknown } | null
@@ -214,6 +220,13 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
     primoGiro = false
     for (const p of r.results as any[]) {
       if (p.object !== 'page') continue
+      /*
+       * Le pagine che Myynd scrive (figlie della pagina scelta per lui, vedi
+       * `notion-scrivi.ts`) non sono materiale: rilette, tornerebbero come
+       * fonte di quello che Myynd stesso ha detto. Fuori da `visti`, così una
+       * letta prima di questa regola esce anche dall'indice.
+       */
+      if (c.paginaMyynd?.id && p.parent?.type === 'page_id' && stessoId(p.parent.page_id, c.paginaMyynd.id)) continue
       const id = `notion:${p.id}`
       // esiste: qualunque cosa succeda dopo, non è sparita da Notion
       visti.push(id)

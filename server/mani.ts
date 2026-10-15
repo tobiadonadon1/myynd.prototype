@@ -899,7 +899,9 @@ export const SCRIVI_NOTION: Anthropic.Tool = {
     'Scrivi una pagina in Notion, dentro la pagina che lei ha scelto per Myynd, e da nessun\'altra ' +
     'parte. Se la pagina di questo lavoro c\'è già, ne sostituisci il contenuto: scrivila sempre ' +
     'intera, non solo la parte nuova. Il testo è in Markdown (titoli, elenchi, cose da fare con ' +
-    '- [ ], grassetto, link). Usala solo se il compito chiede una pagina in Notion. Torna il titolo.',
+    '- [ ], grassetto, link). Ogni scrittura sostituisce tutto il corpo della pagina: quello che c\'era ' +
+    'dentro (anche aggiunto a mano) se ne va, tranne le sottopagine. Usala solo se il compito chiede ' +
+    'una pagina in Notion. Torna il titolo.',
   input_schema: schema({
     titolo: { type: 'string', description: 'Il titolo della pagina, una riga.' },
     testo: { type: 'string', description: 'Il contenuto completo della pagina, in Markdown.' }
