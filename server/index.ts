@@ -12,7 +12,7 @@ import { COLORE_NOTE } from './colori-fonti.ts'
 import express from 'express'
 import { giornoValido, oraValida } from './giorno-compito.ts'
 import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import { existsSync } from 'node:fs'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
@@ -80,6 +80,7 @@ import * as google from './connettori/google.ts'
 import * as desktop from './connettori/desktop.ts'
 import * as desktopRemoto from './connettori/desktopRemoto.ts'
 import * as vedetta from './connettori/vedetta.ts'
+import * as archivioX from './connettori/x-archivio.ts'
 import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
 import * as notionScrivi from './connettori/notion-scrivi.ts'
@@ -779,6 +780,8 @@ app.get('/api/stato', async (_req, res) => {
   // i guai di adesso, per le schede: le fonti dal loro episodio, i motori dal vivo
   const guai = new Map(saluteFonti.fontiIncomplete().map(f => [f.fonte, f.rimedio]))
   const silenzi = saluteFonti.silenzi()
+  // l'archivio di X importato, se c'è: accende la scheda di X anche senza il motore
+  const archivio = ospitato.OSPITATO ? null : archivioX.stato()
   const problemaDi = (id: string) => {
     if (id === 'claude' || id === 'openai') return saluteTeste.problemaScheda(id) ?? undefined
     if (id === 'compatibile') return saluteTeste.problemaScheda(id) ?? guai.get(id)
@@ -848,19 +851,26 @@ app.get('/api/stato', async (_req, res) => {
       // (un fatto, non un guasto): solo quando ci sono
       ...(problemaDi(v.id) ? { problema: problemaDi(v.id) } : {}),
       ...(silenzi.has(v.id) ? { silenzio: silenzi.get(v.id) } : {})
-    })).concat(c.x && !ospitato.OSPITATO ? [{
+    })).concat((c.x || archivio) && !ospitato.OSPITATO ? [{
       /*
        * X non sta nel catalogo: non si collega, si accende da solo quando sul
        * Mac c'è il motore che scrive per lui. Ma una volta acceso è una fonte
        * come le altre, e quando il motore si ferma deve dirlo fra quelle da
        * sistemare, con il giorno dell'ultima cosa scritta (`fermoDal`).
+       *
+       * Si accende anche con l'archivio di X importato, senza motore: allora
+       * non c'è niente da rileggere (`soloArchivio`), e la scheda dice di
+       * quando è l'archivio e, passato un mese, di scaricarne uno nuovo.
        */
       id: 'x', nome: 'X', gruppo: 'Comunicazione', pronto: true, legge: true,
-      nota: 'Quello che pubblichi su X, quello che ti piace e la tua timeline, dal motore di X su questo Mac.',
+      nota: c.x ? 'Quello che pubblichi su X, quello che ti piace e la tua timeline, dal motore di X su questo Mac.'
+        : 'Quello che pubblichi su X e quello che ti piace, dal tuo archivio di X.',
       collegato: true,
       documenti: n.perFonte.find(f => f.fonte === 'x')?.n ?? 0,
       ...(problemaDi('x') ? { problema: problemaDi('x') } : {}),
-      ...(problemaDi('x') && store.cursore('x:fermo') ? { fermoDal: store.cursore('x:fermo')! } : {})
+      ...(problemaDi('x') && store.cursore('x:fermo') ? { fermoDal: store.cursore('x:fermo')! } : {}),
+      ...(c.x ? {} : { soloArchivio: true }),
+      ...(archivio ? { archivio: { data: archivioX.dataDi(archivio), post: archivio.post, vecchio: !archivioX.fresco(archivio), daDire: !archivio.detto } } : {})
     }] : []),
     // su un server sarebbero le cartelle di root dentro il contenitore: non
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
@@ -1642,6 +1652,41 @@ app.post('/api/connettori/conversazioni', async (req, res) => {
   } catch (e) { errore(res, e) }
 })
 
+/*
+ * L'archivio di X, scelto da lui con la finestra di sistema (o trovato fra i
+ * download, più sotto): il percorso di uno zip o di una cartella scompattata
+ * su questo disco. Solo in casa: su un server non c'è il suo disco.
+ */
+app.post('/api/x/archivio', async (req, res) => {
+  if (ospitato.OSPITATO) return res.status(400).json({ errore: 'L’archivio di X si importa dall’app sul tuo computer.' })
+  const percorso = req.body?.percorso
+  if (typeof percorso !== 'string' || !isAbsolute(percorso)) return res.status(400).json({ errore: 'Non trovo questo archivio.' })
+  try {
+    const e = await archivioX.importa(percorso)
+    dopoArchivioX(e)
+    res.json({ ok: true, post: e.stato.post, documenti: e.docs.length, gia: e.gia, guasti: e.guasti.length })
+  } catch (e) { errore(res, e, 400) }
+})
+
+/** La riga «Imported …» si è vista: non si dice più. */
+app.post('/api/x/archivio/detto', (_req, res) => {
+  archivioX.segnaDetto()
+  res.json({ ok: true })
+})
+
+/**
+ * Dopo un archivio letto: se è fresco, il motore fermo smette di essere un
+ * guaio adesso, non alla prossima lettura; e chi guarda le Fonti rilegge.
+ */
+function dopoArchivioX(e: archivioX.EsitoImport) {
+  console.log(`myynd · archivio di X letto: ${e.stato.post} post, ${e.docs.length} documenti${e.guasti.length ? `, ${e.guasti.length} parti saltate` : ''}`)
+  if (archivioX.fresco(e.stato)) {
+    store.segnaCursore('x:fermo', null)
+    saluteFonti.dimentica('x')
+  }
+  compiti.annunciaCollegamento()
+}
+
 app.post('/api/connettori/notion', async (req, res) => {
   const token: string = req.body?.token ?? ''
   if (!token) return res.status(400).json({ errore: 'Serve il token di integrazione.' })
@@ -2154,7 +2199,8 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'dropbox') { delete c.dropbox; dropbox.scordaIlToken() }
   else if (id === 'whatsapp') delete c.whatsapp
   // X si era acceso da solo: scollegato, resta spento (è in `accesiDaSoli`, l'avvio non lo riaccende)
-  else if (id === 'x') delete c.x
+  // e l'archivio importato si scorda con lei; quelli già visti restano visti (i download non lo riportano dentro)
+  else if (id === 'x') { delete c.x; archivioX.scorda() }
   /*
     Le due metà di Microsoft si staccano una per volta, e non passano di qui:
     `scollega` sa che quando resta l'altra il token va tenuto. Scriverle in
@@ -2474,10 +2520,20 @@ async function leggiTuttoDentro(
      * marcato `fermo`, che la salute delle fonti registra come ogni guaio e
      * la riga di lettura nella pagina tratta da fonte letta.
      */
+    /*
+     * Un archivio di X importato conta come X aggiornato: con un archivio di
+     * meno di un mese il motore fermo non è un guaio. Più vecchio, il guaio
+     * torna, e il giorno è il più recente fra i due.
+     */
+    const arch = archivioX.stato()
+    if (e.fermoDal && arch) {
+      const data = archivioX.dataDi(arch)
+      e.fermoDal = archivioX.fresco(arch) ? null : data > e.fermoDal ? data : e.fermoDal
+    }
     store.segnaCursore(motore.CURSORE_FERMO, e.fermoDal)
     const conti = { documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, mipiace: e.mipiace, timeline: e.timeline, tolti }
     if (e.fermoDal) {
-      const g = motore.guaioFermo()
+      const g = motore.guaioFermo(!!arch)
       avvisa({ fase: 'x', stato: 'guaio', fermo: true, errore: g.message, rimedio: g.rimedio, frase: g.message, ...conti })
     } else avvisa({ fase: 'x', stato: 'fatto', ...conti })
     return e.docs.length
@@ -6219,6 +6275,22 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   })
   setTimeout(salute, 5 * 60_000)
   setInterval(salute, 60 * 60_000)
+
+  /*
+   * L'archivio di X fra i download: X lo manda per email, lui lo scarica, e
+   * Myynd lo legge da solo, una volta (vedi `x-archivio.ts`). Costa una lettura
+   * della cartella ogni dieci minuti. Solo in casa, e solo per chi ha già X o
+   * il suo Mac collegato: un conto di prova non si prende l'archivio di un altro.
+   */
+  const archivioNeiDownload = perOgnuno('l’archivio di X non si è letto', async () => {
+    if (ospitato.OSPITATO) return
+    const c = cfg.leggi()
+    if (!c.x && !c.desktop && !archivioX.stato()) return
+    const e = await archivioX.guardaDownload()
+    if (e) dopoArchivioX(e)
+  })
+  setTimeout(archivioNeiDownload, 2 * 60_000)
+  setInterval(archivioNeiDownload, 10 * 60_000)
 
   // La prova delle risposte (P7): spenta di serie, una volta alla settimana
   // quando è accesa. Il modulo si carica solo qui, quando serve: il server

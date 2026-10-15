@@ -499,6 +499,20 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   }, [])
   useEffect(() => () => clearTimeout(tt.current), [])
 
+  /*
+   * L'archivio di X letto (dal bottone, o trovato da solo fra i download):
+   * una riga sola, una volta. Il server la tiene finché non si è vista, così
+   * un archivio arrivato con l'app chiusa si dice alla prima apertura.
+   */
+  const archivioDaDire = stato.connettori.find(c => c.id === 'x')?.archivio
+  const archivioDetto = useRef(false)
+  useEffect(() => {
+    if (!archivioDaDire?.daDire || archivioDetto.current) return
+    archivioDetto.current = true
+    mostraToast(frasi.archivioX(archivioDaDire.post))
+    void api.archivioXDetto().catch(() => {}).finally(() => { archivioDetto.current = false })
+  }, [archivioDaDire?.daDire, archivioDaDire?.post, mostraToast])
+
   // La tastiera. Un attrezzo che si usa tutti i giorni deve poter essere
   // guidato senza staccare le mani: ⌘K apre la ricerca da qualunque punto,
   // Esc chiude quello che è aperto. Il brief chiede una via rapida verso

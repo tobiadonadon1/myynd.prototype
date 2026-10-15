@@ -544,8 +544,9 @@ export async function sincronizza(cfg: ConfigX): Promise<EsitoX> {
  * e il rimedio è guardare: non c'è niente da ricollegare in Myynd. Il
  * giorno non sta nella frase (che si traduce intera): lo porta `fermoDal`.
  */
-export function guaioFermo(): GuaioFonte {
-  return new GuaioFonte('Il motore di X non scrive niente di nuovo da più di tre giorni.', 'guarda')
+export function guaioFermo(archivio = false): GuaioFonte {
+  // con un archivio importato il motore fermo non conta: è l'archivio a essere vecchio (vedi `x-archivio.ts`)
+  return new GuaioFonte(archivio ? 'Il tuo archivio di X ha più di un mese.' : 'Il motore di X non scrive niente di nuovo da più di tre giorni.', 'guarda')
 }
 
 // — l'indice —

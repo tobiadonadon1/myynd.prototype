@@ -24,6 +24,10 @@ export type Connettore = {
   silenzio?: Silenzio
   /** X: il motore non scrive più niente da questo istante; la scheda lo dice al posto della parola del guaio. */
   fermoDal?: string
+  /** X acceso solo dall'archivio importato: non c'è un motore da rileggere. */
+  soloArchivio?: boolean
+  /** X: l'archivio importato, di quando è, quanti suoi post; `vecchio` oltre un mese, `daDire` finché la riga non si è vista. */
+  archivio?: { data: string; post: number; vecchio: boolean; daDire: boolean }
 }
 
 export type FattoAvvio = {
@@ -1499,6 +1503,12 @@ export const api = {
   collegaConversazioni: (file: string[], codice: boolean) =>
     json<{ ok: true; file: { file: string; formato: 'chatgpt' | 'claude'; conversazioni: number }[]; codice: number; conversazioni?: number }>(
       '/api/connettori/conversazioni', { method: 'POST', body: JSON.stringify({ file, codice }) }),
+
+  /** L'archivio di X scelto con la finestra di sistema: uno zip, o la cartella scompattata. */
+  importaArchivioX: (percorso: string) =>
+    json<{ ok: true; post: number; documenti: number; gia: boolean; guasti: number }>('/api/x/archivio', { method: 'POST', body: JSON.stringify({ percorso }) }),
+  /** La riga «Imported …» si è vista. */
+  archivioXDetto: () => json<{ ok: true }>('/api/x/archivio/detto', { method: 'POST', body: '{}' }),
 
   collegaNotion: (token: string) =>
     json<{ ok: true; pagine: number }>('/api/connettori/notion', { method: 'POST', body: JSON.stringify({ token }) }),
