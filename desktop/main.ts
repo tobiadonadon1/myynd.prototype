@@ -45,14 +45,15 @@ import * as lingua from './lingua.ts'
 import { t } from './lingua.ts'
 import { ARGOMENTO_NASCOSTO, avvioNascosto } from './nascosto.ts'
 import { PANNELLI_AMMESSI } from './pannelli.ts'
+import { creaCoda } from './avvisi-coda.ts'
 
-/** Dove il renderer può essere mandato: un posto dell'app, o una chat precisa. */
-type Dove = string | { dove: 'chat'; id: string }
+/** Dove il renderer può essere mandato: un posto dell'app, una chat precisa, o la riga o la carta di un avviso. */
+type Dove = string | { dove: 'chat' | 'compito' | 'voce'; id: string }
 /** La schermata di Accessibilità, per i titoli delle finestre: un canale suo, non `apri-fuori`. */
 const PANNELLO_ACCESSIBILITA = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
 const MAC = process.platform === 'darwin'
 
-const POSTI = new Set(['preferenze', 'chat', 'oggi', 'aiuto', 'nuova-chat'])
+const POSTI = new Set(['preferenze', 'chat', 'oggi', 'aiuto', 'nuova-chat', 'casa'])
 
 /** Quello che arriva via IPC non è fidato: o è un posto conosciuto, o non si va. */
 function doveValido(x: unknown): Dove | null {
@@ -60,6 +61,8 @@ function doveValido(x: unknown): Dove | null {
   if (x && typeof x === 'object') {
     const { dove, id } = x as { dove?: unknown; id?: unknown }
     if (dove === 'chat' && typeof id === 'string' && /^[\w-]{1,80}$/.test(id)) return { dove: 'chat', id }
+    // la riga o la carta di un avviso: un id del server, mai un percorso o un indirizzo
+    if ((dove === 'compito' || dove === 'voce') && typeof id === 'string' && /^[\w:.@-]{1,120}$/.test(id)) return { dove, id }
   }
   return null
 }
@@ -467,20 +470,25 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
    * non è davanti: qui non si decide niente, si mostra. Un clic porta su la
    * finestra sul posto giusto.
    */
-  // una alla volta, e non più di una ogni due secondi: tre bozze pronte
-  // insieme sono un avviso, non tre — e una pagina impazzita non deve poter
-  // riempire il centro notifiche
-  let ultimoAvviso = 0
+  // non più di una ogni due secondi: quelle che arrivano dentro aspettano e
+  // poi escono insieme in una (`avvisi-coda.ts`) — tre bozze pronte insieme
+  // sono un avviso, non tre, e nessuna si perde. Una pagina impazzita non
+  // deve poter riempire il centro notifiche
+  const avvisi = creaCoda<Dove>({
+    mostra: ({ titolo, corpo, dove }) => {
+      const nota = new Notification({ title: titolo, body: corpo })
+      nota.on('click', () => vai(dove))
+      nota.show()
+    },
+    quante: n => t('{n} cose sono pronte.').replace('{n}', String(n)),
+    altrove: 'casa'
+  })
   ipcMain.on('myynd:notifica', (_e, n: unknown) => {
     if (!Notification.isSupported()) return
-    if (Date.now() - ultimoAvviso < 2_000) return
-    ultimoAvviso = Date.now()
     const { titolo, corpo, dove } = (n && typeof n === 'object' ? n : {}) as { titolo?: unknown; corpo?: unknown; dove?: unknown }
     const title = String(titolo ?? '').trim().slice(0, 120)
     if (!title) return
-    const nota = new Notification({ title, body: String(corpo ?? '').trim().slice(0, 300) })
-    nota.on('click', () => vai(doveValido(dove) ?? 'oggi'))
-    nota.show()
+    avvisi.metti({ titolo: title, corpo: String(corpo ?? '').trim().slice(0, 300), dove: doveValido(dove) ?? 'oggi' })
   })
   ipcMain.handle('myynd:aggiornamenti-stato', () => aggiornamenti.stato())
   ipcMain.handle('myynd:aggiornamenti-controlla', () => aggiornamenti.controlla())

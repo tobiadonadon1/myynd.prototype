@@ -79,6 +79,8 @@ export type Evento =
   | { fase: 'usata'; id: string; regola: store.RegolaSeguita }
   /** Un documento corretto ha fatto nascere una convinzione che aspetta il suo sì: «Lo faccio sempre?». */
   | { fase: 'sempre'; convinzione: { id: string; enunciato: string } }
+  /** La mattina dopo una notte di lavoro: quante cose sono state fatte, e quante aspettano lui. Una volta al giorno. */
+  | { fase: 'mattina'; giorno: string; fatte: number; aspettano: number }
 
 /*
  * Ogni ascoltatore sa di chi vuole sentire.
@@ -192,6 +194,21 @@ export function annunciaSalute(o: { guarite?: string[] } = {}) {
 export function annunciaPronto(id: string) {
   const c = store.compito(id)
   if (c) annuncia({ fase: 'pronto', id, compito: c })
+}
+
+/**
+ * «Stanotte ho fatto queste cose»: il punto della mattina è pronto.
+ *
+ * Lo manda il giro del turno, una volta al giorno per persona, nelle ore
+ * dopo la notte (`mattina.annunciaSeMattina`). Chi ascolta ne fa un avviso
+ * di sistema, se lui non sta guardando. Torna se qualcuno l'ha sentito.
+ */
+export function annunciaMattina(e: Omit<Extract<Evento, { fase: 'mattina' }>, 'fase'>): boolean {
+  // nessuna finestra in ascolto (l'app appena partita): non è detto, e si riprova al giro dopo
+  const di = chi.adesso()
+  if (![...ascoltatori].some(a => a.di === di)) return false
+  annuncia({ fase: 'mattina', ...e }, di)
+  return true
 }
 
 const passiAttivi = new Map<string, { di: string | null; evento: Extract<Evento, { fase: 'lavoro' }> }>()
