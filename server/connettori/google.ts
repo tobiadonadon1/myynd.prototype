@@ -36,6 +36,9 @@ import { filoDi, idPulito, rispondeDi, destinatariDi } from '../filo.ts'
 import { postaAutomatica } from './segnaliPosta.ts'
 import { riflua } from '../testo.ts'
 import { vietato } from '../prova-chiusa.ts'
+import { GuaioFonte } from './guaio.ts'
+
+export const GOOGLE_SPARITO = 'Google non riconosce più il collegamento: collega la posta con una password per le app e il calendario con il suo indirizzo iCal.'
 
 const esegui = promisify(execFile)
 
@@ -134,7 +137,10 @@ async function chiediToken(corpo: Record<string, string>): Promise<Record<string
   const j = await r.json().catch(() => ({})) as Record<string, string>
   if (!r.ok) {
     // il messaggio di Google è per chi sviluppa: qui serve quello per chi guarda
-    if (j.error === 'invalid_grant') throw new Error('Il collegamento con Google è scaduto: rifallo.')
+    if (j.error === 'invalid_grant') throw new GuaioFonte('Il collegamento con Google è scaduto: rifallo.', 'accedi')
+    // l'app di Google Cloud con cui si era entrati è stata cancellata (il suo Mac, 15 ott 2026): rientrare
+    // dalla stessa porta non serve, e ogni dieci minuti «rifiutato» non diceva cosa fare
+    if (j.error === 'invalid_client') throw new GuaioFonte(GOOGLE_SPARITO, 'credenziale')
     throw new Error('Google ha rifiutato il collegamento.')
   }
   return j

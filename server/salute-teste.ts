@@ -39,7 +39,8 @@ export function problemaTesta(id: Testa): { rimedio: 'accedi' | 'credenziale' | 
   // uscito dall'account anche se una chiave lo tiene in piedi: sta pagando a
   // consumo senza saperlo, e va detto
   if (id === 'claude' && abbonamento.uscito()) return { rimedio: 'accedi' }
-  if (mod.rifiutata(id)) return { rimedio: 'credenziale' }
+  // sull'account una chiave vecchia rimasta scritta non lavora: il suo rifiuto non è un guaio
+  if (!(id === 'claude' && mod.sullAccount()) && mod.rifiutata(id)) return { rimedio: 'credenziale' }
   if (mod.testaAlLavoro() === id && mod.mancaIlCredito()) return { rimedio: 'credito' }
   return null
 }

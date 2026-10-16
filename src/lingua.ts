@@ -868,6 +868,8 @@ const EN: Record<string, string> = {
   'Serve il client ID di Google.': 'The Google client ID is needed.',
   'Google ha rifiutato il collegamento.': 'Google refused the connection.',
   'Il collegamento con Google è scaduto: rifallo.': 'The Google connection expired: set it up again.',
+  'Google non riconosce più il collegamento: collega la posta con una password per le app e il calendario con il suo indirizzo iCal.':
+    'Google no longer recognises the connection: connect your mail with an app password and your calendar with its iCal address.',
   'Hai detto di no a Google.': 'You said no to Google.',
   'Google non ha mandato il codice.': 'Google did not send the code back.',
   'Nessuna risposta da Google: riprova.': 'No answer from Google: try again.',
@@ -1642,6 +1644,7 @@ const EN: Record<string, string> = {
   'Apri la copia': 'Open the copy',
   'Il lavoro si è fermato prima di finire.': 'The work stopped before it finished.',
   'Claude Code non è installato su questo computer.': 'Claude Code is not installed on this computer.',
+  'Sei uscito dal tuo account Claude: rientra e riprendo.': 'You are signed out of your Claude account: sign back in and I will pick up.',
   'Claude Code non è collegato: apri un terminale e fai «claude» una volta.': 'Claude Code is not signed in: open a terminal and run “claude” once.',
   'Claude Code non ce l’ha fatta.': 'Claude Code could not do it.',
   'Posso lavorare solo nelle cartelle che hai collegato.': 'I can only work in the folders you connected.',

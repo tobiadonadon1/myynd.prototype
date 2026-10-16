@@ -113,6 +113,13 @@ test('un rifiuto di Google diventa una frase, non un codice', async () => {
   await assert.rejects(() => g.cestina(['google:a']), /ricollega l’account/)
 })
 
+test('l’app di Google sparita (invalid_client) dice cosa fare, e si sistema nel pannello', async () => {
+  globalThis.fetch = (async () => new Response(JSON.stringify({ error: 'invalid_client', error_description: 'The OAuth client was not found.' }), { status: 401 })) as typeof fetch
+  g.scordaIlToken()
+  await assert.rejects(() => g.archivia(['google:a']), (e: Error & { rimedio?: string }) =>
+    e.message === g.GOOGLE_SPARITO && e.rimedio === 'credenziale')
+})
+
 test('il token si riusa finché è vivo', async () => {
   let token = 0
   globalThis.fetch = (async (url: string | URL) => {

@@ -88,9 +88,9 @@ test('dentro la prova un account che fallisce ferma la prova «occupato», senza
   assert.equal(colChiave, 0, 'la chiave non si tocca')
 })
 
-test('fuori dalla prova il comportamento di oggi: riposo e chiave (controcaso)', async () => {
+test('fuori dalla prova un account che fallisce non passa alla chiave, e il lavoro dopo riprova l’account (15 ott 2026)', async () => {
   const r = await mod.chiediJSON({ lavoro: 'collaudo', system: 'x', messages: [{ role: 'user', content: 'x' }], max_tokens: 10, formato: { type: 'object' } })
   assert.equal(r, null)
-  assert.ok(colChiave > 0, 'la chiave è stata provata')
-  assert.equal(abbonamento.disponibile(), false, 'l\'account è a riposo')
+  assert.equal(colChiave, 0, 'la chiave rimasta scritta è stata provata')
+  assert.equal(mod.soloAbbonamento(), true, 'dopo un guasto il lavoro non torna sull’account')
 })

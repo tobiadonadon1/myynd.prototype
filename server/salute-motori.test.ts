@@ -178,6 +178,15 @@ test('Claude con la chiave respinta e il modello sul Mac che risponde: si resta 
   assert.equal(cfg.leggi().motore, 'claude')
 })
 
+test('sull’account Claude una chiave vecchia respinta non è un guaio: niente «Anthropic non accetta più la chiave» (15 ott 2026)', async () => {
+  usa({ motore: 'claude', claudeCon: 'abbonamento', claude: { apiKey: 'sk-ant-vecchia' } })
+  const Anthropic = (await import('@anthropic-ai/sdk')).default
+  mod.notaRifiuto(new Anthropic.AuthenticationError(401, { type: 'error', error: { type: 'authentication_error', message: 'invalid' } }, 'invalid', new Headers()), 'claude')
+  assert.notEqual(teste.problemaTesta('claude')?.rimedio, 'credenziale')
+  assert.notEqual(teste.testaDaMostrare()?.rimedio, 'credenziale')
+  assert.equal(mod.motore(), null, 'sull’account la chiave rimasta scritta lavora ancora')
+})
+
 test('il motore di prima scollegato: il ricordo se ne va, e la sua scheda non ha più un guaio', () => {
   usa({ motore: 'claude', motorePrima: 'compatibile', claude: { apiKey: 'sk-ant-a' } })
   mod.segnaVia('compatibile', false); mod.segnaVia('compatibile', false)

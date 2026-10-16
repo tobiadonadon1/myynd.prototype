@@ -1053,7 +1053,21 @@ export function puoLeggere(): boolean {
 
 /** L'account Claude, quando è lui a lavorare e non c'è un altro motore scelto. */
 export function soloAbbonamento(): boolean {
-  return !chatgpt.scelto() && abbonamento.disponibile() && fornitore() === null && !inclusoInUso()
+  return sullAccount() && abbonamento.pronto()
+}
+
+/**
+ * L'account Claude è la strada scelta: allora la chiave non c'è (15 ott 2026).
+ *
+ * «Why can't it just use my account like it has always?» Una chiave vecchia
+ * restava scritta come riserva: quando Claude Code ci metteva troppo il lavoro
+ * passava a lei, lei era scaduta, e la prima pagina diceva «Anthropic no longer
+ * accepts the key» a chi una chiave non la usa. Una chiave valida, poi, è una
+ * bolletta che ha detto di non volere. Niente riserva, quindi niente riposo:
+ * i cinque minuti servivano solo a non pagare due volte la strada che cadeva.
+ */
+export function sullAccount(): boolean {
+  return !chatgpt.scelto() && abbonamento.scelto() && fornitore() === null && !inclusoInUso()
 }
 
 /**
@@ -1118,6 +1132,8 @@ export function motore(): Motore | null {
       }
     }
   }
+  // l'account è la strada scelta: una chiave scritta lì da prima non lavora più
+  if (sullAccount()) return null
   const a = cliente()
   if (!a) return null
   // F8 · con l'AI inclusa la chiave non è sua: un rifiuto non si segna sulla sua, e il ponte ha i suoi no
@@ -1511,6 +1527,8 @@ export async function conEsito<T>(lavoro: string, fai: () => Promise<T>): Promis
   }
 }
 
+const ATTESA_ACCOUNT_MIN = 90_000
+
 async function chiediAdesso(o: Domanda): Promise<Esito> {
   const p = LAVORI[o.lavoro]
   const attesa = o.attesa ?? p.attesa
@@ -1544,7 +1562,9 @@ async function chiediAdesso(o: Domanda): Promise<Esito> {
    */
   if (soloAbbonamento()) {
     try {
-      const testo = await abbonamento.chiedi({ ...o, attesa, modello: modelloPer(o.lavoro) })
+      // trenta secondi bastano alla chiave, non a Claude Code che parte e rilegge il suo preambolo:
+      // il 15 ott «contratto» cadeva così, e con lui il lavoro della notte
+      const testo = await abbonamento.chiedi({ ...o, attesa: Math.max(attesa, ATTESA_ACCOUNT_MIN), modello: modelloPer(o.lavoro) })
       avvisaUsato()
       return { testo, rifiutata: false, da: 'abbonamento' }
     } catch (e) {
@@ -1553,9 +1573,10 @@ async function chiediAdesso(o: Domanda): Promise<Esito> {
       if (tettoDiOggi.delTetto(e)) throw tradotto(e)
       // nella prova (P6) niente riposo e niente chiave: la prova si ferma «occupato»
       if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
-      abbonamento.nonRisponde()
-      console.warn(`myynd · Claude Code non ce l'ha fatta su «${o.lavoro}», passo alla chiave:`,
+      console.warn(`myynd · Claude Code non ce l'ha fatta su «${o.lavoro}»:`,
         e instanceof Error ? e.message : e)
+      // l'account è la sua scelta: il guaio si dice com'è, e il lavoro si riprova sull'account
+      throw tradotto(e)
     }
   }
 
@@ -1568,9 +1589,11 @@ async function chiediAdesso(o: Domanda): Promise<Esito> {
   if (!m) {
     // Due situazioni diverse, e mandare la seconda a collegare Claude sarebbe
     // mandarla a fare l'unica cosa che ha già fatto.
-    throw new Error(abbonamento.scelto()
-      ? 'Claude Code non ha risposto, e non c’è una chiave di riserva.'
-      : 'Collega Claude e potrò ragionare sul tuo materiale.')
+    throw new Error(!abbonamento.scelto()
+      ? 'Collega Claude e potrò ragionare sul tuo materiale.'
+      : abbonamento.uscito()
+        ? 'Sei uscito dal tuo account Claude: rientra e riprendo.'
+        : 'Claude Code non è installato su questo computer.')
   }
 
   // gli errori arrivano già in italiano: li traduce il motore

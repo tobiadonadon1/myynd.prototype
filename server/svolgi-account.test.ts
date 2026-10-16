@@ -119,15 +119,14 @@ test('al massimo quattro giri sull’account, anche in «tutto»: l’ultimo pu�
   assert.match(r.testo, /The final answer/)
 })
 
-test('se l’account cade prima di ogni mano che scrive, lavora la chiave; dopo `scrivi_file` no', async () => {
+test('sull’account una chiave rimasta scritta non lavora mai: né prima di una mano che scrive, né dopo (15 ott 2026)', async () => {
   cfg.scrivi({ ...cfg.leggi(), claude: { apiKey: 'sk-ant-finta-di-prova' } })
-  // cade subito: nessuna mano ha scritto niente, la chiave di riserva finisce il lavoro
+  // cade subito: niente chiave di riserva, il guaio dell'account torna com'è
   let prima = await richiesteAlFinto()
   copione = () => new Error('Claude Code: Not logged in')
-  const r = await claude.svolgi('Find the H-Farm address')
+  await assert.rejects(claude.svolgi('Find the H-Farm address'), /Not logged in/)
   assert.equal(giri.length, 1)
-  assert.ok(await richiesteAlFinto() > prima, 'la chiave non è stata usata')
-  assert.match(r.testo, /Done/)
+  assert.equal(await richiesteAlFinto(), prima, 'la chiave è stata usata')
 
   // cade dopo aver scritto il file: niente chiave, niente secondo file
   giri = []
@@ -136,6 +135,13 @@ test('se l’account cade prima di ogni mano che scrive, lavora la chiave; dopo 
   copione = n => n === 1 ? scrivi : new Error('Claude Code: Not logged in')
   await assert.rejects(claude.svolgi('Save the H-Farm address as a markdown file'), /Not logged in/)
   assert.equal(await richiesteAlFinto(), prima, 'dopo scrivi_file la chiave non deve rifare il lavoro')
+
+  // e il primo giro dopo un guasto torna sull'account, senza cinque minuti di riposo
+  giri = []
+  copione = () => 'Done again.'
+  const r = await claude.svolgi('Find the H-Farm address')
+  assert.equal(giri.length, 1, 'il giro dopo il guasto non è passato dall’account')
+  assert.match(r.testo, /Done again/)
 })
 
 test('una carta per Pages sull’account non dice più «Collega Claude»: il giro parte, con crea_documento_app', async () => {

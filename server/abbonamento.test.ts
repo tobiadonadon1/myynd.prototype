@@ -99,7 +99,9 @@ test('scelto l’abbonamento, ci passa tutto il lavoro e non solo quello grosso'
   // F8 · la catena sta in `soloAbbonamento()`, la stessa che guarda `svolgi`; l'AI inclusa scelta la ferma
   assert.match(m, /if \(soloAbbonamento\(\)\) \{/,
     'la catena è cambiata: rileggere perché prima di riscriverla')
-  assert.match(m, /return !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\) && fornitore\(\) === null && !inclusoInUso\(\)/)
+  // 15 ott 2026 · sull'account la chiave non fa più da riserva, e senza riserva non c'è riposo
+  assert.match(m, /return sullAccount\(\) && abbonamento\.pronto\(\)/)
+  assert.match(m, /return !chatgpt\.scelto\(\) && abbonamento\.scelto\(\) && fornitore\(\) === null && !inclusoInUso\(\)/)
   // sull'`if`, non su tutto il file: il commento qui sopra la vecchia regola la
   // cita apposta, e una prova che legge i commenti non prova niente
   assert.ok(!/if \([^\n]*p\.frontiera \|\| !conLaChiave\(\)/.test(m),
@@ -132,7 +134,7 @@ test('le bozze passano dall’abbonamento quando è quello scelto, con il giro i
     'le bozze non guardano più l’abbonamento: tornano tutte sulla chiave')
   assert.doesNotMatch(c, /Questo è tutto il materiale che avrai/, 'è tornata la passata sola senza attrezzi')
   const m = readFileSync(join(QUI, 'modello.ts'), 'utf8')
-  assert.match(m, /export function soloAbbonamento\(\): boolean \{\s*return !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\)/)
+  assert.match(m, /export function soloAbbonamento\(\): boolean \{\s*return sullAccount\(\) && abbonamento\.pronto\(\)/)
   assert.match(m, /export function motoreDelLavoro\(\): Motore \| null \{\s*if \(!soloAbbonamento\(\)\) return motore\(\)/)
 })
 
