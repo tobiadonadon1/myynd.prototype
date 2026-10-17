@@ -2106,9 +2106,19 @@ app.post('/api/slack/invia', async (req, res) => {
   const compito = req.body?.compito ? String(req.body.compito) : null
   try {
     const testo = String(req.body?.testo ?? '')
+    // dal pacchetto: il posto è il suo, e parte una volta sola
+    if (compito) {
+      try {
+        const r = await seguito.mandaSuSlack(compito, testo, dove => slack.invia(c, { ...dove, testo }))
+        compiti.annunciaCambio()
+        return res.json({ ok: true, permalink: r.permalink, ...(r.gia ? { gia: true } : {}) })
+      } catch (e) {
+        if (e instanceof seguito.RifiutoSlack) return res.status(409).json({ errore: e.message })
+        throw e
+      }
+    }
     const e = await slack.invia(c, { conversazione, testo, filo })
     slackSegnali.risoltoDaQui(conversazione, filo, e.ts)
-    if (compito) { seguito.inviatoSuSlack(compito, testo, e.permalink); compiti.annunciaCambio() }
     res.json({ ok: true, permalink: e.permalink })
   } catch (e) {
     if (e instanceof GuaioFonte && e.rimedio === 'guarda') return res.status(400).json({ errore: e.message })

@@ -41,6 +41,8 @@ export function Pacchetto({ c, l }: { c: Compito; l: Lista }) {
   if (!p) return null
   const r = p.risposta
   const slack = r?.canale === 'slack' && !!p.slack && !r.inviata
+  /** Non ha passato il controllo: parte solo dopo che lui l'ha cambiata (il server rifiuta lo stesso). */
+  const ferma = slack && p.stato === 'non_regge' && testo.trim() === r!.testo.trim()
   const manda = async () => {
     if (!p.slack || mando || !testo.trim()) return
     setMando(true); setErrore('')
@@ -75,8 +77,9 @@ export function Pacchetto({ c, l }: { c: Compito; l: Lista }) {
 
       {p.consegna && <div style={PARTE}>
         <div style={TITOLO}>{t('Il documento')}</div>
-        <div style={{ fontSize: 13.5, overflowWrap: 'anywhere' }}>{p.consegna.titolo}</div>
-        <div style={PICCOLO}>{frasi.versioneNuovaDi(p.consegna.da)}</div>
+        {p.consegna.percorso
+          ? <><div style={{ fontSize: 13.5, overflowWrap: 'anywhere' }}>{p.consegna.titolo}</div><div style={PICCOLO}>{frasi.versioneNuovaDi(p.consegna.da)}</div></>
+          : <div style={PICCOLO}>{frasi.daCambiareIn(p.consegna.da)}</div>}
         {p.consegna.cambiamenti.length > 0 && <ul style={{ ...PICCOLO, margin: '4px 0 0', paddingLeft: 18 }}>{p.consegna.cambiamenti.map((x, i) => <li key={i}>{x}</li>)}</ul>}
       </div>}
 
@@ -98,10 +101,11 @@ export function Pacchetto({ c, l }: { c: Compito; l: Lista }) {
 
       {errore && <p role="alert" style={{ ...PICCOLO, color: 'var(--rame-testo)' }}>{errore}</p>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
-        {slack && <Hov as="button" type="button" onClick={() => void manda()} disabled={mando || !testo.trim()} style={PIENO} hover={{ opacity: 0.92 }}>
+        {ferma && <span style={{ ...PICCOLO, color: 'var(--rame-testo)', flexBasis: '100%' }}>{t('Cambiala prima di mandarla: non ha passato il controllo.')}</span>}
+        {slack && <Hov as="button" type="button" onClick={() => void manda()} disabled={mando || !testo.trim() || ferma} style={{ ...PIENO, ...(ferma ? { opacity: 0.45, cursor: 'default' } : {}) }} hover={{ opacity: ferma ? 0.45 : 0.92 }}>
           {mando ? t('Mando…') : t('Manda su Slack')}</Hov>}
         {r?.casella === 'salvata' && r.url && <a href={r.url} target="_blank" rel="noreferrer" style={{ ...CONTORNO, textDecoration: 'none' }}>{t('Apri la bozza')}</a>}
-        {p.consegna && <Hov as="button" type="button" onClick={() => void l.portami(c.id)} style={CONTORNO} hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>{t('Apri il file')}</Hov>}
+        {!!p.consegna?.percorso && <Hov as="button" type="button" onClick={() => void l.portami(c.id)} style={CONTORNO} hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>{t('Apri il file')}</Hov>}
         <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'))} style={slack ? CONTORNO : PIENO}
           hover={slack ? { borderColor: 'var(--rame)', color: 'var(--rame-testo)' } : { opacity: 0.92 }}>{t('Fatto')}</Hov>
         <div style={{ flex: 1 }} />
