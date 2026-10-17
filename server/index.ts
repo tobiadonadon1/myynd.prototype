@@ -5525,6 +5525,7 @@ app.post('/api/osservatore', (req, res) => {
   if (typeof req.body?.ogni === 'number') v.ogni = req.body.ogni
   if (Array.isArray(req.body?.escluse)) v.escluse = req.body.escluse
   if (Array.isArray(req.body?.siti)) v.siti = req.body.siti
+  if (req.body?.avvisoVisto === true) v.avvisoVisto = true
   try { res.json(osservatore.imposta(v)) } catch (e) { errore(res, e) }
 })
 

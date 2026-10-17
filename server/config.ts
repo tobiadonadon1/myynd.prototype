@@ -1023,6 +1023,8 @@ export type Config = {
   osservatore?: {
     acceso: boolean; titoli?: boolean; dal?: string; pausaFino?: string | null; escluse?: string[]
     testi?: boolean; ogni?: number; siti?: string[]
+    /** Quando l'ha acceso Myynd da sé (di serie), e se lui ha già visto la riga che lo dice. */
+    adottato?: string; avvisoVisto?: boolean
   }
   /**
    * Il turno (F2): Myynd lavora da solo le carte in coda. Acceso se manca;

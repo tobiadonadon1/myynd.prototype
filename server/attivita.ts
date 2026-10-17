@@ -38,9 +38,9 @@ const GIORNO = 86_400_000
 export type Lettori = {
   recenti: () => Promise<spotlight.FileRecente[]>
   repository: () => Promise<string[]>
-  cronologia: (dal: (p: cronologia.ProfiloBrowser) => number, esclusi: readonly string[]) => { profilo: cronologia.ProfiloBrowser; visite: cronologia.Visita[] }[]
+  cronologia: (dal: (p: cronologia.ProfiloBrowser) => number, esclusi: readonly string[], visto: (p: cronologia.ProfiloBrowser) => number) => Promise<cronologia.Lettura[]>
   statoRepo: (percorso: string, mie: Iterable<string>) => Promise<gitProfondo.StatoRepo | null>
-  editor: () => editor.VoceEditor[]
+  editor: () => Promise<editor.VoceEditor[]>
   cartelle: () => string[]
   casa: string
 }
@@ -48,7 +48,7 @@ export type Lettori = {
 const VERI: Lettori = {
   recenti: () => spotlight.recenti(),
   repository: () => spotlight.repository(),
-  cronologia: (dal, esclusi) => cronologia.leggiTutto(dal, { esclusi }),
+  cronologia: (dal, esclusi, visto) => cronologia.leggiTutto(dal, { esclusi, visto }),
   statoRepo: (p, mie) => gitProfondo.statoRepo(p, mie),
   editor: () => editor.leggiEditor(),
   cartelle: () => segnali.cartelleNote(),
@@ -89,12 +89,15 @@ export async function raccogli(adesso = new Date(), o: { forza?: boolean } = {})
   }
 
   // la cronologia, dall'ultima passata di ogni profilo
+  // un file che non è cambiato dall'ultima passata non si ricopia nemmeno
   const cursore = (p: cronologia.ProfiloBrowser) => `cronologia:${p.browser}:${p.profilo}`
-  const letture = lettori.cronologia(p => {
+  const cursoreData = (p: cronologia.ProfiloBrowser) => `cronologia-mtime:${p.browser}:${p.profilo}`
+  const letture = await lettori.cronologia(p => {
     const c = Number(store.cursore(cursore(p)))
     return Number.isFinite(c) && c > 0 ? c : adesso.getTime() - PRIMA_CRONOLOGIA
-  }, s.siti)
-  for (const { profilo, visite } of letture) {
+  }, s.siti, p => Number(store.cursore(cursoreData(p)) ?? 0)).catch(() => [] as cronologia.Lettura[])
+  for (const { profilo, visite, mtime, saltato } of letture) {
+    if (!saltato && mtime) store.segnaCursore(cursoreData(profilo), String(mtime))
     if (!visite.length) continue
     const vive = visite.filter(v => !oss.dimenticata(iso(v.quando)))
     for (const g of cronologia.perGiorno(vive, ms => fuso.giornoIn(new Date(ms)))) {
@@ -114,7 +117,8 @@ export async function raccogli(adesso = new Date(), o: { forza?: boolean } = {})
   for (const r of await lettori.repository().catch(() => [] as string[])) repo.add(r)
   for (const f of recenti) { const r = gitProfondo.repoDelFile(f.percorso, lettori.casa); if (r) repo.add(r) }
   const mie = segnali.mieiIndirizzi()
-  for (const percorso of [...repo].slice(0, REPO_MAX)) {
+  // solo dentro casa, mai un volume di rete o esterno
+  for (const percorso of [...repo].filter(x => gitProfondo.repoAmmesso(x, lettori.casa)).slice(0, REPO_MAX)) {
     const r = await lettori.statoRepo(percorso, mie).catch(() => null)
     if (!r) continue
     const progetto = oss.progettoDi({ percorso: r.percorso }, cerca)
@@ -132,9 +136,10 @@ export async function raccogli(adesso = new Date(), o: { forza?: boolean } = {})
     }
   }
 
-  // le cartelle aperte negli editor: con la loro data se l'editor la sa
-  for (const v of lettori.editor()) {
-    if (v.quando && Date.parse(v.quando) < da14) continue
+  // le cartelle aperte negli editor, solo con la loro data: una voce senza data
+  // sarebbe «vista adesso» a ogni giro, e tornerebbe dentro un'ora dimenticata
+  for (const v of await lettori.editor().catch(() => [] as editor.VoceEditor[])) {
+    if (!v.quando || Date.parse(v.quando) < da14) continue
     conta(oss.registra({
       kind: 'editor', sourceId: `editor:${v.editor}:${v.percorso}`, app: v.editor, title: basename(v.percorso),
       observedAt: ora, eventAt: v.quando, percorso: v.percorso
@@ -159,6 +164,8 @@ export type VistaOggi = {
   diario: { id: string; progetto: string | null; nomeProgetto: string | null; genere: string; testo: string }[]
   /** Il testo della finestra è acceso? La pagina lo dice. */
   testi: boolean
+  /** Accesa di serie e non ancora detto: la pagina lo dice una volta. */
+  avviso: boolean
 }
 
 /** Quello che ha visto oggi, per la pagina: gli episodi e il diario, coi nomi dei progetti. */
@@ -170,7 +177,8 @@ export function oggi(adesso = new Date()): VistaOggi {
     giorno,
     episodi: oss.episodi(giorno).map(e => ({ id: e.id, progetto: e.projectId, nomeProgetto: nome(e.projectId), inizio: e.inizio, fine: e.fine, minuti: e.minuti, etichetta: e.etichetta, app: e.app })),
     diario: oss.diarioDelGiorno(giorno).map(r => ({ id: r.id, progetto: r.projectId, nomeProgetto: nome(r.projectId), genere: r.kind, testo: r.text })),
-    testi: osservatore.statoPerChiChiede(adesso).testi
+    testi: osservatore.statoPerChiChiede(adesso).testi,
+    avviso: osservatore.statoPerChiChiede(adesso).avviso
   }
 }
 

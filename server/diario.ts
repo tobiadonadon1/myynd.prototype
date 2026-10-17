@@ -2,9 +2,10 @@
 //
 // Gli episodi li fa il codice (`osservazioni.ts`), sul Mac, senza modello.
 // Qui una volta al giorno si mettono in fila, progetto per progetto, in una
-// pagina corta: l'ora, i minuti, il titolo delle cose guardate, i commit, il
-// ramo e i file non salvati. Mai il testo delle finestre, mai un indirizzo
-// intero. Quella pagina va al modello più economico che c'è, in una chiamata
+// pagina corta: l'ora, i minuti, le app, i nomi ripuliti dei documenti di
+// lavoro (vedi `nomeSicuro`), i commit senza autori, il ramo e i file non
+// salvati. Mai il testo delle finestre, mai il titolo di una finestra, mai un
+// indirizzo intero né un nome di file fuori dal progetto. Quella pagina va al modello più economico che c'è, in una chiamata
 // sola, e torna da cinque a dieci righe per progetto, ognuna con le prove su
 // cui poggia. Le righe restano nel diario e arrivano nel contesto del
 // progetto (`project-memory.ts`); quelle che poggiano su un'ora dimenticata
@@ -14,7 +15,10 @@
 // finisce, o la mattina dopo se la sera non c'era.
 
 import { randomUUID } from 'node:crypto'
+import { homedir } from 'node:os'
+import { extname } from 'node:path'
 import db from './store.ts'
+import { cercatoreDiProgetti } from './attenzione.ts'
 import * as store from './store.ts'
 import * as fuso from './fuso.ts'
 import * as progetti from './progetti.ts'
@@ -37,6 +41,56 @@ const hhmm = (iso: string, zona: string) => {
   return `${String(p.ora).padStart(2, '0')}:${String(p.minuti).padStart(2, '0')}`
 }
 
+/** Ripulito, compatto, corto: tutto quello che esce dal Mac passa di qui. */
+export function pulito(s: string, tetto: number): string {
+  return oss.compatto(oss.redigi(s), tetto).replace(/"/g, "'")
+}
+
+/** I documenti di lavoro riconosciuti per identità: solo per loro esce il titolo della pagina. */
+const DOCUMENTI_NOTI = /^web:(gdoc|notion|figma|github|linear|canva):/
+
+/**
+ * Il nome di una cosa vista che può uscire dal Mac, o null.
+ *
+ * Una pagina: il titolo solo se è un documento di lavoro riconosciuto (un
+ * Google Doc, una pagina di Notion, un file di Figma, una PR, un'issue, un
+ * design di Canva); altrimenti il dominio e basta, così una ricerca o una
+ * mail aperta nel browser non dicono niente di sé. Un file: il percorso
+ * dentro la cartella del progetto, se ci sta; altrimenti solo il tipo. Le
+ * finestre e le sessioni non danno mai il loro titolo: basta il nome dell'app.
+ */
+export function nomeSicuro(r: Pick<oss.Osservazione, 'kind' | 'sourceId' | 'title'>, progetto: string, cerca: (t: string) => string | null): string | null {
+  if (r.kind === 'web') {
+    if (DOCUMENTI_NOTI.test(r.sourceId)) return r.title ? `"${pulito(oss.titoloCorto(r.title), 80)}"` : null
+    const dominio = r.sourceId.slice('web:'.length)
+    return /^[a-z0-9.-]+$/i.test(dominio) ? dominio : null
+  }
+  if (r.kind === 'file' || r.kind === 'editor') {
+    const percorso = r.sourceId.slice(r.sourceId.indexOf('/'))
+    const dentro = dentroDelProgetto(percorso, progetto, cerca, r.kind === 'editor')
+    if (dentro !== null) return dentro ? `"${pulito(dentro, 80)}"` : 'the project folder'
+    const ext = extname(percorso).slice(1).toLowerCase()
+    return r.kind === 'editor' ? null : /^[a-z0-9]{1,8}$/.test(ext) ? `a .${ext} file` : 'a file'
+  }
+  return null
+}
+
+/**
+ * Il percorso di un file dentro la cartella del progetto («src/pricing.ts»):
+ * la prima cartella, salendo da casa, che nomina il progetto. Vuoto se è la
+ * cartella stessa, null se il file non sta in una cartella del progetto.
+ */
+export function dentroDelProgetto(percorso: string, progetto: string, cerca: (t: string) => string | null, cartella = false): string | null {
+  const casa = homedir()
+  const resto = percorso.startsWith(casa + '/') ? percorso.slice(casa.length + 1) : percorso.replace(/^\/+/, '')
+  const pezzi = resto.split('/').filter(Boolean)
+  // per un file contano solo le cartelle: un nome di file che nomina il progetto non lo mette dentro
+  for (let i = 0; i < pezzi.length - (cartella ? 0 : 1); i++) {
+    if (cerca(pezzi[i]!) === progetto) return pezzi.slice(i + 1).join('/')
+  }
+  return null
+}
+
 /**
  * La pagina del giorno per il modello. Null se non c'è niente di un
  * progetto: senza materiale non si chiama nessuno.
@@ -50,18 +104,24 @@ export function materiale(giorno: string, zona = fuso.fusoDi()): Materiale | nul
   const id = (lista: number[]) => { const k = `e${++n}`; prove.set(k, lista); return k }
   const blocchi: string[] = []
   const conProgetto = [...new Set(righe.map(r => r.projectId).filter((x): x is string => !!x && nomi.has(x)))]
+  const cerca = cercatoreDiProgetti()
+  const perId = new Map(righe.map(r => [r.id, r]))
   for (const p of conProgetto) {
     const linee: string[] = []
+    const nomiDi = (ids: number[], quanti: number) => [...new Set(ids.map(i => perId.get(i)).filter((r): r is oss.Osservazione => !!r)
+      .map(r => nomeSicuro(r, p, cerca)).filter((x): x is string => !!x))].slice(0, quanti)
     for (const e of eps.filter(x => x.projectId === p)) {
-      linee.push(`[${id(e.prove)}] ${hhmm(e.inizio, zona)}-${hhmm(e.fine, zona)}, ${e.minuti ? `${e.minuti} min` : 'seen'}${e.app.length ? `, ${e.app.join(', ')}` : ''}: ${e.etichetta}`)
+      const visti = nomiDi(e.prove, 4)
+      linee.push(`[${id(e.prove)}] ${hhmm(e.inizio, zona)}-${hhmm(e.fine, zona)}, ${e.minuti ? `${e.minuti} min` : 'seen'}${e.app.length ? `, ${e.app.join(', ')}` : ''}${visti.length ? `: ${visti.join(', ')}` : ''}`)
     }
     const suoi = righe.filter(r => r.projectId === p && r.kind === 'commit')
-    if (suoi.length) linee.push(`[${id(suoi.map(r => r.id))}] commits by the user: ${suoi.length} (${suoi.slice(0, 5).map(r => `"${r.title ?? ''}"`).join(', ')})`)
+    if (suoi.length) linee.push(`[${id(suoi.map(r => r.id))}] own commits: ${suoi.length} (${suoi.slice(0, 5).map(r => `"${pulito(r.title ?? '', 100)}"`).join(', ')})`)
     const altri = righe.filter(r => r.projectId === p && r.kind === 'commit-altri')
-    if (altri.length) linee.push(`[${id(altri.map(r => r.id))}] commits by others: ${altri.slice(0, 4).map(r => `${r.app ?? 'someone'}: "${r.title ?? ''}"`).join('; ')}`)
-    for (const r of righe.filter(x => x.projectId === p && x.kind === 'repo')) linee.push(`[${id([r.id])}] repository ${r.title ?? ''}: ${r.text ?? ''}`)
+    if (altri.length) linee.push(`[${id(altri.map(r => r.id))}] teammate commits: ${altri.length} (${altri.slice(0, 4).map(r => `"${pulito(r.title ?? '', 100)}"`).join(', ')})`)
+    for (const r of righe.filter(x => x.projectId === p && x.kind === 'repo')) linee.push(`[${id([r.id])}] repository ${pulito(r.title ?? '', 60)}: ${pulito(r.text ?? '', 200)}`)
     const documenti = righe.filter(r => r.projectId === p && (r.kind === 'web' || r.kind === 'file'))
-    if (documenti.length) linee.push(`[${id(documenti.map(r => r.id))}] documents and pages: ${documenti.slice(0, 8).map(r => r.kind === 'file' ? `"${r.title ?? ''}" (file)` : `"${(r.title ?? r.sourceId).slice(0, 80)}"`).join(', ')}`)
+    const nomiDoc = nomiDi(documenti.map(r => r.id), 8)
+    if (nomiDoc.length) linee.push(`[${id(documenti.map(r => r.id))}] documents and pages: ${nomiDoc.join(', ')}`)
     if (!linee.length) continue
     blocchi.push(`Project: ${nomi.get(p)} (id ${p})\n${linee.join('\n')}`)
   }
@@ -171,7 +231,7 @@ export async function forse(adesso = new Date()): Promise<number> {
   })
   if (!r) return 0
   const righe = ripulisci(r, m)
-  // un'ora dimenticata mentre il modello scriveva: le righe che poggiano su osservazioni sparite non entrano
+  // un'ora dimenticata mentre il modello scriveva: le righe che poggiano anche su una sola osservazione sparita non entrano
   const vive = new Set((db.prepare('SELECT id FROM osservazioni WHERE day = ?').all(giorno) as { id: number }[]).map(x => x.id))
   const ins = db.prepare('INSERT INTO diario (id, day, projectId, kind, text, evidence, createdAt) VALUES (?,?,?,?,?,?,?)')
   let scritte = 0
@@ -179,8 +239,9 @@ export async function forse(adesso = new Date()): Promise<number> {
   try {
     db.prepare('DELETE FROM diario WHERE day = ?').run(giorno)
     for (const x of righe) {
-      const evidence = x.evidence.filter(e => vive.has(e))
-      if (!evidence.length) continue
+      // basta una prova dimenticata e la riga non entra: poggiava anche su quella
+      const evidence = x.evidence
+      if (!evidence.every(e => vive.has(e))) continue
       ins.run(randomUUID(), giorno, x.projectId, x.kind, x.text, JSON.stringify(evidence), adesso.toISOString())
       scritte++
     }

@@ -2358,7 +2358,7 @@ export type Gemello = {
 export type StatoOsservatore = {
   disponibile: boolean; acceso: boolean; titoli: boolean; pausaFino: string | null; altroConto: boolean; osservate: number
   /** Il testo della finestra davanti (acceso a mano), il suo ritmo, e le esclusioni sue. Mancano nei server vecchi. */
-  testi?: boolean; ogni?: number; escluse?: string[]; siti?: string[]
+  testi?: boolean; ogni?: number; escluse?: string[]; siti?: string[]; avviso?: boolean
 }
 /** «Cosa ho visto oggi»: gli episodi del giorno e il diario. */
 export type VistaOggi = {
@@ -2366,13 +2366,15 @@ export type VistaOggi = {
   episodi: { id: string; progetto: string | null; nomeProgetto: string | null; inizio: string; fine: string; minuti: number; etichetta: string; app: string[] }[]
   diario: { id: string; progetto: string | null; nomeProgetto: string | null; genere: string; testo: string }[]
   testi: boolean
+  /** La linea è stata accesa di serie e lui non l'ha ancora saputo: una riga sola, una volta. */
+  avviso?: boolean
 }
 export const gemelloApi = {
   vista: () => json<Gemello>('/api/gemello'),
   abitudine: (chiave: string, azione: 'tieni' | 'correggi' | 'togli' | 'ripristina', testo?: string, prima?: string) =>
     json<{ ok: true; testoSuo: string | null }>(`/api/gemello/abitudini/${encodeURIComponent(chiave)}`, { method: 'POST', body: JSON.stringify({ azione, testo, prima }) }),
   osservatore: () => json<StatoOsservatore>('/api/osservatore'),
-  imposta: (v: { acceso?: boolean; titoli?: boolean; testi?: boolean; escluse?: string[]; siti?: string[] }) => json<StatoOsservatore>('/api/osservatore', { method: 'POST', body: JSON.stringify(v) }),
+  imposta: (v: { acceso?: boolean; titoli?: boolean; testi?: boolean; escluse?: string[]; siti?: string[]; avvisoVisto?: boolean }) => json<StatoOsservatore>('/api/osservatore', { method: 'POST', body: JSON.stringify(v) }),
   oggi: () => json<VistaOggi>('/api/osservatore/oggi'),
   dimenticaOra: (quando: string) => json<VistaOggi>(`/api/osservatore/ora?quando=${encodeURIComponent(quando)}`, { method: 'DELETE' }),
   dimenticaOggi: () => json<VistaOggi>('/api/osservatore/oggi', { method: 'DELETE' }),

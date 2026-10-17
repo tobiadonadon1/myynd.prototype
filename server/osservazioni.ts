@@ -40,6 +40,9 @@ export const GIORNI_DIARIO = 90
 export const GIORNI_DIMENTICATE = 30
 /** Il testo tenuto per riga, già ripulito. */
 export const TESTO_MAX = 4000
+/** Quanti testi di finestra si tengono per fonte in un'ora, e in tutto in un giorno. */
+export const TESTI_PER_ORA = 12
+export const TESTI_PER_GIORNO = 300
 /** Sopra questa somiglianza il testo nuovo non è un cambio: si allunga la riga di prima. */
 export const SIMILE = 0.9
 /** Oltre questo vuoto un episodio si spezza. */
@@ -88,20 +91,37 @@ export function luhn(cifre: string): boolean {
  */
 export function redigi(testo: string): string {
   return testo
+    // blocchi PEM e chiavi SSH, interi (anche tagliati a metà: senza la riga END si va fino in fondo)
+    .replace(/-----BEGIN [A-Z0-9 ]+-----[\s\S]*?(?:-----END [A-Z0-9 ]+-----|$)/g, '[chiave]')
+    .replace(/\b(?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp\d+) [A-Za-z0-9+/=]{20,}/g, '[chiave]')
+    // stringhe di connessione: l'utente e la password prima della chiocciola
+    .replace(/\b(postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?|mssql|sqlserver):\/\/[^\s/@]*@/gi, '$1://[credenziali]@')
     // chiavi dei servizi noti
+    .replace(/\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}/g, '[chiave]')
     .replace(/\b(?:sk|pk|rk)-(?:ant-|proj-|live_|test_)?[A-Za-z0-9_-]{16,}/g, '[chiave]')
     .replace(/\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}/g, '[chiave]')
     .replace(/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, '[chiave]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[chiave]')
+    .replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '[chiave]')
     .replace(/\bAIza[0-9A-Za-z_-]{35}\b/g, '[chiave]')
     .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '[gettone]')
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}/gi, '$1 [gettone]')
-    // la password, il codice, il segreto dopo la sua etichetta
-    .replace(/\b(password|passwd|pwd|passcode|pin|parola d'ordine|api[_ -]?key|secret|segreto|token|otp)(\s*[:=]\s*|\s+is\s+|\s+è\s+)("[^"]*"|'[^']*'|\S+)/gi, '$1$2[nascosto]')
+    // il segreto dopo la sua etichetta, anche fra virgolette come in un JSON («"client_secret": "…"»)
+    .replace(/(["']?)\b(password|passwd|pwd|passcode|pin|parola d'ordine|api[_ -]?key|client[_ -]?secret|access[_ -]?token|refresh[_ -]?token|secret|segreto|token|otp)\1(\s*[:=]\s*|\s+is\s+|\s+è\s+)("[^"]*"|'[^']*'|\S+)/gi, '$1$2$1$3[nascosto]')
+    // e la password scritta di seguito, senza segno in mezzo: «password hunter2»
+    .replace(/\b(password|passwd|pwd|passcode|parola d'ordine)\s+(?!\[nascosto\])(?!(?:is|è|for|per|reset|dimenticata|forgot|manager|field|campo|nuova|new)\b)\S+/gi, '$1 [nascosto]')
+    // gli indirizzi email
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '[email]')
     // IBAN: due lettere, due cifre, poi da undici a trenta caratteri
     .replace(/\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b/g, m => /\d{6,}/.test(m.replace(/ /g, '')) ? '[iban]' : m)
     // numeri di carta: da tredici a diciannove cifre, con spazi o trattini, che passano Luhn
     .replace(/\b\d(?:[ -]?\d){12,18}\b/g, m => luhn(m.replace(/[ -]/g, '')) ? '[carta]' : m)
+    // numeri di telefono: un «+» o dei separatori, da nove a quindici cifre, e non una data
+    .replace(/(?<![\w.])\+?\(?\d[\d ().-]{6,20}\d(?!\w)/g, m => {
+      const cifre = m.replace(/\D/g, '').length
+      if (cifre < 9 || cifre > 15) return m
+      if (/^\d{4}[-./]\d{1,2}[-./]\d{1,2}/.test(m) || /^\d{1,2}[-./]\d{1,2}[-./]\d{2,4}/.test(m)) return m
+      return m.startsWith('+') || /[ ().-]/.test(m) ? '[telefono]' : m
+    })
     // stringhe lunghe a caso: lettere e cifre mescolate, quaranta e più caratteri
     .replace(/\b(?=[A-Za-z0-9+/_-]*\d)(?=[A-Za-z0-9+/_-]*[A-Za-z])[A-Za-z0-9+/_-]{40,}={0,2}/g, '[chiave]')
 }
@@ -206,6 +226,8 @@ export function registra(n: Nuova, cerca: (t: string) => string | null = cercato
   const quando = n.eventAt ?? n.observedAt
   if (dimenticata(n.observedAt) || dimenticata(n.eventAt) || dimenticata(n.endAt)) return 'dimenticata'
   if (n.spans?.some(([a, b]) => dimenticata(new Date(a).toISOString()) || dimenticata(new Date(b).toISOString()))) return 'dimenticata'
+  // un titolo di finestra sta anche nell'identità della fonte: si ripulisce lì come nel titolo
+  if (n.kind === 'app' || n.kind === 'finestra') n = { ...n, sourceId: compatto(redigi(n.sourceId), 600) }
   const title = n.title ? compatto(redigi(n.title), 300) || null : null
   const text = n.text ? compatto(redigi(n.text)) || null : null
   const day = fuso.giornoIn(new Date(quando))
@@ -223,6 +245,15 @@ export function registra(n: Nuova, cerca: (t: string) => string | null = cercato
       .get(n.sourceId, new Date(Date.parse(n.observedAt) - 12 * 3600_000).toISOString()) as { id: number; text: string | null; title: string | null; contentHash: string | null } | undefined
     if (prima && (prima.contentHash === hash || somiglianza(`${prima.title ?? ''} ${prima.text ?? ''}`, `${title ?? ''} ${text ?? ''}`) >= SIMILE)) {
       db.prepare('UPDATE osservazioni SET endAt = MAX(COALESCE(endAt, observedAt), ?) WHERE id = ?').run(n.endAt ?? n.observedAt, prima.id)
+      return 'uguale'
+    }
+    // un tetto: dodici testi per fonte in un'ora, trecento in un giorno; oltre si allunga l'ultimo
+    const t = Date.parse(n.observedAt)
+    const nellOra = (db.prepare("SELECT COUNT(*) AS n FROM osservazioni WHERE kind = 'finestra' AND sourceId = ? AND observedAt > ? AND observedAt <= ?")
+      .get(n.sourceId, new Date(t - 3600_000).toISOString(), n.observedAt) as { n: number }).n
+    const nelGiorno = (db.prepare("SELECT COUNT(*) AS n FROM osservazioni WHERE kind = 'finestra' AND day = ?").get(day) as { n: number }).n
+    if (nellOra >= TESTI_PER_ORA || nelGiorno >= TESTI_PER_GIORNO) {
+      if (prima) db.prepare('UPDATE osservazioni SET endAt = MAX(COALESCE(endAt, observedAt), ?) WHERE id = ?').run(n.endAt ?? n.observedAt, prima.id)
       return 'uguale'
     }
   } else if (UNA_AL_GIORNO.has(n.kind)) {

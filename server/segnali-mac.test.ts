@@ -8,7 +8,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, utimesSync, truncateSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -103,7 +103,7 @@ test('git: le letture pure', () => {
 
 /* ---------------------------------------------------------------- editor */
 
-test('editor: «Apri recenti» da state.vscdb e gli spazi di lavoro con la loro data', () => {
+test('editor: «Apri recenti» da state.vscdb e gli spazi di lavoro con la loro data', async () => {
   const utente = join(CASA, 'Library', 'Application Support', 'Cursor', 'User')
   mkdirSync(join(utente, 'globalStorage'), { recursive: true })
   const db = new DatabaseSync(join(utente, 'globalStorage', 'state.vscdb'))
@@ -126,7 +126,7 @@ test('editor: «Apri recenti» da state.vscdb e gli spazi di lavoro con la loro 
   utimesSync(join(spazio, 'state.vscdb'), t, t)
   mkdirSync(join(utente, 'workspaceStorage', 'rotto'), { recursive: true })
 
-  const v = ed.leggiEditor({ casa: CASA })
+  const v = await ed.leggiEditor({ casa: CASA })
   assert.deepEqual(v, [
     { editor: 'Cursor', percorso: '/Users/anna/Code/harbor', genere: 'cartella', quando: '2026-10-16T11:00:00.000Z' },
     { editor: 'Cursor', percorso: '/Users/anna/Code/northwind', genere: 'cartella', quando: null },
@@ -134,4 +134,29 @@ test('editor: «Apri recenti» da state.vscdb e gli spazi di lavoro con la loro 
     { editor: 'Cursor', percorso: '/Users/anna/w.code-workspace', genere: 'spazio', quando: null }
   ])
   assert.deepEqual(ed.leggiRecenti('non json', 'VS Code'), [])
+  // il file non è cambiato: la seconda lettura non lo ricopia, e dice lo stesso
+  assert.deepEqual(await ed.leggiEditor({ casa: CASA }), v)
+})
+
+test('editor: un state.vscdb oltre i cinquanta mega non si copia', async () => {
+  const f = join(CASA, 'grande.vscdb')
+  writeFileSync(f, '')
+  truncateSync(f, ed.STATO_MASSIMO + 1)
+  assert.equal(await ed.valoreDi(f, 'history.recentlyOpenedPathsList'), null)
+})
+
+test('Spotlight: un’uscita oltre il tetto tiene le righe intere arrivate, invece di niente', async () => {
+  const esegui = spot.creaEsegui(1000)
+  const uscita = await esegui(process.execPath, ['-e', 'for (let i = 0; i < 200; i++) console.log("/Users/anna/f" + i + ".md   kMDItemLastUsedDate = 2026-10-16 09:12:33 +0000")'])
+  assert.ok(uscita.length > 0 && uscita.length <= 1000, String(uscita.length))
+  assert.ok(uscita.endsWith('\n'))
+  assert.ok(spot.leggiUscita(uscita, '/Users/anna').length > 5)
+})
+
+test('git: guarda e basta, e solo dentro casa', () => {
+  assert.deepEqual(git.argomentiGit('/r', ['status']), ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', '/r', 'status'])
+  assert.equal(git.repoAmmesso('/Users/anna/Code/x', '/Users/anna'), true)
+  assert.equal(git.repoAmmesso('/Volumes/NAS/Code/x', '/Users/anna'), false)
+  assert.equal(git.repoAmmesso('/Users/anna/Library/x', '/Users/anna'), false)
+  assert.equal(git.repoAmmesso('/opt/x', '/Users/anna'), false)
 })

@@ -68,6 +68,8 @@ export type StatoOsservatore = {
   /** Le app (identificativo o nome) e i siti da non guardare mai, scelti da lui. */
   escluse: string[]
   siti: string[]
+  /** Acceso di serie da Myynd e lui non ha ancora visto la riga che lo dice. */
+  avviso: boolean
 }
 export type Sessione = { bundle: string; app: string; titolo: string | null; inizio: string; fine: string; secondi: number }
 
@@ -151,7 +153,10 @@ function adotta(): string | null {
   if (!scelto) return null
   const o = chi.dentro(scelto, () => cfg.leggi().osservatore)
   if (o?.acceso === false) return null
-  scriviProprietario(scelto, new Date().toISOString())
+  const adesso = new Date().toISOString()
+  scriviProprietario(scelto, adesso)
+  // acceso da noi, non da lui: lo si dice una volta, e i titoli restano come li aveva (spenti se non li aveva mai accesi)
+  chi.dentro(scelto, () => cfg.aggiorna({ osservatore: { ...(o ?? {}), acceso: true, titoli: o?.titoli === true, adottato: o?.adottato ?? adesso } }))
   return scelto
 }
 
@@ -171,10 +176,10 @@ function statoDi(o: cfg.Config['osservatore'] | undefined, adesso: Date): StatoO
     const t = Date.parse(o.pausaFino)
     if (!Number.isNaN(t) && t > adesso.getTime()) pausaFino = new Date(t).toISOString()
   }
-  return { acceso, titoli, pausaFino, testi: acceso && o?.testi === true, ogni: ogniDi(o?.ogni), escluse: [...(o?.escluse ?? [])], siti: [...(o?.siti ?? [])] }
+  return { acceso, titoli, pausaFino, testi: acceso && o?.testi === true, ogni: ogniDi(o?.ogni), escluse: [...(o?.escluse ?? [])], siti: [...(o?.siti ?? [])], avviso: acceso && !!o?.adottato && o?.avvisoVisto !== true }
 }
 
-const SPENTO: StatoOsservatore = { acceso: false, titoli: false, pausaFino: null, testi: false, ogni: OGNI_TESTI, escluse: [], siti: [] }
+const SPENTO: StatoOsservatore = { acceso: false, titoli: false, pausaFino: null, testi: false, ogni: OGNI_TESTI, escluse: [], siti: [], avviso: false }
 
 /** Lo stato del proprietario: `pausaFino` è null appena è passata. */
 export function stato(adesso = new Date()): StatoOsservatore {
@@ -201,7 +206,7 @@ export function statoPerChiChiede(adesso = new Date()): StatoOsservatore & { dis
  * configurazione. Spegnere da un conto che non è il proprietario non cambia
  * niente di quello che il proprietario vede.
  */
-export type Impostazioni = { acceso?: boolean; titoli?: boolean; testi?: boolean; ogni?: number; escluse?: string[]; siti?: string[] }
+export type Impostazioni = { acceso?: boolean; titoli?: boolean; testi?: boolean; ogni?: number; escluse?: string[]; siti?: string[]; avvisoVisto?: boolean }
 
 /** Una lista di esclusioni scritta da lui: voci corte, senza doppioni, al massimo cento. */
 export function pulisciEsclusioni(v: unknown): string[] {
@@ -211,8 +216,10 @@ export function pulisciEsclusioni(v: unknown): string[] {
 
 export function imposta(v: Impostazioni, adesso = new Date()): ReturnType<typeof statoPerChiChiede> {
   const me = chi.serve()
+  // com'era prima che la domanda stessa facesse adottare il Mac: accenderlo a mano è un gesto suo, e i titoli vanno come sempre
+  const primaDiAdottare = cfg.leggi().osservatore
   const p = proprietario()
-  const o = cfg.leggi().osservatore
+  const o = v.acceso === true ? primaDiAdottare : cfg.leggi().osservatore
   if (v.acceso === true) {
     if (p && p !== me) {
       chi.dentro(p, () => {
@@ -237,6 +244,7 @@ export function imposta(v: Impostazioni, adesso = new Date()): ReturnType<typeof
   if (v.testi !== undefined) extra.testi = v.testi === true
   if (v.ogni !== undefined) extra.ogni = ogniDi(v.ogni)
   if (v.escluse !== undefined) extra.escluse = pulisciEsclusioni(v.escluse)
+  if (v.avvisoVisto === true) extra.avvisoVisto = true
   if (v.siti !== undefined) extra.siti = pulisciEsclusioni(v.siti).map(x => x.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')).filter(Boolean)
   if (Object.keys(extra).length) cfg.aggiorna({ osservatore: { ...(dopo ?? { acceso: true }), ...extra } })
   annuncia()
