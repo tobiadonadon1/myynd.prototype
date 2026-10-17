@@ -73,7 +73,11 @@ export const AMBITI_SLACK = [
   'groups:history', 'groups:read',
   'im:history', 'im:read',
   'mpim:history', 'mpim:read',
-  'users:read'
+  'users:read',
+  // per capire meglio: lo spazio, la ricerca delle menzioni, i file, le reazioni
+  'team:read', 'search:read', 'files:read', 'reactions:read',
+  // il solo che scrive: la risposta che parte quando lui tocca «Manda», mai da sola
+  'chat:write'
 ]
 
 /**

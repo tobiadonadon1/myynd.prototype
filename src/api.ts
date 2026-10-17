@@ -484,6 +484,17 @@ export type ProgettoVisto = {
 export type CartellaSuggerita = { nome: string; percorso: string; dove: string; ultima: string }
 export type VistaProgetti = { progetti: ProgettoVisto[]; suggeriti: CartellaSuggerita[] }
 
+export type SlackStato = {
+  squadra: string | null; utente: string | null; url: string | null
+  ambiti: string[] | null; mancano: string[]; manifesto: string
+  ultima: string | null; conversazioni: number; fili: number; aperte: number
+  esclusi: string[]; posti: { id: string; nome: string; tipo: string }[]
+}
+export type SlackDomanda = {
+  id: string; chi: string; domanda: string; permalink: string; dove: string; conversazione: string
+  filo: string | null; ambito: string; quando: string; ore: number; progetto: string | null; altre: number; fiducia: number
+}
+
 async function json<T>(url: string, opz?: RequestInit): Promise<T> {
   const t = sessione.token()
   let r: Response
@@ -1465,7 +1476,15 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ url, chiave }) }),
 
   collegaSlack: (token: string) =>
-    json<{ ok: true; squadra: string; canali?: number; oltre?: boolean }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
+    json<{ ok: true; squadra: string; utente?: string; canali?: number; oltre?: boolean; mancano?: string[] }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
+  /** Slack collegato: lo spazio, i conti, i permessi che mancano, i posti da cui escludere. */
+  slackStato: () => json<SlackStato>('/api/slack/stato'),
+  slackEsclusi: (esclusi: string[]) =>
+    json<{ ok: true; esclusi: string[]; tolti: number }>('/api/slack/esclusi', { method: 'POST', body: JSON.stringify({ esclusi }) }),
+  slackDaRispondere: () => json<{ domande: SlackDomanda[] }>('/api/slack/da-rispondere'),
+  /** Manda una risposta su Slack: solo da un bottone che lui ha toccato (`x-myynd-tocco`). */
+  slackInvia: (m: { conversazione: string; testo: string; filo?: string | null }) =>
+    json<{ ok: true; permalink: string }>('/api/slack/invia', { method: 'POST', headers: { 'x-myynd-tocco': '1' }, body: JSON.stringify(m) }),
 
   /** GitHub: il token, e — se ne ha scelti — i soli repository da leggere. */
   collegaGithub: (token: string, repos: string[]) =>

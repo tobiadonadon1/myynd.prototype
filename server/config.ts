@@ -939,7 +939,15 @@ export type Config = {
    * un'app installata può offrire. Il token è da utente (`xoxp-`) apposta:
    * vede quello che vede la persona che l'ha creato, e non un canale di più.
    */
-  slack?: { token: string; squadra?: string; utente?: string; giorni?: number }
+  slack?: {
+    token: string; squadra?: string; utente?: string; giorni?: number
+    /** Chi è e dove, da `auth.test`: i suoi messaggi, e i link ai messaggi. */
+    utenteId?: string; squadraId?: string; url?: string
+    /** Gli ambiti che il token ha davvero. */
+    ambiti?: string[]
+    /** Le conversazioni che non si leggono: id di Slack, scelti da lui. */
+    esclusi?: string[]
+  }
   /**
    * Google Drive, separato da Gmail perché è un permesso separato.
    *

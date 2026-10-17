@@ -167,6 +167,6 @@ test('l’app di Slack si crea dal manifesto con tutti gli ambiti che servono al
   assert.deepEqual(m.oauth_config.scopes.user, AMBITI_SLACK)
   // quelli che mancavano ai passi di prima: senza, `users.conversations` si ferma
   for (const a of ['groups:read', 'im:read', 'mpim:read']) assert.ok(AMBITI_SLACK.includes(a), a)
-  // e niente che scriva
-  assert.ok(AMBITI_SLACK.every(a => /:(read|history)$/.test(a)))
+  // e uno solo che scrive: la risposta che parte da un tocco suo
+  assert.deepEqual(AMBITI_SLACK.filter(a => !/:(read|history)$/.test(a)), ['chat:write'])
 })

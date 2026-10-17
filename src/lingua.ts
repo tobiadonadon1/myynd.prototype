@@ -3332,6 +3332,19 @@ const EN: Record<string, string> = {
   'Myynd, da sé': 'Myynd, on its own',
   'Sparisce tutto: documenti, lista, chat, memoria e fonti. Non si torna indietro.': 'Everything goes: documents, list, chats, memory and sources. There is no going back.',
   // — via le automazioni: fine —
+  // — Slack, dieci volte meglio: inizio —
+  'Le conversazioni di Slack di cui fai parte: canali, fili e messaggi diretti.': 'The Slack conversations you are in: channels, threads and direct messages.',
+  'Mancano dei permessi:': 'Missing permissions:',
+  'Rifai l’app su Slack': 'Recreate the app on Slack',
+  'Non leggere': 'Do not read',
+  'Scegli una conversazione': 'Pick a conversation',
+  'Ultima lettura {n}': 'Last read {n}',
+  'Si manda solo con un tocco.': 'It only sends from a tap.',
+  'Collega Slack e potrò mandarlo.': 'Connect Slack and I can send it.',
+  'Questa conversazione non esiste.': 'That conversation does not exist.',
+  'Questa conversazione è esclusa.': 'That conversation is excluded.',
+  'Slack non è collegato.': 'Slack is not connected.',
+  // — Slack, dieci volte meglio: fine —
 }
 
 
@@ -4121,6 +4134,12 @@ export const frasi = {
   /** Corto, sulla destra di una riga: «3 days ago». */
   giorniFa: (n: number) => corrente === 'en' ? `${n} days ago` : `${n} giorni fa`,
   /** Quando ha capito il progetto l'ultima volta: «Last read yesterday». */
-  lettoUltimaVolta: (quando: string) => corrente === 'en' ? `Last read ${quando}` : `Letto l’ultima volta ${quando}`
+  lettoUltimaVolta: (quando: string) => corrente === 'en' ? `Last read ${quando}` : `Letto l’ultima volta ${quando}`,
   // — la pagina dei Progetti: fine —
+  // — Slack, dieci volte meglio: inizio —
+  /** Sulla scheda di Slack: «67 conversations · 4 threads · 3 waiting for you». */
+  slackConti: (conversazioni: number, fili: number, aperte: number) => corrente === 'en'
+    ? `${conversazioni} ${conversazioni === 1 ? 'conversation' : 'conversations'} · ${fili} ${fili === 1 ? 'thread' : 'threads'} · ${aperte} waiting for you`
+    : `${conversazioni} ${conversazioni === 1 ? 'conversazione' : 'conversazioni'} · ${fili} ${fili === 1 ? 'filo' : 'fili'} · ${aperte} ${aperte === 1 ? 'ti aspetta' : 'ti aspettano'}`
+  // — Slack, dieci volte meglio: fine —
 }

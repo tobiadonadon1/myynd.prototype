@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { api, apiP4 } from '../api'
 import { carta } from '../conta-fonti.ts'
 import { rilettura, suCollegamento } from '../collegamenti'
-import type { ChatGPT, ClaudeCon, Stato } from '../api'
+import type { ChatGPT, ClaudeCon, SlackStato, Stato } from '../api'
 import { frasi, lingua, t } from '../lingua'
 import { casoDaErrore, mailto, richiestaAmministratore, type DoveVanno } from '../amministratore.ts'
 // lo stesso riconoscimento del server: una funzione pura, senza niente di Node
@@ -20,6 +20,7 @@ import { controllaAccessoChatGPT, nomePianoChatGPT } from '../chatgpt-accesso.ts
 import {statoAccessoNote} from '../note-access.ts'
 import { gmailPerLeApp, type Strada } from '../onboarding/primo-avvio.ts'
 import { Scatola } from './forme'
+import { riempi } from '../salute-fonti'
 
 export type Tema = 'scuro' | 'chiaro'
 
@@ -2226,7 +2227,7 @@ export function FormSlack({ tema, ok, collegato }: Props) {
 
   return (
     <div>
-      <div style={guida(tema)}>{t('I canali di Slack di cui fai già parte, in sola lettura.')}</div>
+      <div style={guida(tema)}>{t('Le conversazioni di Slack di cui fai parte: canali, fili e messaggi diretti.')}</div>
       {/* l'app si crea già compilata dal suo manifesto: nome e ambiti sono scritti */}
       <a href={appSlack()} target="_blank" rel="noreferrer"
         style={{ ...azione(tema), display: 'inline-block', marginTop: 12, textDecoration: 'none' }}>{t('Crea l’app su Slack')}</a>
@@ -2246,6 +2247,76 @@ export function FormSlack({ tema, ok, collegato }: Props) {
           <>{t('A mano: crea un’app e in «User Token Scopes» aggiungi')}{' '}<span style={{ overflowWrap: 'anywhere' }}>{AMBITI_SLACK.join(', ')}</span>.</>
         ]} />
       </Aiuto>
+    </div>
+  )
+}
+
+/** «3 min fa», «2 h fa», «4 giorni fa»: quando ha letto Slack l'ultima volta. */
+function daQuanto(iso: string): string {
+  const min = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000))
+  if (min < 1) return t('Adesso')
+  if (min < 60) return frasi.minutiFa(min)
+  const ore = Math.round(min / 60)
+  return ore < 48 ? frasi.oreFa(ore) : frasi.giorniFa(Math.round(ore / 24))
+}
+
+/**
+ * Slack collegato: lo spazio e chi, i conti dell'ultimo giro, i permessi che
+ * mancano con il link per rifare l'app, e i posti da non leggere.
+ *
+ * Escludere un posto lo toglie anche da quello che Myynd sa già: la rotta
+ * butta i suoi documenti e i suoi segnali, non solo le letture future.
+ */
+export function DettaglioSlack({ cambiata }: { cambiata?: () => void }) {
+  const [s, setS] = useState<SlackStato | null>(null)
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    api.slackStato().then(r => { if (vivo) setS(r) }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  if (!s) return null
+  const nomeDi = (id: string) => s.posti.find(p => p.id === id)?.nome ?? id
+  const cambia = async (esclusi: string[]) => {
+    setErr(''); setOccupato(true)
+    try {
+      const r = await api.slackEsclusi(esclusi)
+      setS({ ...s, esclusi: r.esclusi })
+      cambiata?.()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+  const chi = [s.squadra, s.utente ? `@${s.utente}` : null].filter(Boolean).join(' · ')
+  return (
+    <div className="connection-writes connection-slack">
+      {chi && <p className="connection-slack-riga">{chi}</p>}
+      <p className="connection-slack-riga">{[
+        frasi.slackConti(s.conversazioni, s.fili, s.aperte),
+        s.ultima ? riempi(t('Ultima lettura {n}'), { n: daQuanto(s.ultima) }) : null
+      ].filter(Boolean).join(' · ')}</p>
+      {!!s.mancano.length && <p className="connection-slack-riga">
+        {t('Mancano dei permessi:')} <span style={{ overflowWrap: 'anywhere' }}>{s.mancano.join(', ')}</span>.{' '}
+        <a href={s.manifesto} target="_blank" rel="noreferrer">{t('Rifai l’app su Slack')}</a>
+      </p>}
+      <div className="connection-writes-row">
+        <span id="slack-esclusi">{t('Non leggere')}</span>
+        <Scatola spento={occupato}>
+          <select aria-labelledby="slack-esclusi" value="" disabled={occupato || !s.posti.length}
+            onChange={e => { if (e.target.value) void cambia([...s.esclusi, e.target.value]) }}>
+            <option value="">{t('Scegli una conversazione')}</option>
+            {s.posti.filter(p => !s.esclusi.includes(p.id)).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </Scatola>
+      </div>
+      {!!s.esclusi.length && <ul className="connection-slack-esclusi">
+        {s.esclusi.map(id => <li key={id}>
+          <span>{nomeDi(id)}</span>
+          <button type="button" disabled={occupato} aria-label={`${t('Togli')} ${nomeDi(id)}`} title={t('Togli')}
+            onClick={() => void cambia(s.esclusi.filter(x => x !== id))}>×</button>
+        </li>)}
+      </ul>}
+      <Errore testo={err} />
     </div>
   )
 }
