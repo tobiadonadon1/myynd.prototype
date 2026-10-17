@@ -13,6 +13,7 @@
 import * as store from './store.ts'
 import { salvaBozzaCasella } from './mailbox-drafts.ts'
 import * as mani from './mani.ts'
+import * as tracce from './tracce.ts'
 
 export type Ferri = {
   salvaBozzaCasella: typeof salvaBozzaCasella
@@ -66,6 +67,8 @@ export async function esegui(c: store.Compito, p: Proposta): Promise<Fatto> {
     })
     store.registraAzione({ tipo: m.nome, cosa: m.titolo, compito: c.id, esito: e.male ? 'fallita' : 'fatta', ...(e.male ? { dettaglio: e.testo.slice(0, 300) } : {}) })
     if (e.male) throw new Error(e.testo || 'Non è riuscito.')
+    // la traccia della carta da cui è nata: il passo trattenuto approvato è lavoro preso
+    tracce.decidi(m.da, 'accettato', { distanza: 0 })
     chiudi(c.id, e.fatto.dettaglio ? `${e.fatto.dettaglio.slice(0, 200)}.` : 'Fatto.')
     return { spostati: 1, dove: e.fatto.dettaglio || m.titolo }
   }

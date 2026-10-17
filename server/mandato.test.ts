@@ -85,11 +85,11 @@ test('un progetto di prima, senza riga, vale di serie; la migrazione non tocca i
 
 test('proposto non allarga mai: vale la più stretta; confermato valgono le sue', () => {
   const p = nuovo()
-  mandato.salva(p.id, { classi: { invio: 'auto', file: 'mai' } })
-  assert.equal(mandato.regolaPer(p.id, 'invio'), 'chiedi', 'da proposto «auto» non passa sopra «chiedi»')
+  mandato.salva(p.id, { classi: { contatto_nuovo: 'auto', file: 'mai' } })
+  assert.equal(mandato.regolaPer(p.id, 'contatto_nuovo'), 'chiedi', 'da proposto «auto» non passa sopra «chiedi»')
   assert.equal(mandato.regolaPer(p.id, 'file'), 'mai', 'da proposto «mai» stringe subito')
   mandato.salva(p.id, {}, { conferma: true })
-  assert.equal(mandato.regolaPer(p.id, 'invio'), 'auto')
+  assert.equal(mandato.regolaPer(p.id, 'contatto_nuovo'), 'auto')
   assert.equal(mandato.autonomia(p.id), 'agisce')
 })
 
@@ -233,4 +233,90 @@ test('il budget del mese di un progetto: finito quando le sue carte l’hanno sp
     .run(new Date().toISOString(), 'bozza', 'claude', 10, 0, 10, 'b1', 300_000)
   assert.equal(mandato.budgetFinito(p.id), true)
   assert.ok(Math.abs(mandato.spesaDelMese(p.id) - 0.6) < 1e-9)
+})
+
+// — le correzioni della revisione —
+
+test('approvare un lavoro sul codice trattenuto non posa niente se «codice_applica» non è «auto»', async () => {
+  const p = nuovo()
+  store.scriviCompito({ id: 'c1', testo: 'Fix the bug', ordine: 'a', progetto: p.id })
+  mandato.salva(p.id, { classi: { codice_copia: 'chiedi', codice_applica: 'mai' } }, { conferma: true })
+  const v = mandato.decidi('lavora_nel_codice', { richiesta: 'x' }, { progetto: p.id, presente: true })
+  assert.deepEqual(v, { via: 'esegui', classe: 'codice_copia', soloCopia: true }, 'anche con lei presente si resta nella copia')
+  assert.equal(mandato.posaPermessa(p.id), false, '«Applica» rifiuta con «mai»')
+  let posate = 0
+  mani.perProva({
+    casa: () => casa, scrivania: () => scrivania, ospitato: () => false, piattaforma: () => 'darwin',
+    installato: () => '/usr/local/bin/claude', runtime: async () => ({ status: 'supported' }),
+    fai: (async () => ({
+      passo: 'fai', cartella: join(radice, 'copia'), finito: true, testo: 'ok',
+      esecuzione: { changedFiles: [{ path: 'a.ts', kind: 'modified' }], state: 'verified', reportFile: join(radice, 'r') }
+    })) as never,
+    posa: async r => { posate++; return { backup: '', applied: r.changedFiles, skipped: [] } }
+  })
+  const u = await mani.esegui('lavora_nel_codice', { richiesta: 'Fix it' }, { cartella: join(radice, 'progetto'), mandato: { progetto: p.id, compito: 'c1', presente: false } })
+  assert.equal(u.male, true, '«chiedi»: niente parte')
+  const proposta = store.elencoCompiti().find(c => c.origine === mandato.ORIGINE)!
+  await proposte.esegui(proposta, proposta.proposta as Parameters<typeof proposte.esegui>[1])
+  assert.equal(posate, 0, 'il codice resta nella copia')
+  mandato.salva(p.id, { classi: { codice_applica: 'chiedi' } })
+  assert.equal(mandato.posaPermessa(p.id), true)
+})
+
+test('un attrezzo che il tocco non sa eseguire non fa nascere una proposta', () => {
+  const p = nuovo()
+  store.scriviCompito({ id: 'c1', testo: 'A Pages doc', ordine: 'a', progetto: p.id })
+  mandato.salva(p.id, { classi: { file: 'chiedi' } }, { conferma: true })
+  const v = mandato.decidi('crea_documento_app', { titolo: 'Doc' }, { progetto: p.id, compito: 'c1', presente: false })
+  assert.equal(v.via, 'chiedi')
+  assert.equal(v.via === 'chiedi' && v.proposta, null)
+  assert.doesNotMatch(v.via === 'chiedi' ? v.testo : '', /proposta da approvare/)
+  assert.equal(store.elencoCompiti().filter(c => c.origine === mandato.ORIGINE).length, 0)
+})
+
+test('un percorso relativo si legge dalla cartella della carta, mai da quella del processo', () => {
+  const p = nuovo()
+  mandato.salva(p.id, { fonti: ['/progetto'] }, { conferma: true })
+  const m = mandato.di(p.id)
+  assert.equal(mandato.fonteAmmessa(m, { percorso: 'src/a.ts' }, '/progetto'), true)
+  assert.equal(mandato.fonteAmmessa(m, { percorso: 'src/a.ts' }, null), false, 'senza cartella un relativo non si risolve')
+  assert.equal(mandato.fonteAmmessa(m, { percorso: '../fuori/a.ts' }, '/progetto/sotto'), true, 'resta sotto /progetto')
+  assert.equal(mandato.fonteAmmessa(m, { percorso: '../../etc/hosts' }, '/progetto/sotto'), false)
+})
+
+test('una proposta sola per carta e attrezzo; l’ultima versione vince; niente lineette nel titolo', async () => {
+  const p = nuovo()
+  store.scriviCompito({ id: 'c1', testo: 'Piano', ordine: 'a', progetto: p.id })
+  tracce.inizia({ compito: 'c1', progetto: p.id })
+  mandato.salva(p.id, { classi: { file: 'chiedi' } }, { conferma: true })
+  await mani.esegui('scrivi_file', { percorso: 'piano — v1.md', testo: 'uno' }, daSolo(p.id))
+  await mani.esegui('scrivi_file', { percorso: 'piano — v2.md', testo: 'due' }, daSolo(p.id))
+  const tutte = store.elencoCompiti().filter(c => c.origine === mandato.ORIGINE)
+  assert.equal(tutte.length, 1)
+  const m = tutte[0].proposta?.azione === 'mandato.mano' ? tutte[0].proposta.mani[0] : null
+  assert.equal(m?.input.testo, 'due')
+  assert.equal(m?.titolo, 'piano, v2.md')
+  assert.doesNotMatch(tutte[0].testo, /—/)
+  assert.equal(tracce.ultimaDi('c1')?.uscita, `proposta:${tutte[0].id}`)
+})
+
+test('approvare la proposta conta nella traccia della carta madre', async () => {
+  const p = nuovo()
+  store.scriviCompito({ id: 'c1', testo: 'Piano', ordine: 'a', progetto: p.id })
+  tracce.inizia({ compito: 'c1', progetto: p.id })
+  tracce.consegnata('c1')
+  mandato.salva(p.id, { classi: { file: 'chiedi' } }, { conferma: true })
+  await mani.esegui('scrivi_file', { percorso: 'piano.md', testo: 'x' }, daSolo(p.id))
+  const proposta = store.elencoCompiti().find(c => c.origine === mandato.ORIGINE)!
+  await proposte.esegui(proposta, proposta.proposta as Parameters<typeof proposte.esegui>[1])
+  assert.equal(tracce.ultimaDi('c1')?.esito, 'accettato')
+})
+
+test('«auto» non si sceglie per quello che il lavoro da solo non sa fare; zero è nessun budget', () => {
+  const p = nuovo()
+  for (const c of mandato.SENZA_MANO) assert.throws(() => mandato.salva(p.id, { classi: { [c]: 'auto' } }), /non la fa ancora/, c)
+  assert.equal(mandato.salva(p.id, { classi: { invio: 'mai', contatto_nuovo: 'auto' } }).classi.invio, 'mai')
+  assert.equal(mandato.salva(p.id, { budget: 3 }).budget, 3)
+  assert.equal(mandato.salva(p.id, { budget: 0 }).budget, null)
+  assert.equal(mandato.budgetFinito(p.id), false)
 })

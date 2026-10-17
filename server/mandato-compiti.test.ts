@@ -124,3 +124,16 @@ test('una carta senza progetto lavora con il mandato di serie', async () => {
   assert.deepEqual(mandatoVisto, { progetto: null })
   assert.ok(existsSync(CASA))
 })
+
+test('il lavoro da sé: il file delle idee e il copione passano dal mandato («file» non «auto»: si ritira, senza modello)', async () => {
+  const daSe = await import('./da-se.ts')
+  const p = progetti.scrivi({ nome: 'Dorsale', obiettivo: 'Ship the video' })
+  mandato.salva(p.id, { classi: { file: 'chiedi' } }, { conferma: true })
+  for (const origine of [daSe.ORIGINE_X, daSe.ORIGINE_VIDEO]) {
+    const id = riga(`Self work ${origine}`, p.id)
+    store.default.prepare('UPDATE compiti SET origine = ? WHERE id = ?').run(origine, id)
+    const e = await daSe.lavora(store.compito(id)!)
+    assert.equal(e.ritira, 'Held by the project mandate', origine)
+    assert.deepEqual(e.fatti, [])
+  }
+})

@@ -132,3 +132,18 @@ test('una settimana vuota: niente numeri inventati', () => {
   assert.equal(s.tasso, null)
   assert.equal(s.costoPerAccettata, null)
 })
+
+test('il costo della settimana è quello di ogni partenza da questa settimana, non la vita della carta', () => {
+  const adesso = new Date()
+  const vecchio = new Date(adesso.getTime() - 20 * 86_400_000)
+  // la stessa carta ha speso tanto tre settimane fa, in una partenza di allora
+  spendi('k', 900_000, vecchio)
+  tracce.inizia({ compito: 'k' })
+  spendi('k', 50_000)
+  tracce.consegnata('k')
+  tracce.decidi('k', 'accettato')
+  const s = tracce.settimana(adesso)
+  assert.ok(Math.abs(s.costo - 0.05) < 1e-9, `costo ${s.costo}`)
+  assert.ok(Math.abs((s.costoPerAccettata ?? 0) - 0.05) < 1e-9)
+  assert.ok(Math.abs((tracce.ultimaDi('k')!.costo ?? 0) - 0.05) < 1e-9, 'anche sulla traccia')
+})

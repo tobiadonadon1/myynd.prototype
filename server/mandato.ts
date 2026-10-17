@@ -52,6 +52,16 @@ export const PREDEFINITE: Readonly<Record<Classe, Regola>> = {
   paga: 'mai', cancella: 'mai'
 }
 
+/**
+ * Le classi che il lavoro da solo non sa ancora fare: nessuna mano manda,
+ * pubblica, paga o tocca l'agenda. Per loro «auto» non si può scegliere, così
+ * il mandato non promette quello che non esiste: solo «chiedi» o «mai».
+ */
+export const SENZA_MANO: readonly Classe[] = ['invio', 'pubblica', 'paga', 'calendario']
+
+/** Gli attrezzi che una proposta con un dito sa eseguire (`proposte.ts`, con `mani.esegui`). */
+export const ESEGUIBILI_COL_TOCCO: readonly string[] = ['crea_nota', 'scrivi_file', 'scrivi_notion', 'lavora_nel_codice']
+
 /** Quanto pesa una regola: la più stretta vince. */
 const PESO: Record<Regola, number> = { auto: 0, chiedi: 1, mai: 2 }
 export function piuStretta(a: Regola, b: Regola): Regola { return PESO[a] >= PESO[b] ? a : b }
@@ -224,6 +234,7 @@ export function pulisci(c: Cambio): Partial<Pick<Mandato, 'esito' | 'misura' | '
     for (const [k, v] of Object.entries(c.classi as Record<string, unknown>)) {
       if (!(CLASSI as readonly string[]).includes(k)) throw new Error('Questa azione non la conosco.')
       if (typeof v !== 'string' || !(REGOLE as readonly string[]).includes(v)) throw new Error('Una regola è «da solo», «chiedi» o «mai».')
+      if (v === 'auto' && (SENZA_MANO as readonly string[]).includes(k)) throw new Error('Questa azione Myynd non la fa ancora da solo: chiedi o mai.')
       cl[k as Classe] = v as Regola
     }
     fuori.classi = cl
@@ -233,7 +244,8 @@ export function pulisci(c: Cambio): Partial<Pick<Mandato, 'esito' | 'misura' | '
     else {
       const n = Number(c.budget)
       if (!Number.isFinite(n) || n < 0 || n > BUDGET_MAX) throw new Error('Il budget è in dollari al mese, da 0 a 1000.')
-      fuori.budget = Math.round(n * 100) / 100
+      // zero è «nessun budget del progetto», come nel resto dell'app
+      fuori.budget = n === 0 ? null : Math.round(n * 100) / 100
     }
   }
   return fuori
@@ -286,7 +298,10 @@ const sotto = (radice: string, p: string) => p === radice || p.startsWith(radice
 export function fonteAmmessa(m: Mandato, fonte: { id?: string; percorso?: string }, cartellaDelCompito?: string | null): boolean {
   if (!m.fonti) return true
   if (fonte.percorso) {
-    const p = espandi(fonte.percorso)
+    // un percorso relativo si intende dalla cartella della carta, come fa `leggi_file`; mai dalla cartella del processo
+    const relativo = !isAbsolute(fonte.percorso) && fonte.percorso !== '~' && !fonte.percorso.startsWith('~/')
+    if (relativo && !(cartellaDelCompito && isAbsolute(cartellaDelCompito))) return false
+    const p = relativo ? resolve(cartellaDelCompito!, fonte.percorso) : espandi(fonte.percorso)
     if (cartellaDelCompito && isAbsolute(cartellaDelCompito) && sotto(resolve(cartellaDelCompito), p)) return true
     if (m.fonti.includes('file')) return true
     return m.fonti.some(f => (f.startsWith('/') || f.startsWith('~')) && sotto(espandi(f), p))
@@ -369,16 +384,23 @@ export function decidi(nome: string, input: unknown, chi: ChiLavora): Verdetto {
       testo: `Non permesso: il mandato di questo progetto dice che Myynd non deve mai ${classe ? NOMI_IT[classe] : 'farlo'}. Non riprovare e non cercare un altro modo; nella riga finale di' che questo passo resta a lei.`
     }
   }
-  if (chi.presente) return { via: 'esegui', classe: classe ?? 'leggi' }
+  /*
+   * Il codice si lavora nella copia; posarlo nel progetto vero è un'altra
+   * classe. Se «codice_applica» non è «auto» si resta nella copia anche con
+   * lei presente (anche approvando una proposta): si posa solo col tocco
+   * esplicito «Applica», che rifiuta quando è «mai» (`posaPermessa`).
+   */
+  const soloCopia = classe === 'codice_copia' && r.codice_applica !== 'auto'
+  if (chi.presente) return { via: 'esegui', classe: classe ?? 'leggi', ...(soloCopia ? { soloCopia: true } : {}) }
   if (regola === 'auto') {
-    // il codice si lavora nella copia; posarlo nel progetto vero è un'altra classe
-    if (classe === 'codice_copia' && r.codice_applica !== 'auto') {
+    if (soloCopia) {
       if (chi.compito) tracce.ricevuta(chi.compito, 'trattenuto', 'codice_applica')
-      return { via: 'esegui', classe, soloCopia: true }
+      return { via: 'esegui', classe: classe!, soloCopia: true }
     }
     return { via: 'esegui', classe: classe! }
   }
-  const proposta = chi.compito ? proponiMano({ nome, input: i, classe, chi }) : null
+  // una proposta solo per quello che il tocco sa eseguire: le altre non nascono per fallire all'«Approva»
+  const proposta = chi.compito && ESEGUIBILI_COL_TOCCO.includes(nome) ? proponiMano({ nome, input: i, classe, chi }) : null
   if (chi.compito) tracce.ricevuta(chi.compito, 'trattenuto', `chiedi:${classe ?? nome}`)
   return {
     via: 'chiedi', classe, proposta,
@@ -386,6 +408,15 @@ export function decidi(nome: string, input: unknown, chi: ChiLavora): Verdetto {
       (proposta ? ' L\'ho messo nella sua lista come proposta da approvare con un tocco.' : '') +
       ' Non riprovare; nella riga finale di\' che aspetta lei.'
   }
+}
+
+/**
+ * Se il codice lavorato nella copia si può posare nel progetto vero con il
+ * tocco «Applica»: no solo quando il mandato dice «mai». Per chi aggiunge
+ * quella rotta (`POST /api/lavoro/applica`).
+ */
+export function posaPermessa(progetto: string | null | undefined): boolean {
+  return regolaPer(progetto, 'codice_applica') !== 'mai'
 }
 
 /** La regola per una bozza nella casella: chi non è mai stato scritto passa da `contatto_nuovo`. */
@@ -424,7 +455,7 @@ const VERBI: Record<Classe, [string, string]> = {
 
 function titoloDi(nome: string, i: Record<string, unknown>): string {
   const s = (k: string) => typeof i[k] === 'string' ? (i[k] as string).replace(/\s+/g, ' ').trim() : ''
-  return (s('titolo') || s('percorso') || s('oggetto') || s('a') || s('richiesta') || nome).slice(0, 120)
+  return (s('titolo') || s('percorso') || s('oggetto') || s('a') || s('richiesta') || nome).replace(/\s*[—–]\s*/g, ', ').slice(0, 120)
 }
 
 function proponiMano(o: { nome: string; input: Record<string, unknown>; classe: Classe | null; chi: ChiLavora }): string | null {
@@ -432,7 +463,7 @@ function proponiMano(o: { nome: string; input: Record<string, unknown>; classe: 
     const en = lingua() === 'en'
     const titolo = titoloDi(o.nome, o.input)
     const verbo = o.classe ? VERBI[o.classe][en ? 1 : 0] : (en ? 'Use' : 'Usare')
-    const id = 'mand-' + createHash('sha256').update(`${o.chi.compito}\n${o.nome}\n${JSON.stringify(o.input)}`).digest('hex').slice(0, 16)
+    const id = 'mand-' + createHash('sha256').update(`${o.chi.compito}\n${o.nome}\n${o.classe ?? ''}`).digest('hex').slice(0, 16)
     const testo = `${verbo}: ${titolo}`.replace(/\s*—\s*/g, ', ')
     const perche = en ? 'This project’s mandate says to ask you first.' : 'Il mandato di questo progetto dice di chiederti prima.'
     const corpo = typeof o.input.testo === 'string' ? (o.input.testo as string).slice(0, 4000) : undefined
@@ -444,8 +475,11 @@ function proponiMano(o: { nome: string; input: Record<string, unknown>; classe: 
     }
     const gia = store.compito(id)
     if (gia && gia.stato !== 'aperto' && gia.stato !== 'pronto') return id
-    if (!gia) store.scriviCompito({ id, testo, quando: 'oggi', ordine: ordine.dopo(store.ultimoOrdine('oggi')), origine: ORIGINE, madre: o.chi.compito ?? null, progetto: o.chi.progetto })
+    // una proposta sola per carta e attrezzo: quella in attesa prende l'ultima versione
+    store.scriviCompito({ id, testo, quando: 'oggi', ordine: ordine.dopo(store.ultimoOrdine('oggi')), origine: ORIGINE, madre: o.chi.compito ?? null, progetto: o.chi.progetto })
     store.proponi(id, { azione: 'mandato.mano', mani: [mano] }, perche)
+    // la traccia della carta madre sa dove è finito il passo trattenuto
+    tracce.uscita(o.chi.compito!, `proposta:${id}`)
     return id
   } catch (e) {
     console.warn('myynd · mandato · la proposta non è nata:', e instanceof Error ? e.message : e)

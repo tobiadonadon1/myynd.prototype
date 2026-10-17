@@ -66,6 +66,7 @@ import { stessaCosa } from './priorita.ts'
 import { linguaDi } from './domande-prova.ts'
 import { fra } from './ordine.ts'
 import { OSPITATO } from './ospitato.ts'
+import * as mandato from './mandato.ts'
 
 export const ORIGINE_X = 'idee-x'
 export const ORIGINE_VIDEO = 'copione-video'
@@ -1197,7 +1198,14 @@ async function copione(o: Parameters<typeof promptVideo>[0], s: { signal?: Abort
 export async function lavora(c: store.Compito, o: { signal?: AbortSignal; adesso?: number } = {}): Promise<Esito> {
   const adesso = o.adesso ?? Date.now()
   const e = en()
+  /*
+   * Il file delle idee e il copione passano dal mandato come ogni file del
+   * lavoro da solo: se «file» non è «auto» la carta si ritira prima di
+   * pagare un modello, trattenuta e non guasta.
+   */
+  const fileTrattenuto = (progetto: string | null) => mandato.regolaPer(progetto, 'file') !== 'auto'
   if (c.origine === ORIGINE_X) {
+    if (fileTrattenuto(c.progetto ?? null)) return { testo: '', fatti: [], ritira: 'Held by the project mandate' }
     const m = materialeX(adesso)
     if (!m) return { testo: '', fatti: [], ritira: 'Not enough posts to learn the voice' }
     const { idee: scelte, fonti } = await idee(m, o)
@@ -1212,6 +1220,7 @@ export async function lavora(c: store.Compito, o: { signal?: AbortSignal; adesso
   if (!p || p.stato !== 'attivo') return { testo: '', fatti: [], ritira: 'The project is not active anymore' }
   const foto = fotoDel(p, adesso)
   if (c.origine === ORIGINE_VIDEO) {
+    if (fileTrattenuto(p.id)) return { testo: '', fatti: [], ritira: 'Held by the project mandate' }
     const prima = leggiStato().video?.[p.id]
     const dal = Math.max(Date.parse(prima?.ultimo ?? '') || 0, adesso - SETTIMANA)
     const progresso = progressoDi(p, foto, dal, adesso, prima?.traguardo)

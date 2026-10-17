@@ -20,7 +20,7 @@
 // Non lancia mai verso chi la chiama: la traccia racconta il lavoro, non lo regge.
 
 import { randomUUID } from 'node:crypto'
-import db, * as store from './store.ts'
+import db from './store.ts'
 import * as chi from './chi.ts'
 import { classe as classeRitocco } from './ritocco.ts'
 
@@ -65,9 +65,14 @@ const prova = <T>(fai: () => T, altrimenti: T): T => {
   try { return fai() } catch (e) { console.warn('myynd · traccia:', e instanceof Error ? e.message : e); return altrimenti }
 }
 
-function costoDi(compito: string): number | null {
-  const u = store.usoDelCompito(compito)
-  return u?.costo == null ? null : u.costo / 1_000_000
+/**
+ * I dollari spesi da questa partenza: le chiamate della carta da quando la
+ * traccia è nata (`da`). Non il conto di tutta la vita della carta: una carta
+ * ripartita tre volte non porta tre volte il costo della prima.
+ */
+function costoDi(compito: string, da: string): number | null {
+  const r = db.prepare('SELECT COUNT(costo) AS n, COALESCE(SUM(costo), 0) AS c FROM uso WHERE compito = ? AND quando >= ?').get(compito, da) as { n: number; c: number }
+  return r.n ? r.c / 1_000_000 : null
 }
 
 /** L'ultima traccia di una carta: quella della partenza più recente. */
@@ -97,7 +102,7 @@ export function consegnata(compito: string, o: { uscita?: string | null; prove?:
     const prove = [...new Set([...t.prove, ...(o.prove ?? []).filter((x): x is string => !!x)])].slice(0, 40)
     db.prepare(`UPDATE tracce SET consegnata = ?, uscita = COALESCE(?, uscita), prove = ?, costo = ?,
       ricevuta = CASE WHEN ricevuta = 'trattenuto' THEN ricevuta ELSE 'fatto' END WHERE id = ?`)
-      .run(new Date().toISOString(), o.uscita ?? null, JSON.stringify(prove), costoDi(compito), t.id)
+      .run(new Date().toISOString(), o.uscita ?? null, JSON.stringify(prove), costoDi(compito, t.creata), t.id)
   }, undefined)
 }
 
@@ -113,7 +118,7 @@ export function uscita(compito: string, ref: string) {
 export function ricevuta(compito: string, stato: Ricevuta, motivo?: string | null) {
   prova(() => {
     const t = ultimaDi(compito) ?? inizia({ compito })
-    if (t) db.prepare('UPDATE tracce SET ricevuta = ?, motivo = ?, costo = ? WHERE id = ?').run(stato, motivo?.slice(0, 300) ?? null, costoDi(compito), t.id)
+    if (t) db.prepare('UPDATE tracce SET ricevuta = ?, motivo = ?, costo = ? WHERE id = ?').run(stato, motivo?.slice(0, 300) ?? null, costoDi(compito, t.creata), t.id)
   }, undefined)
 }
 
@@ -139,7 +144,7 @@ export function decidi(compito: string, esito: 'accettato' | 'modificato' | 'sca
     const adesso = o.adesso ?? new Date()
     const secondi = t.mostrata ? Math.max(0, Math.round((adesso.getTime() - Date.parse(t.mostrata)) / 1000)) : null
     db.prepare('UPDATE tracce SET esito = ?, distanza = ?, decisa = ?, secondi = ?, costo = ? WHERE id = ?')
-      .run(esito, o.distanza ?? null, adesso.toISOString(), secondi, costoDi(compito), t.id)
+      .run(esito, o.distanza ?? null, adesso.toISOString(), secondi, costoDi(compito, t.creata), t.id)
     return ultimaDi(compito)
   }, null)
 }
@@ -196,13 +201,19 @@ export function settimana(adesso = new Date()): Settimana {
   const conta = (e: Esito) => tracce.filter(t => t.consegnata && t.esito === e).length
   const accettate = conta('accettato'), modificate = conta('modificato'), scartate = conta('scartato'), scadute = conta('scaduto')
   const decise = accettate + modificate + scartate + scadute
-  const costi = prova(() => store.usoDeiCompiti(tracce.map(t => t.compito)), new Map<string, store.CostoCompito>())
-  const costo = [...costi.values()].reduce((s, c) => s + (c.costo ?? 0), 0) / 1_000_000
+  /*
+   * Il costo della settimana: per ogni traccia, quello che la sua partenza ha
+   * speso da questa settimana in qua. Una carta che lavora da mesi non porta
+   * qui il conto di tutta la sua vita.
+   */
+  const costi = new Map<string, number>()
+  for (const t of tracce) costi.set(t.id, costoDi(t.compito, t.creata > dal ? t.creata : dal) ?? 0)
+  const costo = [...costi.values()].reduce((s, c) => s + c, 0)
   const prese = accettate + modificate
   return {
     dal, consegnate: tracce.filter(t => t.consegnata).length, accettate, modificate, scartate, scadute,
     inAttesa: conta('in_attesa'), tasso: decise ? prese / decise : null,
     costo: Math.round(costo * 10_000) / 10_000, costoPerAccettata: prese ? Math.round((costo / prese) * 10_000) / 10_000 : null,
-    tracce: tracce.map(t => ({ ...t, costo: costi.get(t.compito)?.costo != null ? costi.get(t.compito)!.costo! / 1_000_000 : t.costo }))
+    tracce: tracce.map(t => ({ ...t, costo: costoDi(t.compito, t.creata) ?? t.costo }))
   }
 }

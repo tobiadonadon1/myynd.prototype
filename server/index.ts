@@ -4592,7 +4592,7 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
   if (!cartella) return res.status(400).json({ errore: 'Dimmi in quale cartella lavorare.' })
   // il mandato del progetto: anche con lei presente, «mai» resta mai (`mandato.ts`)
   if (mandato.regolaPer(c.progetto ?? null, 'codice_copia') === 'mai') return res.status(403).json({ errore: 'Il mandato di questo progetto dice di non lavorare mai sul codice.' })
-  const posaVietata = mandato.regolaPer(c.progetto ?? null, 'codice_applica') === 'mai'
+  const posaVietata = !mandato.posaPermessa(c.progetto ?? null)
 
   /*
    * Quello che gli si chiede: la riga, oppure un testo già scritto apposta.

@@ -3761,6 +3761,7 @@ const EN: Record<string, string> = {
   'Questa azione non la conosco.': 'I don’t know this action.',
   'Una regola è «da solo», «chiedi» o «mai».': 'A rule is «on its own», «ask» or «never».',
   'Il mandato di questo progetto dice di non lavorare mai sul codice.': 'This project’s mandate says never to work on the code.',
+  'Questa azione Myynd non la fa ancora da solo: chiedi o mai.': 'Myynd can’t do this on its own yet: ask or never.',
   // — il mandato e la traccia: fine —
 }
 

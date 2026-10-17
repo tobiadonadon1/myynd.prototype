@@ -23,9 +23,17 @@ const RIGHE: { regola: RegolaMandato; titolo: string }[] = [
   { regola: 'auto', titolo: 'Fa da solo' }, { regola: 'chiedi', titolo: 'Mi chiede' }, { regola: 'mai', titolo: 'Mai' }
 ]
 
-/** La riga dopo: da solo, chiede, mai, e di nuovo da solo. */
-export function dopo(r: RegolaMandato): RegolaMandato {
-  return r === 'auto' ? 'chiedi' : r === 'chiedi' ? 'mai' : 'auto'
+/**
+ * Quello che il lavoro da solo non sa ancora fare (lo stesso elenco di
+ * `SENZA_MANO` in `server/mandato.ts`): per queste «da solo» non si offre,
+ * e il tocco passa fra «chiede» e «mai».
+ */
+export const SENZA_MANO: readonly ClasseMandato[] = ['invio', 'pubblica', 'paga', 'calendario']
+
+/** La riga dopo: da solo, chiede, mai, e di nuovo da solo (o di nuovo chiede, se da solo non c'è). */
+export function dopo(r: RegolaMandato, c?: ClasseMandato): RegolaMandato {
+  const senza = !!c && SENZA_MANO.includes(c)
+  return r === 'auto' ? 'chiedi' : r === 'chiedi' ? 'mai' : senza ? 'chiedi' : 'auto'
 }
 
 const GIORNO = /^\d{4}-\d{2}-\d{2}$/
@@ -59,7 +67,7 @@ export function MandatoProgetto({ progetto }: { progetto: string }) {
   const confermato = m.stato === 'confermato'
 
   const sposta = (c: ClasseMandato) => {
-    const nuova = dopo(regole[c])
+    const nuova = dopo(regole[c], c)
     // si vede subito, prima della risposta del server
     setS({ ...s, mandato: { ...m, classi: { ...m.classi, [c]: nuova } } })
     void salva({ classi: { [c]: nuova } }).catch(() => {})
@@ -91,7 +99,7 @@ export function MandatoProgetto({ progetto }: { progetto: string }) {
               <span className="prog-mandato-voci">
                 {dentro.length ? dentro.map(c => (
                   <button key={c} type="button" className="prog-mandato-voce" data-regola={r.regola} onClick={() => sposta(c)}
-                    title={`${t('Sposta in')}: ${t(RIGHE.find(x => x.regola === dopo(r.regola))!.titolo)}`}>
+                    title={`${t('Sposta in')}: ${t(RIGHE.find(x => x.regola === dopo(r.regola, c))!.titolo)}`}>
                     {t(NOMI[c])}
                   </button>
                 )) : <span className="prog-mandato-vuoto">{t('Niente')}</span>}
