@@ -821,7 +821,7 @@ export type Config = {
    * Assente: tre dollari se l'AI la paga Myynd, nessuna se lavora un suo
    * account, una sua chiave o un modello sul suo computer. Zero: nessuna.
    */
-  quota?: number
+  quota?: number | null
   /**
    * Su cosa tenerla aggiornata, con le sue parole.
    *

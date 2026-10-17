@@ -49,9 +49,19 @@ export function pagataDaMyynd(c: Config = leggi()): boolean {
 
 /** La quota in micro-dollari; zero vuol dire nessuna. Quella scritta vince; senza, dipende da chi paga. */
 export function limite(c: Config = leggi()): number {
+  const diSerie = pagataDaMyynd(c) ? QUOTA_INCLUSA * 1_000_000 : 0
   const q = c.quota
-  if (typeof q === 'number' && Number.isFinite(q) && q >= 0) return Math.round(q * 1_000_000)
-  return pagataDaMyynd(c) ? QUOTA_INCLUSA * 1_000_000 : 0
+  if (typeof q !== 'number' || !Number.isFinite(q) || q < 0) return diSerie
+  const scelta = Math.round(q * 1_000_000)
+  // paga lui: quella che sceglie, zero nessuna. Paga Myynd: si può solo abbassare, e zero non è «nessuna»
+  if (!diSerie) return scelta
+  return scelta > 0 && scelta < diSerie ? scelta : diSerie
+}
+
+/** La quota che si può scrivere, in dollari: con l'AI pagata da Myynd solo più bassa di quella di serie, e mai zero. */
+export function quotaAmmessa(dollari: number, c: Config = leggi()): boolean {
+  if (!Number.isFinite(dollari) || dollari < 0 || dollari > 10_000) return false
+  return !pagataDaMyynd(c) || (dollari > 0 && dollari < QUOTA_INCLUSA)
 }
 
 /** Il primo istante del mese, in UTC: lo stesso per tutti i server, come il giorno del tetto. */
@@ -65,10 +75,16 @@ const guardato = new AsyncLocalStorage<true>()
 /** Quello che lui ha chiesto adesso (la chat, «fallo»): la quota non lo ferma mai. */
 export function conChiGuarda<T>(fai: () => T): T { return guardato.run(true, fai) }
 export function chiGuarda(): boolean { return guardato.getStore() === true }
+/** Il lavoro di fondo partito da dentro una richiesta sua (una carta nata in chat): la quota lo conta. */
+export function fuoriDaChiGuarda<T>(fai: () => T): T { return guardato.exit(fai) }
 
 // — le prenotazioni —
 
-export type Riserva = { id: number; utente: string; lavoro: string; stima: number; prima: number }
+export type Riserva = { id: number; utente: string; lavoro: string; stima: number; prima: number; quando: number }
+/** Una prenotazione più vecchia di così è di una chiamata appesa: non tiene più il posto. */
+export const DURATA_RISERVA_MS = 15 * 60_000
+/** L'orologio delle prenotazioni: le prove lo spostano. */
+export const orologio = { adesso: () => Date.now() }
 const prenotate = new Map<string, Map<number, Riserva>>()
 let numero = 0
 const chiave = () => chi.adesso() ?? ''
@@ -78,7 +94,13 @@ function spesoDelMese(adesso = new Date()): number {
 }
 function riservato(utente = chiave()): number {
   let n = 0
-  for (const r of prenotate.get(utente)?.values() ?? []) n += r.stima
+  const m = prenotate.get(utente)
+  for (const r of m?.values() ?? []) {
+    // una chiamata appesa da un quarto d'ora non blocca la quota per sempre
+    if (orologio.adesso() - r.quando > DURATA_RISERVA_MS) { m!.delete(r.id); continue }
+    n += r.stima
+  }
+  if (m && !m.size) prenotate.delete(utente)
   return n
 }
 
@@ -146,8 +168,15 @@ export function riserva(lavoro: string, stima: number): Riserva | null {
   const utente = chiave()
   const speso = spesoDelMese()
   const quanto = Math.max(0, Math.round(stima))
-  if (speso + riservato(utente) + quanto > lim) throw erroreDellaQuota()
-  const r: Riserva = { id: ++numero, utente, lavoro, stima: quanto, prima: speso }
+  /*
+   * Si rifiuta solo quando non resta niente: una chiamata stimata più grande
+   * del resto parte lo stesso (prenotando il resto), e il mese finisce dopo,
+   * col registro. Rifiutarla con la quota non ancora finita voleva dire un
+   * fondo fermo senza una riga fissa che lo dicesse.
+   */
+  const resto = lim - speso - riservato(utente)
+  if (resto <= 0) throw erroreDellaQuota()
+  const r: Riserva = { id: ++numero, utente, lavoro, stima: Math.min(quanto, resto), prima: speso, quando: orologio.adesso() }
   const m = prenotate.get(utente) ?? new Map<number, Riserva>()
   m.set(r.id, r)
   prenotate.set(utente, m)

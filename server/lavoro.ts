@@ -25,8 +25,9 @@
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { realpath, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import type { ConfigDesktop } from './config.ts'
 import { OSPITATO } from './ospitato.ts'
 import { executeInCopy, type ExecutionReport } from './esecuzione-isolata.ts'
@@ -236,15 +237,21 @@ export function busta(fuori: string): { result: string; errore: boolean; usage?:
  * Anthropic, ma le scritture solo nella copia (nessuna, per il piano, che
  * legge la cartella vera) e nel suo stato, e i segreti chiusi.
  */
-export async function comandoClaude(exe: string, cwd: string, passo: Passo, richiesta: string): Promise<{ argv: string[]; env: NodeJS.ProcessEnv; contenimento: Contenimento }> {
+export async function comandoClaude(exe: string, cwd: string, passo: Passo, richiesta: string, temp?: string): Promise<{ argv: string[]; env: NodeJS.ProcessEnv; contenimento: Contenimento }> {
   const argv = [exe, ...argomentiDi(passo, richiesta)]
-  const env = ambienteClaude()
+  // una cartella temporanea sua, la sola scrivibile fuori dalla copia e dal suo stato
+  const env = ambienteClaude(process.env, temp)
   if (!await sandboxDisponibile()) return { argv, env, contenimento: 'parziale' }
-  return { argv: avvolgi(argv, profiloClaude(cwd, passo === 'fai')), env, contenimento: 'sandbox' }
+  return { argv: avvolgi(argv, profiloClaude(cwd, passo === 'fai', homedir(), temp)), env, contenimento: 'sandbox' }
 }
 
 async function runClaude(exe: string, cwd: string, passo: Passo, richiesta: string, signal?: AbortSignal): Promise<{ text: string; exitCode: number | null; finished: boolean }> {
-  const { argv, env: ambiente } = await comandoClaude(exe, cwd, passo, richiesta)
+  const temp = await mkdtemp(join(tmpdir(), 'myynd-claude-'))
+  try { return await runClaudeIn(temp, exe, cwd, passo, richiesta, signal) } finally { await rm(temp, { recursive: true, force: true }).catch(() => {}) }
+}
+
+async function runClaudeIn(temp: string, exe: string, cwd: string, passo: Passo, richiesta: string, signal?: AbortSignal): Promise<{ text: string; exitCode: number | null; finished: boolean }> {
+  const { argv, env: ambiente } = await comandoClaude(exe, cwd, passo, richiesta, temp)
   if (signal?.aborted) return { text: '', exitCode: null, finished: false }
   return await new Promise((risolvi, rifiuta) => {
     const p = spawn(argv[0], argv.slice(1), { cwd, env: ambiente, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })

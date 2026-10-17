@@ -53,6 +53,7 @@ import { stendi, type Stesa } from './stesura.ts'
 import { conCompito, fuoriDalCompito } from './etichetta-uso.ts'
 import { BUDGET_NOTTE, delBudget } from './tetto.ts'
 import * as budgetNotte from './budget-notte.ts'
+import * as quotaMese from './quota-mese.ts'
 import * as cestino from './cestino.ts'
 import { corpoPerChiRiceve, haSegnaposto, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
@@ -239,7 +240,9 @@ function annuncia(e: Evento, di = chi.adesso()) {
  */
 type Voce = { utente: string | null; id: string; nativa: boolean; accodato: number
   /** L'ha fatta partire il turno (F2): vale il budget della notte, e «Stop now» la ferma (F9). */
-  turno?: boolean }
+  turno?: boolean
+  /** L'ha affidata lui, adesso, da una sua rotta: solo allora il codice verificato si posa da sé. Di serie no. */
+  presente?: boolean }
 const coda: Voce[] = []
 /**
  * Su cosa sta lavorando adesso, per persona. Una riga alla volta per ciascuno
@@ -277,7 +280,7 @@ const interruzioni = new Map<string, AbortController>()
  * ad aspettarlo. Riaffidare un compito già in coda non lo mette due volte —
  * capita, cliccando due volte, e due bozze per la stessa riga sono un difetto.
  */
-export function affida(id: string, modo: string, nativa = true, o: { turno?: boolean } = {}) {
+export function affida(id: string, modo: string, nativa = true, o: { turno?: boolean; presente?: boolean } = {}) {
   const c = store.compito(id)
   if (!c) return
 
@@ -301,7 +304,7 @@ export function affida(id: string, modo: string, nativa = true, o: { turno?: boo
 
   console.info(`myynd · worker · queued · ${id} · busy=${inCorsoDi.has(utente ?? '')} · native=${nativa}`)
   store.affidaCompito(id, modo)
-  coda.push({ utente, id, nativa, accodato: Date.now(), ...(o.turno ? { turno: true } : {}) })
+  coda.push({ utente, id, nativa, accodato: Date.now(), ...(o.turno ? { turno: true } : {}), ...(o.presente && !o.turno ? { presente: true } : {}) })
   gira()
 }
 
@@ -323,7 +326,8 @@ function gira() {
     // si lavora come la persona che l'ha affidato, non come chi ha acceso il
     // giro: è la differenza fra il suo indice e quello di un altro
     void Promise.resolve()
-      .then(() => withBackgroundWork(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id, voce.nativa, !!voce.turno)) : svolgiUno(voce.id, voce.nativa, !!voce.turno)))
+      // fuori da «chi guarda»: una carta nata in chat è lavoro di fondo, e la quota del mese la conta
+      .then(() => withBackgroundWork(() => quotaMese.fuoriDaChiGuarda(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id, voce.nativa, !!voce.turno, !!voce.presente)) : svolgiUno(voce.id, voce.nativa, !!voce.turno, !!voce.presente))))
       .catch(e => {
         console.error('myynd · compito', voce.id, e)
         // sfuggito al `try` di `svolgiUno` (una scrittura prima del lavoro, il
@@ -461,11 +465,11 @@ export function occupatoPer(utente: string): boolean {
  * modello fatta da qui dentro finisce nel registro con il suo id accanto, e
  * `turno` dice che vale il budget della notte (`tetto.ts` la ferma a metà).
  */
-function svolgiUno(id: string, nativa: boolean, turno = false): Promise<void> {
-  return conCompito(id, () => svolgiUnoDentro(id, nativa, turno), { turno })
+function svolgiUno(id: string, nativa: boolean, turno = false, presente = false): Promise<void> {
+  return conCompito(id, () => svolgiUnoDentro(id, nativa, turno, presente), { turno })
 }
 
-async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
+async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean, presente: boolean) {
   // tutto dentro il try, compresa la lettura: `compito()` può fallire come
   // qualunque altra query, e se fallisce fuori di qui si porta via la coda
   let c: store.Compito | null = null
@@ -592,10 +596,10 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     const giriDelBudget = k?.budget.giri
     /*
      * Chi ha l'autorità di posare il codice nel progetto vero: lui, se ha
-     * affidato la carta a mano adesso. Una carta partita dalla coda (il
-     * turno), a qualunque ora, non posa mai da sé: resta nella copia.
+     * affidato la carta a mano adesso da una sua rotta (`presente`, detto da
+     * chi chiama e di serie no). Tutto il resto, la coda del turno a qualunque
+     * ora compresa, non posa mai da sé: resta nella copia.
      */
-    const presente = !turno
     const lavora = (notaGiro: string | null, extra?: { fissa?: string[]; giri?: number }) => ferri.svolgi(
       c.testo, notaGiro, c.modo,
       concessi,

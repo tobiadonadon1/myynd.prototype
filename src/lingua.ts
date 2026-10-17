@@ -3735,6 +3735,7 @@ const EN: Record<string, string> = {
   'trattenuto: quota del mese raggiunta': 'held back: monthly allowance reached',
   'Quota AI del mese raggiunta: il lavoro di fondo riparte il primo del mese.': 'Monthly AI allowance reached: background work resumes on the first of the month.',
   'La quota è in dollari al mese, o zero per nessuna.': 'The allowance is in dollars per month, or zero for none.',
+  'Con l’AI inclusa la quota si può solo abbassare.': 'With the included AI the allowance can only be lowered.',
   // — recinto del codice e quota del mese: fine —
 }
 

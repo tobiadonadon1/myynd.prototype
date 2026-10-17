@@ -289,7 +289,7 @@ test('lavora_nel_codice fa il passo che cambia i file in una copia e lo dice; se
       richieste.push({ passo: o.passo, cartella: o.cartella, richiesta: o.richiesta })
       return o.passo === 'fai'
         ? { passo: 'fai', testo: 'Ho aggiunto il test.', finito: true, cartella: '/profilo/project-work/everwave-ab12/project',
-          esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed', command: ['npm', 'test'] }, agentExitCode: 0, agentFinished: true, agentText: 'Ho aggiunto il test.', createdAt: 'x' } }
+          esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed', command: ['npm', 'test'], containment: 'sandbox' }, agentExitCode: 0, agentFinished: true, agentText: 'Ho aggiunto il test.', createdAt: 'x' } }
         : { passo: 'piano', testo: 'Aggiungerei un test.', finito: true, cartella: o.cartella }
     }
   })
@@ -311,7 +311,7 @@ test('lavora_nel_codice fa il passo che cambia i file in una copia e lo dice; se
     installato: () => '/x/claude', runtime: async () => ({ status: 'supported' }),
     posa: async () => ({ backup: '/r/before', applied: [], skipped: [{ path: 'src/a.test.ts', reason: 'changed-meanwhile' as const }] }),
     fai: async (_d, o) => ({ passo: 'fai', testo: 'Ho aggiunto il test.', finito: true, cartella: '/profilo/project-work/everwave-ab12/project',
-      esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed' }, agentExitCode: 0, agentFinished: true, agentText: '', createdAt: 'x' } })
+      esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed', containment: 'sandbox' }, agentExitCode: 0, agentFinished: true, agentText: '', createdAt: 'x' } })
   })
   const tuo = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test', presente: true })
   assert.equal(tuo.posato, false)
@@ -344,7 +344,7 @@ test('lavora_nel_codice fa il passo che cambia i file in una copia e lo dice; se
 
 test('chi posa il codice: l’autorità, non l’orologio. La coda non posa mai, chi guarda solo il verificato', async () => {
   const esecuzioneCon = (state: 'verified' | 'unverified', cartella: string) => ({ id: '1', source: cartella, workspace: '/copia', reportFile: '/r', state,
-    changedFiles: [{ path: 'src/a.ts', kind: 'modified' as const }], artifactHashes: {}, verification: { status: state === 'verified' ? 'passed' as const : 'unavailable' as const },
+    changedFiles: [{ path: 'src/a.ts', kind: 'modified' as const }], artifactHashes: {}, verification: { status: state === 'verified' ? 'passed' as const : 'unavailable' as const, containment: 'sandbox' as const },
     agentExitCode: 0, agentFinished: true, agentText: '', createdAt: 'x' })
   for (const [presente, state, siPosa] of [[false, 'verified', false], [false, 'unverified', false], [true, 'unverified', false], [true, 'verified', true]] as const) {
     let posate = 0

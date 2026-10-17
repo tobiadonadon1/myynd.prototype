@@ -11,7 +11,8 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { executeInCopy } from './esecuzione-isolata.ts'
-import { ambienteClaude, ambienteMinimo, perProvaSandbox, profilo, profiloClaude, sandboxDisponibile, segreti } from './recinto.ts'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { ambienteClaude, ambienteMinimo, pathPulita, perProvaSandbox, profilo, profiloClaude, sandboxDisponibile, segreti } from './recinto.ts'
 
 const mac = process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')
 const dati = process.env.MYYND_DATI!
@@ -107,7 +108,7 @@ test('l’ambiente minimo e quello di Claude Code', () => {
   assert.equal(m.CI, '1')
   const c = ambienteClaude({ PATH: '/bin', HOME: '/h', USER: 'u', SHELL: '/bin/zsh', LANG: 'en', TERM: 'xterm', LC_ALL: 'C', CLAUDE_CONFIG_DIR: '/c',
     ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k', MYYND_POSTGRES: 'pg', AWS_SECRET_ACCESS_KEY: 's', GITHUB_TOKEN: 't', NOTION_TOKEN: 'n' })
-  assert.deepEqual(Object.keys(c).sort(), ['CLAUDE_CONFIG_DIR', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'SHELL', 'TERM', 'USER'])
+  assert.deepEqual(Object.keys(c).sort(), ['CLAUDE_CONFIG_DIR', 'DISABLE_AUTOUPDATER', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'SHELL', 'TERM', 'USER'])
 })
 
 test('il profilo: la rete solo locale, le scritture solo dove si dice, i segreti chiusi e la copia riaperta', () => {
@@ -129,4 +130,84 @@ test('Claude Code parte dentro il suo recinto', { skip: (!mac || !existsSync(joi
       { cwd: copia, env: ambienteClaude(), timeout: 30_000 }, (e, so, se) => e ? ko(new Error(`${e.message}\n${se}`)) : ok(so)))
     assert.match(out, /\d+\.\d+/)
   } finally { await rm(copia, { recursive: true, force: true }) }
+})
+
+// — le uscite senza rete: app, Apple Events, letture fuori elenco, le impostazioni di Claude Code —
+
+/** Esegue un comando dentro un profilo e dice com'è andata, senza mai aprire niente. */
+function dentro(prof: string, argv: string[], cwd: string, env: NodeJS.ProcessEnv = { PATH: '/usr/bin:/bin' }): { codice: number | null; testo: string } {
+  const r = spawnSync('/usr/bin/sandbox-exec', ['-p', prof, ...argv], { cwd, env, encoding: 'utf8', timeout: 20_000 })
+  return { codice: r.status, testo: `${r.stdout}${r.stderr}` }
+}
+
+/** Python di sistema, per chiedere a launchd un servizio per nome senza parlarci: c'è solo con gli strumenti di sviluppo. */
+const python = mac && (() => { try { return execFileSync('/usr/bin/python3', ['-c', 'print(1)'], { encoding: 'utf8', timeout: 20_000 }).trim() === '1' } catch { return false } })()
+const CERCA = `import ctypes, sys
+libc = ctypes.CDLL('/usr/lib/libSystem.B.dylib')
+porta = ctypes.c_uint32()
+bp = ctypes.c_uint32.in_dll(libc, 'bootstrap_port')
+print(' '.join(str(libc.bootstrap_look_up(bp, n.encode(), ctypes.byref(porta))) for n in sys.argv[1:]))
+`
+
+test('nessuna app da lanciare: open, osascript e shortcuts non partono (con argomenti finti, senza aprire niente)', { skip: !mac && 'serve sandbox-exec' }, async () => {
+  const copia = await mkdtemp(join(tmpdir(), 'myynd-recinto-app-'))
+  try {
+    // prima: senza i divieti osascript parte, e si lamenta solo dell'opzione finta
+    assert.doesNotMatch(dentro('(version 1)(allow default)', ['/usr/bin/osascript', '-z-myynd-prova'], copia).testo, /Operation not permitted/)
+    for (const prof of [profilo({ rete: 'locale', scrivibili: [copia], segreti: segreti(), soloElenco: true }), profiloClaude(copia, true)]) {
+      for (const argv of [['/usr/bin/osascript', '-z-myynd-prova'], ['/usr/bin/open', '--myynd-prova-inesistente'], ['/usr/bin/shortcuts', '--myynd-prova']]) {
+        const r = dentro(prof, argv, copia)
+        assert.match(r.testo, /Operation not permitted/, `${argv[0]}: ${r.testo}`)
+      }
+    }
+  } finally { await rm(copia, { recursive: true, force: true }) }
+})
+
+test('niente LaunchServices né Apple Events: il servizio non si trova dentro il recinto, fuori sì', { skip: (!mac || !python) && 'serve sandbox-exec e python3' }, async () => {
+  const copia = await mkdtemp(join(tmpdir(), 'myynd-recinto-mach-'))
+  try {
+    await writeFile(join(copia, 'cerca.py'), CERCA)
+    const nomi = ['com.apple.coreservices.launchservicesd', 'com.apple.coreservices.appleevents']
+    assert.equal(dentro('(version 1)(allow default)', ['/usr/bin/python3', '-I', 'cerca.py', ...nomi], copia).testo.trim(), '0 0', 'prima: si trovano')
+    for (const prof of [profilo({ rete: 'locale', scrivibili: [copia], segreti: segreti(), soloElenco: true }), profiloClaude(copia, true)]) {
+      const r = dentro(prof, ['/usr/bin/python3', '-I', 'cerca.py', ...nomi], copia, { PATH: '/usr/bin:/bin', TMPDIR: copia, HOME: copia })
+      assert.match(r.testo, /^1100 1100$/m, `dentro no: ${r.testo}`)
+    }
+  } finally { await rm(copia, { recursive: true, force: true }) }
+})
+
+test('la verifica legge per elenco: un file fuori dalla copia non si legge, node sì', { skip: !mac && 'serve sandbox-exec' }, async () => {
+  const base = await mkdtemp(join(tmpdir(), 'myynd-recinto-elenco-'))
+  const copia = join(base, 'copia'), fuori = join(base, 'Documents')
+  await mkdir(copia); await mkdir(fuori)
+  await writeFile(join(fuori, 'nota.txt'), 'privata')
+  try {
+    assert.equal(dentro(profilo({ rete: 'locale', scrivibili: [copia], segreti: [] }), ['/bin/cat', join(fuori, 'nota.txt')], copia).testo, 'privata', 'prima: per divieti si leggeva')
+    const prof = profilo({ rete: 'locale', scrivibili: [copia], segreti: [], soloElenco: true })
+    assert.match(dentro(prof, ['/bin/cat', join(fuori, 'nota.txt')], copia).testo, /Operation not permitted/)
+    assert.equal(dentro(prof, [process.execPath, '-e', 'console.log(process.platform)'], copia).testo.trim(), 'darwin')
+  } finally { await rm(base, { recursive: true, force: true }) }
+})
+
+test('Claude Code non riscrive le sue impostazioni né ~/.local/bin, e non legge Documenti o la cronologia; il suo stato sì', { skip: !mac && 'serve sandbox-exec' }, async () => {
+  const casa = await mkdtemp(join(tmpdir(), 'myynd-recinto-casa-'))
+  const copia = join(casa, 'lavoro')
+  for (const d of ['lavoro', '.claude/projects', '.claude/commands', '.local/bin', 'Documents']) await mkdir(join(casa, d), { recursive: true })
+  await writeFile(join(casa, 'Documents', 'nota.txt'), 'privata')
+  await writeFile(join(casa, '.zsh_history'), 'segreta')
+  try {
+    const prof = profiloClaude(copia, true, casa)
+    const scrivi = (p: string) => dentro(prof, ['/bin/sh', '-c', 'echo x > "$1"', 'sh', join(casa, p)], copia)
+    for (const p of ['.claude/settings.json', '.claude/settings.local.json', '.claude/CLAUDE.md', '.claude/commands/x.md', '.local/bin/npm']) {
+      assert.match(scrivi(p).testo, /Operation not permitted/, p)
+    }
+    for (const p of ['.claude/projects/s.jsonl', '.claude.json', 'lavoro/file.ts']) assert.equal(scrivi(p).codice, 0, `${p}: ${scrivi(p).testo}`)
+    for (const p of ['Documents/nota.txt', '.zsh_history']) assert.match(dentro(prof, ['/bin/cat', join(casa, p)], copia).testo, /Operation not permitted/, p)
+    // il piano legge la cartella vera anche se sta nei Documenti
+    assert.equal(dentro(profiloClaude(join(casa, 'Documents'), false, casa), ['/bin/cat', join(casa, 'Documents', 'nota.txt')], copia).testo, 'privata')
+  } finally { await rm(casa, { recursive: true, force: true }) }
+})
+
+test('~/.local/bin non sta sulla PATH della verifica: ci va la cartella vera di node', () => {
+  assert.ok(!pathPulita().split(':').includes(join(homedir(), '.local/bin')))
 })

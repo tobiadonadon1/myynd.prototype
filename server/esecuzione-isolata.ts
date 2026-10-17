@@ -169,7 +169,7 @@ export async function runCommand(argv: string[], cwd: string, signal?: AbortSign
   if (signal?.aborted) return { exitCode: null, output: '', finished: false, containment }
   const casa = await mkdtemp(join(tmpdir(), 'myynd-verify-'))
   try {
-    return await spawnFenced(conSandbox ? avvolgi(argv, profilo({ rete: 'locale', scrivibili: [cwd, casa], segreti: segreti() })) : argv, cwd, ambienteMinimo(casa), signal, timeoutMs, containment)
+    return await spawnFenced(conSandbox ? avvolgi(argv, profilo({ rete: 'locale', scrivibili: [cwd, casa], segreti: segreti(), soloElenco: true })) : argv, cwd, ambienteMinimo(casa), signal, timeoutMs, containment)
   } finally {
     await rm(casa, { recursive: true, force: true }).catch(() => {})
   }
@@ -292,9 +292,13 @@ export async function executeInCopy(
 // The tap lands with the same backup and conflict checks. An unverified
 // result needs a second, explicit confirmation.
 
-/** Lands without asking: only attended work, only verified, only with changes. */
-export function landsByItself(report: Pick<ExecutionReport, 'state' | 'changedFiles'>, o: { presente: boolean }): boolean {
-  return o.presente === true && report.state === 'verified' && report.changedFiles.length > 0
+/**
+ * Lands without asking: only attended work, only verified, only with changes,
+ * and only if the check ran fully fenced. A check that passed with partial
+ * containment (no sandbox-exec) proves less: it waits for the tap.
+ */
+export function landsByItself(report: Pick<ExecutionReport, 'state' | 'changedFiles' | 'verification'>, o: { presente: boolean }): boolean {
+  return o.presente === true && report.state === 'verified' && report.changedFiles.length > 0 && report.verification.containment === 'sandbox'
 }
 
 /** What the «Apply changes» tap may do: land, ask for the second confirmation, or refuse. */

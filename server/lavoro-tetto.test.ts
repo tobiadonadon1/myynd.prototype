@@ -23,7 +23,9 @@ const PROGETTO = join(CASA, 'Progetti', 'sito')
 mkdirSync(PROGETTO, { recursive: true })
 writeFileSync(join(PROGETTO, 'README.md'), '# Site\n')
 
-const CONTA = join(CASA, 'lanci.txt')
+// dentro ~/.claude: è l'unico posto della casa dove Claude Code, nel suo recinto, può scrivere
+mkdirSync(join(CASA, '.claude'), { recursive: true })
+const CONTA = join(CASA, '.claude', 'lanci.txt')
 process.env.CLAUDE_FINTO_CONTA = CONTA
 mkdirSync(join(CASA, '.local', 'bin'), { recursive: true })
 writeFileSync(join(CASA, '.local', 'bin', 'claude'), `#!/bin/sh

@@ -1082,12 +1082,12 @@ const profilo = async (req: express.Request, res: express.Response) => {
     }
     patch.tetto = n
   }
-  // la quota del mese in dollari: zero nessuna, null torna a quella di serie
+  // la quota del mese in dollari: null torna a quella di serie (si scrive null: undefined vorrebbe dire «non toccare»).
+  // Zero è «nessuna» solo se l'AI la paga lui; pagata da Myynd si può solo abbassare
   if (patch.quota !== undefined) {
-    if (patch.quota === null) patch.quota = undefined
-    else {
+    if (patch.quota !== null) {
       const n = Number(patch.quota)
-      if (!Number.isFinite(n) || n < 0 || n > 10_000) return res.status(400).json({ errore: 'La quota è in dollari al mese, o zero per nessuna.' })
+      if (!quotaMese.quotaAmmessa(n)) return res.status(400).json({ errore: quotaMese.pagataDaMyynd() ? 'Con l’AI inclusa la quota si può solo abbassare.' : 'La quota è in dollari al mese, o zero per nessuna.' })
       patch.quota = Math.round(n * 100) / 100
     }
   }
@@ -4129,7 +4129,7 @@ app.post('/api/compiti/:id/delega', (req, res) => {
 
 /** Quello che succede quando una riga passa a Myynd, dopo i controlli: lo stesso per `/delega` e per `/affida` (P10). */
 function affidaRiga(id: string, modo: string) {
-  compiti.affida(id, modo)
+  compiti.affida(id, modo, true, { presente: true })
 }
 
 /**
@@ -4206,7 +4206,7 @@ app.post('/api/compiti/:id/rispondi', (req, res) => {
     store.scordaChieste(c.id)
   } catch (e) { return errore(res, e) }
 
-  compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
+  compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo, true, { presente: true })
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
   // la risposta si impara (P3): la stessa domanda non deve tornare sulla riga dopo
@@ -4702,20 +4702,27 @@ app.post('/api/lavoro/copia/apri', async (req,res) => {
  * cambiati da lui lasciati stare); un lavoro non verificato vuole una seconda
  * conferma esplicita (`confermo: true`), e la prima risposta la chiede (409).
  */
+// le copie che si stanno posando adesso: due tocchi insieme non posano due volte (un processo solo, il controllo e il segno senza await in mezzo)
+const posandoAdesso = new Set<string>()
 app.post('/api/lavoro/applica', async (req,res) => {
+  let presa: string | null = null
   try {
     if(ospitato.OSPITATO) throw new Error('Apply this on your computer.')
     const reportFile=String(req.body?.reportFile ?? '')
     const report:ExecutionReport=await reportRegistrato(reportFile)
-    if(giaApplicata(report.reportFile)) return res.status(409).json({errore:'These changes are already in the project.',applicato:true})
     const decisione=tapLanding(report,req.body?.confermo===true)
     if(decisione==='refuse') return res.status(400).json({errore:'Only finished work whose check did not fail can be applied.'})
     if(decisione==='confirm') return res.status(409).json({errore:'This work is not verified. Confirm again to apply it anyway.',serveConferma:true})
+    if(posandoAdesso.has(report.reportFile) || giaApplicata(report.reportFile)) return res.status(409).json({errore:'These changes are already in the project.',applicato:true})
+    posandoAdesso.add(report.reportFile); presa=report.reportFile
     if(report.state==='verified' && !await proofValid({id:'project.edit',report})) return res.status(409).json({errore:'The saved working copy no longer matches its verification report.'})
     const posa=await landReport(report)
-    store.registraAzione({tipo:'lavoro.applicato',verso:report.source,cosa:`${posa.applied.length} files`,esito:posa.applied.length?'fatta':'fallita',dettaglio:JSON.stringify({reportFile:report.reportFile,state:report.state,applied:posa.applied,skipped:posa.skipped,backup:posa.backup})})
+    // si segna solo quello che è entrato: un tocco che non ha posato niente si può ripetere
+    if(!posa.applied.length) return res.status(409).json({errore:'Nothing was applied: you changed these files meanwhile.',lasciati:posa.skipped})
+    store.registraAzione({tipo:'lavoro.applicato',verso:report.source,cosa:`${posa.applied.length} files`,esito:'fatta',dettaglio:JSON.stringify({reportFile:report.reportFile,state:report.state,applied:posa.applied,skipped:posa.skipped,backup:posa.backup})})
     res.json({ok:true,applicati:posa.applied,lasciati:posa.skipped,prima:posa.backup})
   } catch(e){errore(res,e)}
+  finally { if(presa) posandoAdesso.delete(presa) }
 })
 
 let runtimeCache: {expires:number; result:Promise<RuntimeDetection[]>} | undefined
@@ -5680,7 +5687,7 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
       store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${correzione}` : correzione })
       store.cambiaStatoCompito(c.id, 'aperto')
       store.sbozzaCompito(c.id)
-      compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
+      compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo, true, { presente: true })
     }
     if (contata) lavoroDati.registraCorrezione(c.id)
   } catch (e) {

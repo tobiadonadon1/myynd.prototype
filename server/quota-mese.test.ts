@@ -57,8 +57,22 @@ test('chi paga decide la quota di serie: tre dollari se paga Myynd, nessuna sul 
   assert.equal(quota.limite(), 0, 'un modello sul suo computer: nessuna quota')
   cfg.scrivi({ lingua: 'en', claude: { apiKey: 'sk-ant-sua' }, quota: 5 })
   assert.equal(quota.limite(), 5_000_000, 'quella scritta vince')
-  cfg.scrivi({ lingua: 'en', quota: 0 }, { togli: ['claude'] })
-  assert.equal(quota.limite(), 0, 'zero: nessuna')
+  cfg.scrivi({ lingua: 'en', claude: { apiKey: 'sk-ant-sua' }, quota: 0 })
+  assert.equal(quota.limite(), 0, 'paga lui, zero: nessuna')
+})
+
+test('quando paga Myynd la quota si può solo abbassare: zero o di più non tolgono il tetto; null torna a quella di serie', () => {
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-della-casa'
+  for (const [scritta, vale] of [[0, 3_000_000], [50, 3_000_000], [3, 3_000_000], [1.5, 1_500_000], [null, 3_000_000]] as const) {
+    cfg.scrivi({ lingua: 'en', quota: scritta }, { togli: ['claude'] })
+    assert.equal(quota.limite(), vale, `quota ${scritta}`)
+  }
+  assert.equal(quota.quotaAmmessa(0), false, 'la rotta rifiuta zero')
+  assert.equal(quota.quotaAmmessa(5), false)
+  assert.equal(quota.quotaAmmessa(2), true)
+  cfg.scrivi({ lingua: 'en', claude: { apiKey: 'sk-ant-sua' } })
+  assert.equal(quota.quotaAmmessa(0), true, 'paga lui: zero è nessuna')
+  assert.equal(quota.quotaAmmessa(50), true)
 })
 
 test('prenotare: due chiamate di fondo insieme non sforano in due; conciliare lascia la spesa vera; rilasciare la toglie', async () => {
@@ -66,7 +80,12 @@ test('prenotare: due chiamate di fondo insieme non sforano in due; conciliare la
   const a = quota.riserva('cernita', 600_000)
   assert.ok(a)
   assert.equal(quota.stato().riservato, 600_000)
-  assert.throws(() => quota.riserva('cernita', 600_000), (e: unknown) => quota.dellaQuota(e) && tetto.delTetto(e), 'la seconda non ci sta')
+  // la seconda è più grande del resto: parte lo stesso, prenotando solo il resto
+  const a2 = quota.riserva('cernita', 600_000)
+  assert.equal(a2?.stima, 400_000)
+  assert.equal(quota.stato().finita, false)
+  assert.throws(() => quota.riserva('cernita', 1), (e: unknown) => quota.dellaQuota(e) && tetto.delTetto(e), 'la terza non ci sta: il resto è tutto prenotato')
+  quota.rilascia(a2)
   spendi(0.2)
   const c = quota.concilia(a)
   assert.equal(c?.stima, 600_000)
@@ -79,6 +98,19 @@ test('prenotare: due chiamate di fondo insieme non sforano in due; conciliare la
   await assert.rejects(quota.conRiserva('cernita', 100_000, async () => { throw new Error('rete giù') }), /rete giù/)
   assert.equal(quota.stato().riservato, 0, 'un fallimento non lascia prenotazioni appese')
   assert.equal(quota.stato().speso, 200_000, 'e non costa niente')
+})
+
+test('una chiamata appesa lascia il posto dopo un quarto d’ora', () => {
+  cfg.scrivi({ lingua: 'en', claude: { apiKey: 'sk-ant-sua' }, quota: 1 })
+  const t0 = Date.now()
+  quota.orologio.adesso = () => t0
+  try {
+    assert.ok(quota.riserva('cernita', 1_000_000))
+    assert.throws(() => quota.riserva('cernita', 1))
+    quota.orologio.adesso = () => t0 + quota.DURATA_RISERVA_MS + 1
+    assert.equal(quota.stato().riservato, 0)
+    assert.ok(quota.riserva('cernita', 1), 'adesso c’è posto')
+  } finally { quota.orologio.adesso = () => Date.now() }
 })
 
 test('una chiamata vera: prenotata mentre gira, conciliata col registro dopo, rilasciata se fallisce', async () => {

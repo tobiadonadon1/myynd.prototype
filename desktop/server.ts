@@ -14,7 +14,7 @@
 import { app, utilityProcess, type UtilityProcess } from 'electron'
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -127,6 +127,23 @@ export type Ascolto = {
 const SEGRETO = randomBytes(32).toString('hex')
 export function segretoGuscio(): string { return SEGRETO }
 
+/**
+ * Il segreto, scritto per il server che sta per partire: una cartella nuova
+ * 0700 dentro quella dell'app, un file 0600. Il server lo legge e lo cancella
+ * (`server/auth.ts`); nell'ambiente resta solo un percorso che non porta più
+ * a niente.
+ */
+function fileDelSegreto(): string {
+  const base = join(app.getPath('userData'), 'avvio')
+  // quelle delle partenze di prima sono già vuote: il server ha cancellato il file
+  rmSync(base, { recursive: true, force: true })
+  mkdirSync(base, { recursive: true, mode: 0o700 })
+  const dir = mkdtempSync(join(base, 's-'))
+  const file = join(dir, 'guscio')
+  writeFileSync(file, SEGRETO, { mode: 0o600 })
+  return file
+}
+
 /** La porta su cui il server ascolta adesso, o null finché non l'ha detta. */
 let portaAttuale: number | null = null
 export function porta(): number | null { return portaAttuale }
@@ -188,7 +205,9 @@ export async function avvia(ascolto: Ascolto, opzioni: { script?: string } = {})
   // utilityProcess non lo è, e con questa variabile Electron farebbe pasticci
   delete env.ELECTRON_RUN_AS_NODE
   // la versione: il server sa dire «dall'aggiornamento» quando le Note perdono il permesso
-  Object.assign(env, { PATH, MYYND_PORT: String(portaChiesta), NODE_ENV: 'production', MYYND_APP: '1', MYYND_VERSIONE: app.getVersion(), MYYND_GUSCIO_SEGRETO: SEGRETO })
+  // il segreto non va nell'ambiente (si legge da `sysctl kern.procargs2`): un file 0600, che il server cancella appena letto
+  Object.assign(env, { PATH, MYYND_PORT: String(portaChiesta), NODE_ENV: 'production', MYYND_APP: '1', MYYND_VERSIONE: app.getVersion(), MYYND_GUSCIO_SEGRETO_FILE: fileDelSegreto() })
+  delete env.MYYND_GUSCIO_SEGRETO
   // il registro su disco: il rapporto di diagnosi ne legge le ultime righe
   if (percorsoRegistro) env.MYYND_REGISTRO = percorsoRegistro
   // MYYND_DEV acceso in produzione fa uscire il server con un errore: meglio

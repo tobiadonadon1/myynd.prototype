@@ -253,8 +253,9 @@ test('unverified work waits in the copy; Apply changes needs a second confirmati
     assert.equal(first.status, 409, JSON.stringify(first.data))
     assert.equal(first.data.serveConferma, true)
     assert.equal(readFileSync(join(sub, 'value.mjs'), 'utf8'), 'export const value = 1\n')
-    const applied = await post('/api/lavoro/applica', firstToken, { reportFile: report.reportFile, confermo: true })
-    assert.equal(applied.status, 200, JSON.stringify(applied.data))
+    // due tocchi nello stesso istante: uno posa, l'altro no
+    const insieme = await Promise.all([1, 2].map(() => post('/api/lavoro/applica', firstToken, { reportFile: report.reportFile, confermo: true })))
+    assert.deepEqual(insieme.map(r => r.status).sort(), [200, 409], JSON.stringify(insieme.map(r => r.data)))
     assert.equal(readFileSync(join(sub, 'value.mjs'), 'utf8'), 'export const value = 2\n')
     const again = await post('/api/lavoro/applica', firstToken, { reportFile: report.reportFile, confermo: true })
     assert.equal(again.status, 409, 'a second tap does not land it twice')
