@@ -3378,6 +3378,7 @@ const EN: Record<string, string> = {
   'Niente': 'Nothing',
   'Sposta in': 'Move to',
   'Notion': 'Notion',
+  'Bozze nella casella': 'Drafts in your mailbox',
   'Codice in una copia': 'Code in a copy',
   'Codice nel progetto': 'Code into the project',
   'Invii': 'Sending',
