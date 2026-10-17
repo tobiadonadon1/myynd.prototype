@@ -53,7 +53,18 @@ export type LavoroVia = {
 }
 /** I conti del lavoro, fatti su tutto quello che è stato fatto, prima di tagliare l'elenco. */
 export type ContiLavoro = { bozze: number; file: number; notion: number }
-export type Via = { dal: string; letti: number; daParte: number; conti: ContiLavoro; lavori: LavoroVia[] }
+/** Una riga di quello che non è successo: il candidato, la carta se c'è, il titolo, il perché in una parola. */
+export type RigaNotte = { id: string; compito: string | null; titolo: string; motivo: string | null }
+/**
+ * Quello che non è successo (`candidati.ricevute`): le carte che aspettano il
+ * Mac, quelle che hanno perso la finestra, quelle trattenute col perché, la
+ * notte senza niente che valesse, e i tratti in cui il Mac dormiva.
+ */
+export type Notte = {
+  inAttesaDelMac: RigaNotte[]; saltate: RigaNotte[]; trattenute: RigaNotte[]; nienteDaFare: boolean
+  buchi: { da: string; a: string }[]
+}
+export type Via = { dal: string; letti: number; daParte: number; conti: ContiLavoro; lavori: LavoroVia[]; notte?: Notte }
 
 /**
  * Perché una cosa è stata messa da parte, in una parola che la pagina

@@ -6,7 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { LavoroVia, Via } from './api.ts'
-import { aspettanoFuori, blocchiConViste, contiVia, frase, inCima, lavoriDi, qualcosa, RAGIONI, statoLavoro, vistaDaPiegare } from './via.ts'
+import { aspettanoFuori, blocchiConViste, contiVia, frase, inCima, lavoriDi, qualcosa, qualcosaDellaNotte, RAGIONI, righeNotte, statoLavoro, vistaDaPiegare } from './via.ts'
 import { contaInPagina } from './blocchi-feed.ts'
 
 const lavoro = (id: string, x: Partial<LavoroVia> = {}): LavoroVia =>
@@ -124,3 +124,30 @@ test('i conti del server valgono su tutto: l’elenco tagliato non li accorcia',
   const v = { ...via(Array.from({ length: 3 }, (_, i) => lavoro(`f${i}`, { genere: 'file' }))), conti: { bozze: 4, file: 130, notion: 2 } }
   assert.deepEqual(contiVia(v), { letti: 0, bozze: 4, file: 130, notion: 2, daParte: 0 })
 })
+
+// — la coda unica: inizio —
+
+test('la notte che non è successa: il Mac, la finestra persa, le trattenute contate per perché', () => {
+  const r = (id: string, motivo: string | null) => ({ id, compito: `c-${id}`, titolo: `Titolo ${id}`, motivo })
+  const zero = { letti: 0, bozze: 0, file: 0, notion: 0, daParte: 0 }
+  const n = righeNotte({
+    inAttesaDelMac: [r('a', 'mac')], saltate: [r('b', 'finestra')],
+    trattenute: [r('c', 'mese'), r('d', 'mandato'), r('e', 'mese')], nienteDaFare: false,
+    buchi: [{ da: '2026-10-17T01:10:00.000Z', a: '2026-10-17T05:40:00.000Z' }]
+  }, zero)
+  assert.equal(n.mac?.n, 1)
+  assert.equal(n.mac?.buchi.length, 1)
+  assert.equal(n.saltate?.n, 1)
+  assert.deepEqual(n.trattenute?.perche, [['mandato', 1], ['mese', 2]])
+  assert.equal(n.niente, false)
+  assert.equal(qualcosaDellaNotte(n), true)
+})
+
+test('«niente da fare» solo quando è la verità intera: con una cosa fatta, non si dice', () => {
+  const vuota = { inAttesaDelMac: [], saltate: [], trattenute: [], nienteDaFare: true, buchi: [] }
+  assert.equal(righeNotte(vuota, { letti: 4, bozze: 0, file: 0, notion: 0, daParte: 4 }).niente, true)
+  assert.equal(righeNotte(vuota, { letti: 4, bozze: 1, file: 0, notion: 0, daParte: 3 }).niente, false)
+  assert.equal(qualcosaDellaNotte(righeNotte(null, { letti: 0, bozze: 0, file: 0, notion: 0, daParte: 0 })), false)
+})
+
+// — la coda unica: fine —

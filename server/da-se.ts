@@ -64,9 +64,9 @@ import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
 import { stessaCosa } from './priorita.ts'
 import { linguaDi } from './domande-prova.ts'
-import { fra } from './ordine.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as mandato from './mandato.ts'
+import * as coda from './candidati.ts'
 
 export const ORIGINE_X = 'idee-x'
 export const ORIGINE_VIDEO = 'copione-video'
@@ -959,7 +959,7 @@ export type Scelta =
   | { genere: 'notion'; progetto: progetti.Progetto; foto: Foto }
 
 /** Le idee per X toccano adesso? Una volta al giorno dall'ultimo lotto consegnato, con materiale nuovo, e nessun lotto ancora vivo. */
-export function sceltaX(vive: store.Compito[], adesso = Date.now()): Scelta | null {
+export function sceltaX(vive: readonly Pick<store.Compito, 'origine' | 'progetto'>[], adesso = Date.now()): Scelta | null {
   if (vive.some(c => c.origine === ORIGINE_X)) return null
   const s = leggiStato().x
   if (!unaVoltaAlGiorno(s?.ultimo, adesso)) return null
@@ -975,7 +975,7 @@ export function sceltaX(vive: store.Compito[], adesso = Date.now()): Scelta | nu
  * traguardo visto di un progetto si scrive una volta: è quello contro cui un
  * traguardo nuovo conta come un passo. Lo stato si tocca solo allora.
  */
-export function sceltaVideo(vive: store.Compito[], adesso = Date.now()): Scelta | null {
+export function sceltaVideo(vive: readonly Pick<store.Compito, 'origine' | 'progetto'>[], adesso = Date.now()): Scelta | null {
   const video = leggiStato().video ?? {}
   const vivi = conQuadro(adesso).filter(v => v.foto)
   const nuovi: Record<string, { traguardo: string }> = {}
@@ -996,7 +996,7 @@ export function sceltaVideo(vive: store.Compito[], adesso = Date.now()): Scelta 
 }
 
 /** Le pagine di Notion che toccano adesso: con la pagina scelta, quadro cambiato dall'ultima scritta, una al giorno per progetto. */
-export function scelteNotion(vive: store.Compito[], adesso = Date.now(), pagina: () => boolean = () => contratto.manoDisponibile('notion')): Scelta[] {
+export function scelteNotion(vive: readonly Pick<store.Compito, 'origine' | 'progetto'>[], adesso = Date.now(), pagina: () => boolean = () => contratto.manoDisponibile('notion')): Scelta[] {
   if (!pagina()) return []
   const stato = leggiStato().notion ?? {}
   const out: Scelta[] = []
@@ -1019,29 +1019,44 @@ function contrattoPer(mano: store.ManoContratto, criterio: string, adesso: numbe
   return { criterio, mani: [mano], budget: { giri: 2, minuti: 10 }, scritto: 'myynd', quando: new Date(adesso).toISOString() }
 }
 
+/** Quanto vale il lavoro da sé, per genere: la politica lo mette dopo le risposte alla posta. */
+export const VALORI = {
+  x: { genere: 'contenuto', valore: 0.5, incertezza: 0.35, classi: ['file'] },
+  video: { genere: 'contenuto', valore: 0.5, incertezza: 0.35, classi: ['file'] },
+  notion: { genere: 'notion', valore: 0.45, incertezza: 0.2, classi: ['notion'] }
+} as const
+
 /**
- * Una carta nuova, in coda per il turno. Null se c'era già: l'id ha dentro il
- * giorno (e il progetto), ed è lui che impedisce due carte uguali nello stesso
- * giorno, anche quando la prima è caduta.
+ * Una carta nuova, proposta alla coda unica (`candidati.ts`): la politica
+ * decide se vale la notte. Null se c'era già: l'id ha dentro il giorno (e il
+ * progetto), ed è lui che impedisce due carte uguali nello stesso giorno,
+ * anche quando la prima è caduta. Torna l'id che la carta avrà.
  */
-function nasce(o: { id: string; testo: string; nota: string; origine: string; progetto?: string | null; quando: 'oggi' | 'poi'; contratto: store.Contratto }, adesso: number): string | null {
+function nasce(o: { id: string; genere: Scelta['genere']; testo: string; nota: string; origine: string; progetto?: string | null; quando: 'oggi' | 'poi'; contratto: store.Contratto; prove: string[] }, adesso: number): string | null {
   if (store.compito(o.id)) return null
-  store.scriviCompito({ id: o.id, testo: o.testo, nota: o.nota, origine: o.origine, progetto: o.progetto ?? null, priorita: 'bassa', quando: o.quando, ordine: fra(store.ultimoOrdine(o.quando), '') })
-  store.scriviContrattoCompito(o.id, o.contratto)
-  if (!store.mettiCompitoInCoda(o.id, 'tutto', { da: 'myynd', quando: 'notte', dal: new Date(adesso).toISOString(), tentativi: 0 })) return null
+  const v = VALORI[o.genere]
+  const chiave = o.id
+  const id = `${v.genere}:${chiave}`
+  if (coda.leggi(id)) return null
+  coda.proponi({
+    id, genere: v.genere, progetto: o.progetto ?? null, titolo: o.testo, risultato: o.contratto.criterio, perche: 'New material since the last batch.',
+    prove: o.prove, eventAt: null, valore: v.valore, incertezza: v.incertezza, costo: coda.COSTO_DI_SERIE[v.genere],
+    classi: [...v.classi], chiave, scade: new Date(adesso + 86_400_000).toISOString(),
+    carta: { id: o.id, testo: o.testo, nota: o.nota, modo: 'tutto', origine: o.origine, priorita: 'bassa', quando: o.quando, contratto: o.contratto }
+  })
   return o.id
 }
 
 // senza nomi di progetto: la prima pagina mette una riga sotto il progetto che il suo testo nomina
 const NOTA = 'AUTONOMOUS WORK: written on its own from the user\'s own material. Delivered for review; nothing is posted, sent or published.'
 
-/** La carta di una scelta. Lo stato non si tocca: lo scrive `lavora`, se riesce. */
+/** Il candidato di una scelta: torna l'id che la carta avrà. Lo stato non si tocca: lo scrive `lavora`, se riesce. */
 export function crea(s: Scelta, adesso = Date.now()): string | null {
   const giorno = giornoDi(adesso)
   const e = en()
   if (s.genere === 'x') {
     return nasce({
-      id: `${ORIGINE_X}-${giorno}`, origine: ORIGINE_X, quando: 'oggi',
+      id: `${ORIGINE_X}-${giorno}`, genere: 'x', origine: ORIGINE_X, quando: 'oggi', prove: [`x:${s.impronta}`],
       testo: e ? 'Post ideas for X' : 'Idee per i post su X',
       nota: `${NOTA} Post ideas for X in his voice, from his recent posts and what moved in his projects.`,
       contratto: contrattoPer('file', e ? 'A file in the Myynd folder with 4 or 5 X post ideas in your voice, each with why now and its source.' : 'Un file nella cartella Myynd con 4 o 5 idee di post per X con la tua voce, ognuna col perché adesso e la sua fonte.', adesso)
@@ -1050,7 +1065,7 @@ export function crea(s: Scelta, adesso = Date.now()): string | null {
   if (s.genere === 'video') {
     const p = s.progetto
     return nasce({
-      id: `${ORIGINE_VIDEO}-${p.id}-${giorno}`, origine: ORIGINE_VIDEO, progetto: p.id, quando: 'oggi',
+      id: `${ORIGINE_VIDEO}-${p.id}-${giorno}`, genere: 'video', origine: ORIGINE_VIDEO, progetto: p.id, quando: 'oggi', prove: [`progetto:${p.id}`],
       testo: e ? `Video script for ${p.nome}` : `Copione video per ${p.nome}`,
       nota: `${NOTA} A 60 to 90 second talking-head script about what moved in the project.`,
       contratto: contrattoPer('file', e ? `A file in the Myynd folder: a 60 to 90 second script about ${p.nome}, with a hook, three beats, a close and a shot list.` : `Un file nella cartella Myynd: un copione da 60 a 90 secondi su ${p.nome}, con gancio, tre battute, chiusura e inquadrature.`, adesso)
@@ -1059,7 +1074,7 @@ export function crea(s: Scelta, adesso = Date.now()): string | null {
   const p = s.progetto
   return nasce({
     // «poi»: in coda, ma non nella lista di oggi; la prima pagina la mostra solo se c'è qualcosa da guardare
-    id: `${ORIGINE_NOTION}-${p.id}-${giorno}`, origine: ORIGINE_NOTION, progetto: p.id, quando: 'poi',
+    id: `${ORIGINE_NOTION}-${p.id}-${giorno}`, genere: 'notion', origine: ORIGINE_NOTION, progetto: p.id, quando: 'poi', prove: [`progetto:${p.id}`],
     testo: e ? `Update the Notion page for ${p.nome}` : `Aggiorna la pagina Notion di ${p.nome}`,
     nota: `${NOTA} Keep the project page in Notion up to date.`,
     contratto: contrattoPer('notion', e ? `The page for ${p.nome} in Notion, up to date: gist, where it stands, next step, what changed, open questions.` : `La pagina di ${p.nome} in Notion, aggiornata: in breve, a che punto è, prossimo passo, cosa è cambiato, domande aperte.`, adesso)
@@ -1086,7 +1101,11 @@ export async function giro(adesso = Date.now(), o: { pronto?: () => boolean; pag
     for (const c of store.elencoCompiti()) {
       if (suo(c.origine) && c.stato === 'aperto' && c.guaio && adesso - Date.parse(c.aggiornato) > FERMA_DOPO) store.cambiaStatoCompito(c.id, 'ritirato', 'Stuck autonomous work')
     }
-    const vive = () => store.elencoCompiti().filter(c => suo(c.origine))
+    // vive: le carte di questo genere, e i candidati che aspettano ancora la politica
+    const vive = (): Pick<store.Compito, 'origine' | 'progetto'>[] => [
+      ...store.elencoCompiti().filter(c => suo(c.origine)),
+      ...coda.aperti().filter(c => suo(c.carta.origine)).map(c => ({ origine: c.carta.origine, progetto: c.progetto }))
+    ]
     const posto = () => vive().length < VIVE_MAX
     // senza una Scrivania (su un server) i file non si scrivono: solo Notion
     if (!OSPITATO) {
@@ -1100,7 +1119,13 @@ export async function giro(adesso = Date.now(), o: { pronto?: () => boolean; pag
       const id = crea(sn, adesso)
       if (id) nate.push(id)
     }
-    if (nate.length) console.info(`myynd · da sé · in coda per il turno: ${nate.join(', ')}`)
+    if (nate.length) {
+      // la politica decide adesso, o alla fine del lotto del quarto d'ora: tornano le carte nate davvero
+      coda.decidi(new Date(adesso))
+      const proposte = nate.splice(0)
+      nate.push(...proposte.filter(id => !!store.compito(id)))
+      console.info(`myynd · da sé · proposte alla coda: ${proposte.join(', ')}`)
+    }
   } catch (e) {
     console.warn('myynd · il lavoro da sé non è nato:', e instanceof Error ? e.message : e)
   } finally { occupati.delete(conto) }

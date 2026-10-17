@@ -17,9 +17,10 @@ import { IconAvanti, IconCroce } from '../icons'
 import { api, type AspettaMattina, type Compito, type LavoroVia, type Mattina, type RigaElencoVia, type SettimanaTracce } from '../api'
 import type { Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
-import { contiVia, frase, inCima, lavoriDi, qualcosa, RAGIONI, type GenereConto } from '../via'
+import { contiVia, frase, inCima, lavoriDi, qualcosa, qualcosaDellaNotte, RAGIONI, righeNotte, type GenereConto } from '../via'
 import { segnaVisto, useVistiOra } from '../visti'
 import { CARTA, FOGLIO, VELO } from './Punto'
+import { ora } from './Stanotte'
 import './mentre-via.css'
 
 /** Dove sta una cosa fatta, in due parole accanto al titolo. */
@@ -151,7 +152,9 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
     return () => { vivo = false }
   }, [])
   const prese = settimana ? settimana.accettate + settimana.modificate : 0
-  if (!m || (!qualcosa(conti) && !cima.length && !lettera && !riassunto)) return null
+  // quello che non è successo (`server/candidati.ts`): il Mac che dormiva, la finestra persa, le trattenute, la notte vuota
+  const notte = righeNotte(m?.via?.notte, conti)
+  if (!m || (!qualcosa(conti) && !cima.length && !lettera && !riassunto && !qualcosaDellaNotte(notte))) return null
   return (
     <section aria-labelledby="via-titolo" style={{ ...CARTA, flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
       <h2 id="via-titolo" style={{ margin: 0, fontSize: 15, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{t('Mentre non c’eri.')}</h2>
@@ -161,6 +164,22 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
             ? <button key={i} type="button" className="via-conto" onClick={() => setAperto(p.conto!)}>{p.testo}</button>
             : <span key={i}>{p.testo}</span>)}
         </p>
+      )}
+      {qualcosaDellaNotte(notte) && (
+        <div className="via-notte">
+          {notte.mac && (
+            <p title={notte.mac.titoli.join('\n')}>
+              {[frasi.aspettanoIlMac(notte.mac.n), ...notte.mac.buchi.map(b => frasi.macAddormentato(ora(b.da), ora(b.a)))].join(' · ')}
+            </p>
+          )}
+          {notte.saltate && <p title={notte.saltate.titoli.join('\n')}>{frasi.finestraPersa(notte.saltate.n)}</p>}
+          {notte.trattenute && (
+            <p title={notte.trattenute.titoli.join('\n')}>
+              {frasi.trattenute(notte.trattenute.n, notte.trattenute.perche.map(([k, n]) => frasi.perTrattenuta(k, n)).join(', '))}
+            </p>
+          )}
+          {notte.niente && <p>{t('Stanotte non c’era niente che valesse la pena.')}</p>}
+        </div>
       )}
       {(cima.length > 0 || lettera) && (
         <ul className="via-righe">

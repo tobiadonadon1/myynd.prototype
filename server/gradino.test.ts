@@ -79,13 +79,11 @@ const mail = (id: string, autore: string, extra: Partial<Documento> = {}): Docum
 
 test('di notte, ogni mail di chi è salito che chiede una risposta ha la sua riga in coda, anche con le proposte spente', () => {
   store.salvaDocumenti([mail('a', `Nora <${NORA}>`), mail('b', `Nora <${NORA}>`, { messageId: 'b@harbor.example' }), mail('c', 'Leo <leo@studio.example>')])
-  const prima: string[] = []
-  assert.deepEqual(iniziativa.guadagnate(ORA, id => { prima.push(id) }, () => true), [], 'nessuno è salito: niente')
+  assert.deepEqual(iniziativa.guadagnate(ORA, () => true), [], 'nessuno è salito: niente')
   for (let i = 0; i < 4; i++) parte(0)
-  const code: unknown[][] = []
-  const nate = iniziativa.guadagnate(ORA, (...a) => { code.push(a) }, () => true)
+  const nate = iniziativa.guadagnate(ORA, () => true)
   assert.equal(nate.length, 2, 'le due di Nora, non quella di Leo')
-  assert.deepEqual(code.map(x => x.slice(1)), [['bozza', false], ['bozza', false]])
+  assert.deepEqual(nate.map(id => [store.compito(id)?.modo, store.compito(id)?.turno?.da]), [['bozza', 'myynd'], ['bozza', 'myynd']])
   for (const id of nate) {
     const c = store.compito(id)!
     assert.equal(c.origine, gradino.ORIGINE)
@@ -95,16 +93,16 @@ test('di notte, ogni mail di chi è salito che chiede una risposta ha la sua rig
   const vista = attenzione.compitiAttuali().find(c => c.id === nate[0])!
   assert.deepEqual(vista.guadagnato, { indirizzo: NORA, nome: 'Nora' })
   // un secondo giro non le rifà
-  assert.deepEqual(iniziativa.guadagnate(ORA, () => assert.fail('due volte'), () => true), [])
+  assert.deepEqual(iniziativa.guadagnate(ORA, () => true), [])
   // in pausa, o senza motore, niente
   store.salvaDocumenti([mail('d', `Nora <${NORA}>`, { messageId: 'd@harbor.example' })])
   cfg.aggiorna({ autonomia: 'chiedere' })
-  assert.deepEqual(iniziativa.guadagnate(ORA, () => assert.fail('in pausa'), () => true), [])
+  assert.deepEqual(iniziativa.guadagnate(ORA, () => true), [])
   cfg.aggiorna({ autonomia: 'preparare' })
-  assert.deepEqual(iniziativa.guadagnate(ORA, () => assert.fail('senza motore'), () => false), [])
+  assert.deepEqual(iniziativa.guadagnate(ORA, () => false), [])
   // col turno spento nessuno la farebbe partire: non nasce
   cfg.aggiorna({ turno: { spento: true } })
-  assert.deepEqual(iniziativa.guadagnate(ORA, () => assert.fail('turno spento'), () => true), [])
+  assert.deepEqual(iniziativa.guadagnate(ORA, () => true), [])
   cfg.aggiorna({ turno: { spento: false } })
   // ripreso: la riga non lo dice più, e la riga nata da lì non è più valida
   gradino.ritira(NORA)
@@ -115,8 +113,8 @@ test('di notte, ogni mail di chi è salito che chiede una risposta ha la sua rig
 test('il giro di ogni quarto d’ora passa dalle guadagnate, anche con le proposte spente', async () => {
   store.salvaDocumenti([mail('p1', `Nora <${NORA}>`, { messageId: 'p1@harbor.example' })])
   for (let i = 0; i < 4; i++) parte(0)
-  const code: string[] = []
-  await iniziativa.preparazione(ORA, id => { code.push(id) }, () => true)
+  await iniziativa.preparazione(ORA, () => true)
+  const code = store.elencoCompiti().map(c => c.id)
   assert.equal(code.length, 1)
   assert.equal(store.compito(code[0]!)?.origine, gradino.ORIGINE)
 })
@@ -146,7 +144,7 @@ test('«Take it back» ritira subito le risposte in coda per quella persona; una
   store.salvaDocumenti([mail('a', `Nora <${NORA}>`), mail('b', `Nora <${NORA}>`, { messageId: 'b@harbor.example' }), mail('c', `Nora <${NORA}>`, { messageId: 'c@harbor.example' }), mail('l', 'Leo <leo@studio.example>', { messageId: 'l@studio.example' })])
   for (let i = 0; i < 4; i++) parte(0)
   for (let i = 0; i < 4; i++) gradino.registraInvio({ compito: `leo${i}`, indirizzo: 'leo@studio.example', distanza: 0 })
-  const nate = iniziativa.guadagnate(ORA, () => {}, () => true)
+  const nate = iniziativa.guadagnate(ORA, () => true)
   assert.equal(nate.length, 4)
   const di = (doc: string) => nate.find(id => store.compito(id)!.doc === doc)!
   // una in coda per il turno, una al lavoro, una già pronta

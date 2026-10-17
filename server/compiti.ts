@@ -33,7 +33,7 @@ import * as lavoro from './lavoro.ts'
 import { OSPITATO } from './ospitato.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { projectMemoryContext } from './project-memory.ts'
-import { fonteValida } from './iniziativa.ts'
+import * as candidati from './candidati.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import * as mailDelMac from './bozza-mail-mac.ts'
 import { senzaTrattini, tutteLeDomande } from './testo.ts'
@@ -493,10 +493,10 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     // Il permesso viaggia con la riga: qui non si va a rileggere niente, si
     // usa quello che c'era scritto quando la riga è nata. Un compito scritto a
     // mano non ne ha, e lavora come ha sempre lavorato.
-    if ((c.origine === 'iniziativa' && !fonteValida(c.doc)) || (c.origine === gradino.ORIGINE && !gradino.rigaValida(c))) {
+    if (!candidati.cartaValida(c)) {
       // Withdraw automatic work without inventing user dismissal feedback.
       store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
-      tracce.ricevuta(id, 'saltato', 'source changed')
+      candidati.ricevutaDellaCarta(id, 'saltato', 'fonte')
       annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
     }
     /*
@@ -935,16 +935,12 @@ async function dopoLaStesura(
    */
   const detto = mossa === 'chiedi' && domanda ? [stesa.visto, tutteLeDomande(domanda, 1)].filter(Boolean).join('\n') : testo
 
-  if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
-    // Withdraw automatic work without inventing user dismissal feedback.
-    store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
-    tracce.ricevuta(id, 'saltato', 'source changed')
-    annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
-  }
-  // una risposta guadagnata (il primo gradino) vale finché la fonte regge e il gradino c'è: «Take it back» la ritira
-  if (c.origine === gradino.ORIGINE && !gradino.rigaValida(c)) {
-    store.cambiaStatoCompito(id, 'ritirato', 'Source changed or trust taken back')
-    tracce.ricevuta(id, 'saltato', 'trust taken back')
+  // la fonte di una proposta, riletta prima di consegnare: la regola dei candidati (`candidati.cartaValida`).
+  // Una risposta guadagnata vale finché la fonte regge e il gradino c'è: «Take it back» la ritira
+  if (!candidati.cartaValida(c)) {
+    const guadagnata = c.origine === gradino.ORIGINE
+    store.cambiaStatoCompito(id, 'ritirato', guadagnata ? 'Source changed or trust taken back' : 'Source changed or preparation paused')
+    candidati.ricevutaDellaCarta(id, 'saltato', guadagnata ? 'gradino' : 'fonte')
     annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
   }
 
@@ -1294,7 +1290,7 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
      */
     const nellaCasella = mandato.regolaPosta(c.progetto ?? null, !!email.conosciuto) === 'auto'
     if (!nellaCasella) console.info(`myynd · mandato · ${c.id} · bozza trattenuta sulla carta (${email.conosciuto ? 'bozza_posta' : 'contatto_nuovo'})`)
-    if (nellaCasella && c.doc && (c.origine !== 'iniziativa' || fonteValida(c.doc))) {
+    if (nellaCasella && c.doc && candidati.cartaValida(c)) {
       const source = store.documento(c.doc)
       if (source?.messageId) email.rispondeA = { messageId: source.messageId }
       await verificaBaseRevisione(c)

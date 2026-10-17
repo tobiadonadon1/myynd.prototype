@@ -16,25 +16,24 @@ beforeEach(() => { store.azzeraTutto(); rmSync(join(dir, 'iniziativa.json'), { f
 after(() => { store.chiudiIndici(); rmSync(dir, { recursive: true, force: true }) })
 
 test('on by default for whoever never touched the switch; off stays off; pause and disconnected provider do no work', async () => {
-  store.salvaDocumenti([email('a')]); let calls = 0
-  const execute = () => { calls++ }
+  store.salvaDocumenti([email('a')])
   // nessun file: nessuno ha mai toccato l'interruttore, ed è acceso
   assert.equal(initiative.stato(ora).attiva, true)
   initiative.imposta(false)
   assert.equal(initiative.stato(ora).attiva, false)
-  assert.equal(await initiative.giro(ora, execute, () => true), null, 'spento da lei resta spento')
+  assert.equal(await initiative.giro(ora, {}, () => true), null, 'spento da lei resta spento')
   initiative.imposta(true)
-  assert.equal(await initiative.giro(ora, execute, () => false), null)
+  assert.equal(await initiative.giro(ora, {}, () => false), null)
   cfg.aggiorna({ autonomia: 'chiedere' })
-  assert.equal(await initiative.giro(ora, execute, () => true), null)
-  assert.equal(calls, 0)
+  assert.equal(await initiative.giro(ora, {}, () => true), null)
+  assert.equal(store.elencoCompiti().length, 0)
 })
 test('a new account drafts a reply to a message that needs one without anyone turning anything on', async () => {
   store.salvaDocumenti([email('nuova')])
-  const calls: unknown[][] = []
-  const id = await initiative.giro(ora, (...args) => { calls.push(args) }, () => true)
+  const id = await initiative.giro(ora, {}, () => true)
   assert.ok(id, 'di serie non è nata nessuna bozza')
-  assert.deepEqual(calls, [[id, 'bozza', false]])
+  assert.equal(store.compito(id!)?.modo, 'bozza')
+  assert.equal(store.compito(id!)?.turno?.da, 'myynd')
   assert.equal(store.compito(id!)?.origine, 'iniziativa')
   assert.match(store.compito(id!)?.testo ?? '', /^Draft a reply:/)
   // e la fonte resta valida per la consegna nella casella: fonteValida legge lo stesso default
@@ -43,12 +42,10 @@ test('a new account drafts a reply to a message that needs one without anyone tu
 test('col turno spento non nasce nessuna proposta: in coda non partirebbe mai', async () => {
   store.salvaDocumenti([email('spento')])
   cfg.aggiorna({ turno: { spento: true } })
-  let calls = 0
-  assert.equal(await initiative.giro(ora, () => { calls++ }, () => true), null)
-  assert.equal(calls, 0)
+  assert.equal(await initiative.giro(ora, {}, () => true), null)
   assert.equal(store.elencoCompiti().length, 0, 'una riga ferma sulla lista, mai lavorata')
   cfg.aggiorna({ turno: { spento: false } })
-  assert.ok(await initiative.giro(ora, () => { calls++ }, () => true), 'riacceso il turno, la proposta nasce')
+  assert.ok(await initiative.giro(ora, {}, () => true), 'riacceso il turno, la proposta nasce')
 })
 test('eligibility rejects promotions, receipts, stale, sent, technical and quoted-only requests', () => {
   assert.deepEqual(initiative.candidati([
@@ -63,15 +60,14 @@ test('eligibility rejects promotions, receipts, stale, sent, technical and quote
 })
 test('creates actual task with source, invokes draft-only non-native executor and persists cadence', async () => {
   store.salvaDocumenti([email('a'), email('b')]); initiative.imposta(true)
-  const calls: unknown[][] = []
-  const id = await initiative.giro(ora, (...args) => { calls.push(args) }, () => true)
+  const id = await initiative.giro(ora, {}, () => true)
   assert.ok(id)
-  assert.deepEqual(calls, [[id, 'bozza', false]])
+  assert.equal(store.compito(id)?.modo, 'bozza')
   assert.equal(store.compito(id)?.origine, 'iniziativa')
   assert.equal(store.compito(id)?.doc, 'a')
   assert.equal(store.compito(id)?.attrezzi, null)
   assert.equal(initiative.stato(ora).oggi, 1)
-  assert.equal(await initiative.giro(ora + 1000, () => assert.fail('cadence'), () => true), null)
+  assert.equal(await initiative.giro(ora + 1000, {}, () => true), null)
   assert.equal((await import('./iniziativa.ts')).stato(ora).attiva, true)
 })
 test('rolling daily cap and outstanding cap prevent clutter even across restarts', async () => {
@@ -80,15 +76,15 @@ test('rolling daily cap and outstanding cap prevent clutter even across restarts
   initiative.imposta(true)
   const n = initiative.PROPOSTE_VIVE_MAX + 1
   store.salvaDocumenti(Array.from({ length: n }, (_, i) => email(`d${i}`, { quando: new Date(ora - (i + 1) * 60_000).toISOString() })))
-  for (let i = 0; i < initiative.PROPOSTE_VIVE_MAX; i++) assert.ok(await initiative.giro(ora + i * initiative.PAUSA, () => {}, () => true), `proposta ${i + 1}`)
-  assert.equal(await initiative.giro(ora + initiative.PROPOSTE_VIVE_MAX * initiative.PAUSA, () => assert.fail('outstanding'), () => true), null)
+  for (let i = 0; i < initiative.PROPOSTE_VIVE_MAX; i++) assert.ok(await initiative.giro(ora + i * initiative.PAUSA, {}, () => true), `proposta ${i + 1}`)
+  assert.equal(await initiative.giro(ora + initiative.PROPOSTE_VIVE_MAX * initiative.PAUSA, {}, () => true), null)
   // la cadenza vale anche dopo un riavvio: il conto sta su disco
   assert.equal(initiative.stato(ora + initiative.PROPOSTE_VIVE_MAX * initiative.PAUSA).oggi, initiative.PROPOSTE_VIVE_MAX)
 })
 
 test('F2 · di serie una proposta entra in coda per il turno, con il suo contratto, e non parte', async () => {
   initiative.imposta(true); store.salvaDocumenti([email('coda')])
-  const id = await initiative.giro(ora, undefined, () => true)
+  const id = await initiative.giro(ora, {}, () => true)
   assert.ok(id)
   const c = store.compito(id!)!
   assert.equal(c.stato, 'aperto')
@@ -100,7 +96,7 @@ test('F2 · di serie una proposta entra in coda per il turno, con il suo contrat
 
 test('F2 · «Prepara ora»: la proposta entra in coda con la precedenza di una carta di oggi', async () => {
   initiative.imposta(true); store.salvaDocumenti([email('subito')])
-  const id = await initiative.giro(ora, initiative.inCodaPerIlTurno(true), () => true)
+  const id = await initiative.giro(ora, { presto: true }, () => true)
   assert.equal(store.compito(id!)?.turno?.quando, 'presto')
 })
 test('done and deleted task sources never recreate; answered threads are skipped', async () => {
@@ -108,14 +104,14 @@ test('done and deleted task sources never recreate; answered threads are skipped
   store.salvaDocumenti([email('done'), email('deleted'), email('incoming', { filo: 'thread' }), email('answer', { filo: 'thread', inviato: true, quando: new Date(ora).toISOString() })])
   store.scriviCompito({ id: 'done-task', testo: 'Reply', doc: 'done', ordine: 'a' }); store.cambiaStatoCompito('done-task', 'fatto')
   store.scriviCompito({ id: 'deleted-task', testo: 'Reply', doc: 'deleted', ordine: 'b' }); store.scordaCompito('deleted-task')
-  assert.equal(await initiative.giro(ora, () => assert.fail('excluded source'), () => true), null)
+  assert.equal(await initiative.giro(ora, {}, () => true), null)
 })
 test('dismissed feed evidence suppresses a proactive reply', async () => {
   initiative.imposta(true); store.salvaDocumenti([email('ignored')])
   store.salvaFeed([{ tipo: 'reply', titolo: 'Reply to the project review request', testo: 'Jane asks you to review the project proposal and reply with feedback.', perche: 'A direct request from Jane.', doc: 'ignored', fonte: 'posta' }])
   const item = store.elencoFeed('aperto')[0]; assert.ok(item)
   store.cambiaStatoFeed(item.id, 'scartato', 'Not relevant')
-  assert.equal(await initiative.giro(ora, () => assert.fail('dismissed'), () => true), null)
+  assert.equal(await initiative.giro(ora, {}, () => true), null)
 })
 test('publication recheck rejects feedback, newly sent replies, and pausing', async () => {
   initiative.imposta(true); store.salvaDocumenti([email('current', { filo: 'thread' })])
@@ -145,7 +141,8 @@ test('actual task queue refuses publication when the user answers during model c
       const timer = setTimeout(() => { stop(); reject(new Error('No final queue event')) }, 3000)
       stop = compiti.ascolta(e => { if (e.fase === 'richiamato') { clearTimeout(timer); resolve() } })
     })
-    const id = await initiative.giro(ora, compiti.affida, () => true); assert.ok(id)
+    const id = await initiative.giro(ora, {}, () => true); assert.ok(id)
+    compiti.affida(id, 'bozza', false)
     await event
     assert.equal(native, false)
     assert.equal(store.compito(id)?.risultato, null)
@@ -159,7 +156,7 @@ test('prepared task replaces the duplicate feed card without recording dismissal
   initiative.imposta(true); store.salvaDocumenti([email('feed-source')])
   store.salvaFeed([{ tipo: 'reply', titolo: 'Reply to the project review request', testo: 'Jane asks you to review the project proposal and reply with feedback.', perche: 'A direct request from Jane.', doc: 'feed-source', fonte: 'posta' }])
   assert.equal(attention.feedAttuale(ora).length, 1)
-  const id = await initiative.giro(ora, () => {}, () => true); assert.ok(id)
+  const id = await initiative.giro(ora, {}, () => true); assert.ok(id)
   assert.equal(attention.feedAttuale(ora).length, 0)
   assert.equal(store.docsIgnoratiDalFeed([email('feed-source')]).size, 0)
   store.cambiaStatoCompito(id, 'ritirato')
@@ -171,7 +168,7 @@ test('explicit request on a named active project queues a quiet next-step plan a
  const issue:Documento={id:'project-issue',fonte:'github',tipo:'issue',titolo:'Atlas customer portal review',corpo:'Could you review the customer portal launch checklist and choose the next concrete step?',quando:new Date(ora-3600_000).toISOString()}
  store.salvaDocumenti([issue]);initiative.imposta(true)
  assert.equal(initiative.candidatiDettagli([issue],ora)[0]?.tipo,'passo-progetto')
- const id=await initiative.giro(ora,()=>{},()=>true);assert.ok(id)
+ const id=await initiative.giro(ora,{},()=>true);assert.ok(id)
  const task=store.compito(id)!
  assert.equal(task.progetto,project.id)
  assert.match(task.testo,/next project step/)
@@ -190,7 +187,7 @@ test('fresh due invoices prepare review details; paid invoices, receipts and bul
  assert.deepEqual(actual.map(x=>x.doc.id),['due'])
  assert.equal(actual[0]?.tipo,'fattura')
  store.salvaDocumenti([due,paid,receipt,bulk]);initiative.imposta(true)
- const id=await initiative.giro(ora,()=>{},()=>true);assert.ok(id)
+ const id=await initiative.giro(ora,{},()=>true);assert.ok(id)
  assert.match(store.compito(id)?.testo||'',/Review invoice/)
  assert.match(store.compito(id)?.nota||'',/Do not pay or submit anything/)
  assert.equal(initiative.fonteValida('due',ora),true)
@@ -208,7 +205,7 @@ test('form request creates only an honest field draft; source without visible fi
  const form=email('form',{titolo:'Atlas application form',corpo:'Could you fill out the application form? It asks for legal name, address, and contact email.'})
  store.salvaDocumenti([form]);initiative.imposta(true)
  assert.equal(initiative.candidatiDettagli([form],ora)[0]?.tipo,'modulo')
- const id=await initiative.giro(ora,()=>{},()=>true);assert.ok(id)
+ const id=await initiative.giro(ora,{},()=>true);assert.ok(id)
  const task=store.compito(id)!
  assert.match(task.testo,/form fields for review/)
  assert.match(task.nota||'',/reviewable field-by-field draft/)
@@ -226,7 +223,7 @@ test('F6 · le carte del primo giorno contano fra le proposte vive: con la bache
   initiative.imposta(true)
   store.salvaDocumenti([email('nuova')])
   for (let i = 0; i < initiative.PROPOSTE_VIVE_MAX; i++) store.scriviCompito({ id: `pg${i}`, testo: `Day one ${i}`, origine: 'primo-giorno', ordine: `o${i}` })
-  assert.equal(await initiative.giro(ora, () => assert.fail('la bacheca è piena'), () => true), null)
+  assert.equal(await initiative.giro(ora, {}, () => true), null)
   store.cambiaStatoCompito('pg0', 'fatto')
-  assert.ok(await initiative.giro(ora, () => {}, () => true), 'un posto libero: nasce')
+  assert.ok(await initiative.giro(ora, {}, () => true), 'un posto libero: nasce')
 })
