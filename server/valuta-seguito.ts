@@ -7,7 +7,8 @@
 //
 // Lavora in una cartella temporanea, mai nel profilo vero: il motore si dice
 // con un fornitore compatibile (`MYYND_VALUTA_URL`, `MYYND_VALUTA_MODELLO`,
-// `MYYND_VALUTA_CHIAVE` se serve) o con la chiave di Claude nell'ambiente.
+// `MYYND_VALUTA_CHIAVE` se serve), con l'account di Claude (`MYYND_VALUTA_ACCOUNT=1`),
+// o con la chiave di Claude nell'ambiente.
 // La casella e Slack sono finti: niente parte. Stampa, per episodio,
 // «accettato» o cosa non va, e il conto in fondo. Gli episodi che provano la
 // verifica contro una risposta sbagliata apposta girano col modello finto.
@@ -28,7 +29,7 @@ const episodi = await import('./seguito-episodi.ts')
 const url = process.env.MYYND_VALUTA_URL
 const base: Partial<import('./config.ts').Config> = url
   ? { motore: 'compatibile', compatibile: { url, modello: process.env.MYYND_VALUTA_MODELLO ?? 'qwen2.5:14b', ...(process.env.MYYND_VALUTA_CHIAVE ? { chiave: process.env.MYYND_VALUTA_CHIAVE } : {}) } } as never
-  : {}
+  : process.env.MYYND_VALUTA_ACCOUNT ? { motore: 'claude', claudeCon: 'abbonamento' } as never : {}
 const finto = process.argv.includes('--finto')
 cfg.scrivi({ ...base, lingua: 'en' } as import('./config.ts').Config)
 if (!finto && !modello.collegato()) {
