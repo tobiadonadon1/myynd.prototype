@@ -23,6 +23,7 @@ const NOMI: Record<Genere, { it: [string, string]; en: [string, string] }> = {
   nota: { it: ['nota', 'note'], en: ['note', 'notes'] },
   pagina: { it: ['pagina', 'pagine'], en: ['page', 'pages'] },
   conversazione: { it: ['conversazione', 'conversazioni'], en: ['conversation', 'conversations'] },
+  discussione: { it: ['discussione', 'discussioni'], en: ['discussion', 'discussions'] },
   riunione: { it: ['riunione', 'riunioni'], en: ['meeting', 'meetings'] },
   documento: { it: ['documento', 'documenti'], en: ['document', 'documents'] }
 }

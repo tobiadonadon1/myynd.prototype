@@ -5,7 +5,7 @@
 // e i conti per fonte diventano conti per genere. Puro e senza import: lo
 // usa anche l'interfaccia (`src/conta-fonti.ts`).
 
-export type Genere = 'email' | 'evento' | 'file' | 'nota' | 'pagina' | 'conversazione' | 'riunione' | 'documento'
+export type Genere = 'email' | 'evento' | 'file' | 'nota' | 'pagina' | 'conversazione' | 'discussione' | 'riunione' | 'documento'
 
 /** I generi che si dicono per primi, in quest'ordine; gli altri seguono per quantità. */
 export const ORDINE_GENERI: readonly Genere[] = ['email', 'evento', 'file']
@@ -16,8 +16,10 @@ const PER_FONTE: Record<string, Genere> = {
   desktop: 'file', lavoro: 'file', drive: 'file', dropbox: 'file', sharepoint: 'file',
   note: 'nota',
   notion: 'pagina',
-  // un documento di Slack o di WhatsApp è un giorno di una conversazione
-  slack: 'conversazione', whatsapp: 'conversazione', conversazioni: 'conversazione',
+  // un documento di WhatsApp è un giorno di una conversazione; uno di Slack un
+  // filo o un giorno di messaggi: «90 discussioni» accanto a «67 conversazioni»
+  // lette, non due numeri diversi con lo stesso nome
+  slack: 'discussione', whatsapp: 'conversazione', conversazioni: 'conversazione',
   granola: 'riunione'
 }
 

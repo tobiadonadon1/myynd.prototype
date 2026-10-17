@@ -284,7 +284,7 @@ test('rows say what they counted: emails, events, files, never documents for mai
   r = avanzaLettura(r, { fase: 'desktop', stato: 'leggo', fatti: 1204 })
   r = avanzaLettura(r, { fase: 'notion', stato: 'fatto', documenti: 40 })
   r = avanzaLettura(r, { fase: 'slack', stato: 'fatto', documenti: 3 })
-  assert.deepEqual(r.map(x => x.testo), ['60 emails', '1 email', '42 events', '1,204 files', '40 pages', '3 conversations'])
+  assert.deepEqual(r.map(x => x.testo), ['60 emails', '1 email', '42 events', '1,204 files', '40 pages', '3 discussions'])
   impostaLingua('it')
   assert.equal(dettaglioSincronizzazione({ fase: 'desktop', stato: 'leggo', fatti: 1204 }), '1.204 file')
   assert.equal(dettaglioSincronizzazione({ fase: 'posta', stato: 'fatto', documenti: 312 }), '312 email')

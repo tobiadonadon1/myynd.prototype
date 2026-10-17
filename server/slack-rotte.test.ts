@@ -113,4 +113,11 @@ test('collegare, leggere, la scheda, le esclusioni, e l’invio solo da un tocco
   assert.equal((await chiama('GET', '/api/slack/stato')).json.aperte, 2, 'i messaggi diretti restano')
   const inviato = await chiama('POST', '/api/slack/invia', { conversazione: 'C0ACME', testo: 'x' }, { 'x-myynd-tocco': '1' })
   assert.equal(inviato.stato, 400, 'un posto escluso non riceve niente')
+  // il nome dell'escluso resta nella scheda, per poterlo togliere
+  assert.ok((await chiama('GET', '/api/slack/stato')).json.posti.some((p: { id: string }) => p.id === 'C0ACME'))
+
+  // scollegato: niente più domande, promesse o decisioni di Slack
+  assert.equal((await chiama('DELETE', '/api/connettori/slack')).stato, 200)
+  const dopo = await chiama('GET', '/api/slack/da-rispondere')
+  assert.deepEqual([dopo.json.domande.length, dopo.json.promesse.length, dopo.json.decisioni.length], [0, 0, 0])
 })

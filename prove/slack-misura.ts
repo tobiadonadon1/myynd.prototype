@@ -30,6 +30,7 @@ const diretti = ['D0NORA', 'D0TOM', 'D0LISA', 'G0MP'].filter(x => posti.has(x)).
 let aperte = 0, promesse = 0, decisioni = 0
 let segnali: { registra?: (e: unknown) => unknown; daRispondere?: () => unknown[]; promesse?: () => unknown[]; decisioni?: () => unknown[] } = {}
 try { segnali = await import('../server/slack-segnali.ts' as string) } catch { /* il prima non li ha */ }
+;(e as { conferma?: () => void }).conferma?.()
 if (segnali.registra) {
   segnali.registra(e)
   aperte = segnali.daRispondere!().length

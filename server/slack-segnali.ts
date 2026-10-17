@@ -14,6 +14,21 @@
 //
 // Niente modello: espressioni regolari in italiano e in inglese, e una
 // fiducia scritta accanto (`valore`) perché chi le usa sappia quanto pesarle.
+//
+// **Il contratto per chi prepara il seguito** (stabile; un campo nuovo si
+// aggiunge, uno vecchio non cambia senso):
+//
+//   · `daRispondere({ adesso?, giorni = 14 })` → `DaRispondere[]`, una voce per
+//     posto, le più vecchie prima: `id` (il riferimento `slack:<canale>:<ts>`),
+//     `chi`, `domanda`, `permalink`, `dove`, `conversazione`, `filo` (dove
+//     rispondere: il `ts` del filo, o `null` in un messaggio diretto), `ore`,
+//     `altre`, `fiducia`, `progetto`. Anche in `GET /api/slack/da-rispondere`.
+//   · `promesse()` e `decisioni()` → `Voce[]`, le più recenti prima, con
+//     `chi`, `testo`, `permalink`, `fiducia` e, per le promesse, `scadenza`.
+//   · Per mandare la risposta: `POST /api/slack/invia` con
+//     `{ conversazione, filo, testo }` e l'intestazione `x-myynd-tocco: 1`,
+//     che mette solo un bottone toccato da lui (senza: 403). Torna
+//     `{ ok, permalink }` e chiude subito la domanda (`risoltoDaQui`).
 
 import db from './store.ts'
 import * as segnali from './segnali.ts'
@@ -35,46 +50,63 @@ const REAZIONI_RISPOSTA = new Set(['white_check_mark', 'heavy_check_mark', '+1',
 
 const FINE = '(?=$|[^\\p{L}\\p{N}])'
 const ALTRE_RICHIESTE = new RegExp(`(?:^|[^\\p{L}])(?:riesci a|riusciresti|mi (?:mandi|invii|giri|passi|fai sapere|dici|aggiorni)|ci (?:mandi|invii|giri|aggiorni)|mandami|inviami|girami|fammi sapere|fateci sapere|let me know|any update|any news|novità su|hai (?:modo|tempo)|quando (?:puoi|riesci|pensi)|when (?:can|could|will) you|send me|share the)${FINE}`, 'iu')
+/**
+ * Un imperativo gentile rivolto a lui: «pls review», «take a look when you
+ * can», «dai un'occhiata appena puoi». Il «please» lo vede già
+ * `contieneRichiesta`; qui le forme corte e il «quando puoi» in coda.
+ */
+const IMPERATIVO_GENTILE = new RegExp(`(?:^|[^\\p{L}])(?:pls|plz|pretty please|when(?:ever)? you (?:can|get a (?:chance|minute|sec))|when you have a (?:sec|minute|moment)|asap|appena (?:puoi|riesci|hai un attimo)|quando hai (?:un attimo|tempo)|per piacere|perfavore)${FINE}`, 'iu')
 
-/** Gli chiedono qualcosa: una domanda, o una richiesta anche senza punto di domanda. */
+/** Gli chiedono qualcosa: una domanda, una richiesta, o un imperativo gentile rivolto a lui. */
 export function chiede(testo: string): boolean {
   const t = testo.replace(/\(https?:[^)]+\)|https?:\S+/g, ' ').trim()
   if (t.length < 6) return false
-  return /\?/.test(t) || contieneRichiesta(t) || ALTRE_RICHIESTE.test(t)
+  return /\?/.test(t) || contieneRichiesta(t) || ALTRE_RICHIESTE.test(t) || IMPERATIVO_GENTILE.test(t)
 }
 
-const IMPEGNO = new RegExp(`(?:^|[^\\p{L}])(?:i['’]ll|i will|i['’]m going to|i am going to|will do|on it|let me (?:check|look|get back|send|share)|i can (?:send|share|do)|i['’]ll get back|ti (?:mando|invio|giro|faccio sapere|preparo|scrivo|chiamo|aggiorno|passo|mander[oò]|invier[oò])|vi (?:mando|invio|giro|faccio sapere|preparo|scrivo|aggiorno|passo|mander[oò])|te lo (?:mando|preparo|giro|faccio)|ve lo (?:mando|preparo|giro|faccio)|lo (?:faccio|preparo|mando) (?:io|entro|domani|oggi|stasera)|ci penso io|me ne occupo|mi occupo|provvedo|preparo io|mando io)${FINE}`, 'iu')
+/** Una negazione: «I will not», «won't», «non ti mando», «mai». Un impegno o una decisione negati non lo sono. */
+const NEGAZIONE = new RegExp(`(?:^|[^\\p{L}])(?:not|never|no longer|cannot|can['’]t|won['’]t|wouldn['’]t|don['’]t|didn['’]t|isn['’]t|wasn['’]t|haven['’]t|non|mai|nessun[oa]?|niente)${FINE}`, 'iu')
+
+/** I verbi del fare: un impegno è promettere di mandare, scrivere, chiamare, sistemare. Non «I'll be out». */
+const FARE_EN = '(?:send|do|write|call|share|fix|prepare|draft|update|review|check|look into|finish|deliver|handle|book|email|ping|forward|sort out|follow up|get back|circle back|put together|set up|schedule|submit|upload|create|make|ship)'
+const IMPEGNO = new RegExp(`(?:^|[^\\p{L}])(?:(?:i['’]ll|i will|i['’]m going to|i am going to|i can|let me)(?: \\p{L}+){0,2}? ${FARE_EN}|will do|on it|ti (?:mando|invio|giro|faccio sapere|preparo|scrivo|chiamo|aggiorno|passo|mander[oò]|invier[oò]|scriver[oò]|chiamer[oò])|vi (?:mando|invio|giro|faccio sapere|preparo|scrivo|aggiorno|passo|mander[oò])|te lo (?:mando|preparo|giro|faccio)|ve lo (?:mando|preparo|giro|faccio)|lo (?:faccio|preparo|mando) (?:io|entro|domani|oggi|stasera)|ci penso io|me ne occupo|mi occupo|provvedo|preparo io|mando io)${FINE}`, 'iu')
+/** Un verbo del fare in prima persona senza «ti»: «lo chiudo domani», «I send it tonight». Con una scadenza è un indizio. */
+const FARE_IO = new RegExp(`(?:^|[^\\p{L}])(?:(?:i|io) (?:\\p{L}+ )?${FARE_EN}|(?:lo |la |li |le )?(?:mando|faccio|scrivo|chiamo|preparo|chiudo|invio|sistemo|controllo|finisco|consegno|aggiorno|carico|giro))${FINE}`, 'iu')
 const SCADENZA = new RegExp(`(?:^|[^\\p{L}])(entro (?:(?:il |la |lo )?(?:luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|domani|stasera|oggi|fine (?:giornata|settimana|mese)|\\d{1,2}(?:/\\d{1,2})?|la prossima settimana))|domani|stasera|in giornata|la prossima settimana|by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|tonight|eod|end of (?:the )?(?:day|week|month)|next week|\\d{1,2}(?:st|nd|rd|th)?)|tomorrow|tonight|later today|first thing|eod|next week)${FINE}`, 'iu')
-const IN_PRIMA_PERSONA = /(?:^|[^\p{L}])(?:i|io|me|mi)(?=$|[^\p{L}])/iu
 
 /**
  * Ha promesso qualcosa: «I'll send…», «ti mando…», «entro venerdì».
  *
- * Un verbo d'impegno con una scadenza è quasi certo; il verbo da solo è
- * probabile; la sola scadenza, detta in prima persona, è un indizio. Una
- * domanda («ti mando io il file?») non è una promessa.
+ * Serve un verbo del fare in prima persona: «I'll be out tomorrow» ha una
+ * scadenza e nessun impegno. Con la scadenza è quasi certo, senza è
+ * probabile; un verbo del fare senza «ti» ma con una scadenza («lo chiudo
+ * domani») è un indizio. Una domanda e una negazione non sono promesse.
  */
 export function promessa(testo: string): { fiducia: number; scadenza: string | null } | null {
   const t = testo.trim()
-  if (!t || /\?\s*$/.test(t)) return null
+  if (!t || /\?\s*$/.test(t) || NEGAZIONE.test(t)) return null
   const impegno = IMPEGNO.test(t)
   const s = SCADENZA.exec(t)
   const scadenza = s ? s[1]!.trim() : null
   if (impegno && scadenza) return { fiducia: 0.9, scadenza }
   if (impegno) return { fiducia: 0.7, scadenza: null }
-  if (scadenza && IN_PRIMA_PERSONA.test(t)) return { fiducia: 0.4, scadenza }
+  if (scadenza && FARE_IO.test(t)) return { fiducia: 0.6, scadenza }
   return null
 }
 
 const DECISO_FORTE = new RegExp(`(?:^|[^\\p{L}])(?:we decided|we['’]ve decided|we have decided|decided to|final decision|decision(?: is|:)|let['’]s go with|we['’]re going with|green light|abbiamo deciso|ho deciso|si è deciso|è deciso|decidiamo|deciso:|decisione:|andiamo con|procediamo con|via libera)${FINE}`, 'iu')
 const DECISO_DEBOLE = new RegExp(`(?:^|[^\\p{L}])(?:agreed|approved|confirmed|ship it|go ahead|si procede|si parte|approvato|approvata|confermato|confermata|d['’]accordo)${FINE}`, 'iu')
+/** Un racconto del passato: «was approved last year», «l'anno scorso». Non è una decisione di adesso. */
+const PASSATO = new RegExp(`(?:^|[^\\p{L}])(?:was|were|had been|has been|used to|last (?:year|month|week|quarter|time)|years? ago|months? ago|back in|in \\d{4}|era stat[oa]|erano stat[ie]|l['’]anno scorso|il mese scorso|la settimana scorsa|anni fa|mesi fa|a suo tempo|all['’]epoca)${FINE}`, 'iu')
+/** Un appuntamento confermato non è una decisione di lavoro: «Confirmed, see you at 5». */
+const APPUNTAMENTO = new RegExp(`(?:^|[^\\p{L}])(?:see you|ci vediamo|ci sentiamo|a dopo|a domani|at \\d{1,2}(?::\\d{2})?|alle \\d{1,2}(?:[:.]\\d{2})?)${FINE}`, 'iu')
 
-/** Una decisione detta: «abbiamo deciso», «let's go with B»; «approvato» pesa meno. */
+/** Una decisione detta: «abbiamo deciso», «let's go with B»; «approvato» pesa meno. Negata, raccontata o un appuntamento no. */
 export function decisione(testo: string): { fiducia: number } | null {
   const t = testo.trim()
-  if (!t || /\?\s*$/.test(t)) return null
+  if (!t || /\?\s*$/.test(t) || NEGAZIONE.test(t) || PASSATO.test(t)) return null
   if (DECISO_FORTE.test(t)) return { fiducia: 0.8 }
-  if (DECISO_DEBOLE.test(t)) return { fiducia: 0.5 }
+  if (DECISO_DEBOLE.test(t) && !APPUNTAMENTO.test(t)) return { fiducia: 0.5 }
   return null
 }
 
@@ -266,6 +298,11 @@ function voci(genere: string, adesso: Date, giorni: number): Voce[] {
 export function promesse(o: { adesso?: Date; giorni?: number } = {}): Voce[] { return voci(PROMESSO, o.adesso ?? new Date(), o.giorni ?? 14) }
 /** Quello che si è deciso dove c'era anche lui, i più recenti prima. */
 export function decisioni(o: { adesso?: Date; giorni?: number } = {}): Voce[] { return voci(DECISO, o.adesso ?? new Date(), o.giorni ?? 14) }
+
+/** Slack scollegato: via tutti i suoi segnali. */
+export function dimenticaTutto(): number {
+  return Number(db.prepare("DELETE FROM segnali WHERE genere LIKE 'slack.%'").run().changes)
+}
 
 /** Una conversazione esclusa: via anche i suoi segnali. */
 export function dimenticaConversazione(id: string): number {
