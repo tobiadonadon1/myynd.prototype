@@ -36,7 +36,7 @@
 import * as provaChiusa from './prova-chiusa.ts'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'node:crypto'
-import { aggiorna, leggi, lingua, scrivi as scriviConfig, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
+import { aggiorna, ECONOMICO, leggi, lingua, scrivi as scriviConfig, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as chi from './chi.ts'
@@ -44,6 +44,7 @@ import * as store from './store.ts'
 import * as compatibile from './compatibile.ts'
 import * as chatgpt from './chatgpt.ts'
 import * as tettoDiOggi from './tetto.ts'
+import * as quotaMese from './quota-mese.ts'
 import { estraiJSON } from './chiamate-emulate.ts'
 
 // — chi c'è —
@@ -65,6 +66,19 @@ function chiaveDiCasa(): string | undefined {
 function conLaChiave(): boolean {
   return !!(leggi().claude?.apiKey || chiaveDiCasa())
 }
+
+/*
+ * Chi paga l'AI, per la quota del mese (`quota-mese.ts`): Myynd quando lavora
+ * l'AI inclusa, o la chiave della casa senza una chiave sua. Il suo account
+ * Claude o ChatGPT, la sua chiave OpenAI o Anthropic, un modello sul suo
+ * computer: paga lui, e la quota di serie non c'è.
+ */
+quotaMese.quandoPagaMyynd(c => {
+  if (c.motore === 'incluso') return !!fornitoreIncluso(c)
+  if (c.motore && c.motore !== 'claude') return false
+  if (chatgpt.scelto() || fornitore() !== null || sullAccount()) return false
+  return !c.claude?.apiKey && !!chiaveDiCasa()
+})
 
 /**
  * Il fornitore compatibile con OpenAI, se è lui che deve fare il lavoro grosso.
@@ -1094,13 +1108,13 @@ export function motore(): Motore | null {
   if (chatgpt.scelto()) {
     const m = chatgpt.motore()
     return { ...m,
-      crea: (p, attesa) => { controllaIlTetto(); return m.crea(p, attesa) },
+      crea: (p, attesa) => { controllaIlTetto(); return prenota(p, () => m.crea(p, attesa)) },
       flusso: (p, onTesto, attesa, segnale, conversazione) => {
         controllaIlTetto()
         // chi guarda è una persona: la stesura di una prova (P6) non fa aspettare la prova stessa
         const suo = !provaChiusa.inProva()
         if (suo) segnaGuardato(true)
-        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => { if (suo) segnaGuardato(false) })
+        return prenota(p, () => m.flusso(p, onTesto, attesa, segnale, conversazione)).finally(() => { if (suo) segnaGuardato(false) })
       }
     }
   }
@@ -1117,12 +1131,12 @@ export function motore(): Motore | null {
         rispostoIl.delete(f.url)
         throw tradotto(new Error('Il modello sul tuo computer non risponde: controlla che Ollama (o LM Studio) sia acceso.'))
       },
-      crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { segnaSeOpenAI(e); throw tradotto(e) }) },
+      crea: (p, attesa) => { controllaIlTetto(); return prenota(p, () => compatibile.crea(f, p, attesa)).catch(e => { segnaSeOpenAI(e); throw tradotto(e) }) },
       flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
         const suo = !provaChiusa.inProva()
         if (suo) segnaGuardato(true)
-        return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
+        return prenota(p, () => compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale))
           .finally(() => { if (suo) segnaGuardato(false) })
           .catch(e => {
             if (segnale?.aborted) throw new DOMException('The request was cancelled.', 'AbortError')
@@ -1152,19 +1166,24 @@ export function motore(): Motore | null {
     crea: async (p, attesa) => {
       controllaIlTetto()
       try {
-        return await a.messages.create(p, attesa ? { timeout: attesa } : undefined)
+        return await prenota(p, () => a.messages.create(p, attesa ? { timeout: attesa } : undefined))
       } catch (e) {
+        // la quota del mese non è un rifiuto della chiave: passa com'è
+        if (tettoDiOggi.delTetto(e)) throw e
         throw guaio(e)
       }
     },
     flusso: async (p, onTesto, attesa, segnale) => {
       controllaIlTetto()
       try {
-        // il segnale è di chi ascolta: se se n'è andato, si smette di pagare
-        const s = a.messages.stream(p, { ...(attesa ? { timeout: attesa } : {}), ...(segnale ? { signal: segnale } : {}) })
-        s.on('text', onTesto)
-        return await senzaSilenzi(s)
+        return await prenota(p, () => {
+          // il segnale è di chi ascolta: se se n'è andato, si smette di pagare
+          const s = a.messages.stream(p, { ...(attesa ? { timeout: attesa } : {}), ...(segnale ? { signal: segnale } : {}) })
+          s.on('text', onTesto)
+          return senzaSilenzi(s)
+        })
       } catch (e) {
+        if (tettoDiOggi.delTetto(e)) throw e
         throw guaio(e)
       }
     }
@@ -1274,6 +1293,23 @@ function controllaIlTetto() {
   try { tettoDiOggi.controllaIlTetto() } catch (e) { throw tradotto(e) }
 }
 
+/**
+ * La quota del mese, chiamata per chiamata: prima si prenota quello che
+ * costerebbe (il prompt, al prezzo del modello chiesto, e tutta l'uscita
+ * permessa), poi si chiama; finita, la prenotazione lascia il posto alla
+ * spesa vera del registro, e se fallisce si toglie e basta. Per chi guarda
+ * (la chat) non si prenota niente: non si ferma mai.
+ */
+export function stimaRichiesta(p: { model?: unknown; max_tokens?: unknown; system?: unknown; messages?: unknown; tools?: unknown }): number {
+  let caratteri = 0
+  try { caratteri = JSON.stringify([p.system ?? '', p.messages ?? [], p.tools ?? []]).length } catch { /* una stima senza entrata */ }
+  return quotaMese.stima(typeof p.model === 'string' ? p.model : null, caratteri, typeof p.max_tokens === 'number' ? p.max_tokens : 0)
+}
+function prenota<T>(p: Parameters<typeof stimaRichiesta>[0], fai: () => Promise<T>): Promise<T> {
+  // la prenotazione lancia subito, prima di partire: la quota finita non costa una chiamata
+  return quotaMese.conRiserva('chiamata', stimaRichiesta(p), fai)
+}
+
 // — la richiesta —
 
 export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'abbonamento' | 'compatibile' | 'chatgpt' }
@@ -1299,7 +1335,24 @@ export type Parametri = Omit<Anthropic.MessageCreateParamsNonStreaming, 'message
  * risparmia.
  */
 export function modelloPer(lavoro: string): string {
-  return modelloDelLivello(LAVORI[lavoro as Lavoro]?.livello ?? 'frontiera')
+  // la rassegna sta sempre sul più economico, anche se il livello «casa» l'ha alzato lui
+  if (SEMPRE_ECONOMICI.has(lavoro)) return ECONOMICO
+  return modelloDelLivello(livelloPer(lavoro))
+}
+
+/** I lavori che girano tante volte al giorno su materiale che nessuno firma: sempre il modello più economico. */
+const SEMPRE_ECONOMICI = new Set<string>(['rassegna'])
+/** La chat che apre lui: non si ferma mai per la quota, ma oltre una volta e mezza passa all'economico. */
+const DELLA_CHAT = new Set<string>(['risposta', 'rispostaBreve'])
+
+/** Il livello di un lavoro adesso: quello della tabella, salvo la chat oltre la quota del mese. */
+function livelloPer(lavoro: string): Livello {
+  if (SEMPRE_ECONOMICI.has(lavoro)) return 'casa'
+  const l = LAVORI[lavoro as Lavoro]?.livello ?? 'frontiera'
+  if (l !== 'casa' && DELLA_CHAT.has(lavoro)) {
+    try { if (quotaMese.stato().oltre) return 'casa' } catch { /* senza indice, il livello di sempre */ }
+  }
+  return l
 }
 
 /** Quanto si aspetta questo lavoro, per chi chiama il motore da sé. */
@@ -1313,7 +1366,7 @@ export function parametri(lavoro: Lavoro, max_tokens: number, formato?: object):
   const cap = capacita(m)
   // con OpenAI al lavoro il modello lo sceglie il livello, e il fornitore lo
   // legge da qui (`perLivello`); con Claude resta il suo
-  const fuori: Record<string, unknown> = { model: modelloOpenAIPer(p.livello) ?? m, max_tokens }
+  const fuori: Record<string, unknown> = { model: modelloOpenAIPer(livelloPer(lavoro)) ?? m, max_tokens }
 
   if (p.ragiona) {
     if (cap.adattivo) {
@@ -1564,7 +1617,7 @@ async function chiediAdesso(o: Domanda): Promise<Esito> {
     try {
       // trenta secondi bastano alla chiave, non a Claude Code che parte e rilegge il suo preambolo:
       // il 15 ott «contratto» cadeva così, e con lui il lavoro della notte
-      const testo = await abbonamento.chiedi({ ...o, attesa: Math.max(attesa, ATTESA_ACCOUNT_MIN), modello: modelloPer(o.lavoro) })
+      const testo = await prenota({ model: modelloPer(o.lavoro), max_tokens: o.max_tokens, system: o.system, messages: o.messages }, () => abbonamento.chiedi({ ...o, attesa: Math.max(attesa, ATTESA_ACCOUNT_MIN), modello: modelloPer(o.lavoro) }))
       avvisaUsato()
       return { testo, rifiutata: false, da: 'abbonamento' }
     } catch (e) {

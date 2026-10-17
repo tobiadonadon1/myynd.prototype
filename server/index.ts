@@ -1,5 +1,5 @@
 import { listSenderRules, enableSenderRule, disableSenderRule, runSenderRules } from './sender-rules.ts'
-import { copiaVerificata } from './apri-copia.ts'
+import { copiaVerificata, giaApplicata, reportRegistrato } from './apri-copia.ts'
 import { execFile } from 'node:child_process'
 import { capabilities, proofValid } from './capacita-verificate.ts'
 import { projectEvidence, projectMemorySummaries } from './project-memory.ts'
@@ -71,11 +71,12 @@ import { classe as classeRitocco, parole as paroleDi, ritocco } from './ritocco.
 import * as scrivania from './scrivania.ts'
 import { openInProva } from './senza-open.ts'
 import { apriDocumento } from './native-document.ts'
-import { landReport } from './esecuzione-isolata.ts'
+import { landReport, landsByItself, tapLanding, type ExecutionReport } from './esecuzione-isolata.ts'
 import * as mani from './mani.ts'
 import * as tavolo from './tavolo.ts'
 import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
+import * as quotaMese from './quota-mese.ts'
 import { detectRuntime, hermesDefaults, hasHermesInferenceCredentials, type RuntimeDetection, type RuntimeId } from './agent-runtime.ts'
 import * as google from './connettori/google.ts'
 import * as desktop from './connettori/desktop.ts'
@@ -923,6 +924,8 @@ app.get('/api/stato', async (_req, res) => {
     letturaIncompleta: fontiIncomplete(chi.adesso() ?? '').map(f => f.fonte === 'x' && store.cursore('x:fermo') ? { ...f, dal: store.cursore('x:fermo')!, fermo: true } : f),
     // il guaio del motore che lavora (accesso o chiave), per la stessa riga
     testa: saluteTeste.testaDaMostrare(),
+    // la quota del mese finita: il lavoro di fondo è fermo, e la riga fissa lo dice
+    quotaFinita: (() => { try { return quotaMese.stato().finita } catch { return false } })(),
     // i titoli delle finestre accesi: allora la pagina chiede al guscio se il
     // permesso di Accessibilità c'è davvero
     osservaTitoli: !ospitato.OSPITATO && c.osservatore?.acceso === true && c.osservatore?.titoli === true,
@@ -996,7 +999,7 @@ const profilo = async (req: express.Request, res: express.Response) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giorniLato', 'giro', 'argomenti', 'tetto', 'fuso', 'pubblico'] as const) {
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giorniLato', 'giro', 'argomenti', 'tetto', 'quota', 'fuso', 'pubblico'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
   // Con l'orologio fermo di una scena (MYYND_DEV=1 e MYYND_ADESSO), il fuso
@@ -1079,6 +1082,15 @@ const profilo = async (req: express.Request, res: express.Response) => {
     }
     patch.tetto = n
   }
+  // la quota del mese in dollari: zero nessuna, null torna a quella di serie
+  if (patch.quota !== undefined) {
+    if (patch.quota === null) patch.quota = undefined
+    else {
+      const n = Number(patch.quota)
+      if (!Number.isFinite(n) || n < 0 || n > 10_000) return res.status(400).json({ errore: 'La quota è in dollari al mese, o zero per nessuna.' })
+      patch.quota = Math.round(n * 100) / 100
+    }
+  }
   // gli argomenti sono una riga, non un tema: un muro di testo davanti a
   // settanta titoli non li sceglie meglio, li sceglie a caso
   if (patch.argomenti !== undefined) {
@@ -1121,6 +1133,18 @@ app.get('/api/connettori/posta/scopri', async (req, res) => {
   try {
     res.json(await posta.scopri(String(req.query.email ?? '')) ?? { host: null })
   } catch { res.json({ host: null }) }
+})
+
+/**
+ * La quota del mese: quanto ha speso il mese, quanto resta, e se il fondo è
+ * fermo. In dollari, per la schermata; `limite` zero vuol dire nessuna quota.
+ */
+app.get('/api/quota-mese', (_req, res) => {
+  try {
+    const q = quotaMese.stato()
+    const usd = (n: number | null) => n === null ? null : Math.round(n) / 1_000_000
+    res.json({ mese: q.mese, speso: usd(q.speso), riservato: usd(q.riservato), limite: usd(q.limite), resto: usd(q.resto), finita: q.finita, oltre: q.oltre, pagaMyynd: q.pagaMyynd })
+  } catch (e) { errore(res, e) }
 })
 
 /** Quanto ha speso oggi e negli ultimi giorni, e dove sta il tetto. */
@@ -4564,7 +4588,7 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
   }
   compiti.annunciaCambio()
   try {
-    const e = await withBackgroundWork(() => lavoro.fai(conf.desktop, { cartella, richiesta, passo, runtime, hermes, team, acceptanceCriteria,signal:controller.signal }))
+    const e = await withBackgroundWork(() => quotaMese.conChiGuarda(() => lavoro.fai(conf.desktop, { cartella, richiesta, passo, runtime, hermes, team, acceptanceCriteria,signal:controller.signal })))
     if (e.esecuzione && e.finito && !await proofValid({id:'project.edit',report:e.esecuzione})) {
       e.finito=false
       e.testo += '\nThe saved working copy no longer matches its verification report. Review it before accepting.'
@@ -4581,10 +4605,12 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
      * non c'è niente da chiedere una seconda volta. Se non riesce, il lavoro
      * resta nella copia e la riga lo dice: non è un motivo per buttare via un
      * giro riuscito.
+     *
+     * Lui è qui e l'ha chiesto adesso (`presente`): si posa da sé solo il
+     * verificato. Il resto aspetta «Applica le modifiche» (`/api/lavoro/applica`).
      */
     let posa: Awaited<ReturnType<typeof landReport>> | null = null
-    if (current && e.finito && e.esecuzione && e.esecuzione.changedFiles.length
-      && (e.esecuzione.state === 'verified' || e.esecuzione.state === 'unverified')) {
+    if (current && e.finito && e.esecuzione && landsByItself(e.esecuzione, { presente: true })) {
       posa = await landReport(e.esecuzione).catch(g => {
         console.warn(`myynd · il lavoro su ${c.id} è fatto, ma non si è posato nel progetto:`, g instanceof Error ? g.message : g)
         return null
@@ -4604,6 +4630,7 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
       posa?.applied.length ? `Applied to ${cartella}: ${posa.applied.map(f => `${f.path} (${f.kind})`).join(', ')}` : '',
       posa?.applied.length ? `Previous versions kept in: ${posa.backup}` : '',
       lasciati.length ? `Left alone because you changed them meanwhile: ${lasciati.join(', ')}` : '',
+      !posa?.applied.length && tapLanding(e.esecuzione, true) === 'land' ? 'Waiting in the copy: tap Apply changes to put it in the project.' : '',
       `Working copy: ${e.esecuzione.workspace}`,
       `Verification: ${e.esecuzione.state}`,
       `Changed files: ${e.esecuzione.changedFiles.map(f => f.path).join(', ') || 'none'}`,
@@ -4611,7 +4638,7 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
     ].filter((r, i) => i === 0 || r).join('\n') : ''
     if(current) store.risultatoCompito(c.id, senzaTrattini(e.testo) + evidence, [], e.finito ? 'pronto' : 'chiede')
     const dopo = store.compito(c.id)
-    res.json({ ok: true, passo, finito: e.finito, esecuzione: e.esecuzione, compiti: compitiAttuali(), compito: dopo })
+    res.json({ ok: true, passo, finito: e.finito, esecuzione: e.esecuzione, posato: !!posa?.applied.length, compiti: compitiAttuali(), compito: dopo })
     compiti.annunciaCambio()
   } catch (e) {
     if(stillCurrent()) store.guaioCompito(c.id, e instanceof Error ? e.message : String(e)); compiti.annunciaCambio(); errore(res, e)
@@ -4664,6 +4691,30 @@ app.post('/api/lavoro/copia/apri', async (req,res) => {
     const path=await copiaVerificata(String(req.body?.reportFile ?? ''))
     if(!openInProva('lavoro',[path])) await new Promise<void>((resolve,reject)=>execFile(process.platform==='darwin'?'/usr/bin/open':'explorer.exe',[path],e=>e?reject(e):resolve()))
     res.json({ok:true})
+  } catch(e){errore(res,e)}
+})
+
+/*
+ * «Applica le modifiche»: il tocco che posa nel progetto vero il lavoro
+ * rimasto nella copia. Quello partito dalla coda ci resta sempre, quello
+ * chiesto adesso ci resta se non è verificato. Si posa con gli stessi
+ * controlli di sempre (`landReport`: il prima tenuto da parte, i file
+ * cambiati da lui lasciati stare); un lavoro non verificato vuole una seconda
+ * conferma esplicita (`confermo: true`), e la prima risposta la chiede (409).
+ */
+app.post('/api/lavoro/applica', async (req,res) => {
+  try {
+    if(ospitato.OSPITATO) throw new Error('Apply this on your computer.')
+    const reportFile=String(req.body?.reportFile ?? '')
+    const report:ExecutionReport=await reportRegistrato(reportFile)
+    if(giaApplicata(report.reportFile)) return res.status(409).json({errore:'These changes are already in the project.',applicato:true})
+    const decisione=tapLanding(report,req.body?.confermo===true)
+    if(decisione==='refuse') return res.status(400).json({errore:'Only finished work whose check did not fail can be applied.'})
+    if(decisione==='confirm') return res.status(409).json({errore:'This work is not verified. Confirm again to apply it anyway.',serveConferma:true})
+    if(report.state==='verified' && !await proofValid({id:'project.edit',report})) return res.status(409).json({errore:'The saved working copy no longer matches its verification report.'})
+    const posa=await landReport(report)
+    store.registraAzione({tipo:'lavoro.applicato',verso:report.source,cosa:`${posa.applied.length} files`,esito:posa.applied.length?'fatta':'fallita',dettaglio:JSON.stringify({reportFile:report.reportFile,state:report.state,applied:posa.applied,skipped:posa.skipped,backup:posa.backup})})
+    res.json({ok:true,applicati:posa.applied,lasciati:posa.skipped,prima:posa.backup})
   } catch(e){errore(res,e)}
 })
 
@@ -5351,7 +5402,7 @@ app.post('/api/chat/:id', async (req, res) => {
       if (sul.iniziativa && feedbackProjectInitiative(sul.iniziativa, 'answered')) compiti.annunciaFeed()
     }
 
-    const r = await claude.rispondiInStreaming(domanda, storico, delta => invia({ fase: 'testo', delta }), {
+    const r = await quotaMese.conChiGuarda(() => claude.rispondiInStreaming(domanda, storico, delta => invia({ fase: 'testo', delta }), {
       compitoId: selectedTask?.id,
       progetto: sul?.progetto,
       // già concluso in questa chat: il modello lo sa, e non chiude due volte
@@ -5384,7 +5435,7 @@ app.post('/api/chat/:id', async (req, res) => {
       // Claude Code è caduto dopo aver già scritto mezza risposta, e il motore
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
       // invece di vedersela accodare a quella intera.
-    }, controllo.signal, () => invia({ fase: 'ricomincio' }), undefined, tappe)
+    }, controllo.signal, () => invia({ fase: 'ricomincio' }), undefined, tappe))
     // il testo è già pulito da `ancora` (segni fuori elenco, lineette fuori dal codice); `verifica` è il verbale, che si registra e basta
     store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: senzaTrattiniFuoriCodice(r.testo), fonti: r.fonti, verifica: r.verifica })
     console.log(risposteVive.rigaRisposta(r.verifica))

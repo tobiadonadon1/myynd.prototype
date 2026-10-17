@@ -179,6 +179,8 @@ export type Stato = {
   letturaIncompleta?: FonteIncompleta[]
   /** Il guaio del motore (uscito dall'account, chiave rifiutata, spento, il ponte, niente risposte): la stessa riga fissa (P8). */
   testa?: TestaGuasta | null
+  /** La quota AI del mese è finita: il lavoro di fondo è fermo, la riga fissa lo dice. */
+  quotaFinita?: boolean
   /** I titoli delle finestre sono accesi: la pagina chiede al guscio se l'Accessibilità c'è davvero (P8). */
   osservaTitoli?: boolean
   /**
@@ -793,7 +795,7 @@ export type StatoTurno = {
   budget?: { speso: number; limite: number; finito: boolean }
   stanotte: { fatte: number; attende: number; dal: string
     /** F9 · il costo della notte, il budget, quante sono rimaste in coda, perché si è fermato, e quando il Mac dormiva. */
-    costo?: number; limite?: number; rimaste?: number; fermata?: 'budget' | 'stop' | null; buchi?: { da: string; a: string }[] }
+    costo?: number; limite?: number; rimaste?: number; fermata?: 'budget' | 'stop' | 'mese' | null; buchi?: { da: string; a: string }[] }
 }
 
 export type ManoCompito = 'posta' | 'file' | 'nota' | 'web' | 'codice' | 'notion'
@@ -1377,12 +1379,21 @@ export const api = {
    * in modo prompt — al posto del titolo della riga.
    */
   lavora: (id: string, m: ProjectWorkRequest) =>
-    json<{ ok: true; passo: string; finito: boolean; compiti: Compito[]; compito: Compito; esecuzione?: ProjectExecutionReport }>(
+    json<{ ok: true; passo: string; finito: boolean; compiti: Compito[]; compito: Compito; esecuzione?: ProjectExecutionReport; posato?: boolean }>(
       `/api/compiti/${encodeURIComponent(id)}/lavora`, { method: 'POST', body: JSON.stringify(m) }),
 
   /** Apre nel Finder la copia verificabile, mai la cartella originale. */
   apriCopiaProgetto: (reportFile: string) =>
     json<{ ok: true }>('/api/lavoro/copia/apri', { method: 'POST', body: JSON.stringify({ reportFile }) }),
+
+  /** La quota AI del mese, in dollari: speso, resto (null senza quota), e se il lavoro di fondo è fermo. */
+  quotaMese: () =>
+    json<{ mese: string; speso: number; riservato: number; limite: number; resto: number | null; finita: boolean; oltre: boolean; pagaMyynd: boolean }>('/api/quota-mese'),
+
+  /** «Applica le modifiche»: posa nel progetto il lavoro rimasto nella copia. Non verificato: solo con `confermo`. */
+  applicaModifiche: (reportFile: string, confermo = false) =>
+    json<{ ok: true; applicati: { path: string; kind: string }[]; lasciati: { path: string; reason: string }[]; prima: string }>(
+      '/api/lavoro/applica', { method: 'POST', body: JSON.stringify({ reportFile, confermo }) }),
 
   /**
    * «Portami lì»: il posto vero, non una copia dentro Myynd.

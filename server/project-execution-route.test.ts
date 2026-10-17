@@ -65,6 +65,7 @@ before(async () => {
     store.scriviCompito({ id: 'route-hermes', testo: 'Update selected value with Hermes', origine: 'mano', ordine: 'b' })
     store.scriviCompito({ id: 'route-team', testo: 'Update selected value with a reviewer', origine: 'mano', ordine: 'c' })
     for(const suffix of ['cancel','delete','close','revise','noop']) store.scriviCompito({id:'route-'+suffix,testo:'slowFixture project work',origine:'mano',ordine:suffix})
+    store.scriviCompito({ id: 'route-unverified', testo: 'Update the value in the project without tests', origine: 'mano', ordine: 'z' })
   })
   store.chiudiIndici()
   service = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
@@ -230,4 +231,32 @@ test('an unchanged detail save and a priority change do not stop running project
   assert.match(current.risultato ?? '',/Plan:/)
   assert.equal(current.priorita,'alta')
   assert.ok(!current.diario?.some(v=>v.tipo==='fermato'),'nothing stopped it')
+})
+
+test('unverified work waits in the copy; Apply changes needs a second confirmation, lands once, and only for its owner', async () => {
+  const sub = join(source, 'senza-test')
+  mkdirSync(sub, { recursive: true })
+  writeFileSync(join(sub, 'package.json'), JSON.stringify({ name: 'no-tests', type: 'module' }))
+  writeFileSync(join(sub, 'value.mjs'), 'export const value = 1\n')
+  try {
+    const done = await post('/api/compiti/route-unverified/lavora', firstToken, { cartella: sub, passo: 'fai' })
+    assert.equal(done.status, 200, JSON.stringify(done.data))
+    const report = done.data.esecuzione as { state: string; reportFile: string; verification: { containment?: string } }
+    assert.equal(report.state, 'unverified')
+    assert.equal(done.data.posato, false)
+    assert.equal(readFileSync(join(sub, 'value.mjs'), 'utf8'), 'export const value = 1\n', 'unverified work does not land by itself')
+    assert.match((done.data.compito as { risultato: string }).risultato, /Apply changes/)
+
+    const other = await post('/api/lavoro/applica', secondToken, { reportFile: report.reportFile, confermo: true })
+    assert.notEqual(other.status, 200, 'another account cannot apply this copy')
+    const first = await post('/api/lavoro/applica', firstToken, { reportFile: report.reportFile })
+    assert.equal(first.status, 409, JSON.stringify(first.data))
+    assert.equal(first.data.serveConferma, true)
+    assert.equal(readFileSync(join(sub, 'value.mjs'), 'utf8'), 'export const value = 1\n')
+    const applied = await post('/api/lavoro/applica', firstToken, { reportFile: report.reportFile, confermo: true })
+    assert.equal(applied.status, 200, JSON.stringify(applied.data))
+    assert.equal(readFileSync(join(sub, 'value.mjs'), 'utf8'), 'export const value = 2\n')
+    const again = await post('/api/lavoro/applica', firstToken, { reportFile: report.reportFile, confermo: true })
+    assert.equal(again.status, 409, 'a second tap does not land it twice')
+  } finally { rmSync(sub, { recursive: true, force: true }) }
 })

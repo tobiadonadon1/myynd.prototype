@@ -3727,6 +3727,15 @@ const EN: Record<string, string> = {
   'Fuori dagli obiettivi dei tuoi progetti.': 'Outside your projects’ goals.',
   'Meno urgente delle altre di oggi.': 'Less urgent than today’s others.',
   // — mentre non c'eri: fine —
+  // — recinto del codice e quota del mese: inizio —
+  'Applica le modifiche': 'Apply changes',
+  'Non è verificato. Applica comunque': 'Not verified. Apply anyway',
+  'Nel progetto.': 'In the project.',
+  'Il lavoro di fondo è fermo: la quota AI del mese è finita.': 'Background work is paused: this month’s AI allowance is used up.',
+  'trattenuto: quota del mese raggiunta': 'held back: monthly allowance reached',
+  'Quota AI del mese raggiunta: il lavoro di fondo riparte il primo del mese.': 'Monthly AI allowance reached: background work resumes on the first of the month.',
+  'La quota è in dollari al mese, o zero per nessuna.': 'The allowance is in dollars per month, or zero for none.',
+  // — recinto del codice e quota del mese: fine —
 }
 
 

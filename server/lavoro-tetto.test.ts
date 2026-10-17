@@ -24,13 +24,14 @@ mkdirSync(PROGETTO, { recursive: true })
 writeFileSync(join(PROGETTO, 'README.md'), '# Site\n')
 
 const CONTA = join(CASA, 'lanci.txt')
-process.env.FINTO_CONTA = CONTA
+process.env.CLAUDE_FINTO_CONTA = CONTA
 mkdirSync(join(CASA, '.local', 'bin'), { recursive: true })
 writeFileSync(join(CASA, '.local', 'bin', 'claude'), `#!/bin/sh
-echo lancio >> "$FINTO_CONTA"
-case "$FINTO_MODO" in
+echo lancio >> "$CLAUDE_FINTO_CONTA"
+case "$CLAUDE_FINTO_MODO" in
   testo) echo 'Plan: add a footer.' ;;
   fuori) echo '{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}'; exit 1 ;;
+  ambiente) echo "Visti: \${ANTHROPIC_API_KEY}\${MYYND_SEGRETO}\${OPENAI_API_KEY}|\${CLAUDE_FINTO_MODO}" ;;
   *) echo '{"type":"result","subtype":"success","is_error":false,"result":"Plan: add a footer.","usage":{"input_tokens":1200,"cache_creation_input_tokens":300,"cache_read_input_tokens":45000,"output_tokens":800}}' ;;
 esac
 `)
@@ -50,8 +51,8 @@ before(() => { cfg.scrivi({ lingua: 'en', tetto: 0 }) })
 after(() => {
   store.chiudiIndici()
   process.env.HOME = CASA_VERA
-  delete process.env.FINTO_CONTA
-  delete process.env.FINTO_MODO
+  delete process.env.CLAUDE_FINTO_CONTA
+  delete process.env.CLAUDE_FINTO_MODO
   rmSync(CASA, { recursive: true, force: true })
 })
 
@@ -59,7 +60,7 @@ function azzera() {
   store.default.exec('DELETE FROM uso')
   rmSync(CONTA, { force: true })
   cfg.aggiorna({ tetto: 0 })
-  delete process.env.FINTO_MODO
+  delete process.env.CLAUDE_FINTO_MODO
 }
 
 test('il piano chiede la busta JSON, e i token del lavoro intero finiscono nel registro', async () => {
@@ -74,7 +75,7 @@ test('il piano chiede la busta JSON, e i token del lavoro intero finiscono nel r
 
 test('una versione che risponde in testo: il testo vale com’è, e i token si stimano dicendolo', async () => {
   azzera()
-  process.env.FINTO_MODO = 'testo'
+  process.env.CLAUDE_FINTO_MODO = 'testo'
   const esito = await lavoro.fai(DESKTOP, { cartella: PROGETTO, richiesta: 'x'.repeat(40), passo: 'piano' })
   assert.equal(esito.testo, 'Plan: add a footer.')
   assert.deepEqual(righe(), [{ lavoro: 'codice', motore: 'Claude account (stima)', entrata: 10, cache: 0, uscita: Math.ceil('Plan: add a footer.'.length / 4) }])
@@ -82,7 +83,7 @@ test('una versione che risponde in testo: il testo vale com’è, e i token si s
 
 test('fuori dall’account: lo dice, e non scrive una riga per un lavoro che non c’è stato', async () => {
   azzera()
-  process.env.FINTO_MODO = 'fuori'
+  process.env.CLAUDE_FINTO_MODO = 'fuori'
   await assert.rejects(() => lavoro.fai(DESKTOP, { cartella: PROGETTO, richiesta: 'Add a footer', passo: 'piano' }), /non è collegato/)
   assert.equal(righe().length, 0)
 })
@@ -110,6 +111,22 @@ test('sotto il tetto si lavora; la cache non conta per il tetto', async () => {
   const esito = await lavoro.fai(DESKTOP, { cartella: PROGETTO, richiesta: 'Add a footer', passo: 'piano' })
   assert.equal(esito.testo, 'Plan: add a footer.')
   assert.equal(lanci(), 1)
+})
+
+test('Claude Code non vede la chiave di Myynd né gli altri segreti, solo le sue impostazioni', async () => {
+  azzera()
+  process.env.CLAUDE_FINTO_MODO = 'ambiente'
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-di-myynd'
+  process.env.MYYND_SEGRETO = 'segreto'
+  process.env.OPENAI_API_KEY = 'sk-openai'
+  try {
+    const esito = await lavoro.fai(DESKTOP, { cartella: PROGETTO, richiesta: 'Add a footer', passo: 'piano' })
+    assert.equal(esito.testo, 'Visti: |ambiente')
+  } finally {
+    delete process.env.ANTHROPIC_API_KEY
+    delete process.env.MYYND_SEGRETO
+    delete process.env.OPENAI_API_KEY
+  }
 })
 
 test('la busta: un oggetto, un elenco (--verbose), niente', () => {

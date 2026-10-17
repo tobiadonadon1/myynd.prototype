@@ -120,6 +120,26 @@ test('il budget finito: il giro non parte, la carta resta in coda, il conto lo s
   assert.equal(turno.stato(alle(15)).budget.finito, false)
 })
 
+test('la quota del mese finita: il turno non parte, la carta resta in coda, e la notte dice «quota del mese»', async () => {
+  cfg.scrivi({ lingua: 'en', quota: 1 })
+  const partite: string[] = []
+  turno.perProva({ motore: () => true, assente: () => false, contratto: async () => null, occupato: () => false,
+    affida: id => { partite.push(id); store.affidaCompito(id, 'tutto') } })
+  const id = carta('Draft the board note')
+  // la spesa del mese (anche la chat): un dollaro su un dollaro
+  spesa('chat', alle(10, 0, 2), 1_000_000)
+  assert.equal(await turno.giro(alle(2, 30)), null)
+  assert.deepEqual(partite, [])
+  assert.equal(store.compito(id)?.modo, 'tutto', 'resta in coda')
+  const s = turno.stato(alle(2, 31))
+  assert.equal(s.stanotte.fermata, 'mese')
+  assert.equal(s.stanotte.rimaste, 1)
+  assert.equal(s.budget.finito, true, 'il mese finito chiude anche la notte')
+  // con la quota alzata si riparte
+  cfg.scrivi({ lingua: 'en', quota: 10 })
+  assert.equal(await turno.giro(alle(2, 40)), id)
+})
+
 /** Un modello finto che lavora finché non lo fermano: scrive un file a metà, e aspetta il segnale. */
 function lavoroCheAspetta(o: { fatto?: (id: string) => void } = {}) {
   let chiamate = 0

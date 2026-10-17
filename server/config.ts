@@ -817,6 +817,12 @@ export type Config = {
   /** Il tetto di token al giorno per il lavoro di frontiera. Zero o assente: nessuno. */
   tetto?: number
   /**
+   * La quota del mese per il lavoro di fondo, in dollari (`quota-mese.ts`).
+   * Assente: tre dollari se l'AI la paga Myynd, nessuna se lavora un suo
+   * account, una sua chiave o un modello sul suo computer. Zero: nessuna.
+   */
+  quota?: number
+  /**
    * Su cosa tenerla aggiornata, con le sue parole.
    *
    * È il gemello del `fuoco`, e non è la stessa cosa: il fuoco dice a Myynd

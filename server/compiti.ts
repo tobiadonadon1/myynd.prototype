@@ -53,7 +53,6 @@ import { stendi, type Stesa } from './stesura.ts'
 import { conCompito, fuoriDalCompito } from './etichetta-uso.ts'
 import { BUDGET_NOTTE, delBudget } from './tetto.ts'
 import * as budgetNotte from './budget-notte.ts'
-import * as regoleTurno from './turno-regole.ts'
 import * as cestino from './cestino.ts'
 import { corpoPerChiRiceve, haSegnaposto, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
@@ -591,7 +590,12 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     let v: voce.Voce | null = null
     try { v = ferri.voce.perRiga(c) } catch (e) { console.warn(`myynd · voce · ${id}:`, e instanceof Error ? e.message : e) }
     const giriDelBudget = k?.budget.giri
-    const soloCopia = turno && regoleTurno.inNotte(new Date(), budgetNotte.finestra())
+    /*
+     * Chi ha l'autorità di posare il codice nel progetto vero: lui, se ha
+     * affidato la carta a mano adesso. Una carta partita dalla coda (il
+     * turno), a qualunque ora, non posa mai da sé: resta nella copia.
+     */
+    const presente = !turno
     const lavora = (notaGiro: string | null, extra?: { fissa?: string[]; giri?: number }) => ferri.svolgi(
       c.testo, notaGiro, c.modo,
       concessi,
@@ -603,8 +607,7 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
       dato,
       {
         nativa, signal: controller.signal, taskId: c.id,
-        // F9 · di notte una carta del turno non posa il codice nel progetto vero: resta nella copia
-        ...(soloCopia ? { soloCopia: true } : {}),
+        ...(presente ? { presente: true } : {}),
         ...(k?.criterio ? { criterio: k.criterio } : {}),
         // F3: le mani del contratto sono le sue, anche per una carta scritta da Myynd
         ...(k?.mani?.length ? { mani: k.mani } : {}),

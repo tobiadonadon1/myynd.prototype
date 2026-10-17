@@ -205,6 +205,8 @@ export function rigaFonti(o: {
   puoAprireTitoli?: boolean
   /** Gli ordini fissi accesi il cui ultimo giro è andato storto (E). */
   automazioni?: { nome: string; riprova: string | null }[]
+  /** La quota AI del mese è finita: il lavoro di fondo è fermo fino al primo. */
+  quotaFinita?: boolean
   adesso?: Date
 }): { frase: string; controllo: Controllo } | null {
   const adesso = o.adesso ?? new Date()
@@ -256,6 +258,12 @@ export function rigaFonti(o: {
       ? riempi(quando ? t('«{nome}» non è riuscito: riprovo alle {ora}.') : t('«{nome}» non è riuscito.'), { nome: storti[0].nome, ora: quando })
       : riempi(quando ? t('{n} ordini fissi non sono riusciti: riprovo alle {ora}.') : t('{n} ordini fissi non sono riusciti.'), { n: storti.length, ora: quando }))
     primo({ tipo: 'automazioni' })
+  }
+
+  // 5. la quota del mese: non è un guasto, ma il lavoro di fondo è fermo e deve dirlo
+  if (o.quotaFinita) {
+    frasi.push(t('Il lavoro di fondo è fermo: la quota AI del mese è finita.'))
+    primo({ tipo: 'preferenze' })
   }
 
   if (!frasi.length || !controllo) return null

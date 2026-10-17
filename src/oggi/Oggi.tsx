@@ -945,6 +945,19 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
   const [gira, setGira] = useState<'' | 'piano' | 'fai'>('')
   const [guaio, setGuaio] = useState('')
   const [esecuzione, setEsecuzione] = useState<ProjectExecutionReport | null>(null)
+  // il lavoro è già nel progetto; o il primo tocco su un lavoro non verificato, che chiede la seconda conferma
+  const [posato, setPosato] = useState(false)
+  const [confermaPosa, setConfermaPosa] = useState(false)
+  const applica = async () => {
+    if (!esecuzione) return
+    if (esecuzione.state === 'unverified' && !confermaPosa) { setConfermaPosa(true); return }
+    setGuaio('')
+    try {
+      await api.applicaModifiche(esecuzione.reportFile, esecuzione.state === 'unverified')
+      setPosato(true)
+    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    setConfermaPosa(false)
+  }
   // vero dopo il primo passo: è quello che sblocca «fallo davvero»
   const [pianoFatto, setPianoFatto] = useState(false)
 
@@ -978,7 +991,7 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
         ...(passo === 'piano' && richiesta?.trim() ? { richiesta } : {})
       })
       if (passo === 'piano' && r.finito) setPianoFatto(true)
-      if (passo === 'fai') setEsecuzione(r.esecuzione ?? null)
+      if (passo === 'fai') { setEsecuzione(r.esecuzione ?? null); setPosato(!!r.posato); setConfermaPosa(false) }
       if (!r.finito && !r.esecuzione) setGuaio(t('Il lavoro si è fermato prima di finire.'))
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setGira('')
@@ -1111,6 +1124,13 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
                 color: 'var(--inchiostro)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
               {t('Apri la copia')}
             </button>
+            {(esecuzione.state === 'verified' || esecuzione.state === 'unverified') && esecuzione.changedFiles.length > 0 && (posato
+              ? <div style={{ marginTop: 6, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{t('Nel progetto.')}</div>
+              : <button type="button" onClick={() => { void applica() }} style={{ marginTop: 8, marginLeft: 8, padding: '6px 10px',
+                  borderRadius: 8, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'var(--carta-alta)',
+                  color: confermaPosa ? 'var(--rame-testo)' : 'var(--inchiostro)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {confermaPosa ? t('Non è verificato. Applica comunque') : t('Applica le modifiche')}
+                </button>)}
           </div>}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, flexWrap: 'wrap' }}>
