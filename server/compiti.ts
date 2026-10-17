@@ -48,6 +48,8 @@ import * as abitudini from './abitudini.ts'
 import * as regoleTono from './regole-tono.ts'
 import * as gradino from './gradino.ts'
 import * as daSe from './da-se.ts'
+import * as mandato from './mandato.ts'
+import * as tracce from './tracce.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi, type Stesa } from './stesura.ts'
 import { conCompito, fuoriDalCompito } from './etichetta-uso.ts'
@@ -503,6 +505,8 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
   // una riga riaffidata non si porta dietro la prova di ieri
   store.scriviProvaCompito(id, null)
   store.segnaNelDiario(id, { tipo: 'preso', dettaglio: c.modo })
+  // la traccia di questa partenza (`tracce.ts`): da qui fino a cosa ne fa lei
+  tracce.inizia({ compito: id, progetto: c.progetto ?? null, genere: c.modo, prove: [c.doc] })
 
   try {
     // Il permesso viaggia con la riga: qui non si va a rileggere niente, si
@@ -511,7 +515,21 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     if ((c.origine === 'iniziativa' && !fonteValida(c.doc)) || (c.origine === gradino.ORIGINE && !gradino.rigaValida(c))) {
       // Withdraw automatic work without inventing user dismissal feedback.
       store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
+      tracce.ricevuta(id, 'saltato', 'source changed')
       annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
+    }
+    /*
+     * Il budget del mese di questo progetto (il mandato): finito, la carta
+     * non parte. Torna sua con la frase che lo dice, e la traccia lo segna
+     * trattenuta: non è un guaio del lavoro.
+     */
+    if (c.progetto && mandato.budgetFinito(c.progetto)) {
+      const frase = cfg.lingua() === 'en' ? 'This project’s budget for the month is used up.' : 'Il budget del mese di questo progetto è finito.'
+      tracce.ricevuta(id, 'trattenuto', 'budget')
+      if (!store.guaioCompito(id, frase)) return
+      store.segnaNelDiario(id, { tipo: 'guaio', dettaglio: frase })
+      annuncia({ fase: 'guaio', id, guaio: frase })
+      return
     }
     const dato = c.attrezzi
     const progetto = c.progetto ? progetti.trova(c.progetto) : null
@@ -610,6 +628,8 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
         ...(k?.mani?.length ? { mani: k.mani } : {}),
         // una pagina di Notion per progetto, sempre la stessa: la chiave è il progetto
         ...(c.progetto && k?.mani?.includes('notion') ? { chiaveNotion: `progetto:${c.progetto}` } : {}),
+        // il mandato del progetto vale per ogni mano di questa carta (`mandato.ts`)
+        mandato: { progetto: c.progetto ?? null },
         ...(giriDelBudget ? { giri: giriDelBudget } : {}),
         ...(extra ?? {}),
         ...(extra?.giri && giriDelBudget ? { giri: Math.min(extra.giri, giriDelBudget) } : {}),
@@ -667,6 +687,7 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
     if (turno && (delBudget(e) || budgetNotte.sforato())) {
       ritentati.delete(chiave(id))
       fermati.set(chiave(id), 'budget')
+      tracce.ricevuta(id, 'trattenuto', 'budget della notte')
       rimettiInCoda(id, 'budget', alLavoro.get(chiave(id))?.dal ?? new Date(iniziato).toISOString())
       console.info(`myynd · turno · ${id} · fermata: finito il budget della notte`)
       return
@@ -722,11 +743,13 @@ function consegnaDaSe(c: store.Compito, e: daSe.Esito) {
   const id = c.id
   if (e.ritira) {
     store.cambiaStatoCompito(id, 'ritirato', e.ritira)
+    tracce.ricevuta(id, /mandate/i.test(e.ritira) ? 'trattenuto' : 'niente_da_fare', e.ritira)
     console.info(`myynd · da sé · ${id} · ritirata: ${e.ritira}`)
     annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
   }
   if (!store.risultatoCompito(id, e.testo, [], 'pronto')) return
   if (e.consegna) store.scriviConsegnaCompito(id, e.consegna)
+  tracce.consegnata(id, { uscita: e.consegna?.percorso ?? e.fatti.find(f => f.esito === 'ok' && f.attrezzo === 'scrivi_notion')?.dettaglio ?? null })
   for (const f of e.fatti) if (f.attrezzo === 'scrivi_file' && f.esito === 'ok') store.segnaNelDiario(id, { tipo: 'file', dettaglio: f.dettaglio })
   const scritta = store.compito(id)
   const p = e.prova ?? (scritta ? contratto.prova({ compito: scritta, verdetto: null, fatti: e.fatti, lingua: cfg.lingua() }) : null)
@@ -905,7 +928,9 @@ export async function dopoLaStesura(
       catch (e) { console.warn('myynd · non riesco a ricordare dove salvare:', e instanceof Error ? e.message : e) }
     }
     // il lavoro dal quadro si consegna sempre in un file: è quello che la carta gli promette
-    if (mani.vaSalvato({ risultato: testo, fatti, messaggio, chiesto: !!dettoDaLei || dalQuadro })) {
+    // il mandato del progetto: un file si scrive da solo solo se «file» è «auto»; se no il testo resta sulla riga
+    const fileDaSolo = mandato.regolaPer(c.progetto ?? null, 'file') === 'auto'
+    if (fileDaSolo && mani.vaSalvato({ risultato: testo, fatti, messaggio, chiesto: !!dettoDaLei || dalQuadro })) {
       try {
         const { corpo, nota: perLei } = mani.rigaPerLei(mani.senzaChiusura(testo))
         const sotto = dalQuadro && c.progetto ? progetti.trova(c.progetto)?.nome ?? null : null
@@ -943,11 +968,13 @@ export async function dopoLaStesura(
   if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
     // Withdraw automatic work without inventing user dismissal feedback.
     store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
+    tracce.ricevuta(id, 'saltato', 'source changed')
     annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
   }
   // una risposta guadagnata (il primo gradino) vale finché la fonte regge e il gradino c'è: «Take it back» la ritira
   if (c.origine === gradino.ORIGINE && !gradino.rigaValida(c)) {
     store.cambiaStatoCompito(id, 'ritirato', 'Source changed or trust taken back')
+    tracce.ricevuta(id, 'saltato', 'trust taken back')
     annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
   }
 
@@ -958,6 +985,11 @@ export async function dopoLaStesura(
   if (!store.risultatoCompito(id, detto, chiede ? [] : fonti, chiede ? 'chiede' : 'pronto')) return
   if (consegna) store.scriviConsegnaCompito(id, consegna as store.ConsegnaCompito)
   else if (consegnaFile) store.scriviConsegnaCompito(id, consegnaFile)
+  // la traccia: consegnata, dove, e da cosa. Una domanda non è una consegna
+  if (!chiede) {
+    const notion = fatti.find(f => f.esito === 'ok' && f.attrezzo === 'scrivi_notion')
+    tracce.consegnata(id, { uscita: (consegna as store.ConsegnaCompito | null | undefined)?.percorso ?? consegnaFile?.percorso ?? (notion ? `notion:${notion.dettaglio}` : null), prove: [c.doc, ...fonti.map(f => f.id), ...lette] })
+  }
   // il verdetto si riscrive a ogni giro, anche quando non c'è: una riga
   // riaffidata che stavolta chiede non deve portarsi dietro il «passa» di ieri
   const revisione = verdetto ? { ...verdetto, giri } : null
@@ -1273,14 +1305,26 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
     // una mail di Mail del Mac ha la sua casella, le Bozze di Mail: ci va se Mail del Mac è
     // collegata qui sul Mac; altrimenti il testo resta nella riga, com'era (P4)
     const dalMac = !!c.doc?.startsWith('postamac:')
-    if (dalMac ? !ferri.bozzeInMail() : !ferri.postaCollegata()) return
+    if (dalMac ? !ferri.bozzeInMail() : !ferri.postaCollegata()) {
+      // una risposta a una mail di Mail del Mac aspetta il Mac: la ricevuta lo dice
+      if (dalMac && invio.sembraUnMessaggio(c.testo, bozza, [c.doc, ...fonti.map(f => f.id)])) tracce.ricevuta(c.id, 'in_attesa_del_mac', 'Mail del Mac')
+      return
+    }
     if (!invio.sembraUnMessaggio(c.testo, bozza, [c.doc, ...fonti.map(f => f.id)])) return
     const e = await ferri.preparaEmail(c.testo, bozza, fonti, c.doc, o)
     if (!e || richiamati.has(chiave(c.id))) return
     if (store.compito(c.id)?.stato !== 'pronto') return
     // la cornice non arriva mai a chi riceve, qualunque cosa abbia capito il modello
     email = { ...e, corpo: corpoPerChiRiceve(e.corpo), conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false }
-    if (c.doc && (c.origine !== 'iniziativa' || fonteValida(c.doc))) {
+    /*
+     * Il mandato del progetto: la bozza va nella casella da sola solo se
+     * «bozza_posta» è «auto» (e, per chi non ha mai sentito, anche
+     * «contatto_nuovo»). Se no l'email resta sulla carta, pronta per il suo
+     * tocco, che è la proposta.
+     */
+    const nellaCasella = mandato.regolaPosta(c.progetto ?? null, !!email.conosciuto) === 'auto'
+    if (!nellaCasella) console.info(`myynd · mandato · ${c.id} · bozza trattenuta sulla carta (${email.conosciuto ? 'bozza_posta' : 'contatto_nuovo'})`)
+    if (nellaCasella && c.doc && (c.origine !== 'iniziativa' || fonteValida(c.doc))) {
       const source = store.documento(c.doc)
       if (source?.messageId) email.rispondeA = { messageId: source.messageId }
       await verificaBaseRevisione(c)
@@ -1290,6 +1334,7 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
     }
     if (c.madre && email.casella?.stato === 'errore') throw new Error(email.casella.errore || 'Mailbox revision could not be verified.')
     store.scriviEmailCompito(c.id, email)
+    if (email.casella?.stato === 'salvata') tracce.uscita(c.id, `bozza:${email.casella.id ?? c.id}`)
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     if (c.madre) {

@@ -3727,6 +3727,41 @@ const EN: Record<string, string> = {
   'Fuori dagli obiettivi dei tuoi progetti.': 'Outside your projects’ goals.',
   'Meno urgente delle altre di oggi.': 'Less urgent than today’s others.',
   // — mentre non c'eri: fine —
+
+  // — il mandato e la traccia: inizio —
+  'Il mandato': 'Mandate',
+  'Proposto': 'Proposed',
+  'Confermato': 'Confirmed',
+  'Esito': 'Outcome',
+  'Come lo sapremo': 'How we’ll know',
+  'Entro': 'Due',
+  'Da rivedere il': 'Review on',
+  'Budget al mese ($)': 'Monthly budget ($)',
+  'Fa da solo': 'Does on its own',
+  'Mi chiede': 'Asks me',
+  'Mai': 'Never',
+  'Niente': 'Nothing',
+  'Sposta in': 'Move to',
+  'Notion': 'Notion',
+  'Codice in una copia': 'Code in a copy',
+  'Codice nel progetto': 'Code into the project',
+  'Invii': 'Sending',
+  'Pubblicare': 'Posting publicly',
+  'Pagamenti': 'Payments',
+  'Cancellare': 'Deleting',
+  'Persone nuove': 'New contacts',
+  'Aspetta il tuo sì': 'Waiting for your yes',
+  'Il budget del mese di questo progetto è finito.': 'This project’s budget for the month is used up.',
+  'Il mandato di questo progetto dice di chiederti prima.': 'This project’s mandate says to ask you first.',
+  'Una data è giorno, mese e anno.': 'A date is year, month and day.',
+  'Il budget è in dollari al mese, da 0 a 1000.': 'The budget is dollars a month, from 0 to 1000.',
+  'Non sono riuscito a leggere il mandato.': 'Couldn’t load the mandate.',
+  'Le fonti sono un elenco.': 'Sources are a list.',
+  'Le regole non sono valide.': 'The rules aren’t valid.',
+  'Questa azione non la conosco.': 'I don’t know this action.',
+  'Una regola è «da solo», «chiedi» o «mai».': 'A rule is «on its own», «ask» or «never».',
+  'Il mandato di questo progetto dice di non lavorare mai sul codice.': 'This project’s mandate says never to work on the code.',
+  // — il mandato e la traccia: fine —
 }
 
 
@@ -4556,6 +4591,15 @@ export const frasi = {
   /** Corto, sulla destra di una riga: «3 days ago». */
   giorniFa: (n: number) => corrente === 'en' ? `${n} days ago` : `${n} giorni fa`,
   /** Quando ha capito il progetto l'ultima volta: «Last read yesterday». */
-  lettoUltimaVolta: (quando: string) => corrente === 'en' ? `Last read ${quando}` : `Letto l’ultima volta ${quando}`
+  lettoUltimaVolta: (quando: string) => corrente === 'en' ? `Last read ${quando}` : `Letto l’ultima volta ${quando}`,
   // — la pagina dei Progetti: fine —
+
+  // — il mandato e la traccia: inizio —
+  /** La riga della settimana sotto «Mentre non c'eri»: «This week: 4 accepted · $0.62». */
+  settimanaPrese: (prese: number, costo: number) => corrente === 'en'
+    ? `This week: ${prese} accepted · ${frasi.dollari(costo)}`
+    : `Questa settimana: ${prese} ${prese === 1 ? 'presa' : 'prese'} · ${frasi.dollari(costo)}`,
+  /** Quanto ha speso il progetto questo mese: «$1.20 this month». */
+  spesaDelMese: (n: number) => corrente === 'en' ? `${frasi.dollari(n)} this month` : `${frasi.dollari(n)} questo mese`
+  // — il mandato e la traccia: fine —
 }

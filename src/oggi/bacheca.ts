@@ -95,7 +95,7 @@ export function localeDelGiorno(iso: string): string {
 export type Provenienza = 'posta' | 'riunione' | 'tu' | 'myynd' | 'seguito' | 'automazione' | 'feed'
 export function provenienza(c: Compito): Provenienza {
   if (c.origine === 'seguito') return 'seguito'
-  if (c.origine === 'iniziativa' || c.origine === 'punto' || c.origine === 'proposta' || c.origine === 'turno') return 'myynd'
+  if (c.origine === 'iniziativa' || c.origine === 'punto' || c.origine === 'proposta' || c.origine === 'turno' || c.origine === 'mandato') return 'myynd'
   if (c.origine?.startsWith('auto:')) return 'automazione'
   if (c.doc?.startsWith('posta') || c.doc?.startsWith('gmail') || c.doc?.startsWith('outlook')) return 'posta'
   if (c.doc?.startsWith('granola') || c.doc?.startsWith('riunion')) return 'riunione'

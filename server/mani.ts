@@ -54,6 +54,7 @@ import { detectRuntime } from './agent-runtime.ts'
 import { openInProva } from './senza-open.ts'
 import { vietato } from './prova-chiusa.ts'
 import * as notionScrivi from './connettori/notion-scrivi.ts'
+import * as mandato from './mandato.ts'
 
 // — cosa è stato fatto —
 
@@ -956,7 +957,9 @@ export type Contesto = { cartella?: string | null; copia?: string | null; signal
   /** La chiave stabile della pagina in Notion (`progetto:<id>`): senza, vale il titolo. */
   chiaveNotion?: string | null
   /** F9 · il lavoro sul codice resta nella copia (di notte, per una carta del turno). */
-  soloCopia?: boolean }
+  soloCopia?: boolean
+  /** Il mandato del progetto da guardare prima di partire (`mandato.ts`). Senza, nessun cancello. */
+  mandato?: mandato.ChiLavora }
 export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: string }
 
 /**
@@ -966,6 +969,22 @@ export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: stri
  * collega a cui il sito non risponde.
  */
 export async function esegui(nome: string, input: unknown, contesto: Contesto = {}): Promise<Uscita> {
+  /*
+   * Il cancello del mandato, prima di tutto: `mai` rifiuta, `chiedi` mette
+   * la proposta in lista e non esegue, `auto` passa. Il mandato si rilegge
+   * dal disco a ogni chiamata: quello che una mano ha restituito prima non
+   * lo può cambiare.
+   */
+  if (contesto.mandato) {
+    const v = mandato.decidi(nome, input, {
+      ...contesto.mandato, cartella: contesto.mandato.cartella ?? contesto.cartella ?? null,
+      luogo: contesto.mandato.luogo ?? contesto.luogo ?? null, chiaveNotion: contesto.mandato.chiaveNotion ?? contesto.chiaveNotion ?? null
+    })
+    if (v.via !== 'esegui') {
+      return { testo: v.testo, male: true, fatto: { attrezzo: attrezzoDi(nome), esito: 'errore', dettaglio: v.via === 'chiedi' ? `in attesa del suo sì${v.proposta ? ` (${v.proposta})` : ''}` : 'fuori dal mandato' } }
+    }
+    if (v.soloCopia) contesto = { ...contesto, soloCopia: true }
+  }
   // nella prova (P6) le mani che scrivono non si aprono: si lancia fuori, non è un guaio della mano
   if (nome === CREA_NOTA.name || nome === SCRIVI_FILE.name || nome === LAVORA_NEL_CODICE.name || nome === SCRIVI_NOTION.name) vietato(`mani.${nome}`)
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
@@ -1026,10 +1045,13 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
     return guaio('cerca', nome, new Error(`attrezzo sconosciuto: ${nome}`))
   } catch (e) {
     if (contesto.signal?.aborted) throw e
-    const attrezzo: Attrezzo = nome === LEGGI_FILE.name ? 'leggi_file' : nome === LEGGI_PAGINA.name ? 'leggi_pagina' : nome === CERCA_WEB.name ? 'cerca_web'
-      : nome === CREA_NOTA.name ? 'crea_nota' : nome === SCRIVI_FILE.name ? 'scrivi_file' : nome === SCRIVI_NOTION.name ? 'scrivi_notion' : 'lavora'
-    return guaio(attrezzo, s('percorso') || s('url') || s('query') || s('titolo') || '', e)
+    return guaio(attrezzoDi(nome), s('percorso') || s('url') || s('query') || s('titolo') || '', e)
   }
+}
+
+function attrezzoDi(nome: string): Attrezzo {
+  return nome === LEGGI_FILE.name ? 'leggi_file' : nome === LEGGI_PAGINA.name ? 'leggi_pagina' : nome === CERCA_WEB.name ? 'cerca_web'
+    : nome === CREA_NOTA.name ? 'crea_nota' : nome === SCRIVI_FILE.name ? 'scrivi_file' : nome === SCRIVI_NOTION.name ? 'scrivi_notion' : 'lavora'
 }
 
 // — la frase di chiusura —

@@ -574,7 +574,27 @@ const TABELLE = {
     );
   `,
   // P5 · le convinzioni scordate a mano: una deduzione uguale non torna
-  convinzioni_tolte: 'CREATE TABLE IF NOT EXISTS convinzioni_tolte (id TEXT PRIMARY KEY, quando TEXT NOT NULL);'
+  convinzioni_tolte: 'CREATE TABLE IF NOT EXISTS convinzioni_tolte (id TEXT PRIMARY KEY, quando TEXT NOT NULL);',
+  // il mandato di un progetto (`mandato.ts`): cosa Myynd fa da solo, cosa chiede, cosa mai.
+  //   `fonti` è JSON (null = tutte), `classi` è JSON { classe: auto|chiedi|mai }.
+  mandati: `
+    CREATE TABLE IF NOT EXISTS mandati (
+      progetto TEXT PRIMARY KEY, esito TEXT, misura TEXT, scadenza TEXT, fonti TEXT,
+      classi TEXT NOT NULL, budget REAL, revisione TEXT, stato TEXT NOT NULL DEFAULT 'proposto',
+      origine TEXT, creato TEXT NOT NULL, aggiornato TEXT NOT NULL, confermato TEXT
+    );
+  `,
+  // la traccia di un lavoro (`tracce.ts`): da quando parte la carta a cosa ne ha fatto lei
+  tracce: `
+    CREATE TABLE IF NOT EXISTS tracce (
+      id TEXT PRIMARY KEY, utente TEXT, progetto TEXT, candidato TEXT, compito TEXT NOT NULL,
+      genere TEXT, prove TEXT, creata TEXT NOT NULL, consegnata TEXT, uscita TEXT,
+      esito TEXT NOT NULL DEFAULT 'in_attesa', distanza REAL, mostrata TEXT, decisa TEXT,
+      secondi INTEGER, costo REAL, ricevuta TEXT, motivo TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tracce_compito ON tracce(compito, creata);
+    CREATE INDEX IF NOT EXISTS idx_tracce_creata ON tracce(creata);
+  `
 } as const
 
 /**
@@ -1549,7 +1569,10 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     colonna(d, 'automazioni', 'riprova', 'TEXT')
     colonna(d, 'automazioni', 'ricevuta', 'TEXT')
     d.prepare('UPDATE automazioni SET vassoio = ? WHERE vassoio > ?').run(new Date().toISOString(), new Date().toISOString())
-  }
+  },
+  // 72 → 73 · il mandato di ogni progetto e la traccia di ogni lavoro. I progetti
+  //   di prima non hanno una riga: valgono le regole di serie, finché lei non conferma.
+  d => { d.exec(TABELLE.mandati); d.exec(TABELLE.tracce) }
 ]
 
 /**
@@ -3681,7 +3704,7 @@ export type Compito = {
   sparito: string | null
   versione: number
   /** Quello che si offre di fare, se è qualcosa di più di un testo da rileggere. */
-  proposta: Proposta | null
+  proposta: PropostaDiCompito | null
   /** Le domande a scelta, quando si è fermato perché gli manca qualcosa. */
   chieste: Chiesta[] | null
   /**
@@ -3878,6 +3901,23 @@ export type Proposta =
       azione: 'file.crea'
       file: { titolo: string; testo: string; perche: string }[]
     }
+
+/**
+ * Un attrezzo che il mandato del progetto ha trattenuto (`mandato.ts`,
+ * regola «chiedi»): il lavoro da solo non l'ha usato, e lo usa il suo tocco.
+ * Sta fuori da `Proposta` apposta: le proposte degli ordini fissi restano
+ * quelle che erano, e una carta può portare l'una o l'altra.
+ */
+export type PropostaDelMandato = {
+  azione: 'mandato.mano'
+  mani: {
+    nome: string; input: Record<string, unknown>; classe: string | null; titolo: string; perche: string; testo?: string
+    da: string; progetto: string | null; cartella?: string | null; luogo?: string | null; chiaveNotion?: string | null
+  }[]
+}
+
+/** Quello che una carta può offrirsi di fare con un dito. */
+export type PropostaDiCompito = Proposta | PropostaDelMandato
 
 /**
  * Dove porta questa riga *fuori* da Myynd: la mail, il file, la pagina.
@@ -4167,7 +4207,7 @@ export function cambiaCompito(id: string, c: {
  * lavoro. Tenerle separate è anche il motivo per cui riscrivere il titolo di
  * una riga non può cancellare per sbaglio quello che sta per fare.
  */
-export function proponi(id: string, p: Proposta, riassunto: string) {
+export function proponi(id: string, p: PropostaDiCompito, riassunto: string) {
   db.prepare(`
     UPDATE compiti SET proposta = ?, risultato = ?, email = NULL, stato = 'pronto',
       aggiornato = ?, versione = versione + 1

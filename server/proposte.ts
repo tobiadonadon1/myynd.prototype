@@ -19,22 +19,25 @@ export type Ferri = {
   creaNota: typeof mani.creaNota
   salvaConsegna: typeof mani.salvaConsegna
   luogo: () => mani.Luogo
+  /** La mano trattenuta dal mandato, eseguita col suo tocco. */
+  esegui: typeof mani.esegui
 }
 const VERI: Ferri = {
   salvaBozzaCasella: (t, s, e) => salvaBozzaCasella(t, s, e),
   creaNota: (o, signal) => mani.creaNota(o, signal),
   salvaConsegna: o => mani.salvaConsegna(o),
-  luogo: () => mani.luogoPreferito()
+  luogo: () => mani.luogoPreferito(),
+  esegui: (n, i, c) => mani.esegui(n, i, c)
 }
 let ferri: Ferri = VERI
 /** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
 
-export type Proposta = Extract<store.Proposta, { azione: 'posta.bozza' | 'nota.crea' | 'file.crea' }>
+export type Proposta = Extract<store.PropostaDiCompito, { azione: 'posta.bozza' | 'nota.crea' | 'file.crea' | 'mandato.mano' }>
 
-/** Le tre che si eseguono qui. Le altre restano dove sono sempre state, in index.ts. */
-export function eQui(p: store.Proposta): p is Proposta {
-  return p.azione === 'posta.bozza' || p.azione === 'nota.crea' || p.azione === 'file.crea'
+/** Le quattro che si eseguono qui. Le altre restano dove sono sempre state, in index.ts. */
+export function eQui(p: store.PropostaDiCompito): p is Proposta {
+  return p.azione === 'posta.bozza' || p.azione === 'nota.crea' || p.azione === 'file.crea' || p.azione === 'mandato.mano'
 }
 
 /** Com'è andata: quante fatte, e dove, per l'avviso. */
@@ -48,6 +51,24 @@ export type Fatto = { spostati: number; dove: string }
  * con la proposta, da riprovare). Il registro dice cosa è successo, uno per uno.
  */
 export async function esegui(c: store.Compito, p: Proposta): Promise<Fatto> {
+  /*
+   * Una mano trattenuta dal mandato (`mandato.ts`): la fa adesso il suo
+   * tocco, con lei presente. Il mandato si rilegge lo stesso: se nel
+   * frattempo quella classe è diventata «mai», non parte.
+   */
+  if (p.azione === 'mandato.mano') {
+    const m = p.mani?.[0]
+    if (!m) throw new Error('Non c\'è niente da eseguire.')
+    const e = await ferri.esegui(m.nome, m.input, {
+      cartella: m.cartella ?? null, ...(m.luogo && (mani.LUOGHI as readonly string[]).includes(m.luogo) ? { luogo: m.luogo as mani.Luogo } : {}),
+      ...(m.chiaveNotion ? { chiaveNotion: m.chiaveNotion } : {}),
+      mandato: { progetto: m.progetto, compito: c.id, presente: true }
+    })
+    store.registraAzione({ tipo: m.nome, cosa: m.titolo, compito: c.id, esito: e.male ? 'fallita' : 'fatta', ...(e.male ? { dettaglio: e.testo.slice(0, 300) } : {}) })
+    if (e.male) throw new Error(e.testo || 'Non è riuscito.')
+    chiudi(c.id, e.fatto.dettaglio ? `${e.fatto.dettaglio.slice(0, 200)}.` : 'Fatto.')
+    return { spostati: 1, dove: e.fatto.dettaglio || m.titolo }
+  }
   if (p.azione === 'posta.bozza') {
     if (!p.bozze?.length) throw new Error('Non c\'è niente da eseguire.')
     let salvate = 0

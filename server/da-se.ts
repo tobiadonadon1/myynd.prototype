@@ -1123,13 +1123,17 @@ export type Esito = {
 type Ferri = {
   chiedi: <T>(o: Parameters<typeof chiediJSON>[0]) => Promise<T | null>
   salva: typeof mani.salvaConsegna
-  scriviNotion: (o: { titolo: string; testo: string; chiave: string }) => Promise<mani.Uscita>
+  scriviNotion: (o: { titolo: string; testo: string; chiave: string; compito?: string }) => Promise<mani.Uscita>
   pagina: () => boolean
 }
 const VERI: Ferri = {
   chiedi: o => chiediJSON(o),
   salva: o => mani.salvaConsegna(o),
-  scriviNotion: o => mani.esegui('scrivi_notion', { titolo: o.titolo, testo: o.testo }, { chiaveNotion: o.chiave }),
+  // lavoro da solo: passa dal mandato del progetto (`mandato.ts`), come le mani di una carta
+  scriviNotion: o => mani.esegui('scrivi_notion', { titolo: o.titolo, testo: o.testo }, {
+    chiaveNotion: o.chiave,
+    mandato: { progetto: o.chiave.startsWith('progetto:') ? o.chiave.slice('progetto:'.length) : null, compito: o.compito ?? null, presente: false }
+  }),
   pagina: () => contratto.manoDisponibile('notion')
 }
 let ferri: Ferri = VERI
@@ -1235,7 +1239,9 @@ export async function lavora(c: store.Compito, o: { signal?: AbortSignal; adesso
   o.signal?.throwIfAborted()
   const pagina = paginaValida(r, base)
   const md = markdownNotion(pagina, !!prima, adesso)
-  const u = await ferri.scriviNotion({ titolo: p.nome, testo: md, chiave: `progetto:${p.id}` })
+  const u = await ferri.scriviNotion({ titolo: p.nome, testo: md, chiave: `progetto:${p.id}`, compito: c.id })
+  // trattenuta dal mandato: non è un guaio, la carta si ritira (con `chiedi` la proposta è già nella lista)
+  if (u.male && /^(?:in attesa del suo sì|fuori dal mandato)/.test(u.fatto.dettaglio)) return { testo: '', fatti: [u.fatto], ritira: 'Held by the project mandate' }
   if (u.male || u.fatto.esito !== 'ok') throw new Error(u.testo || (e ? 'Notion did not take the page.' : 'Notion non ha preso la pagina.'))
   const grosso = importante(prima, foto)
   aggiorna(st => { st.notion = { ...st.notion, [p.id]: { foto, scritta: new Date(adesso).toISOString() } } })
