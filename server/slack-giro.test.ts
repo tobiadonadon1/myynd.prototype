@@ -34,6 +34,7 @@ async function giro(c = C(), o: { veloce?: boolean; budget?: number } = {}) {
   assert.ok(e)
   await store.salvaDocumentiAPezzi(e.docs)
   store.scordaDocumenti(e.tolti)
+  e.conferma()
   seg.registra(e)
   return e
 }
@@ -257,8 +258,9 @@ test('il tetto delle chiamate: prima i messaggi diretti e le menzioni, poi i can
   assert.ok(p.has('C0ACME'), 'il canale dove lo hanno nominato prima degli altri')
   let giri = 1
   let ultimo = e
-  while (ultimo.troncato && giri < 20) { ultimo = await giro(C(), { budget: 15 }); giri++ }
-  assert.equal(ultimo.troncato, false)
+  // ogni giro avanza: chi non è mai stato letto passa prima di chi rilegge
+  while (!ultimo.resto.aGiorno && giri < 20) { ultimo = await giro(C(), { budget: 15 }); giri++ }
+  assert.equal(ultimo.resto.aGiorno, true, `${giri} giri`)
   assert.equal(posti([...store.quandoPerPrefisso('slack:').keys()]).size, 67)
   assert.ok(giri > 2, String(giri))
 })
@@ -271,7 +273,78 @@ test('le esclusioni: un posto escluso non si legge, ed esce dall’indice', asyn
   assert.equal(store.quandoPerPrefisso('slack:C0ACME:').size, 0)
   seg.dimenticaConversazione('C0ACME')
   assert.ok(!seg.daRispondere().some(a => a.conversazione === 'C0ACME'))
-  assert.ok(!slack.statoPerScheda().posti.some(p => p.id === 'C0ACME'))
+  // il nome resta: la scheda lo mostra fra gli esclusi, e lo si può togliere da lì
+  assert.equal(slack.statoPerScheda().posti.find(p => p.id === 'C0ACME')?.nome, '#proj-acme')
+})
+
+test('il segno si scrive solo con `conferma`, dopo i documenti: senza, il giro dopo rilegge da capo', async () => {
+  const e = await slack.sincronizza(C(), undefined, { esistenti: store.quandoPerPrefisso('slack:') })
+  assert.equal(slack.statoPerScheda().conversazioni, 0, 'niente segno prima della conferma')
+  const trenta = slack.perProva.inizioGiorno(Date.now() / 1000 - 30 * 86_400)
+  const prima = f.richieste.length
+  await giro()
+  const storie = f.richieste.slice(prima).filter(r => r.metodo === 'conversations.history' && r.q.channel === 'C0GEN')
+  assert.equal(Number(storie[0]!.q.oldest), trenta - 1, 'riparte dai trenta giorni')
+  e.conferma()
+  assert.equal(slack.statoPerScheda().conversazioni, 67)
+})
+
+test('due giri lunghi in coda non partono insieme', async () => {
+  let dentro = 0, massimo = 0
+  const vero = globalThis.fetch
+  globalThis.fetch = (async (u: string | URL | Request, init?: RequestInit) => {
+    dentro++; massimo = Math.max(massimo, dentro)
+    try { return await vero(u, init) } finally { dentro-- }
+  }) as typeof fetch
+  try {
+    const a = slack.sincronizza(C()), b = slack.sincronizza(C()), c = slack.sincronizza(C())
+    await Promise.all([a, b, c])
+  } finally { globalThis.fetch = vero }
+  assert.equal(massimo, 1, 'una chiamata alla volta: i giri si mettono in fila')
+})
+
+test('la corsia corta non rilegge ogni due minuti i messaggi diretti fermi: tre per passata, a turno', async () => {
+  // cinque messaggi diretti vuoti da trenta giorni: non hanno `visto`
+  const vuoti = ['D0V1', 'D0V2', 'D0V3', 'D0V4', 'D0V5']
+  for (const id of vuoti) f.conv.push({ id, is_im: true, user: finto.TOM, membro: true, updated: 0, messaggi: [] })
+  await giro()
+  const opz = C({ utenteId: finto.ME, squadraId: 'T0NW', url: 'https://northwind-studio.slack.com/' })
+  const sonde: string[][] = []
+  for (let i = 0; i < 3; i++) {
+    const prima = f.richieste.length
+    await giro(opz, { veloce: true })
+    sonde.push(f.richieste.slice(prima).filter(r => r.metodo === 'conversations.history' && vuoti.includes(r.q.channel!)).map(r => r.q.channel!))
+  }
+  for (const s of sonde) assert.ok(s.length <= 3, `al massimo tre per passata: ${s}`)
+  // a turno: in due passate li guarda tutti, ma mai tutti insieme
+  for (const id of vuoti) assert.ok(sonde.slice(0, 2).some(s => s.includes(id)), `${id} mai guardato`)
+  const vuoto = { id: 'D0V1' }
+  // e quando arriva qualcosa, la sonda lo vede
+  f.aggiungi(vuoto.id, finto.TOM, 'Ciao, ci sei per una chiamata domani?')
+  let entrato = false
+  for (let i = 0; i < 4 && !entrato; i++) entrato = (await giro(opz, { veloce: true })).docs.some(d => d.id.startsWith(`slack:${vuoto.id}:`))
+  assert.ok(entrato)
+})
+
+test('una risposta tardiva sotto un suo messaggio di tre giorni fa, senza menzione, entra dalla corsia corta (to:me)', async () => {
+  // un suo messaggio vecchio di tre giorni, senza risposte, in un canale vivo
+  const suo = f.aggiungi('C0ACME', finto.ME, 'Shared the moodboard, thoughts welcome', { fa: 3 * 86_400 })
+  await giro()
+  const t0 = f.richieste.length
+  f.aggiungi('C0ACME', finto.NORA, 'Love it. Could you add the darker palette too?', { thread_ts: suo.ts })
+  const e = await giro(C({ utenteId: finto.ME, squadraId: 'T0NW', url: 'https://northwind-studio.slack.com/' }), { veloce: true })
+  assert.ok(f.richieste.slice(t0).some(r => r.metodo === 'search.messages' && /to:me/.test(r.q.query!)))
+  assert.ok(e.docs.some(d => d.id === `slack:C0ACME:t${suo.ts}` && d.corpo.includes('darker palette')))
+  assert.ok(seg.daRispondere().some(a => a.domanda.includes('darker palette')))
+})
+
+test('anche senza ricerca, il giro lungo ricontrolla i suoi messaggi delle ultime due settimane', async () => {
+  const suo = f.aggiungi('C0ACME', finto.ME, 'Uploaded the v2 wireframes', { fa: 4 * 86_400 })
+  await giro()
+  f.aggiungi('C0ACME', finto.LISA, 'Can we move the CTA up?', { thread_ts: suo.ts })
+  f.limita('search.messages', 99, 0)
+  await giro()
+  assert.match(corpo(`slack:C0ACME:t${suo.ts}`), /move the CTA up/)
 })
 
 test('nessun giro di fondo manda niente; l’invio parte solo da `invia`, in POST, e torna il link', async () => {
@@ -319,7 +392,8 @@ test('il token non esce: non nei risultati, non nei guai, e i file fuori da Slac
 // — le regole, una per una —
 
 test('chiede: domande e richieste in italiano e in inglese; un grazie no', () => {
-  for (const s of ['Riesci a mandarmi il preventivo?', 'mi mandi il file entro domani', 'Can you add them?', 'let me know when it is ready', 'fammi sapere', 'Are you free tomorrow?']) assert.ok(seg.chiede(s), s)
+  for (const s of ['Riesci a mandarmi il preventivo?', 'mi mandi il file entro domani', 'Can you add them?', 'let me know when it is ready', 'fammi sapere', 'Are you free tomorrow?',
+    'Pls review when you can', 'take a look whenever you get a chance', 'dai un’occhiata appena puoi']) assert.ok(seg.chiede(s), s)
   for (const s of ['thanks!', 'ok', 'Grazie mille, perfetto', 'Deploy finished']) assert.ok(!seg.chiede(s), s)
 })
 
@@ -328,9 +402,16 @@ test('promessa: verbo con scadenza, verbo da solo, scadenza in prima persona; un
   assert.deepEqual(seg.promessa("Sure, I'll send it by Friday"), { fiducia: 0.9, scadenza: 'by Friday' })
   assert.deepEqual(seg.promessa('Me ne occupo io'), { fiducia: 0.7, scadenza: null })
   assert.deepEqual(seg.promessa('I will share the deck'), { fiducia: 0.7, scadenza: null })
-  assert.equal(seg.promessa('Io lo chiudo domani')?.fiducia, 0.4)
+  assert.equal(seg.promessa('Io lo chiudo domani')?.fiducia, 0.6)
   assert.equal(seg.promessa('Ti mando io il file?'), null)
   assert.equal(seg.promessa('Il cliente ha pagato'), null)
+  // negate, o senza un verbo del fare: non sono promesse
+  assert.equal(seg.promessa('I will not be there'), null)
+  assert.equal(seg.promessa("I'll be out tomorrow"), null)
+  assert.equal(seg.promessa("I won't send it today"), null)
+  assert.equal(seg.promessa('Non ti mando niente entro venerdì'), null)
+  assert.equal(seg.promessa('Domani sono in ferie'), null)
+  assert.equal(seg.promessa("I'll quickly send the invoice tomorrow")?.fiducia, 0.9)
 })
 
 test('decisione: «abbiamo deciso», «let’s go with» forti; «approvato» debole; una domanda no', () => {
@@ -339,6 +420,12 @@ test('decisione: «abbiamo deciso», «let’s go with» forti; «approvato» de
   assert.equal(seg.decisione('Approvato, grazie')?.fiducia, 0.5)
   assert.equal(seg.decisione('Abbiamo deciso?'), null)
   assert.equal(seg.decisione('Ci vediamo dopo'), null)
+  // negate, raccontate o un appuntamento: non sono decisioni
+  assert.equal(seg.decisione('Non abbiamo deciso niente'), null)
+  assert.equal(seg.decisione('it was approved last year'), null)
+  assert.equal(seg.decisione('Confirmed, see you at 5'), null)
+  assert.equal(seg.decisione("We haven't decided yet"), null)
+  assert.equal(seg.decisione('Confermato il budget per il Q4')?.fiducia, 0.5)
 })
 
 test('inChiaro: persone, canali senza etichetta, gruppi, date, mail e faccine', () => {

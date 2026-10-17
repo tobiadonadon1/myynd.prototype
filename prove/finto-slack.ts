@@ -253,10 +253,13 @@ export async function avvia(o: { ora?: number; porta?: number; ambiti?: string }
       case 'search.messages': {
         const query = q.get('query') ?? ''
         const menz = /<@([A-Z0-9]+)>/.exec(query)?.[1]
+        // `to:me`: i messaggi diretti a lui, e le risposte nei fili dove ha scritto anche lui
+        const aMe = /(^|\s)to:me(\s|$)/.test(query)
+        const suoFilo = (c: ConvFinta, x: MsgFinto) => !!x.thread_ts && c.messaggi.some(y => y.user === ME && (y.ts === x.thread_ts || y.thread_ts === x.thread_ts))
         const dopo = /after:(\d{4}-\d{2}-\d{2})/.exec(query)?.[1]
         const da = dopo ? Date.parse(`${dopo}T00:00:00`) / 1000 + 86_400 : 0
         const tutti = conv.filter(c => c.membro).flatMap(c => c.messaggi
-          .filter(x => (!menz || x.text.includes(`<@${menz}>`)) && Number(x.ts) >= da)
+          .filter(x => (!menz || x.text.includes(`<@${menz}>`)) && (!aMe || (x.user !== ME && (!!c.is_im || suoFilo(c, x)))) && Number(x.ts) >= da)
           .map(x => ({
             ts: x.ts, text: x.text, user: x.user, type: 'message',
             channel: { id: c.id, name: nomeConv(c), is_im: !!c.is_im, is_mpim: !!c.is_mpim },

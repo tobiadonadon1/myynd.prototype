@@ -2261,7 +2261,8 @@ app.delete('/api/connettori/:id', (req, res) => {
   */
   else if (id === 'jev') { delete c.jev; giudizi.scorda() }
   else if (id === 'google') { delete c.google; google.scordaIlToken() }
-  else if (id === 'slack') delete c.slack
+  // Slack scollegato: anche le domande, le promesse e le decisioni che ne venivano, e il segno
+  else if (id === 'slack') { delete c.slack; slackSegnali.dimenticaTutto(); slack.scorda() }
   else if (id === 'github') delete c.github
   else if (id === 'drive') { delete c.drive; drive.scordaIlToken() }
   else if (id === 'dropbox') { delete c.dropbox; dropbox.scordaIlToken() }
@@ -2402,9 +2403,18 @@ async function leggiTutto(
  * non sapeva ancora chi è lui, chi è.
  */
 async function dopoSlack(e: slack.EsitoSlack): Promise<store.EsitoScrittura> {
-  const scritti = await store.salvaDocumentiAPezzi(e.docs)
-  if (e.tolti.length) store.scordaDocumenti(e.tolti)
-  try { slackSegnali.registra(e) } catch (err) { console.error('myynd · i segnali di Slack non si sono scritti:', err instanceof Error ? err.message : err) }
+  // un posto escluso mentre il giro girava: niente di suo entra, né documenti né segnali
+  const esclusi = new Set(cfg.leggi().slack?.esclusi ?? [])
+  const fuori = (id: string) => esclusi.has(id.split(':')[1] ?? '')
+  const docs = e.docs.filter(d => !fuori(d.id))
+  const tolti = [...e.tolti, ...e.docs.filter(d => fuori(d.id)).map(d => d.id)]
+  const scritti = await store.salvaDocumentiAPezzi(docs)
+  if (tolti.length) store.scordaDocumenti(tolti)
+  // il segno dopo i documenti: se il salvataggio cade, il giro dopo rilegge
+  e.conferma()
+  try { slackSegnali.registra({ ...e, ambiti: e.ambiti.filter(a => !esclusi.has(a.conversazione)) }) }
+  catch (err) { console.error('myynd · i segnali di Slack non si sono scritti:', err instanceof Error ? err.message : err) }
+  for (const id of esclusi) slackSegnali.dimenticaConversazione(id)
   const c = cfg.leggi().slack
   if (c && e.io.utenteId && (c.utenteId !== e.io.utenteId || c.url !== e.io.url || (e.io.ambiti && e.io.ambiti.join() !== (c.ambiti ?? []).join()))) {
     cfg.aggiorna({ slack: { ...c, utenteId: e.io.utenteId, squadraId: e.io.squadraId, url: e.io.url, ...(e.io.ambiti ? { ambiti: e.io.ambiti } : {}) } })

@@ -13,15 +13,15 @@ const { carta, contaGenere, lettiFinora, numero, trovato, trovatoDurante } = awa
 
 afterEach(() => impostaLingua('en'))
 
-const GENERI = ['email', 'evento', 'file', 'nota', 'pagina', 'conversazione', 'riunione', 'documento'] as const
+const GENERI = ['email', 'evento', 'file', 'nota', 'pagina', 'conversazione', 'discussione', 'riunione', 'documento'] as const
 
 test('every kind, in both languages, one and many', () => {
   impostaLingua('en')
-  assert.deepEqual(GENERI.map(g => contaGenere(g, 1)), ['1 email', '1 event', '1 file', '1 note', '1 page', '1 conversation', '1 meeting', '1 document'])
-  assert.deepEqual(GENERI.map(g => contaGenere(g, 2)), ['2 emails', '2 events', '2 files', '2 notes', '2 pages', '2 conversations', '2 meetings', '2 documents'])
+  assert.deepEqual(GENERI.map(g => contaGenere(g, 1)), ['1 email', '1 event', '1 file', '1 note', '1 page', '1 conversation', '1 discussion', '1 meeting', '1 document'])
+  assert.deepEqual(GENERI.map(g => contaGenere(g, 2)), ['2 emails', '2 events', '2 files', '2 notes', '2 pages', '2 conversations', '2 discussions', '2 meetings', '2 documents'])
   impostaLingua('it')
-  assert.deepEqual(GENERI.map(g => contaGenere(g, 1)), ['1 email', '1 evento', '1 file', '1 nota', '1 pagina', '1 conversazione', '1 riunione', '1 documento'])
-  assert.deepEqual(GENERI.map(g => contaGenere(g, 3)), ['3 email', '3 eventi', '3 file', '3 note', '3 pagine', '3 conversazioni', '3 riunioni', '3 documenti'])
+  assert.deepEqual(GENERI.map(g => contaGenere(g, 1)), ['1 email', '1 evento', '1 file', '1 nota', '1 pagina', '1 conversazione', '1 discussione', '1 riunione', '1 documento'])
+  assert.deepEqual(GENERI.map(g => contaGenere(g, 3)), ['3 email', '3 eventi', '3 file', '3 note', '3 pagine', '3 conversazioni', '3 discussioni', '3 riunioni', '3 documenti'])
 })
 
 test('thousands: 1.204 in Italian, 1,204 in English, even under ten thousand', () => {

@@ -28,8 +28,16 @@
 // segno è più recente, per vedere le modifiche, le cancellazioni e le risposte
 // arrivate tardi. La prima volta trenta giorni, prima i messaggi diretti e le
 // menzioni, poi i canali più vivi. E una corsia corta, ogni due minuti
-// (`corsiaVeloce`), guarda solo le menzioni e i messaggi diretti: la domanda
-// di un cliente entra in pochi minuti, non al giro dopo.
+// (`corsiaVeloce`), guarda solo le menzioni, quello che è rivolto a lui
+// (`to:me`) e i messaggi diretti: la domanda di un cliente entra in pochi
+// minuti, non al giro dopo.
+//
+// **Il limite che resta.** Una risposta tardiva sotto una radice più vecchia
+// delle 48 ore si vede se: lo nomina, o la ricerca `to:me` la trova (Slack
+// decide cosa conta come rivolto a lui), o il filo è fra quelli seguiti (con
+// risposte, o una radice sua o che lo nomina, nelle ultime due settimane: al
+// massimo 25 ricontrolli per giro, a turno). Un filo di un mese fa dove non
+// ha mai scritto e che nessuno gli rivolge non si rilegge.
 
 import type { Documento } from '../store.ts'
 import * as store from '../store.ts'
@@ -299,8 +307,17 @@ type StatoSlack = {
   v: 1
   utente: string
   squadra: string
-  conv: Record<string, { visto?: string; fondo?: number; letto?: string }>
-  fili: Record<string, { ultima: string; controllato: string }>
+  /** `visto`: l'ultimo messaggio visto; `letto`: l'ultima lettura intera; `controllato`: l'ultima occhiata della corsia corta. */
+  conv: Record<string, { visto?: string; fondo?: number; letto?: string; controllato?: string }>
+  /**
+   * I fili da ricontrollare: quelli con risposte, e i messaggi suoi o che lo
+   * nominano nelle ultime due settimane (`risposte: false`), perché una
+   * risposta tardiva sotto una radice fuori dalle 48 ore non si vede nella
+   * storia del canale.
+   */
+  fili: Record<string, { ultima: string; controllato: string; risposte?: boolean }>
+  /** I fili tolti in questo giro: la fusione del segno non li riporta. */
+  tolti?: string[]
   nomi: Record<string, { nome: string; tipo: Tipo | 'privato' }>
   /** Le conversazioni con una menzione da leggere per prime. */
   urgenti?: string[]
@@ -322,8 +339,42 @@ function leggiStato(io: { utenteId: string; squadraId: string }): StatoSlack {
   return { v: 1, utente: io.utenteId, squadra: io.squadraId, conv: {}, fili: {}, nomi: {} }
 }
 
+/**
+ * Scrive il segno, fondendolo con quello che c'è: la corsia corta può essere
+ * partita sul segno di prima mentre il giro lungo scriveva i suoi documenti,
+ * e il suo segno non deve cancellare quello più nuovo. Per ogni conversazione
+ * e ogni filo vince la lettura più recente.
+ */
 function scriviStato(s: StatoSlack): void {
-  store.segnaCursore(SEGNO, JSON.stringify(s))
+  const ora = leggiStato({ utenteId: s.utente, squadraId: s.squadra })
+  const dopo = (a?: string, b?: string) => (a ?? '') >= (b ?? '')
+  const conv = { ...ora.conv }
+  for (const [id, x] of Object.entries(s.conv)) {
+    const y = conv[id]
+    const base = !y || dopo(x.letto, y.letto) ? x : y
+    const controllato = [x.controllato, y?.controllato].filter(Boolean).sort().at(-1)
+    conv[id] = { ...base, ...(controllato ? { controllato } : {}) }
+  }
+  const tolti = new Set(s.tolti ?? [])
+  const fili = { ...ora.fili }
+  for (const [k, f] of Object.entries(s.fili)) if (!fili[k] || dopo(f.controllato, fili[k]!.controllato)) fili[k] = f
+  for (const k of Object.keys(fili)) if (!(k in s.fili) && tolti.has(k)) delete fili[k]
+  const fuori: StatoSlack = {
+    ...s, conv, fili,
+    veloce: Math.max(s.veloce ?? 0, ora.veloce ?? 0) || undefined,
+    ultima: [s.ultima, ora.ultima].filter((x): x is string => !!x).sort().at(-1)
+  }
+  delete fuori.tolti
+  fuori.conti = {
+    conversazioni: Object.values(conv).filter(x => x.letto).length,
+    fili: Object.values(fili).filter(f => f.risposte !== false).length
+  }
+  store.segnaCursore(SEGNO, JSON.stringify(fuori))
+}
+
+/** Scollegato: il segno si scorda, e la prossima volta si comincia da capo. */
+export function scorda(): void {
+  store.segnaCursore(SEGNO, null)
 }
 
 /** Quello che la scheda delle Fonti mostra: l'ultimo giro e i conti. */
@@ -384,8 +435,8 @@ async function nomeDi(g: Giro, per: Map<string, string>, id: string, conti: { n:
   } catch { per.set(id, 'qualcuno'); return 'qualcuno' }
 }
 
-/** Solo quelli di cui fa parte, non archiviati, e non esclusi da lui. */
-async function posti(g: Giro, esclusi: Set<string>): Promise<Canale[]> {
+/** Solo quelli di cui fa parte, non archiviati: le esclusioni si tolgono dopo, perché la scheda ne vuole i nomi. */
+async function posti(g: Giro): Promise<Canale[]> {
   const fuori: Canale[] = []
   let cursore: string | undefined, pagine = 0
   do {
@@ -395,7 +446,7 @@ async function posti(g: Giro, esclusi: Set<string>): Promise<Canale[]> {
       limit: '200',
       ...(cursore ? { cursor: cursore } : {})
     })
-    fuori.push(...(r.channels ?? []).filter(x => !x.is_archived && !esclusi.has(x.id)))
+    fuori.push(...(r.channels ?? []).filter(x => !x.is_archived))
     cursore = r.response_metadata?.next_cursor || undefined
   } while (cursore && ++pagine < 15)
   return fuori
@@ -601,6 +652,12 @@ export type EsitoSlack = {
   chiamate: number
   /** Perché si è fermato prima: il tetto delle chiamate, o Slack che ha detto di rallentare. */
   fermato?: 'tetto' | 'limite'
+  /**
+   * Scrive il segno di questo giro. Va chiamata *dopo* aver salvato i
+   * documenti: se il salvataggio cade, il giro dopo rilegge da dove era, e
+   * niente resta segnato come letto senza essere nell'indice.
+   */
+  conferma: () => void
 }
 
 type Opzioni = {
@@ -618,8 +675,8 @@ async function inFila<T>(salta: boolean, fn: () => Promise<T>): Promise<T | null
   const chiave = chi.adesso() ?? ''
   const prima = IN_CORSO.get(chiave)
   if (prima && salta) return null
-  if (prima) await prima.catch(() => {})
-  const p = fn()
+  // in coda dietro l'ultimo, non dietro il primo: due giri lunghi in attesa non partono insieme
+  const p = (prima ?? Promise.resolve()).catch(() => {}).then(fn)
   IN_CORSO.set(chiave, p)
   try { return await p } finally { if (IN_CORSO.get(chiave) === p) IN_CORSO.delete(chiave) }
 }
@@ -664,7 +721,8 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
   const st = leggiStato(io)
   const esclusi = new Set(c.esclusi ?? [])
   const persone = await nomi(g, io.squadraId)
-  const elenco = await posti(g, esclusi)
+  const tuttiIPosti = await posti(g)
+  const elenco = tuttiIPosti.filter(ch => !esclusi.has(ch.id))
   const perId = new Map(elenco.map(ch => [ch.id, ch]))
   const nomiPosti = new Map(elenco.filter(ch => tipoDi(ch) === 'canale').map(ch => [ch.id, `#${ch.name ?? ch.id}`]))
   const cx: Contesto = { g, me: io.utenteId, io: io.utente, url: io.url, persone, nomiPosti, ospiti: { n: 0 } }
@@ -678,7 +736,7 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
   const filiFatti = new Set<string>()
 
   // i nomi dei posti, per la scheda (le esclusioni si scelgono da qui)
-  st.nomi = Object.fromEntries(elenco.slice(0, 1000).map(ch => [ch.id, { nome: comeSiChiama(ch, persone, io.utente), tipo: tipoDi(ch) === 'canale' && ch.is_private ? 'privato' as const : tipoDi(ch) }]))
+  st.nomi = Object.fromEntries(tuttiIPosti.slice(0, 1000).map(ch => [ch.id, { nome: comeSiChiama(ch, persone, io.utente), tipo: tipoDi(ch) === 'canale' && ch.is_private ? 'privato' as const : tipoDi(ch) }]))
   // un posto escluso esce anche dall'indice
   if (o.esistenti) for (const id of o.esistenti.keys()) if (esclusi.has(id.split(':')[1] ?? '')) tolti.push(id)
 
@@ -686,38 +744,56 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
   const daMenzioni = new Set<string>(st.urgenti ?? [])
   const filiDaMenzioni = new Set<string>()
   const ultimaOcchiata = st.veloce ?? da
-  try {
-    const giornoPrima = giornoDi(String(inizioGiorno(ultimaOcchiata) - GIORNO)).chiave
-    const r = await api<{ messages?: { matches?: { ts: string; channel?: { id?: string }; permalink?: string }[] } }>(g, 'search.messages', {
-      query: `<@${io.utenteId}> after:${giornoPrima}`, sort: 'timestamp', sort_dir: 'desc', count: '50'
-    })
-    for (const m of r.messages?.matches ?? []) {
-      const ch = m.channel?.id
-      if (!ch || esclusi.has(ch) || !perId.has(ch) || Number(m.ts) <= ultimaOcchiata - 60) continue
-      const filo = /[?&]thread_ts=([0-9.]+)/.exec(m.permalink ?? '')?.[1]
-      if (filo && filo !== m.ts) filiDaMenzioni.add(`${ch}:${filo}`)
-      else daMenzioni.add(ch)
+  /*
+   * Due ricerche: le menzioni (`<@lui>`), e quello che è rivolto a lui
+   * (`to:me`: i messaggi diretti e le risposte nei fili dove c'è anche lui).
+   * La seconda vede una risposta tardiva sotto una radice vecchia che non lo
+   * nomina.
+   */
+  const giornoPrima = giornoDi(String(inizioGiorno(ultimaOcchiata) - GIORNO)).chiave
+  for (const query of [`<@${io.utenteId}> after:${giornoPrima}`, `to:me after:${giornoPrima}`]) {
+    try {
+      const r = await api<{ messages?: { matches?: { ts: string; user?: string; channel?: { id?: string }; permalink?: string }[] } }>(g, 'search.messages', {
+        query, sort: 'timestamp', sort_dir: 'desc', count: '50'
+      })
+      for (const m of r.messages?.matches ?? []) {
+        const ch = m.channel?.id
+        if (!ch || m.user === io.utenteId || esclusi.has(ch) || !perId.has(ch) || Number(m.ts) <= ultimaOcchiata - 60) continue
+        const filo = /[?&]thread_ts=([0-9.]+)/.exec(m.permalink ?? '')?.[1]
+        // già letto: un giro tagliato dal tetto non deve rileggerlo a ogni passata
+        if (filo && filo !== m.ts) { if (Number(st.fili[`${ch}:${filo}`]?.ultima ?? 0) < Number(m.ts)) filiDaMenzioni.add(`${ch}:${filo}`) }
+        else if (Number(st.conv[ch]?.visto ?? 0) < Number(m.ts)) daMenzioni.add(ch)
+      }
+    } catch (e) {
+      // la ricerca è un di più (manca `search:read`, o Slack rallenta): si legge lo stesso
+      if (e instanceof Esaurito) { fermato = 'tetto'; break }
     }
-  } catch (e) {
-    // la ricerca è un di più (manca `search:read`, o Slack rallenta): si legge lo stesso
-    if (e instanceof Esaurito) fermato = 'tetto'
   }
 
   /** Quali conversazioni leggere, in che ordine. */
   let coda: Canale[]
   if (o.veloce) {
-    // i messaggi diretti vivi (l'ultimo messaggio entro due settimane) e quelli mai visti, i più recenti prima
+    /*
+     * I messaggi diretti: quelli mai letti si leggono (al massimo cinque per
+     * passata); quelli vivi (un messaggio nelle ultime due settimane) si
+     * guardano tutti, fino a dodici; quelli fermi tre per passata, a turno,
+     * dal guardato meno di recente. Un messaggio diretto vuoto da un mese non
+     * costa una chiamata ogni due minuti.
+     */
     const diretti = elenco.filter(ch => tipoDi(ch) !== 'canale')
-      .filter(ch => { const v = st.conv[ch.id]?.visto; return !v || adesso - Number(v) < FILI_VIVI })
-      .sort((a, b) => Number(st.conv[b.id]?.visto ?? 0) - Number(st.conv[a.id]?.visto ?? 0))
-      .slice(0, 15)
-    const nuovi: Canale[] = []
-    for (const ch of diretti) {
-      const visto = st.conv[ch.id]?.visto
-      if (!visto) { nuovi.push(ch); continue }
+    const mai = diretti.filter(ch => !st.conv[ch.id]).slice(0, 5)
+    const vivo = (ch: Canale) => { const v = st.conv[ch.id]?.visto; return !!v && adesso - Number(v) < FILI_VIVI }
+    const vivi = diretti.filter(vivo).sort((a, b) => Number(st.conv[b.id]!.visto) - Number(st.conv[a.id]!.visto)).slice(0, 12)
+    const quando = (ch: Canale) => st.conv[ch.id]?.controllato ?? st.conv[ch.id]?.letto ?? ''
+    const fermi = diretti.filter(ch => st.conv[ch.id] && !vivo(ch)).sort((a, b) => quando(a).localeCompare(quando(b))).slice(0, 3)
+    const nuovi: Canale[] = [...mai]
+    for (const ch of [...vivi, ...fermi]) {
+      const s = st.conv[ch.id]!
+      const dal = s.visto ?? String(Math.floor(Date.parse(s.letto ?? '') / 1000 - 120) || Math.floor(da))
       try {
-        const r = await api<{ messages?: Messaggio[] }>(g, 'conversations.history', { channel: ch.id, oldest: visto, limit: '1' })
-        if ((r.messages ?? []).some(m => Number(m.ts) > Number(visto))) nuovi.push(ch)
+        const r = await api<{ messages?: Messaggio[] }>(g, 'conversations.history', { channel: ch.id, oldest: dal, limit: '1' })
+        s.controllato = new Date(adesso * 1000).toISOString()
+        if ((r.messages ?? []).some(m => Number(m.ts) > Number(dal))) nuovi.push(ch)
       } catch (e) { if (e instanceof Esaurito) break }
     }
     coda = [...nuovi, ...[...daMenzioni].map(id => perId.get(id)).filter((x): x is Canale => !!x)]
@@ -730,7 +806,15 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
       if (s.visto && adesso - Number(s.visto) < 3 * GIORNO) return true
       return adesso - Date.parse(s.letto) / 1000 >= 3600
     }
-    const peso = (ch: Canale) => tipoDi(ch) !== 'canale' ? 0 : daMenzioni.has(ch.id) ? 1 : 2
+    // prima quello mai letto (i messaggi diretti per primi), e le menzioni nuove;
+    // poi il resto, dal letto meno di recente: un giro tagliato dal tetto non
+    // rilegge gli stessi posti mentre altri aspettano la prima lettura
+    const peso = (ch: Canale) => {
+      const letto = !!st.conv[ch.id]?.letto
+      if (!letto && tipoDi(ch) !== 'canale') return 0
+      if (daMenzioni.has(ch.id)) return 1
+      return letto ? 3 : 2
+    }
     coda = elenco.filter(dovuto).sort((a, b) =>
       peso(a) - peso(b)
       || (st.conv[a.id]?.letto ?? '').localeCompare(st.conv[b.id]?.letto ?? '')
@@ -748,7 +832,7 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
     } catch (e) {
       if (e instanceof Esaurito) { fermato = 'tetto'; break }
       if (e instanceof GuaioFonte && e.rimedio === 'attendi') { fermato = 'limite'; break }
-      if (e instanceof GuaioFonte && e.rimedio === 'credenziale') { salva(); throw e }
+      if (e instanceof GuaioFonte && e.rimedio === 'credenziale') throw e
       // un posto che non si legge non ferma gli altri, ma non sparisce in silenzio
       falliti.push(comeSiChiama(ch, persone, io.utente))
     }
@@ -777,7 +861,7 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
     } catch (e) {
       if (e instanceof Esaurito) { fermato = 'tetto'; break }
       if (e instanceof GuaioFonte && e.rimedio === 'attendi') { fermato = 'limite'; break }
-      if (e instanceof GuaioFonte && e.rimedio === 'credenziale') { salva(); throw e }
+      if (e instanceof GuaioFonte && e.rimedio === 'credenziale') throw e
     }
   }
 
@@ -787,13 +871,12 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
   else if (!fermato) st.veloce = Math.max(st.veloce ?? 0, adesso - 60)
   if (fermato) st.urgenti = [...new Set([...(st.urgenti ?? []), ...[...daMenzioni].filter(x => !fatti.has(x))])]
 
-  function salva() {
-    const letti = Object.values(st.conv).filter(x => x.letto).length
-    st.conti = { conversazioni: letti, fili: Object.keys(st.fili).length }
-    if (!o.veloce) st.ultima = new Date(adesso * 1000).toISOString()
-    scriviStato(st)
+  if (!o.veloce) st.ultima = new Date(adesso * 1000).toISOString()
+  st.tolti = [...new Set(tolti)].map(id => /^slack:([^:]+):t([0-9.]+)$/.exec(id)).filter(m => !!m).map(m => `${m![1]}:${m![2]}`)
+  const conti = {
+    conversazioni: Object.values(st.conv).filter(x => x.letto).length,
+    fili: Object.values(st.fili).filter(f => f.risposte !== false).length
   }
-  salva()
 
   const completi = elenco.filter(ch => st.conv[ch.id]?.letto && !st.conv[ch.id]?.fondo).length
   return {
@@ -801,8 +884,10 @@ async function giro(c: ConfigSlack, o: Opzioni & { veloce?: boolean; avanzamento
     troncato: !!fermato || completi < elenco.length,
     resto: resto(completi, elenco.length),
     dal: new Date(da * 1000).toISOString(),
-    io, conti: st.conti ?? { conversazioni: 0, fili: 0 }, chiamate: g.chiamate,
-    ...(fermato ? { fermato } : {})
+    io, conti, chiamate: g.chiamate,
+    ...(fermato ? { fermato } : {}),
+    // il segno si scrive dopo i documenti: chi li salva lo chiama (`dopoSlack` in index.ts)
+    conferma: () => scriviStato(st)
   }
 }
 
@@ -876,11 +961,17 @@ async function leggiConversazione(
   for (const k of Object.keys(st.fili)) if (k.startsWith(`${ch.id}:`)) spariti.add(k.slice(ch.id.length + 1))
   for (const ts of spariti) {
     if (!dentro(Number(ts)) || conRisposte.has(ts)) continue
-    fuori.tolti.push(`slack:${ch.id}:t${ts}`)
-    delete st.fili[`${ch.id}:${ts}`]
+    const k = `${ch.id}:${ts}`
+    const id = `slack:${ch.id}:t${ts}`
+    const radiceViva = tutti.some(m => m.ts === ts)
+    const avevaRisposte = st.fili[k]?.risposte !== false || !!w.esistenti?.has(id)
+    if (!avevaRisposte) continue
+    if (!w.esistenti || w.esistenti.has(id)) fuori.tolti.push(id)
+    // la radice c'è ancora, senza risposte: si continua a guardarla; se non c'è più, si scorda
+    if (radiceViva) st.fili[k] = { ultima: ts, controllato: new Date(w.adesso * 1000).toISOString(), risposte: false }
+    else delete st.fili[k]
     // le domande che stavano nelle risposte non ci sono più: il pezzo vuoto le chiude
-    fuori.ambiti.push({ chiave: `${ch.id}:${ts}`, conversazione: ch.id, filo: ts, tipo, dove, righe: [], dal: ts,
-      presenti: tutti.some(m => m.ts === ts) ? [ts] : [] })
+    fuori.ambiti.push({ chiave: k, conversazione: ch.id, filo: ts, tipo, dove, righe: [], dal: ts, presenti: radiceViva ? [ts] : [] })
   }
 
   // fuori dai fili: un giorno per documento
@@ -917,6 +1008,18 @@ async function leggiConversazione(
     if (dentro(inizio) && dentro(inizio + GIORNO - 1)) fuori.tolti.push(id)
   }
 
+  // i suoi messaggi, e quelli che lo nominano, delle ultime due settimane: una
+  // risposta che arriva sotto fra tre giorni non passa dalla storia del canale
+  if (tipo === 'canale') for (const r of righe) {
+    const k = `${ch.id}:${r.ts}`
+    if ((r.mio || r.menzionaMe) && !st.fili[k] && w.adesso - Number(r.ts) < FILI_VIVI) {
+      st.fili[k] = { ultima: r.ts, controllato: new Date(w.adesso * 1000).toISOString(), risposte: false }
+    }
+  }
+
+  // quelli guardati qui (la storia dice già se hanno risposte) non si ricontrollano a parte
+  for (const m of tutti) if (st.fili[`${ch.id}:${m.ts}`]) fuori.filiFatti.add(`${ch.id}:${m.ts}`)
+
   // per i segnali: i messaggi fuori dai fili, letti per intero dal tratto recente
   fuori.ambiti.push({ chiave: ch.id, conversazione: ch.id, filo: null, tipo, dove, righe, dal: String(tratti[0]!.da), presenti: tratti[0]!.messaggi.map(m => m.ts) })
 
@@ -934,9 +1037,10 @@ async function leggiFilo(cx: Contesto, ch: Canale, ts: string, st: StatoSlack, f
   const messaggi = await filoIntero(cx.g, ch, ts)
   if (!messaggi || messaggi.length < 2) {
     // il filo non c'è più, o è rimasto la radice da sola: il documento esce, e le domande lì dentro si chiudono
-    fuori.tolti.push(id)
-    delete st.fili[k]
-    fuori.ambiti.push({ chiave: k, conversazione: ch.id, filo: ts, tipo, dove, righe: [], dal: ts, presenti: [] })
+    if (st.fili[k]?.risposte !== false) fuori.tolti.push(id)
+    if (messaggi?.length === 1 && adesso - Number(ts) < FILI_VIVI) st.fili[k] = { ultima: ts, controllato: new Date(adesso * 1000).toISOString(), risposte: false }
+    else delete st.fili[k]
+    fuori.ambiti.push({ chiave: k, conversazione: ch.id, filo: ts, tipo, dove, righe: [], dal: ts, presenti: messaggi?.length === 1 ? [ts] : [] })
     return
   }
   const righe: Riga[] = []
