@@ -39,6 +39,7 @@ import { RigaIpotesi } from './RigaIpotesi'
 import { LasciaConRagione, RigaGuadagnata, RigaImparato } from './Imparato'
 import { bloccoDi, haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
 import { approva } from './approva'
+import { Pacchetto, SlackInAttesa } from './Pacchetto'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -487,6 +488,8 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
 
       {aperto && (chiede ? <Domanda c={c} l={l} />
         : c.proposta ? <Proposta c={c} l={l} />
+        // il seguito di una conversazione con un cliente: le sue tre parti, con le prove
+        : pronto && c.origine === 'pacchetto' ? <Pacchetto c={c} l={l} />
         : pronto ? <>
           <Bozza c={c} l={l} />
           {/* F4: non regge il suo «fatto»: sotto il lavoro, la domanda sola per finirlo */}
@@ -1876,6 +1879,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
             marginTop: 9, fontSize: '12.5px', fontWeight: 500, letterSpacing: '.02em',
             color: 'rgba(var(--inchiostro-rgb),.5)', textTransform: 'capitalize'
           }}>{oggi}</div>
+          <SlackInAttesa />
         </div>
         <div className="task-view-toggle" style={{ flex: 'none', marginTop: 6 }} role="group" aria-label={t('Vista attività')}>
           <button type="button" aria-pressed={vista === 'calendario'} onClick={() => setVista('calendario')}>{t('Calendario')}</button>

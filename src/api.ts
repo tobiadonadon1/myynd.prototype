@@ -495,6 +495,31 @@ export type SlackDomanda = {
   filo: string | null; ambito: string; quando: string; ore: number; progetto: string | null; altre: number; fiducia: number
 }
 
+/** Il pacchetto del seguito (`server/seguito.ts`): la risposta, il documento, gli impegni, le prove. */
+export type PacchettoSeguito = {
+  id: string
+  stato: 'in_coda' | 'pronto' | 'non_regge' | 'mandato' | 'lasciato'
+  perche: string
+  conversazione: {
+    canale: 'posta' | 'slack' | 'riunione' | 'file'
+    cliente: { nome: string; indirizzo: string | null; conosciuto: boolean }
+    titolo: string
+    doc: string | null
+    prove: { id: string; fonte: 'posta' | 'slack' | 'riunione' | 'file'; chi: string; quando: string | null; citazione: string; link: string | null }[]
+    file?: { doc: string; titolo: string; percorso: string | null } | null
+    sospetto: string[]
+  }
+  slack: { conversazione: string; filo: string | null; permalink: string; ref: string } | null
+  risposta: {
+    canale: 'posta' | 'slack' | 'carta'; a: string | null; oggetto: string | null; testo: string
+    casella: 'salvata' | 'trattenuta' | 'errore' | null; url?: string | null
+    inviata?: { quando: string; permalink: string | null; distanza: number } | null
+  } | null
+  consegna: { percorso: string; titolo: string; da: string; cambiamenti: string[] } | null
+  impegni: { compito: string | null; chi: string; cosa: string; entro: string; stimata: boolean; prova: string }[]
+  problemi: string[]
+}
+
 async function json<T>(url: string, opz?: RequestInit): Promise<T> {
   const t = sessione.token()
   let r: Response
@@ -1492,8 +1517,12 @@ export const api = {
     json<{ ok: true; esclusi: string[]; tolti: number }>('/api/slack/esclusi', { method: 'POST', body: JSON.stringify({ esclusi }) }),
   slackDaRispondere: () => json<{ domande: SlackDomanda[] }>('/api/slack/da-rispondere'),
   /** Manda una risposta su Slack: solo da un bottone che lui ha toccato (`x-myynd-tocco`). */
-  slackInvia: (m: { conversazione: string; testo: string; filo?: string | null }) =>
+  slackInvia: (m: { conversazione: string; testo: string; filo?: string | null; compito?: string }) =>
     json<{ ok: true; permalink: string }>('/api/slack/invia', { method: 'POST', headers: { 'x-myynd-tocco': '1' }, body: JSON.stringify(m) }),
+  /** Il pacchetto del seguito di una carta. */
+  pacchetto: (id: string) => json<{ pacchetto: PacchettoSeguito }>(`/api/seguito/${encodeURIComponent(id)}`),
+  /** Quante domande di Slack aspettano lui senza un pacchetto che le copra. */
+  seguito: () => json<{ slackInAttesa: number }>('/api/seguito'),
 
   /** GitHub: il token, e — se ne ha scelti — i soli repository da leggere. */
   collegaGithub: (token: string, repos: string[]) =>

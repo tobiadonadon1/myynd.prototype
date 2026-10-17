@@ -37,6 +37,7 @@ import { fonteValida } from './iniziativa.ts'
 import * as primoGiorno from './primo-giorno.ts'
 import * as gradino from './gradino.ts'
 import { suo as diSe } from './da-se.ts'
+import * as seguito from './seguito.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 import * as budgetNotte from './budget-notte.ts'
 import { conCompito } from './etichetta-uso.ts'
@@ -242,6 +243,8 @@ function ritirabile(c: store.Compito, adesso = new Date()): boolean {
   // una risposta guadagnata: la fonte non regge più, o la persona è stata ripresa («Take it back»)
   if (c.origine === gradino.ORIGINE) return !gradino.rigaValida(c)
   if (c.origine === primoGiorno.ORIGINE) return !primoGiorno.fonteValida(c, adesso.getTime())
+  // il seguito: qualcuno ha già risposto, l'ha scartato, o la domanda su Slack è chiusa
+  if (seguito.suo(c.origine)) { const p = seguito.pacchettoDi(c.id); return !!p && !seguito.regge(p.conversazione, adesso.getTime()) }
   return false
 }
 
@@ -255,7 +258,7 @@ export function pronte(adesso = new Date()): store.Compito[] {
   // il lavoro che Myynd fa da sé (`da-se.ts`) aspetta in coda mentre lui ha chiesto la pausa
   const inPausa = cfg.autonomia() === 'chiedere'
   return store.elencoCompiti()
-    .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1 && !(inPausa && diSe(c.origine)))
+    .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1 && !(inPausa && (diSe(c.origine) || seguito.suo(c.origine))))
     .map(c => ({ c, p: regole.punteggio(c, { adesso, progettoAlto: !!c.progetto && alti.has(c.progetto) }) }))
     .sort((a, b) => b.p - a.p || a.c.ordine.localeCompare(b.c.ordine) || a.c.id.localeCompare(b.c.id))
     .map(x => x.c)

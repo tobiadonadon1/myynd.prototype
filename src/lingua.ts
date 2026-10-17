@@ -3396,7 +3396,28 @@ const EN: Record<string, string> = {
   'Una regola è «da solo», «chiedi» o «mai».': 'A rule is «on its own», «ask» or «never».',
   'Il mandato di questo progetto dice di non lavorare mai sul codice.': 'This project’s mandate says never to work on the code.',
   'Questa azione Myynd non la fa ancora da solo: chiedi o mai.': 'Myynd can’t do this on its own yet: ask or never.',
+  'Bozze nella casella': 'Drafts in the mailbox',
   // — il mandato e la traccia: fine —
+
+  // — il pacchetto di seguito: inizio —
+  'La risposta': 'Reply',
+  'Il documento': 'Document',
+  'Il prossimo impegno': 'Next commitment',
+  'Le prove': 'Evidence',
+  'La mail': 'The email',
+  'La nota': 'The notes',
+  'Apri su Slack': 'Open in Slack',
+  'Manda su Slack': 'Send in Slack',
+  'Apri la bozza': 'Open draft',
+  'Non rilevante': 'Not relevant',
+  'Mandata su Slack.': 'Sent in Slack.',
+  'Nelle tue Bozze, non mandata.': 'In your Drafts, not sent.',
+  'Resta qui: le regole del progetto tengono le bozze per te.': 'Kept here: this project’s rules keep drafts for you.',
+  'La casella non l’ha presa: è qui.': 'The mailbox did not take it: it is here.',
+  'nel filo non c’è una data': 'no date in the thread',
+  'Non sono riuscito a mandarlo.': 'I couldn’t send it.',
+  'Questo pacchetto non c’è.': 'This package is not there.',
+  // — il pacchetto di seguito: fine —
 }
 
 
@@ -4201,6 +4222,19 @@ export const frasi = {
     ? `This week: ${prese} accepted · ${frasi.dollari(costo)}`
     : `Questa settimana: ${prese} ${prese === 1 ? 'presa' : 'prese'} · ${frasi.dollari(costo)}`,
   /** Quanto ha speso il progetto questo mese: «$1.20 this month». */
-  spesaDelMese: (n: number) => corrente === 'en' ? `${frasi.dollari(n)} this month` : `${frasi.dollari(n)} questo mese`
+  spesaDelMese: (n: number) => corrente === 'en' ? `${frasi.dollari(n)} this month` : `${frasi.dollari(n)} questo mese`,
   // — il mandato e la traccia: fine —
+
+  // — il pacchetto di seguito: inizio —
+  /** Sotto il documento nuovo: «New version of Proposal.docx, the original is untouched». */
+  versioneNuovaDi: (da: string) => corrente === 'en' ? `New version of ${da}; the original is untouched.` : `Versione nuova di ${da}; l’originale non è toccato.`,
+  /** La data dell'impegno: «by 2026-10-24». */
+  entroIl: (giorno: string) => {
+    const d = new Date(`${giorno}T12:00:00`)
+    const detto = Number.isNaN(d.getTime()) ? giorno : d.toLocaleDateString(corrente === 'en' ? 'en-GB' : 'it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
+    return corrente === 'en' ? `by ${detto}` : `entro ${detto}`
+  },
+  /** Sotto la data della lista: «3 waiting for you on Slack». */
+  slackTiAspetta: (n: number) => corrente === 'en' ? `${n} waiting for you on Slack` : `${n} ${n === 1 ? 'ti aspetta' : 'ti aspettano'} su Slack`
+  // — il pacchetto di seguito: fine —
 }
