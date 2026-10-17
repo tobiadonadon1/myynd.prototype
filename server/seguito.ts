@@ -701,7 +701,8 @@ export function verifica(b: BozzaModello, c: Conversazione, o: { adesso?: number
   const scartati: string[] = []
   for (const i of b.impegni.slice(0, 3)) {
     const prova = normalizza(i.prova ?? '')
-    const fondata = prova.length >= 8 && perTe.some(f => f.includes(prova) || (prova.includes(f) && f.length >= 12))
+    // la frase com'è, o quasi: il modello la ricopia con una maiuscola, un prefisso o una parola in meno
+    const fondata = prova.length >= 8 && perTe.some(f => f.includes(prova) || (prova.includes(f) && f.length >= 12) || somiglia(prova, f))
     const prima = problemi.length
     guarda(i.cosa, e ? 'Commitment' : 'Impegno')
     if (!fondata || problemi.length > prima) {
@@ -717,6 +718,13 @@ export function verifica(b: BozzaModello, c: Conversazione, o: { adesso?: number
   if (!problemi.length) controlli.push(e ? 'Every number, date and address in the reply is in the conversation.' : 'Ogni numero, data e indirizzo della risposta è nella conversazione.')
   if (scartati.length) controlli.push(e ? `Not a commitment of yours, left out: ${scartati.join('; ')}` : `Non è un impegno tuo, lasciato fuori: ${scartati.join('; ')}`)
   return { problemi: [...new Set(problemi)], impegni, scartati, controlli }
+}
+
+/** Quasi la stessa frase: quattro parole su cinque della prova stanno nella frase. */
+function somiglia(prova: string, frase: string): boolean {
+  const parole = (s: string) => s.split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2)
+  const p = parole(prova), f = new Set(parole(frase))
+  return p.length >= 4 && p.filter(w => f.has(w)).length / p.length >= 0.8
 }
 
 /** Una riga sola, corta: per l'oggetto, il chi, il perché. */

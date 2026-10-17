@@ -368,7 +368,7 @@ export const EPISODI: Episodio[] = [
       const g: string[] = []
       if (r.carta?.prova?.esito !== 'pass') g.push(`proof: ${r.carta?.prova?.perche}`)
       const b = r.bozze[0]
-      if (!b?.corpo.includes('5,200 to 6,000 EUR (Mon-Fri)')) g.push(`reply: ${b?.corpo}`)
+      if (!b?.corpo.includes('5,200 to 6,000') || /[–—]/.test(b.corpo)) g.push(`reply: ${b?.corpo}`)
       if (b && /[\r\n—]/.test(b.oggetto)) g.push(`subject: ${b.oggetto}`)
       if (!r.file || !readFileSync(r.file, 'utf8').includes('Phase 1 — Discovery\nPhase 2 — Build\nSupport: Mon–Fri')) g.push('the document lost its dashes')
       return g

@@ -232,6 +232,9 @@ test('i falsi negativi: un link, un numero in lettere, la valuta e il periodo ca
   assert.match(controlla('It is $4,500 per month.', prove)[0]!, /another currency/)
   assert.match(controlla('It is €4,500 per year.', prove)[0]!, /another period/)
   assert.equal(controlla('It is 7% off.', prove).length, 1, 'una percentuale non è un numero piccolo')
+  // la prova vera sul modello: «from 5 pages to 6 pages» con 6 inventato
+  assert.equal(controlla('The scope goes from 5 pages to 6 pages.', 'Scope: 5 pages').length, 1)
+  assert.deepEqual(controlla('I attached 2 files.', 'Scope: 5 pages'), [])
 })
 
 test('7 · un impegno vale solo se la frase chiede a lui: niente riferito, niente per un terzo, niente promesse del cliente', () => {
@@ -241,6 +244,10 @@ test('7 · un impegno vale solo se la frase chiede a lui: niente riferito, nient
     sospetto: []
   } as import('./seguito.ts').Conversazione
   assert.deepEqual(seguito.frasiPerTe(c), ['Could you share the invoice?'])
+  // la frase ricopiata quasi uguale regge; un'altra frase no
+  const b = (prova: string) => ({ risposta: 'Sure.', oggetto: '', cambia_documento: false, documento: { testo: '', cambiamenti: [] }, impegni: [{ chi: 'A', cosa: 'Share the invoice', entro: '', prova }], perche: '' })
+  assert.equal(seguito.verifica(b('Can you share the invoice'), c).impegni.length, 1)
+  assert.equal(seguito.verifica(b('Bob wants Anna to send the file'), c).impegni.length, 0)
 })
 
 test('8 · la data dell\'impegno: tutta la data, non il giorno del mese da qualche parte, non «tomorrow» per un giorno qualunque', () => {

@@ -105,6 +105,9 @@ const CUR = String.raw`€|\$|£|eur(?:os?)?\b|usd\b|gbp\b|chf\b|dollars?\b|poun
 const PER = String.raw`per month|a month|monthly|\/\s?mo(?:nth)?\b|al mese|mensil[ei]|per year|a year|yearly|annually|per annum|\/\s?y(?:ea)?r\b|all'anno|l'anno|annu[io]|annuale|per hour|an hour|hourly|\/\s?h(?:ou)?r\b|all'ora|l'ora|orari|per day|a day|daily|al giorno|giornalieri|per week|a week|weekly|a settimana|alla settimana|settimanali`
 const RE_IMPORTO = new RegExp(String.raw`(${CUR})?\s?(${NUM})(\s?k\b)?\s?(${CUR})?(?:\s?(?:\+\s?vat|\+\s?iva|vat|iva|excl\.? vat|incl\.? vat))?\s?(${PER})?`, 'gi')
 
+/** Le cose che si contano in un ambito o in un tempo: un numero piccolo accanto a loro è un fatto. */
+const CONTATI = /^\s?(?:pages?|screens?|rounds?|revisions?|deliverables?|sessions?|calls?|meetings?|weeks?|days?|hours?|months?|years?|seats?|users?|licen[cs]es?|pagine|schermate|revisioni|consegne|sessioni|incontri|settimane|giorni|ore|mesi|anni|postazioni|utenti|licenze)\b/i
+
 export type Importo = { v: string; valuta: string | null; periodo: string | null; piccolo: boolean }
 
 // — le date —
@@ -229,7 +232,9 @@ function leggi(testo: string, base: number, lingua: 'it' | 'en' | null) {
     const cur = valuta(m[1]) ?? valuta(m[4])
     const dopo = resto.slice(m.index! + m[0].length, m.index! + m[0].length + 2)
     const percento = /^\s?%/.test(dopo)
-    const piccolo = !cur && !m[3] && !m[5] && !percento && /^\d+$/.test(v) && Number(v) <= 10
+    // «6 pages», «3 rounds», «2 weeks» sono l'ambito e i tempi: si contano anche piccoli
+    const conta = CONTATI.test(resto.slice(m.index! + m[0].length, m.index! + m[0].length + 16))
+    const piccolo = !cur && !m[3] && !m[5] && !percento && !conta && /^\d+$/.test(v) && Number(v) <= 10
     importi.push({ inizio: m.index!, fine: m.index! + m[0].length, v, valuta: cur, periodo: periodo(m[5]), piccolo })
   }
   return { t, link, indirizzi, orari, date, importi }
