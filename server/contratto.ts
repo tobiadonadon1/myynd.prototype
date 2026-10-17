@@ -127,9 +127,9 @@ export function forma(c: Pick<store.Compito, 'testo' | 'nota' | 'modo' | 'doc' |
   const tipo = tipoDiLavoro({ testo: c.testo, modo: c.modo, email: daPosta, codice })
   const messaggio = tipo === 'risposta' || tipo === 'preventivo' || tipo === 'proposta-incontro'
   const mani = new Set<Mano>()
-  // una carta nata da un'automazione ha le sue fonti e basta: nessuna mano
-  const dellAutomazione = c.attrezzi?.origine === 'automazione' || !!c.attrezzi?.nomi?.length
-  if (!dellAutomazione && c.modo !== 'prompt') {
+  // una carta con i suoi attrezzi dichiarati ha le sue fonti e basta: nessuna mano
+  const conAttrezzi = !!c.attrezzi?.nomi?.length
+  if (!conAttrezzi && c.modo !== 'prompt') {
     if (tipo === 'codice') mani.add('codice')
     // la mail di Mail del Mac ha la sua casella: le Bozze di Mail (`bozza-mail-mac.ts`)
     const dalMac = !!c.doc?.startsWith('postamac:')

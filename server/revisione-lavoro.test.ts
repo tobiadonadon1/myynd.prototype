@@ -290,7 +290,7 @@ test('eUnLavoro: rifiuti, stati, domande, piani al posto di un messaggio non son
     ['June, because the audit uses June [1].', 'Decide: June or July figures?'],
     // una scaletta chiesta come scaletta è il lavoro, anche se è fatta di punti (28 set)
     ['Done: the course outline.\n\n# First course\n\n1. Finding your angle.\n2. The first lesson.\n3. Building the page.\n4. The first ten buyers.\n5. Shipping.\n\nFrom your notes.', 'Write the first course outline'],
-    ['1. Create the account.\n2. Invite the team.\n3. Connect the inbox.\n4. Set the first automation.', 'Draft the onboarding checklist']
+    ['1. Create the account.\n2. Invite the team.\n3. Connect the inbox.\n4. Set the first reminder.', 'Draft the onboarding checklist']
   ]
   for (const [r, c] of si) assert.equal(revisione.eUnLavoro(r, c), true, `doveva passare: «${r}»`)
 })

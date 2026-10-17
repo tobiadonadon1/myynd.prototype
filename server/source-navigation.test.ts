@@ -23,7 +23,7 @@ before(async () => {
   assert.ok(account.ok)
   await conti.perProva.apriCon(token, account.id)
   chi.dentro(account.id, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false })
+    cfg.scrivi({ lingua: 'en' })
     store.salvaDocumenti([
       { id: 'github:pr:42', fonte: 'github', tipo: 'attività', titolo: 'Launch review', corpo: 'Please review the launch.', quando: new Date().toISOString(), percorso: 'https://github.com/example/project/pull/42' },
       { id: 'google:mail', fonte: 'google', tipo: 'email', titolo: 'Launch', corpo: 'Please review the launch.', quando: new Date().toISOString(), messageId: 'launch@example.com' },

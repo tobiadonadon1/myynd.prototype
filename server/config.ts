@@ -11,7 +11,6 @@ import { join } from 'node:path'
 import * as chi from './chi.ts'
 import * as conti from './conti.ts'
 import * as postgres from './postgres.ts'
-import { vietato } from './prova-chiusa.ts'
 import * as cancellati from './cancellati.ts'
 
 /**
@@ -157,8 +156,7 @@ export function autonomia(c: Config = leggi()): string {
  * suo gemello cattivo `!== 'en'`, e tutti e undici finivano nello stesso
  * posto: **su un conto nuovo `lingua` non c'è**, quindi non è `'en'`, quindi
  * italiano. Il risultato è la cosa che si vede peggio di tutte — un'interfaccia
- * inglese con dentro roba italiana: le automazioni di serie, le voci del feed,
- * le domande, il ritratto.
+ * inglese con dentro roba italiana: le voci del feed, le domande, il ritratto.
  *
  * Non era un difetto in undici posti: era lo stesso difetto scritto undici
  * volte, perché la domanda «che lingua parliamo» non aveva un posto dove
@@ -183,7 +181,7 @@ export function nellaLingua(): string {
 }
 
 /**
- * Dove vive tutto: la configurazione, l'indice, le automazioni tue.
+ * Dove vive tutto: la configurazione, l'indice, le chat tue.
  *
  * Era una costante e adesso è una funzione, ed è il cardine su cui gira tutta
  * la faccenda delle più persone. Ottantuno punti nel codice chiamano `leggi()`
@@ -852,24 +850,6 @@ export type Config = {
   /** L'ultima volta che ha aperto la Memoria (ISO): il punto nel menù conta solo quello nato dopo (P5). */
   memoriaVista?: string
   /**
-   * Le undici automazioni che arrivano con il pacchetto: le vuole?
-   *
-   * Assente vuol dire no, ed è il verso giusto. Erano sempre accese per tutti:
-   * chi si faceva un conto nuovo trovava undici cose che non aveva scritto, che
-   * non aveva chiesto, e che parlano di fatture e preventivi di qualcun altro —
-   * e la prima cosa che faceva era cancellarle una per una. Un prodotto che
-   * comincia dandoti da buttare via undici righe comincia male.
-   *
-   * Restano disponibili: sono un buon punto di partenza per chi le vuole, e si
-   * accendono da una riga sola nella schermata delle automazioni.
-   */
-  diSerie?: boolean
-  /**
-   * Le quattro di partenza offerte dalla prima pagina: «Non ora» le toglie da
-   * lì per sempre (E). Restano nella pagina degli ordini fissi.
-   */
-  pacchettoOfferto?: boolean
-  /**
    * Quando ha messo in ordine da solo, l'ultima volta. Due date, non una.
    *
    * Sono due giri diversi con due ritmi diversi — gli argomenti seguono quello
@@ -944,24 +924,6 @@ export type Config = {
   compatibile?: { url: string; chiave?: string; modello: string; nome?: string }
   /** Saved provider keys, scoped by exact endpoint. Never returned by pubblica(). */
   credenzialiModelli?: Record<string, { chiave: string }>
-  /**
-   * Di che azienda è questa installazione.
-   *
-   * Serve a una cosa sola: scegliere quale cartella di automazioni le
-   * appartiene. Non è un dato personale — è il nome di un cliente — e non
-   * esce mai da qui se non per chiedere «quali automazioni per questa
-   * licenza?», che è una domanda a cui si risponde senza sapere chi sia.
-   */
-  licenza?: string
-  /**
-   * Da dove arrivano le automazioni, se non solo dal pacchetto.
-   *
-   * `repo` è «proprietario/nome» su GitHub: dentro, una cartella `automazioni/`
-   * con `_comuni` e una cartella per licenza. Il `token` serve solo se il
-   * repository è privato — e privato è la scelta giusta: una ricetta non
-   * contiene dati di nessuno, ma dice come lavora un'azienda.
-   */
-  ricette?: { repo?: string; ramo?: string; token?: string }
   /**
    * Google: posta e calendario dalla loro API.
    *
@@ -1246,7 +1208,6 @@ export function scrivi(c: Config, opz: { togli?: readonly string[] } = {}) {
 }
 
 export function aggiorna(patch: Partial<Config>): Config {
-  vietato('config.aggiorna')
   // i campi undefined non sono "cancella": sono "non toccare"
   const puliti = Object.fromEntries(
     Object.entries(patch).filter(([, v]) => v !== undefined)
@@ -1288,7 +1249,6 @@ export function pubblica(c: Config = leggi()) {
     // e lo stesso per il fuoco: la schermata deve poter dire chi ha scritto
     // quella riga, invece di lasciar credere a qualcuno di averla scritta lui
     fuocoDaMe: c.fuocoDaMe === true,
-    diSerie: c.diSerie === true,
     abbonamento: { attivo: c.abbonamento?.attivo === true },
     claudeCon: c.claudeCon ?? (c.abbonamento?.attivo === true ? 'abbonamento' : 'chiave'),
     // «compatibile» solo se il fornitore c'è: una scelta rimasta nel file dopo

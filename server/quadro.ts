@@ -98,7 +98,7 @@ const TETTO_MATERIALE = 42_000
 /** Una cartella non può mangiarsi da sola il posto delle sessioni e della posta. */
 const TETTO_CARTELLA = 12_000
 /** Cambia quando cambia il modo di ragionare: i quadri vecchi si rifanno subito. */
-export const VERSIONE = 3
+export const VERSIONE = 4
 /** Un progetto con una pagina pubblica si rilegge almeno ogni tante ore: «it should read my website constantly». */
 export const ORE_SITO = 12
 /** Sotto questa certezza l'obiettivo dedotto non basta, e si chiede a lui. */
@@ -108,11 +108,10 @@ export const CERTEZZA_MINIMA = 0.5
  * Che cosa è una mossa, e quindi dove va.
  *   · sblocco: una cosa che può fare solo lui e che sblocca il traguardo; Myynd prepara la sua parte;
  *   · lavoro: un lavoro che Myynd fa da sé (ricerca, idee, bozze, una pagina) e consegna in un file;
- *   · consiglio: la sua lettura da professionista, «io farei questo, questo e quello»;
- *   · automazione: un controllo che si ripete e che Myynd può far girare da solo.
+ *   · consiglio: la sua lettura da professionista, «io farei questo, questo e quello».
  */
-export type Genere = 'sblocco' | 'lavoro' | 'consiglio' | 'automazione'
-const GENERI: readonly Genere[] = ['sblocco', 'lavoro', 'consiglio', 'automazione']
+export type Genere = 'sblocco' | 'lavoro' | 'consiglio'
+const GENERI: readonly Genere[] = ['sblocco', 'lavoro', 'consiglio']
 
 export type Mossa = {
   genere: Genere
@@ -577,12 +576,12 @@ const FORMA = {
       items: {
         type: 'object',
         properties: {
-          genere: { type: 'string', enum: ['sblocco', 'lavoro', 'consiglio', 'automazione'] },
+          genere: { type: 'string', enum: ['sblocco', 'lavoro', 'consiglio'] },
           titolo: { type: 'string', description: 'Un verbo e la cosa precisa, al massimo nove parole, con i nomi veri, come lo diresti a voce.' },
           testo: { type: 'string', description: 'Una o due frasi, al massimo trenta parole: per «consiglio» il piano, «io farei questo, questo e quello»; per gli altri perché adesso.' },
           leva: { type: 'integer', enum: [1, 2, 3], description: '3 sblocca o raggiunge il traguardo, 2 lo avvicina di molto, 1 aiuta.' },
           urgenza: { type: 'string', enum: ['oggi', 'settimana', 'poi'] },
-          offerta: { type: 'string', description: 'In prima persona, al massimo sedici parole. Per «lavoro» cosa consegno nel file; per «automazione» comincia con «I set up an automation» e dice cosa controlla e quando; per «sblocco» cosa preparo perché gli basti un minuto; per «consiglio» il primo passo che faccio io.' },
+          offerta: { type: 'string', description: 'In prima persona, al massimo sedici parole. Per «lavoro» cosa consegno nel file; per «sblocco» cosa preparo perché gli basti un minuto; per «consiglio» il primo passo che faccio io.' },
           prova: { type: 'string', description: 'Citazione ESATTA, da 12 a 300 caratteri, dal materiale: una riga di una fonte qui sopra.' },
           fonte: { type: 'string', description: 'L\'id esatto fra parentesi quadre della fonte da cui viene la prova (ad esempio «memoria», «esterno:https://…» o un id di documento).' }
         },
@@ -616,7 +615,6 @@ Hai davanti tutto quello che gli appartiene: le cartelle di codice, le sue sessi
 — «sblocco»: c'è una cosa che solo lui può fare e che ferma il traguardo (un accesso da chiedere, un'approvazione, una firma, una risposta). È la prima mossa, leva 3. L'offerta dice cosa preparo io perché gli basti un minuto.
 — «lavoro»: un lavoro che faccio io da solo e consegno in un file, utile al traguardo: una ricerca, idee e direzioni (stile, nomi, offerte), una bozza di articolo o di pagina, un controllo SEO, un confronto con i concorrenti. Deve essere una cosa che lui leggerebbe volentieri domattina.
 — «consiglio»: la tua lettura da professionista, con un piano concreto: «io farei questo, questo e quello», con i nomi delle cose sue. Nasce soprattutto dal guardare la cosa da fuori.
-— «automazione»: un controllo che si ripete e che gli toglie un pensiero, con un motivo vero nel materiale (il blog fermo da tre settimane: ogni lunedì guardo quando è uscito l'ultimo articolo e ne preparo uno se sono passati quattordici giorni).
 
 Le faccende di codice NON sono mosse e non vanno mai sul suo feed: fare il merge di un ramo o di un worktree, riempire file di configurazione o variabili d'ambiente, committare, fare build, pulire cartelle, guardare log, verificare pipeline. Il codice lo segue lui con i suoi assistenti; tu guardi il risultato che si vede fuori. Non sono mosse nemmeno: quello che sta facendo proprio adesso in una sessione di oggi, quello che è già in lista, quello che ha già fatto, quello che somiglia a una carta che ha scartato o lasciato scadere (lì ha già risposto, e il perché te lo dice), e i documenti nominati per file senza dire a cosa servono («il deck», «l'outline»): se una cosa non la capirebbe un collega appena arrivato, non è una mossa. Zero mosse è una risposta giusta.
 
@@ -658,8 +656,6 @@ export function ripulisciMossa(g: MossaGrezza, fonti: Map<string, string>, gia: 
   if (/["“”«»]/.test(titolo)) return null
   // le faccende di codice non vanno sul feed, nemmeno se il modello ci casca; e nemmeno i titoli astratti
   if (FACCENDA.test(titolo) || VAGO.test(titolo)) return null
-  // un'automazione è una proposta che si accende con un tocco: l'offerta lo deve dire così
-  if (genere === 'automazione' && !/^(?:i set up an automation|imposto un'automazione)/i.test(offerta)) return null
   if (gia.some(t => stessaCosa(t, titolo))) return null
   const leva = g.leva === 3 || g.leva === 2 || g.leva === 1 ? g.leva : null
   const urgenza = g.urgenza === 'oggi' || g.urgenza === 'settimana' || g.urgenza === 'poi' ? g.urgenza : null

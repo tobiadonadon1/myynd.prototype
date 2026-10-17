@@ -161,9 +161,6 @@ test('i generi nuovi: una scadenza vuole la data letta nella fonte, una cosa da 
   assert.equal(pulisci({ genere: 'da-leggere', ...base, doc: '' }), null)
   const leggi = pulisci({ genere: 'da-leggere', ...base })
   assert.ok(leggi && priorita.voceDelFeed(leggi).tipo === 'Da leggere')
-  // «Imposto un'automazione…» è una proposta anche se l'ha chiamata priorità
-  const auto = pulisci({ genere: 'priorita', ...base, offerta: 'I set up an automation that files the App Review mails every Monday.' })
-  assert.equal(auto?.genere, 'proposta')
 })
 
 test('con il riferimento, un progetto che lui ha detto morto non si propone, nemmeno per nome', () => {

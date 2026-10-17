@@ -110,34 +110,6 @@ test('la delega riceve il progetto attuale per ID e conserva le note della riga'
   o.smetti()
 })
 
-test('saved email policy reaches delegation and dismissal during classification prevents saving', async () => {
-  const d = { id: 'posta:policy-race', fonte: 'posta', tipo: 'email', titolo: 'Sequoia pilot scope', corpo: 'Could you confirm the Sequoia pilot scope?', autore: 'Lee <lee@example.com>', quando: new Date().toISOString() }
-  store.salvaDocumenti([d])
-  store.scriviCompito({ id: 'policy-feedback', testo: 'Pilot scope', doc: d.id, ordine: 'policy-feedback' })
-  const policy = { nomi: ['posta.leggi'], selezione: 'richieste-dirette' as const, ambitoSelezione: 'Sequoia' }
-  store.scriviCompito({ id: 'policy-work', testo: 'Summarize direct email', origine: 'auto:human-mail', doc: d.id, attrezzi: policy, ordine: 'policy-work' })
-  let ricevuta: unknown
-  prova({
-    svolgi: async (_c, _n, _m, _a, _cart, _passo, _doc, vincolo) => {
-      ricevuta = vincolo
-      return { testo: 'Lee asks for scope confirmation.', fonti: [{ id: d.id, label: '[1] Scope' }], verificaDocumenti: [d.id] }
-    },
-    chiedeAiuto: async () => {
-      store.cambiaStatoCompito('policy-feedback', 'lasciato')
-      return { chiede: false, manca: [], domanda: '' }
-    },
-    domandeDaFare: nessunaDomanda
-  })
-  const o = orecchio('policy-work')
-  compiti.affida('policy-work', 'bozza')
-  await o.aspetta('guaio')
-  assert.deepEqual(ricevuta, policy)
-  assert.equal(store.compito('policy-work')?.risultato, null)
-  assert.notEqual(store.compito('policy-work')?.stato, 'pronto')
-  assert.ok(!o.sentiti.some(e => e.fase === 'pronto'))
-  o.smetti()
-})
-
 test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affidata', async () => {
   prova({
     svolgi: async (_c, _n, _m, _a, _cart, onPasso) => {
@@ -520,7 +492,7 @@ test('madre si scrive, si rilegge, e una riscrittura non taglia il filo', () => 
 test('verified native delivery skips speculative classification; execution is cancellable and replayed only to its owner', async () => {
   let signal: AbortSignal | undefined
   let resolveWork: (value: {testo: string; fonti: never[]; eseguito: boolean}) => void = () => {}
-  prova({ svolgi: async (_t, _n, _m, _a, _c, passo, _d, _s, execution) => {
+  prova({ svolgi: async (_t, _n, _m, _a, _c, passo, _d, execution) => {
     signal = execution?.signal
     assert.equal(execution?.nativa, true)
     passo?.({ passo: 'apro', dettaglio: 'Pages' })
@@ -543,7 +515,7 @@ test('verified native delivery skips speculative classification; execution is ca
   stop(); stopOther(); o.smetti()
   await pausa(10)
 
-  prova({ svolgi: async (_t, _n, _m, _a, _c, _p, _d, _s, execution) => {
+  prova({ svolgi: async (_t, _n, _m, _a, _c, _p, _d, execution) => {
     signal = execution?.signal
     return new Promise(r => { resolveWork = r })
   } })
@@ -1075,7 +1047,7 @@ test('una riga di un progetto porta a svolgi la cartella di lavoro, la memoria e
 
   let ricevuto: { cartella: string | null | undefined; concessi: string[]; materiale: unknown; nota: string | null | undefined } | null = null
   prova({
-    svolgi: async (_t, nota, _m, concessi, cartella, _p, _d, _s, _e, materiale) => {
+    svolgi: async (_t, nota, _m, concessi, cartella, _p, _d, _e, materiale) => {
       ricevuto = { cartella, concessi: concessi ?? [], materiale, nota }
       return { testo: 'Reply to App Review with the link and the steps, whole and ready to send.', fonti: [] }
     },
@@ -1242,7 +1214,7 @@ const NOTA_P3 = 'Done: the kickoff note for the Harbor pilot.\n\nThe kickoff not
 /** Un `svolgi` finto che risponde in fila e ricorda l'esecuzione ricevuta. */
 function svolgiInFila(uscite: string[]) {
   const ricevute: { nota: string | null; esecuzione: unknown }[] = []
-  const svolgi: Ferri['svolgi'] = async (_t, nota, _m, _a, _c, _p, _d, _s, esecuzione) => {
+  const svolgi: Ferri['svolgi'] = async (_t, nota, _m, _a, _c, _p, _d, esecuzione) => {
     ricevute.push({ nota: nota ?? null, esecuzione })
     return { testo: uscite[Math.min(ricevute.length - 1, uscite.length - 1)], fonti: [], lette: ['posta:INBOX:502'] }
   }

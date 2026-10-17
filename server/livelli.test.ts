@@ -35,11 +35,11 @@ after(() => rmSync(CASA, { recursive: true, force: true }))
 const ECONOMICO = 'claude-haiku-5-5'
 
 /** I lavori che prima della tabella a tre livelli erano `frontiera: true`. */
-const ERANO_FRONTIERA = ['risposta', 'bozza', 'lettura', 'cernita', 'domande', 'punto', 'ricetta']
+const ERANO_FRONTIERA = ['risposta', 'bozza', 'lettura', 'cernita', 'domande', 'punto']
 
 /** Quelli che erano `frontiera: false`, e devono restare sull'economico. */
 const ERANO_PICCOLI = ['rassegna', 'titolo', 'classifica', 'traduzione', 'estrazione',
-  'giudizio', 'ritratto', 'smistamento']
+  'giudizio', 'ritratto']
 
 test('nessun lavoro che pagava il modello grande è finito sull’economico', () => {
   cfg.scrivi({ modello: 'claude-sonnet-5-5' })
@@ -94,23 +94,23 @@ test('i parametri di un lavoro «media» sono ancora quelli di prima', () => {
   assert.deepEqual(p.output_config, { effort: 'medium' })
 })
 
-test('i lavori delle fondamenta: l’esame e la verifica di frontiera, il collaudo non sull’economico', () => {
+test('i lavori delle fondamenta: l’esame e la verifica di frontiera, la valutazione non sull’economico', () => {
   cfg.scrivi({ modello: 'claude-sonnet-5-5' })
   // l'esame e la verifica misurano la chat: un giudice più debole di chi giudica non vede l'errore
   assert.equal(mod.modelloPer('esame'), 'claude-sonnet-5-5')
   assert.equal(mod.modelloPer('verifica'), 'claude-sonnet-5-5')
-  // il collaudo è `media`: in rete vale quanto la lettura, mai l'economico
-  assert.equal(mod.modelloPer('collaudo'), 'claude-sonnet-5-5')
-  assert.notEqual(mod.modelloPer('collaudo'), ECONOMICO)
-  assert.equal(mod.attesaDi('collaudo'), 120_000)
+  // la valutazione è `media`: in rete vale quanto la lettura, mai l'economico
+  assert.equal(mod.modelloPer('valutazione'), 'claude-sonnet-5-5')
+  assert.notEqual(mod.modelloPer('valutazione'), ECONOMICO)
+  assert.equal(mod.attesaDi('valutazione'), 120_000)
   assert.equal(mod.attesaDi('esame'), 90_000)
   assert.equal(mod.attesaDi('verifica'), 120_000)
-  // la verifica pensa, l'esame e il collaudo no
+  // la verifica pensa, l'esame e la valutazione no
   assert.ok(mod.parametri('verifica', 4000).thinking?.type !== 'disabled')
   // Sonnet 5.5 rifiuta `disabled` con un 400: chi non pensa lo spegne con `between_tools`, a sforzo basso
   assert.deepEqual(mod.parametri('esame', 4000).thinking, { type: 'between_tools' })
-  assert.deepEqual(mod.parametri('collaudo', 4000).thinking, { type: 'between_tools' })
-  assert.equal((mod.parametri('collaudo', 4000).output_config as { effort?: string }).effort, 'low')
+  assert.deepEqual(mod.parametri('valutazione', 4000).thinking, { type: 'between_tools' })
+  assert.equal((mod.parametri('valutazione', 4000).output_config as { effort?: string }).effort, 'low')
 })
 
 test('il pensiero si spegne solo dove il modello lo accetta: Haiku 5.5 con `disabled`, Sonnet 5.5 con `between_tools`, Opus 5.5 no', () => {

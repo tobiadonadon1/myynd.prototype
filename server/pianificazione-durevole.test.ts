@@ -9,10 +9,10 @@ const {backgroundWorkScope}=await import('./lavoro-background.ts')
 after(()=>rmSync(folder,{recursive:true,force:true}))
 test('startup and repeated wake coalesce missed slots, persisting completion',async()=>{
  let calls=0
- assert.equal((await runScheduled('automation',60_000,async()=>++calls,600_000)).ran,true)
- assert.equal((await runScheduled('automation',60_000,async()=>++calls,620_000)).ran,false)
- assert.equal((await runScheduled('automation',60_000,async()=>++calls,86_400_000)).ran,true)
- assert.equal(calls,2);assert.equal(scheduledStatus().automation.state,'complete')
+ assert.equal((await runScheduled('gemello',60_000,async()=>++calls,600_000)).ran,true)
+ assert.equal((await runScheduled('gemello',60_000,async()=>++calls,620_000)).ran,false)
+ assert.equal((await runScheduled('gemello',60_000,async()=>++calls,86_400_000)).ran,true)
+ assert.equal(calls,2);assert.equal(scheduledStatus().gemello.state,'complete')
 })
 test('concurrent wakeups do not duplicate dispatch and crash-claimed slots are not replayed',async()=>{
  let finish:()=>void=()=>{};let calls=0

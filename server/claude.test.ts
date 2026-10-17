@@ -136,15 +136,15 @@ test('una stringa passa com’è, i blocchi si appiattiscono, il resto è vuoto'
 })
 
 /*
- * Il recinto delle automazioni.
+ * Il recinto delle fonti.
  *
- * Una ricetta dichiara cosa può aprire, e quella riga si legge sulla sua scheda.
- * Fino a ieri valeva per la pescata iniziale e non per `cerca`, quindi era una
- * scritta: la ricerca generale apriva tutto lo stesso. Queste prove sono
+ * Una riga dichiara cosa può aprire. Fino a ieri valeva per la pescata
+ * iniziale e non per `cerca`, quindi era una scritta: la ricerca generale
+ * apriva tutto lo stesso. Queste prove sono
  * quelle che tengono in piedi la promessa, e la cosa che devono impedire è che
  * qualcuno «semplifichi» togliendo il terzo argomento.
  */
-test('il recinto: si vede solo quello che l’automazione ha il permesso di aprire', () => {
+test('il recinto: si vede solo quello che la riga ha il permesso di aprire', () => {
   store.salvaDocumenti([
     doc('posta:INBOX:900', 'Preventivo per il capannone'),
     doc('desktop:/listino.pdf', 'Listino prezzi capannone',
@@ -163,7 +163,7 @@ test('il recinto: si vede solo quello che l’automazione ha il permesso di apri
   assert.ok(soloPosta.every(d => d.fonte === 'posta'), 'e non esce dal recinto')
 
   // un elenco vuoto è un permesso vuoto, non «tutto»: è la differenza fra
-  // un’automazione che può leggere niente e una senza restrizioni
+  // una riga che può leggere niente e una senza restrizioni
   assert.deepEqual(claude.materiale('capannone', [], []), [], 'nessuna fonte concessa, niente materiale')
 })
 
@@ -177,7 +177,7 @@ test('il recinto lo decide una funzione sola, e gli attrezzi che non leggono non
   // niente di dichiarato: nessun recinto, cioè il compito scritto a mano
   assert.equal(attrezzi.recinto([]), null)
   /*
-   * E il caso che conta: un'automazione che chiede solo di far lavorare Claude
+   * E il caso che conta: una riga che chiede solo di far lavorare Claude
    * Code non ha dichiarato nessuna fonte, quindi non ne ha ristretta nessuna.
    * Restringerla a zero la spegnerebbe — ed è quello che faceva una prima
    * versione di questa modifica.
@@ -661,48 +661,12 @@ test('current-project chat planning filters its initial evidence and later searc
   progetti.chiudi(p.id)
 })
 
-test('saved direct-email policy constrains summary tools and an automatic origin is not a manual pin', async () => {
-  const progetti = await import('./progetti.ts')
-  const p = progetti.scrivi({ nome: 'Redwood', obiettivo: 'Improve customer support' })
-  const base = { quando: new Date().toISOString(), autore: 'Alex <alex@example.com>' }
-  const current = doc('posta:red-current', 'Redwood approval request', { ...base, corpo: 'CURRENT_OK: Could you confirm the Redwood pilot?' })
-  const old = doc('posta:red-old', 'Redwood old school programme', { ...base, corpo: 'EXCLUDED_ARCHIVE: Please review the course.', quando: new Date(Date.now() - 90 * 86_400_000).toISOString() })
-  const dismissed = doc('posta:red-dismissed', 'Redwood outdated scope', { ...base, corpo: 'EXCLUDED_DISMISSED: Could you confirm the obsolete scope?' })
-  const unrelated = doc('posta:red-unrelated', 'Maple supplier approval', { ...base, corpo: 'EXCLUDED_OTHER: Could you approve the unrelated supplier?' })
-  store.salvaDocumenti([current, old, dismissed, unrelated])
-  store.scriviCompito({ id: 'red-dismissal', testo: 'Old scope', doc: dismissed.id, ordine: 'red' })
-  store.cambiaStatoCompito('red-dismissal', 'lasciato')
-  const policy = { selezione: 'richieste-dirette' as const, ambitoSelezione: 'Redwood' }
-  const question = 'Summarize new direct human email requests.'
-  const requests = fornitoreFinto([
-    { chiamate: [
-      { name: 'cerca', input: { query: 'approval' } },
-      { name: 'posta_leggi', input: { query: 'Redwood' } },
-      { name: 'apri', input: { id: old.id } },
-      { name: 'apri', input: { id: unrelated.id } }
-    ] },
-    { testo: 'Alex asks you to confirm the Redwood pilot. [1]' }
-  ])
-  const result = await claude.svolgi(question, null, 'bozza', ['posta.leggi'], null, undefined, current.id, policy)
-  assert.deepEqual(result.fonti.map(f => f.id), [current.id])
-  assert.deepEqual(result.verificaDocumenti, [current.id])
-  assert.ok(risultati(requests).every(t => !/EXCLUDED_/.test(t)))
-  const noCalls = fornitoreFinto([{ testo: 'Must never run for a stale automatic origin.' }])
-  await assert.rejects(() => claude.svolgi(question, null, 'bozza', [], null, undefined, old.id, policy), /non è più una richiesta attuale/)
-  assert.equal(noCalls.length, 0)
-  // Feedback received while the model is writing must invalidate the result.
-  store.scriviCompito({ id: 'red-race', testo: 'Review current pilot', doc: current.id, ordine: 'red-race' })
-  fornitoreFinto([{ prima: () => store.cambiaStatoCompito('red-race', 'fatto'), testo: 'Reply about Redwood. [1]' }])
-  await assert.rejects(() => claude.svolgi(question, null, 'bozza', [], null, undefined, current.id, policy), /mentre preparavo il risultato/)
-  progetti.chiudi(p.id)
-})
-
 test('native delegation rejects prose-only claims and unrequested app writes', async () => {
   fornitoreFinto([{ testo: 'I have created your essay in Pages.' }])
-  await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages', null, 'tutto', [], null, undefined, null, null,
+  await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages', null, 'tutto', [], null, undefined, null,
     { nativa: true, signal: new AbortController().signal }), /not created|non è stato creato/)
   fornitoreFinto([{ chiamate: [{ name: 'crea_documento_app', input: { app: 'TextEdit', titolo: 'Garden', testo: 'An essay.' } }] }])
-  await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages', null, 'tutto', [], null, undefined, null, null,
+  await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages', null, 'tutto', [], null, undefined, null,
     { nativa: true, signal: new AbortController().signal }), /Pages only/)
   fornitoreFinto([{ chiamate: [{ name: 'crea_documento_app', input: { app: 'Pages', titolo: 'Garden', testo: 'An essay.' } }] }])
   await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages'), /not authorized/)
@@ -710,12 +674,12 @@ test('native delegation rejects prose-only claims and unrequested app writes', a
 
 test('native delegation can ask for an essential topic, but cancellation prevents model and app work', async () => {
   fornitoreFinto([{ testo: 'What topic should the essay cover?' }])
-  const r = await claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null, null,
+  const r = await claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null,
     { nativa: true, signal: new AbortController().signal })
   assert.equal(r.eseguito, undefined)
   assert.match(r.testo, /topic/)
   const stop = new AbortController(); stop.abort()
-  await assert.rejects(() => claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null, null,
+  await assert.rejects(() => claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null,
     { nativa: true, signal: stop.signal }), /abort/i)
 })
 
@@ -724,7 +688,7 @@ test('native delegation can ask for an essential topic, but cancellation prevent
  *
  * Una riga scritta a mano riceve le mani di `mani.ts`, oltre a cerca e apri;
  * quello che una mano legge torna al modello, e ogni mano segna un fatto che
- * esce con il risultato. Un'automazione no. E un obiettivo nudo non torna più
+ * esce con il risultato. Una riga con i suoi attrezzi no. E un obiettivo nudo non torna più
  * come domanda: il modello riceve l'istruzione di produrre, e quello che
  * scrive è il risultato.
  */
@@ -778,7 +742,7 @@ test('un obiettivo nudo si produce: il modello riceve l\'istruzione di scegliere
   assert.ok(!sistemi(normale).some(s => s.includes('Non fermarti a chiedere')))
 })
 
-test('le mani seguono il compito: una nota chiede crea_nota, un file scrivi_file, un\'automazione e un prompt non ne hanno nessuna', async () => {
+test('le mani seguono il compito: una nota chiede crea_nota, un file scrivi_file, una riga con i suoi attrezzi e un prompt non ne hanno nessuna', async () => {
   const nota = fornitoreFinto([{ testo: 'Done: the note is in Apple Notes.\n\nCall summary.' }])
   await claude.svolgi('Write a note in Apple Notes with the call summary')
   assert.ok(nomiAttrezzi(nota[0]).includes('crea_nota'))
@@ -787,9 +751,9 @@ test('le mani seguono il compito: una nota chiede crea_nota, un file scrivi_file
   await claude.svolgi('Save the pilot plan as a markdown file')
   assert.ok(nomiAttrezzi(file[0]).includes('scrivi_file'))
   cfg.scrivi({ ...cfg.leggi(), posta: { host: 'imap.example.test', porta: 993, utente: 'me@example.test', password: 'test' } })
-  const automazione = fornitoreFinto([{ testo: 'Nothing new in the mailbox.' }])
+  const dichiarata = fornitoreFinto([{ testo: 'Nothing new in the mailbox.' }])
   await claude.svolgi('Summarise new direct requests', null, 'bozza', ['posta.leggi'])
-  assert.ok(!nomiAttrezzi(automazione[0]).some(n => mani.eUnaMano(n)), 'un\'automazione ha solo gli attrezzi dichiarati')
+  assert.ok(!nomiAttrezzi(dichiarata[0]).some(n => mani.eUnaMano(n)), 'una riga con i suoi attrezzi ha solo quelli')
   const prompt = fornitoreFinto([{ testo: 'Write the pilot.' }])
   await claude.svolgi('Define a Myynd pilot inside H-Farm', null, 'prompt')
   assert.ok(!nomiAttrezzi(prompt[0]).some(n => mani.eUnaMano(n)), 'un prompt consegna la richiesta, non fa la cosa')

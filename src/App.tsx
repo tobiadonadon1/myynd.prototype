@@ -4,13 +4,12 @@ import { desktop } from './desktop'
 import { Sfondo } from './Sfondo'
 import { Cestino, Hov, daTastiera, taglia, useAttiva, useLarghezza } from './ui'
 import {
-  IconAiuto, IconCerca, IconChat, IconFulmine, IconIngranaggio,
+  IconAiuto, IconCerca, IconChat, IconIngranaggio,
   IconMappa, IconMemoria, IconPiu, IconProgetti, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
 import { useTastiMenu } from './components/MenuGiu'
 import { Documento, Ricerca, Toast } from './modals'
 import { Aiuto } from './screens/Aiuto'
 import { ResocontoAperto } from './components/Resoconto'
-import { Automazioni } from './screens/Automazioni'
 import { Chat } from './screens/Chat'
 import { Connettori } from './screens/Connettori'
 import { Mappa, MappaPiena } from './screens/Mappa'
@@ -46,7 +45,7 @@ import { inviaAvvio, ospitatoQui, segna } from './tempi'
  *
  * «Ogni giorno alle 7» è un'ora del suo orologio, e il server — su Railway —
  * sta in UTC. Il browser lo sa e il server no: glielo si dice quando non
- * coincide, e da lì in poi le automazioni e il conto delle bozze del giorno
+ * coincide, e da lì in poi i giri di fondo e il conto delle bozze del giorno
  * ragionano nella sua ora. Se non riesce, pazienza: lo ridirà al prossimo avvio.
  */
 function dilloIlFuso(suoSulServer: string | null | undefined) {
@@ -428,7 +427,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   /**
    * Il guscio dell'app chiede di andare da qualche parte.
    *
-   * Cmd+, nel menù, «Nuova chat» nel vassoio: arrivano da qui come nomi, e si
+   * Cmd+, nel menù, «Nuova chat» nella barra: arrivano da qui come nomi, e si
    * portano dove porterebbe la voce corrispondente della colonna. `v` si rifà a
    * ogni disegno, e ci si iscrive una volta sola: il riferimento tiene l'ultimo.
    */
@@ -599,13 +598,6 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             </div>
           )}
 
-          <a href="#" onClick={v.goAuto} style={nav(v.navAuto)} title={rail ? (v.suggerimentiNuovi > 0 ? t('Nuove automazioni proposte') : v.vassoioNuovi > 0 ? t('Nuovi risultati in prova') : t('Ordini fissi')) : undefined}>
-            {/* Myynd ha una proposta nuova: il fulmine si accende di rame e il pallino dice
-                quello che dice dappertutto, qualcosa aspetta una persona; si spegne quando la guarda */}
-            <IconFulmine style={{ flex: 'none', ...((v.suggerimentiNuovi > 0 || v.vassoioNuovi > 0) && !v.isAuto ? { color: 'var(--rame)' } : {}) }} />
-            {!rail && <span style={{ flex: 1 }}>{t('Ordini fissi')}</span>}
-            {(v.suggerimentiNuovi > 0 || v.vassoioNuovi > 0) && <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: v.isAuto ? 'var(--avorio)' : 'var(--rame)' }} />}
-          </a>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -727,7 +719,6 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         )}
         {v.isProgetti && <Progetti v={v} />}
         {v.isChat && <Chat v={v} />}
-        {v.isAuto && <Automazioni v={v} />}
         {v.isMappa && <Mappa v={v} />}
         {v.isPref && <Preferenze v={v} />}
         {v.isMemoria && <Memoria v={v} />}

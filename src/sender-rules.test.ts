@@ -1,7 +1,7 @@
 // La riga dei mittenti messi via si vede solo se ha qualcosa da dire.
 //
-// Senza regole non è una funzione che manca, è una riga in meno sulla pagina
-// delle automazioni: chi non ne ha una non deve nemmeno sapere che esiste.
+// Senza regole non è una funzione che manca, è una riga in meno sulla pagina:
+// chi non ne ha una non deve nemmeno sapere che esiste.
 //
 //   node --test src/sender-rules.test.ts
 

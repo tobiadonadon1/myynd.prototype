@@ -47,7 +47,7 @@ before(async () => {
     const k = await conti.registra(`resoconto-${e}@esempio.test`, 'parola-di-prova-lunga')
     assert.ok(k.ok)
     if (i === 0) A = k.id; else if (i === 1) B = k.id; else C = k.id
-    chi.dentro(k.id, () => cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', diSerie: false, onboarding: true, giro: true }))
+    chi.dentro(k.id, () => cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', onboarding: true, giro: true }))
   }
   chi.dentro(A, () => {
     riga('m1', { creato: '2026-09-02T09:00:00.000Z', stato: 'fatto', chiesto: '2026-09-15T08:00:00.000Z', chiuso: '2026-09-17T09:00:00.000Z' })

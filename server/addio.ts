@@ -68,7 +68,7 @@ export async function cancella(utente: string): Promise<Esito> {
   //    dentro le credenziali.
   await cfg.cancella(utente)
 
-  // 4. i file: l'indice, i documenti, le automazioni scritte da lei.
+  // 4. i file: l'indice, i documenti, quello che ha scritto lei.
   //    Prima le copie private della prova delle risposte, in tutt'e due i
   //    casi: `togli` ferma anche la prova che sta girando in questo processo,
   //    e senza quella fermata la prova continuava con le domande che

@@ -139,8 +139,7 @@ export function componi(m: Materiale, o: { dal: string; mattina: boolean }): Mat
     else if (c.stato === 'aperto' && ferma(c)) carte.push({ a: { genere: 'carta', id: c.id, titolo: titoloDi(c), perche: c.guaio ?? '', motivo: 'blocco' }, rango: 1, quando: c.aggiornato })
     else if (c.stato === 'pronto' && bocciata) carte.push({ a: { genere: 'carta', id: c.id, titolo: titoloDi(c), perche: domandaDi(c) || c.prova?.perche || '', motivo: 'blocco' }, rango: 1, quando: c.aggiornato })
     // pronta, e non ancora partita né salvata da nessuna parte: si approva lei.
-    // Anche la proposta di un ordine fisso (modo «io», con la sua `proposta`):
-    // aspetta il suo «Approva», e la ricevuta che la tace la lascia lì
+    // Anche una riga con la sua `proposta` (modo «io»): aspetta il suo «Approva»
     else if (c.stato === 'pronto' && (c.modo !== 'io' || !!c.proposta)) carte.push({ a: { genere: 'carta', id: c.id, titolo: titoloDi(c), perche: '', motivo: 'approva' }, rango: 2, quando: c.aggiornato })
   }
   done.sort((a, b) => b.quando.localeCompare(a.quando))

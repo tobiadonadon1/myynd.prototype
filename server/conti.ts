@@ -9,7 +9,7 @@
 //
 // Quindi un database piccolo e condiviso con dentro le due sole cose che non
 // appartengono a nessuno in particolare: chi ha un conto, e quale token è di
-// chi. Tutto il resto — i documenti, la lista, la memoria, le automazioni —
+// chi. Tutto il resto — i documenti, la lista, la memoria, le chat —
 // resta nella cartella della singola persona e non si mescola mai.
 //
 // **Dove sta quel database.** In casa, `conti.db` accanto alla cartella di
@@ -616,7 +616,7 @@ export async function pota(): Promise<void> {
  *
  * Un'installazione che gira da mesi ha l'account dentro `config.json` nella
  * radice, e accanto il suo `mente.db` con dentro tutto: i documenti, la lista,
- * la memoria, le automazioni. Senza questo passaggio quella persona riaprirebbe
+ * la memoria, le chat. Senza questo passaggio quella persona riaprirebbe
  * Myynd e troverebbe una schermata che le chiede di registrarsi, con tutto il
  * suo lavoro ancora lì sul disco ma invisibile. È il modo peggiore di
  * aggiornare qualcosa.

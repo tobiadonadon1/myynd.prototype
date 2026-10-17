@@ -82,7 +82,7 @@ const DA_SOLO = new Set(['iniziativa', 'primo-giorno', 'guadagnata'])
  */
 const SUA = '\n\nNOTE FROM THE USER:\n'
 /**
- * Le righe di un ordine fisso: la nota è l'istruzione e poi l'elenco «Da
+ * Le righe «auto:» di prima: la nota è l'istruzione e poi l'elenco «Da
  * guardare» con gli id dei documenti, per chi lavora. Sotto il titolo, sulla
  * prima pagina, si leggeva «Da guardare: — [posta:v-1] …» anche in inglese:
  * a lei si mostra l'istruzione, e l'elenco resta in coda quando la cambia.

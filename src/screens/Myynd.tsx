@@ -8,9 +8,7 @@ import { Rassegna } from '../components/Rassegna'
 import { Punto, apriIlPunto } from '../components/Punto'
 import { MenuGiu } from '../components/MenuGiu'
 import { CartaSettimana } from '../components/Resoconto'
-import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaAllOrdineFisso, portaInChat, primoParagrafo, siPuoFareOgniSettimana, siPuoParlarne, taglia, type Vals } from '../vals'
-import { fraseOgniSettimana } from '../automazioni/quando'
-import { CartaPacchetto } from '../automazioni/Pacchetto'
+import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
@@ -299,8 +297,6 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
             <>
               {proposta && lista ? <>{affidalo}{fatto}</> : <>{fatto}{affidalo}</>}
               <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>
-              {/* una cosa che torna diventa un ordine fisso, già scritto (E) */}
-              {siPuoFareOgniSettimana() && <Hov as="button" type="button" onClick={fermo(() => portaAllOrdineFisso({ frase: fraseOgniSettimana(carta.titolo), testo: carta.titolo }))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Fallo ogni settimana')}</Hov>}
               <Hov as="button" type="button" ref={nonUtile} onClick={fermo(chiedi)} title={t('Toglila dal feed')} aria-label={`${t('Non utile')}: ${carta.titolo}`} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non utile')}</Hov>
             </>
           )} />
@@ -352,15 +348,15 @@ function provenienza(c: Compito, v: Vals, l?: Lista): { testo: string; apri?: ()
     // apre il dettaglio appena la vede
     return { testo: t('la riga che l’ha fatta nascere'), apri: () => { l?.chiediDiAprire(id); v.goOggi() } }
   }
-  // «chat» e le automazioni: i due rami di prima cercavano parole che nessuno
-  // scrive più — `origine` vale 'chat', e un'automazione scrive 'auto:<id>' —
-  // quindi quelle righe non dicevano da dove venivano
+  // «chat»: il ramo di prima cercava parole che nessuno scrive più —
+  // `origine` vale 'chat' — quindi quelle righe non dicevano da dove venivano.
+  // Le righe «auto:<id>» sono quelle che Myynd scriveva da sé, prima
   if (c.origine === 'chat' || c.origine === 'conversazione') return { testo: t('la chat'), apri: () => v.goChat() }
   if (c.origine === 'iniziativa') return { testo: t('Prepara in anticipo') }
   if (c.origine === 'idee-x') return { testo: t('i tuoi post su X') }
   if (c.origine === 'punto') return { testo: t('il punto del giorno') }
   if (c.origine === 'avvio' || c.origine === 'onboarding') return { testo: t('il primo progetto') }
-  if (c.origine?.startsWith('auto:') || c.origine === 'automazione') return { testo: t('un’automazione') }
+  if (c.origine?.startsWith('auto:')) return { testo: t('Myynd, da sé') }
   if (c.origine === 'feed') return { testo: t('il feed') }
   return null
 }
@@ -410,7 +406,7 @@ function Prove({ c, v, l, scuro, inRiga }: { c: Compito; v: Vals; l?: Lista; scu
             hover={{ textDecorationColor: 'currentColor' }}>{da.testo}</Hov>
         )
         : (
-          // il punto del giorno, il primo progetto, un'automazione: posti
+          // il punto del giorno, il primo progetto, Myynd da sé: posti
           // che non si aprono, e un link che non porta da nessuna parte è
           // peggio di una parola scritta
           <span style={{ ...link, flex: 'none', cursor: 'default', textDecoration: 'none' }}>{da.testo}</span>
@@ -736,7 +732,7 @@ function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
 function attesaDi(c: Compito): string {
   // F1 · un lavoro consegnato che non ha passato il suo «fatto» non è «fatto»
   if (c.stato === 'pronto' && c.prova?.esito === 'fail') return t('da finire')
-  // E · una proposta di un ordine fisso non è fatta: aspetta il suo «Approva»
+  // E · una proposta non è fatta: aspetta il suo «Approva»
   if (c.stato === 'pronto' && c.proposta) return t('da approvare')
   return c.stato === 'pronto' ? t('fatto') : c.stato === 'chiede' ? t('ti chiede') : ''
 }
@@ -1514,10 +1510,6 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
           questions, don't stack them one over the other» */}
       <CartaDomande v={v} />
 
-      {/* E · le quattro di partenza: piegate in una riga, in fondo, sotto il lavoro e le domande.
-          Stavano sotto la ricevuta, quattro interruttori sopra la prima cosa da fare (15 ottobre 2026) */}
-      {v.feedCaricato && <div style={{ marginTop: 18 }}><CartaPacchetto v={v} /></div>}
-
       {blocchi.length === 0 && <Vuoto v={v} />}
 
       {/* niente elenco delle fatte qui: quello che hai chiuso è chiuso.
@@ -1585,8 +1577,7 @@ function Avviso({ v }: { v: Vals }) {
     puoAprire: !!d,
     puoRiavviare: !!d?.riavvia,
     // senza la schermata dell'Accessibilità nel ponte «Aspetto il permesso…» aspetterebbe un'apertura mai avvenuta
-    puoAprireTitoli: !!osservatore()?.apriImpostazioniTitoli,
-    automazioni: v.automazioniInGuaio
+    puoAprireTitoli: !!osservatore()?.apriImpostazioniTitoli
   })
   if (!riga) return null
   return (
@@ -1829,7 +1820,7 @@ function Vuoto({ v }: { v: Vals }) {
   }
   // il motore che manca lo dice la riga fissa in cima (`Avviso`): qui non si ripete
   const manca = senzaFonti ? { frase: t('Non hai collegato niente.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
-    // niente letto: le Fonti dicono quale manca (un ordine fisso acceso senza la posta non gira)
+    // niente letto: le Fonti dicono quale manca
     : senzaDocumenti ? { frase: t('Non ho ancora letto niente.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
     : !conProgetti ? { frase: t('Nessun progetto attivo.'), gesto: t('Apri la memoria'), vai: v.goMemoria }
     : null

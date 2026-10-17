@@ -79,7 +79,7 @@ before(async () => {
   await conti.perProva.apriCon(token, id)
   chi.dentro(id, () => {
     cartella = cfg.cartella()
-    cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, nome: 'Alex', desktop: { cartelle: [join(home, 'Documents')], scelte: true }, motore: 'compatibile', compatibile: { url: `http://127.0.0.1:${portaFinto}/v1/`, chiave: 'sk-finta', modello: 'finto' } })
+    cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, nome: 'Alex', desktop: { cartelle: [join(home, 'Documents')], scelte: true }, motore: 'compatibile', compatibile: { url: `http://127.0.0.1:${portaFinto}/v1/`, chiave: 'sk-finta', modello: 'finto' } })
     store.salvaDocumenti([{ id: 'posta:INBOX:701', fonte: 'posta', tipo: 'email', titolo: 'Harbor pilot kickoff', corpo: 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel. The fee is €4,800 for the first phase. Nora', autore: 'Nora Vance <nora@harbor.example>', quando: new Date().toISOString(), percorso: 'INBOX', messageId: 'k701@harbor.example' }])
   })
   store.chiudiIndici()

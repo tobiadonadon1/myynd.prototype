@@ -82,7 +82,7 @@ export async function semina(n: number): Promise<string> {
   const acc = await conti.registra('banco@example.com', 'banco-password-123')
   if (!acc.ok) throw new Error(acc.errore)
   chi.dentro(acc.id, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false, nome: 'Alex', ruolo: 'founder', onboarding: true } as Parameters<typeof cfg.scrivi>[0])
+    cfg.scrivi({ lingua: 'en', nome: 'Alex', ruolo: 'founder', onboarding: true } as Parameters<typeof cfg.scrivi>[0])
     const nomi = ['Aurora', 'Harbor', 'Myynd', 'Evermute', 'Northwind', 'Atlas', 'Orbit', 'Lumen', 'Vega', 'Cobalt']
     const ps = nomi.map(x => progetti.crea({ nome: x, obiettivo: `Ship the ${x} pilot with two customers by October` }).progetto)
     const parole = 'launch pilot customer contract invoice proposal meeting deadline budget design review roadmap hiring partner quote scope delivery'.split(' ')

@@ -50,7 +50,7 @@ before(async () => {
   utente = account.id
   await conti.perProva.apriCon(token, account.id)
   chi.dentro(account.id, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true } })
+    cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true } })
     store.salvaDocumenti([
       { id: 'posta:INBOX:1', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo <leo@studio.example>', quando: fa(4), percorso: 'INBOX', messageId: 'leo1@ex', filo: 'leo1@ex' },
       { id: 'posta:Sent:1', fonte: 'posta', tipo: 'email', titolo: 'Re: Logo files', corpo: 'Here are the logo files.', autore: 'Alex <alex@northwind.example>', quando: fa(1), percorso: 'Sent', inviato: true, risponde: 'leo1@ex', destinatari: 'leo@studio.example', filo: 'leo1@ex', messageId: 's1@ex' },

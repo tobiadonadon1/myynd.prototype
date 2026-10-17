@@ -47,7 +47,6 @@ const NOME_PROVENIENZA: Record<Provenienza, string> = {
   tu: 'Scritta da te',
   myynd: 'Da Myynd',
   seguito: 'Il passo dopo',
-  automazione: 'Da un’automazione',
   feed: 'Dal feed'
 }
 

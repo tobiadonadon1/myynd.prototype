@@ -63,7 +63,7 @@ test('provenienza: la fonte vera, in due parole', () => {
   assert.equal(provenienza(c({ doc: 'posta:INBOX:1' })), 'posta')
   assert.equal(provenienza(c({ origine: 'iniziativa' })), 'myynd')
   assert.equal(provenienza(c({ origine: 'seguito' })), 'seguito')
-  assert.equal(provenienza(c({ origine: 'auto:human-mail' })), 'automazione')
+  assert.equal(provenienza(c({ origine: 'auto:human-mail' })), 'myynd')
   assert.equal(provenienza(c({ doc: 'granola:abc' })), 'riunione')
   assert.equal(provenienza(c({})), 'tu')
 })

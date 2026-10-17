@@ -75,7 +75,7 @@ function fascicoloDi(utente: string): Record<string, unknown> {
 
 test('c’è dentro tutto quello che serve a capire cosa tieni', () => {
   const f = fascicoloDi(anna)
-  for (const chiave of ['conto', 'configurazione', 'documenti', 'compiti', 'memoria', 'chat', 'automazioni', 'azioni', 'uso', 'gettoni']) {
+  for (const chiave of ['conto', 'configurazione', 'documenti', 'compiti', 'memoria', 'chat', 'azioni', 'uso', 'gettoni']) {
     assert.ok(chiave in f, `nel fascicolo manca «${chiave}»`)
   }
   assert.equal((f.conto as { email: string }).email, 'anna@esempio.it')
@@ -174,7 +174,7 @@ test('l’addio a metà prova delle risposte ferma la prova, e la cartella non t
     origine: 'costruita' as const, interlingua: false, verificata: 'persona' as const, creata: ieri, assenza: { cercato: ['fee'], guardati: 0 }
   })
   chi.dentro(carla, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, nome: 'Carla', motore: 'claude', claude: { apiKey: 'sk-ant-prova-finta' }, tetto: 0 })
+    cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, nome: 'Carla', motore: 'claude', claude: { apiKey: 'sk-ant-prova-finta' }, tetto: 0 })
     store.salvaDocumenti([doc('posta:1:Carla', 'una mail per Carla')])
     archivio.scriviInsieme({ versione: 1, lingua: 'en', creato: ieri, aggiornato: ieri, domande: [1, 2, 3, 4, 5, 6].map(domanda) })
   })

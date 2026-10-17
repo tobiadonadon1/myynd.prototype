@@ -13,7 +13,6 @@ import * as conti from './conti.ts'
 import * as chi from './chi.ts'
 import * as cfg from './config.ts'
 import * as progetti from './progetti.ts'
-import * as automazioni from './automazioni.ts'
 import * as misuraFeed from './misura-feed.ts'
 import { conta, numeri as numeriDi, type Genere, type Materiale, type RigaAzione, type RigaCompito, type RigaFeed, type Voce } from './resoconto-conta.ts'
 
@@ -31,7 +30,6 @@ export type Resoconto = {
   notato: { chiave: string; genere: string; dati: unknown; testoSuo: string | null; stato: string }[]
   segnalate: { utili: number; viste: number; mancate: number } | null
   voci: VoceResoconto[]
-  automazioni: { id: string; nome: string; usate: number; prodotte: number }[]
   copertura: { postaInviata: boolean; bozzeInCasella: number }
   vuoto: boolean
 }
@@ -121,7 +119,6 @@ export function materiale(da: string, a: string): Materiale {
   aggiungi(db.prepare('SELECT compito AS id FROM misure_compiti WHERE consegnato >= ? AND consegnato < ?').all(da, a) as { id: string }[])
   aggiungi(db.prepare('SELECT id FROM compiti WHERE chiuso >= ? AND chiuso < ?').all(da, a) as { id: string }[])
   aggiungi(db.prepare('SELECT id FROM compiti WHERE consegna IS NOT NULL AND COALESCE(chiuso, chiesto) >= ? AND COALESCE(chiuso, chiesto) < ?').all(da, a) as { id: string }[])
-  aggiungi(db.prepare("SELECT id FROM compiti WHERE origine LIKE 'auto:%' AND creato >= ? AND creato < ?").all(da, a) as { id: string }[])
   aggiungi(db.prepare(`SELECT id FROM compiti WHERE email LIKE '%"salvata"%' AND chiesto >= ? AND chiesto < ?`).all(da, a) as { id: string }[])
   for (const r of db.prepare('SELECT id, mandata FROM compiti WHERE mandata IS NOT NULL').all() as { id: string; mandata: string }[]) {
     try {
@@ -244,12 +241,9 @@ function costruisci(quale: Quale, da: string, a: string, lunedi: string, ini: st
     if (!inviataInCatena(r.id)) bozzeInCasella++
   }
 
-  const ricette = automazioni.ricette()
-  const autom = c.automazioni.map(x => ({ ...x, nome: ricette.find(r => r.id === x.id)?.nome ?? x.id }))
-
   return {
     quale, da, a, lunedi, inizio: ini,
-    ...n, punteggio, notato, segnalate, voci, automazioni: autom,
+    ...n, punteggio, notato, segnalate, voci,
     copertura: { postaInviata, bozzeInCasella },
     vuoto: !voci.length && !notato.length && !punteggio
   }

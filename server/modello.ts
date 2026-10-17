@@ -33,7 +33,6 @@
 // con un indirizzo, come qualunque altro fornitore: si vede cosa lavora, e
 // quando non risponde lo si sa.
 
-import * as provaChiusa from './prova-chiusa.ts'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'node:crypto'
 import { aggiorna, leggi, lingua, scrivi as scriviConfig, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
@@ -489,17 +488,14 @@ export type Lavoro =
   | 'cernita'       // quali di questi messaggi si possono mettere via
   | 'domande'       // cosa gli serve sapere per andare avanti, con le opzioni
   | 'rassegna'      // quali titoli di giornale vale la pena leggere stamattina
-  | 'ricetta'       // da una frase sua a un'automazione che gira davvero
   | 'contratto'     // cosa vuol dire «fatto» per una carta, prima di lavorarla (F1)
   | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
-  | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
   | 'priorita'      // cosa dovrebbe fare adesso, guardando tutto: le fonti non lo chiedono, lo propone lui
   | 'quadro'        // a che punto è davvero un progetto, il prossimo traguardo e le mosse che lo avvicinano
   | 'valutazione'   // il voto alle priorità, contro quello che lui ha scritto di suo pugno: attuali, morte, nel progetto giusto
   | 'email'         // dalla bozza all'email pronta: a chi va, che oggetto, che testo
   | 'revisione'     // rileggere il lavoro consegnato come lei e come chi lo riceve, prima di dirlo pronto
-  | 'collaudo'      // P6: la prova di un'automazione sugli ultimi trenta giorni, in un recinto che non scrive
   | 'esame'         // P7: le domande dell'esame delle risposte, e il giudizio su ognuna
   | 'verifica'      // P7: rileggere una risposta contro le fonti che cita, prima di fidarsene
   | 'presumere'     // P3: di che genere è il dato che manca a un lavoro, e se sbagliarlo costa
@@ -526,8 +522,7 @@ export type Lavoro =
  *   · `media` — un modello di casa *capace* lo fa bene; uno da due giga no.
  *     Qui sta il volume, e qui sta il risparmio vero.
  *   · `frontiera` — lo firma l'azienda, e non si risparmia. La bozza che parte
- *     a un cliente, il punto che si legge ogni mattina, la ricetta che poi gira
- *     per mesi.
+ *     a un cliente, il punto che si legge ogni mattina.
  *
  * In rete conta una riga sola: vedi `modelloPer`, dove solo `casa` scende al
  * modello economico. `media` e `frontiera` oggi si comportano uguale, e
@@ -597,12 +592,6 @@ const LAVORI: Record<Lavoro, Profilo> = {
   // lungo e rispondere con quattro sì o no, e non serve che ragioni. Il
   // conto lo tiene chi la chiede: `valuta-feed.ts`, a mano o da una rotta.
   valutazione: { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 120_000 },
-  // Frontiera, e per una volta non per il costo di sbagliare in pubblico: una
-  // ricetta scritta male gira ogni mattina per mesi, e il modo in cui sbaglia è
-  // il peggiore — non si rompe, fa *quasi* quello che avevi chiesto. Si scrive
-  // due o tre volte in tutta la vita di un'installazione: pagarla bene è la
-  // spesa più facile da giustificare che ci sia in questa tabella.
-  ricetta:    { livello: 'frontiera',  ragiona: false, sforzo: 'medium', attesa: 90_000 },
   /*
    * Ricavare da una bozza l'email vera: a chi va, che oggetto ha, e il solo
    * testo che deve leggere il destinatario.
@@ -649,15 +638,6 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * che costa fiducia quando manca.
    */
   verifica:   { livello: 'frontiera',  ragiona: true,  sforzo: 'low',    attesa: 120_000 },
-  /*
-   * Il collaudo di un'automazione (P6): rifare sugli ultimi trenta giorni
-   * quello che la ricetta farebbe, dentro un recinto che non può scrivere.
-   * `media` e non frontiera: quello che produce non esce da qui, lo guarda lui
-   * prima di accenderla, e una prova gira su decine di documenti; ma un
-   * modello da due giga la farebbe peggio di come girerà davvero, e allora la
-   * prova direbbe il falso.
-   */
-  collaudo:   { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 120_000 },
   /*
    * Il contratto di una carta (F1): una riga che dice cosa vuol dire «fatto»,
    * prima che il lavoro cominci. È il metro con cui il revisore boccia o fa
@@ -714,15 +694,7 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * Quello che produce non esce da questa macchina e nessuno lo firma: se una
    * riga viene storta, sta in una schermata fatta apposta per correggerla.
    */
-  ritratto:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 },
-  /*
-   * Lo smistamento: scegliere fra otto messaggi quali meritano una riga, e
-   * scriverne il titolo. Gira dopo ogni lettura della posta, per sempre, e
-   * quello che produce non esce da qui: una riga di troppo si chiude con un
-   * dito, una che manca la scrive la persona. La risposta vera — la bozza —
-   * la scrive poi il modello grande, una riga alla volta e sotto il tetto.
-   */
-  smistamento: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 }
+  ritratto:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 }
 }
 
 type Messaggio = { role: 'user' | 'assistant'; content: string }
@@ -840,8 +812,8 @@ export function perIlCredito(e: unknown): boolean {
 /**
  * Che il conto sia a secco lo si scopre mentre si sta facendo altro.
  *
- * Chi sbatte contro il muro è quasi sempre dentro una risposta, o un'automazione
- * che gira da sola alle sette del mattino: posti dove l'errore diventa una riga
+ * Chi sbatte contro il muro è quasi sempre dentro una risposta, o un lavoro
+ * che gira da solo di notte: posti dove l'errore diventa una riga
  * rossa che sparisce, o niente del tutto. Allora il fatto si segna qui, e la
  * schermata lo chiede a `/api/stato` e lo dice per bene, una volta, con un
  * cartellino invece che con una riga.
@@ -1097,10 +1069,9 @@ export function motore(): Motore | null {
       crea: (p, attesa) => { controllaIlTetto(); return m.crea(p, attesa) },
       flusso: (p, onTesto, attesa, segnale, conversazione) => {
         controllaIlTetto()
-        // chi guarda è una persona: la stesura di una prova (P6) non fa aspettare la prova stessa
-        const suo = !provaChiusa.inProva()
-        if (suo) segnaGuardato(true)
-        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => { if (suo) segnaGuardato(false) })
+        // chi guarda è una persona
+        segnaGuardato(true)
+        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => segnaGuardato(false))
       }
     }
   }
@@ -1120,10 +1091,9 @@ export function motore(): Motore | null {
       crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { segnaSeOpenAI(e); throw tradotto(e) }) },
       flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
-        const suo = !provaChiusa.inProva()
-        if (suo) segnaGuardato(true)
+        segnaGuardato(true)
         return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
-          .finally(() => { if (suo) segnaGuardato(false) })
+          .finally(() => segnaGuardato(false))
           .catch(e => {
             if (segnale?.aborted) throw new DOMException('The request was cancelled.', 'AbortError')
             segnaSeOpenAI(e)
@@ -1267,7 +1237,7 @@ export { tetto, usoDiOggi } from './tetto.ts'
  *
  * Il tetto è una scelta sua e sta nelle preferenze; zero vuol dire nessuno.
  * Si controlla qui, nell'unico posto da cui partono le chiamate che costano,
- * così vale per la chat, le bozze, il feed e le automazioni insieme. L'account
+ * così vale per la chat, le bozze, il feed e i giri di fondo insieme. L'account
  * Claude lo controlla da sé, in `abbonamento.ts`.
  */
 function controllaIlTetto() {
@@ -1571,8 +1541,6 @@ async function chiediAdesso(o: Domanda): Promise<Esito> {
       // il tetto non è un guasto dell'account: niente riposo, e niente chiave
       // di riserva, che costerebbe denaro per scavalcare una scelta sua
       if (tettoDiOggi.delTetto(e)) throw tradotto(e)
-      // nella prova (P6) niente riposo e niente chiave: la prova si ferma «occupato»
-      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       console.warn(`myynd · Claude Code non ce l'ha fatta su «${o.lavoro}»:`,
         e instanceof Error ? e.message : e)
       // l'account è la sua scelta: il guaio si dice com'è, e il lavoro si riprova sull'account

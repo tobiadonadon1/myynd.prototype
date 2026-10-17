@@ -75,7 +75,7 @@ async function main() {
       const settimane = lunedi.map((l, i) => {
         const da = l.toISOString(), fino = (lunedi[i + 1] ?? ora).toISOString()
         const c = rc.conta(m, { da, a: fino, fuso: f })
-        return { da, a: fino, ...rc.numeri(c.voci), voci: c.voci, esclusi: c.esclusi, automazioni: c.automazioni }
+        return { da, a: fino, ...rc.numeri(c.voci), voci: c.voci, esclusi: c.esclusi }
       })
       if (a.json) {
         console.log(JSON.stringify(settimane.map(s => ({ da: s.da, a: s.a, numeri: s.numeri, voci: s.voci.map(v => ({ genere: v.genere, chiave: v.chiave, prova: v.prova, minuti: v.minuti })), esclusi: s.esclusi })), null, 2))
@@ -87,9 +87,7 @@ async function main() {
           const perche = new Map<string, number>()
           for (const e of s.esclusi) perche.set(e.perche, (perche.get(e.perche) ?? 0) + 1)
           for (const [p, k] of perche) console.log(`  esclusi · ${p}: ${k}`)
-          for (const x of s.automazioni) console.log(`  automazione ${x.id}: usate ${x.usate}, prodotte ${x.prodotte}`)
         }
-        console.log('\nI risultati nel vassoio delle automazioni (esiti) non sono righe: non si contano.')
       }
       const cartellaValutazioni = join(resolve(a.dati!), 'valutazioni')
       mkdirSync(cartellaValutazioni, { recursive: true })

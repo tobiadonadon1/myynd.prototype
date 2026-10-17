@@ -28,10 +28,9 @@ export type VoceConnettore = {
    * Porta documenti nell'indice: c'è un `sincronizza` dietro.
    *
    * Separato da `pronto` di proposito. Teams non ha codice, e non deve
-   * entrare nel recinto delle automazioni; Gmail e Outlook ce l'hanno,
-   * e devono restarci anche mentre non si offrono — perché chi li ha collegati
-   * prima continua a portare documenti, e un'automazione deve poterli
-   * dichiarare. Il recinto segue il codice, non la vetrina.
+   * entrare nel recinto delle fonti; Gmail e Outlook ce l'hanno, e devono
+   * restarci anche mentre non si offrono — perché chi li ha collegati prima
+   * continua a portare documenti. Il recinto segue il codice, non la vetrina.
    */
   legge?: boolean
   nota: string
@@ -181,12 +180,11 @@ export const FONTI_POSTA = ['posta', 'google', 'microsoft', 'postamac'] as const
  * e `compatibile` non portano niente — sono il ragionamento, non una fonte — e
  * `mind2do` è la lista, che vive in un'altra tabella. Chi ha bisogno di sapere
  * «da dove può arrivare un documento» — la riconciliazione, il recinto delle
- * automazioni, i conteggi — deve chiederlo qui e non dedurlo, perché dedurlo è
+ * fonti, i conteggi — deve chiederlo qui e non dedurlo, perché dedurlo è
  * come si finisce con una fonte nuova che nessuno ha aggiunto al recinto.
  *
  * Segue `legge` e non `pronto`: una fonte che smettiamo di offrire continua a
- * portare documenti per chi l'aveva già collegata, e resta dichiarabile da
- * un'automazione. Togliere una scheda dalla vetrina non toglie i suoi documenti
+ * portare documenti per chi l'aveva già collegata. Togliere una scheda dalla vetrina non toglie i suoi documenti
  * dall'indice.
  */
 export const FONTI = CATALOGO.filter(c => c.legge).map(c => c.id)

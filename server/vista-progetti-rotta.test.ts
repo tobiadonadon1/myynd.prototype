@@ -37,7 +37,7 @@ const cartella = (percorso: string, corpo: string) =>
 const conto = await conti.registra('sviluppo@myynd.local', TOKEN)
 assert.ok(conto.ok)
 const ids = chi.dentro(conto.id, () => {
-  cfg.scrivi({ lingua: 'en', nome: 'Alex', onboarding: true, giro: true, diSerie: false })
+  cfg.scrivi({ lingua: 'en', nome: 'Alex', onboarding: true, giro: true })
   const ev = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Ship Evermute 1.0' })
   const nw = progetti.scrivi({ nome: 'Northwind', obiettivo: '' })
   const chiuso = progetti.scrivi({ nome: 'Archivio' })

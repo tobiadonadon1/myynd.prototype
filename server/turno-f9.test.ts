@@ -126,7 +126,7 @@ function lavoroCheAspetta(o: { fatto?: (id: string) => void } = {}) {
   compiti.perProva({
     svolgi: async (...a) => {
       chiamate++
-      const esecuzione = a[8] as { signal: AbortSignal; taskId: string }
+      const esecuzione = a[7] as { signal: AbortSignal; taskId: string }
       const percorso = join(SCRIVANIA, `Half ${esecuzione.taskId}.md`)
       writeFileSync(percorso, 'half written')
       store.segnaNelDiario(esecuzione.taskId, { tipo: 'file', dettaglio: percorso })

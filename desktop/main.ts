@@ -15,7 +15,7 @@
 // che lo si tolga (`compagno.ts`): un clic su di lui apre il richiamo accanto.
 //
 // L'app vive anche a finestra chiusa: la X nasconde, il segno nella barra e
-// il Dock la tengono viva, e il server con le sue automazioni continua a
+// il Dock la tengono viva, e il server con i suoi giri di fondo continua a
 // girare. Si esce da «Esci» — nella barra, nel menù, o con ⌘Q.
 //
 // Questo file fa da regista e basta: ordine di avvio, chi risponde a quale

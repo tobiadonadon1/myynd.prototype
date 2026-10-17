@@ -32,7 +32,6 @@ import { APP_MICROSOFT, oauthWeb } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 import { riprendi, segna, resto, type Resto } from './ripresa.ts'
 import { riflua } from '../testo.ts'
-import { vietato } from '../prova-chiusa.ts'
 
 /** Le due metà, e cosa chiede ciascuna. */
 export const PARTI = {
@@ -398,12 +397,11 @@ export type Evento = { titolo: string; inizio: string; minuti?: number; dove?: s
  * Quello che ha in calendario nei prossimi giorni.
  *
  * Esiste per una ragione che non si vede da qui: `agenda.ts` legge il
- * calendario del Mac, e su Windows quindi non legge niente. Un'automazione che
+ * calendario del Mac, e su Windows quindi non legge niente. Una riga che
  * dice «guarda cos'ho domani» era una cosa che su metà dei computer non poteva
  * funzionare — e non lo diceva. Con Outlook collegato adesso funziona ovunque.
  */
 export async function prossimi(giorni = 7): Promise<Evento[]> {
-  vietato('microsoft.prossimi')
   const da = new Date()
   const a = new Date(Date.now() + Math.min(30, Math.max(1, giorni)) * 86_400_000)
   const u = new URL(`${GRAFO}/me/calendarView`)

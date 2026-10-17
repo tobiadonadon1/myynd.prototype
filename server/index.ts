@@ -50,13 +50,8 @@ import * as disfa from './disfa.ts'
 import * as progettoRiga from './progetto-riga.ts'
 import * as titoloRiga from './titolo-riga.ts'
 import * as dopoFatto from './dopo-fatto.ts'
-import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
-import * as scoperte from './scoperte.ts'
-import * as collaudo from './collaudo.ts'
-import * as vassoio from './vassoio.ts'
 import * as ordine from './ordine.ts'
-import * as attrezzi from './attrezzi.ts'
 import * as domande from './domande.ts'
 import * as traduci from './traduci.ts'
 import * as posta from './connettori/posta.ts'
@@ -894,13 +889,6 @@ app.get('/api/stato', async (_req, res) => {
     // la vedetta: le cartelle del desktop guardate dal vivo, per questa persona
     vedetta: vedetta.stato(),
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
-    // le automazioni proposte che non ha ancora visto: accendono il fulmine
-    // in colonna. Si legge il foglio e basta, mai un modello
-    suggerimentiNuovi: scoperte.nuovi().length && scoperte.nuoviInVetrina().length,
-    // i risultati nuovi del vassoio di prova (P6): accendono lo stesso punto
-    vassoioNuovi: vassoio.nonVisti(),
-    // gli ordini fissi accesi il cui ultimo giro è andato storto (E): la riga fissa del motore li dice
-    automazioniInGuaio: (() => { try { return automazioni.inGuaio() } catch { return [] } })(),
     // le cose da guardare nate dopo l'ultima visita alla Memoria: il punto nel menù (P5)
     memoriaNuove: (() => { try { return memoriaNuove.nuove(cfg.leggi().memoriaVista ?? null) } catch { return { quante: 0, dove: null } } })(),
     // la scheda delle conversazioni offre l'interruttore di Claude Code solo se
@@ -1087,9 +1075,8 @@ const profilo = async (req: express.Request, res: express.Response) => {
      * Scriverli a mano vuol dire riprenderseli.
      *
      * Da qui in avanti quella riga è sua e Myynd non la tocca più — nemmeno
-     * quando quello che legge cambia. È la stessa regola di `ottimizza` sulle
-     * automazioni: una cosa che riscrive quello che hai scritto tu, senza che
-     * tu l'abbia chiesto, non è un aiuto. Resta la proposta, che si accetta con
+     * quando quello che legge cambia: una cosa che riscrive quello che hai
+     * scritto tu, senza che tu l'abbia chiesto, non è un aiuto. Resta la proposta, che si accetta con
      * un dito, e quella non toglie niente a nessuno.
      */
     patch.argomentiDaMe = false
@@ -1103,9 +1090,6 @@ const profilo = async (req: express.Request, res: express.Response) => {
   // la traduzione prima di rispondere, così quando l'app si ricarica è tutta
   // nella stessa lingua invece che mezza e mezza.
   if (patch.lingua && patch.lingua !== prima) {
-    // le righe nate da un'automazione non passano dal modello: la stessa frase
-    // nell'altra lingua sta già scritta nella ricetta, basta rimetterla
-    try { automazioni.rinominaInLista(String(patch.lingua)) } catch { /* non ferma il resto */ }
     try { await traduci.inLingua(String(patch.lingua)) } catch { /* resta quello che c'era */ }
   }
 
@@ -2920,14 +2904,6 @@ app.get('/api/sincronizza', async (req, res) => {
     v.avvisa({ fase: 'fine', totale, conteggi: store.conteggi() })
     // una bozza salvata nella sua posta può essere partita: si guarda adesso (P3)
     await invii.osserva().catch(() => 0)
-    // «quando arriva» vale anche per quello che è arrivato premendo il bottone,
-    // non solo per il giro delle sei ore
-    if (totale > 0 && claude.collegato()) {
-      const utente = chi.adesso()
-      const gira = () => automazioni.quandoArriva()
-      void (utente ? chi.dentro(utente, gira) : gira())
-        .catch(e => console.error('myynd · le automazioni «quando arriva» non sono partite:', e instanceof Error ? e.message : e))
-    }
     // la serratura resta finché la prima pagina non è salvata
     if (!soloFonte && !fermo()) await pagina()
   } catch (e) {
@@ -3011,8 +2987,7 @@ const OGNI = 10 * 60 * 1000
  * chiama nessun modello: una rilettura a vuoto non deve costare.
  */
 /**
- * Quello che viene dopo un arrivo: la prima pagina, forse una domanda, le
- * automazioni «quando arriva».
+ * Quello che viene dopo un arrivo: la prima pagina, forse una domanda.
  *
  * Stava in fondo a `rileggiDaSola`, e ci arrivava una strada sola: il giro
  * delle sei ore. Adesso ci arriva anche la vedetta, quando le cartelle si
@@ -3035,8 +3010,7 @@ async function dopoLArrivoDentro(nuovi: store.Documento[]): Promise<number> {
    *
    * E il modello si chiama solo se fra gli arrivi c'è qualcosa da feed: un
    * giro che ha portato solo file vecchi del Mac, o impegni, non paga una
-   * lettura per sentirsi dire «niente». Le domande e «quando arriva» sotto
-   * restano come sono.
+   * lettura per sentirsi dire «niente». Le domande sotto restano come sono.
    *
    * P10 · e mentre «Leggi adesso» sceglie dall'indice intero, una seconda
    * lettura del modello qui non serve.
@@ -3052,9 +3026,6 @@ async function dopoLArrivoDentro(nuovi: store.Documento[]): Promise<number> {
   // e, ogni tanto e quasi mai, una domanda. I cinque cancelli stanno dentro
   // `forseChiedi`: qui si dà solo l'occasione.
   await domande.forseChiedi().catch(() => {})
-
-  // le automazioni che aspettano l'arrivo di qualcosa: è arrivato
-  await automazioni.quandoArriva().catch(() => {})
   return nuovi.length
 }
 
@@ -3126,17 +3097,6 @@ async function rileggiDaSolaDentro() {
     if (!trattenuta && await tempi.misuraLavoro('priorita', () => priorita.forse())) compiti.annunciaFeed()
     // niente tavolo qui: le righe inventate per riempire un progetto vuoto
     // erano «messed-up tasks that do not mean anything». Vedi `tavolo.ts`.
-    // e le automazioni che non si è ancora scritto. Il cancello — un giro al
-    // giorno per conto, mai senza modello — sta dentro `inSottofondo`: qui si
-    // dà l'occasione, e quando ne ha scritte di nuove lo si dice in colonna,
-    // sullo stesso filo che rilegge lo stato: il fulmine si accende da sé
-    const proposte = await scoperte.inSottofondo().catch(() => null)
-    // appena scritte, si provano (P6): tre al giorno, e solo le passate si mostrano
-    if (proposte) { try { scoperte.provaLeIdee() } catch (e) { console.warn('myynd · prove d\'idea:', e instanceof Error ? e.message : e) } }
-    if (proposte) {
-      console.log(`myynd · scoperte · ${proposte.length} proposte`)
-      if (proposte.length) compiti.annunciaCambio()
-    }
     // il motore, ogni dieci minuti anche senza chiamate: il suo giorno si scrive
     abbonamento.riguarda(); saluteTeste.segnaTesta()
   } catch (e) {
@@ -3639,11 +3599,6 @@ app.post('/api/punto/scarta', (req, res) => {
   catch (e) { errore(res, e, 400) }
 })
 
-/** Un'automazione accesa da una frase del punto: passa dalla stessa strada di «scrivine una». */
-app.post('/api/punto/avvia', async (req, res) => {
-  try { res.json(await punto.avvia(String(req.body?.frase ?? ''))) }
-  catch (e) { errore(res, e) }
-})
 
 // — i progetti —
 //
@@ -4303,7 +4258,7 @@ app.post('/api/compiti/:id/esegui', async (req, res) => {
   if (!p) return res.status(400).json({ errore: 'Non c\'è niente da eseguire.' })
   const conf = cfg.leggi()
 
-  // — le bozze nella casella, una nota, un file: le proposte degli ordini fissi (E) —
+  // — le bozze nella casella, una nota, un file —
   if (proposte.eQui(p)) {
     try {
       const fatto = await proposte.esegui(c, p)
@@ -4778,13 +4733,8 @@ app.delete('/api/compiti/:id', (req, res) => {
   compiti.annunciaCambio()
 })
 
-// — automazioni —
-//
-// La ricetta arriva con l'azienda: chi apre Myynd se le ritrova già lì, e
-// non deve installare niente. Quello che è suo è solo se tenerle accese.
+// — le regole sui mittenti —
 
-// `rifai=1` è il bottone: senza, quelli di ieri se hanno meno di un giorno, e
-// aprire la schermata non chiama nessun modello
 app.get('/api/posta/regole', (_req,res)=>res.json({rules:listSenderRules()}))
 app.post('/api/posta/regole', async (req,res)=>{
   try { await enableSenderRule(String(req.body?.sender ?? ''),'archive'); compiti.annunciaCambio(); res.json({rules:listSenderRules()}) } catch(e){errore(res,e,400)}
@@ -4806,265 +4756,6 @@ app.post('/api/iniziativa/prepara', async (_req, res) => {
     res.json({ ...iniziativa.stato(), compito })
     if (compito) void turno.giro()
   } catch (e) { errore(res, e) }
-})
-
-app.get('/api/automazioni/suggerimenti', async (req, res) => {
-  try {
-    const rifai = req.query.rifai === '1'
-    const lista = await scoperte.suggerimenti(rifai)
-    // dopo averle riscritte, le prove d'idea (P6): la pagina mostra solo quelle passate
-    if (rifai) scoperte.provaLeIdee()
-    res.json({ suggerimenti: scoperte.inVetrina(lista), inProva: collaudo.ideeInProva() })
-  } catch (e) { errore(res, e) }
-})
-app.post('/api/automazioni/suggerimenti/:id', (req, res) => {
-  try {
-    const a = scoperte.adotta(req.params.id)
-    res.json({ id: a.id, automazioni: automazioni.elenco() })
-  } catch (e) { errore(res, e, 400) }
-})
-app.delete('/api/automazioni/suggerimenti/:id', (req, res) => {
-  // `scarta` controlla da sé che l'id sia di una proposta e non di
-  // un'automazione vera, e non chiama nessun modello per accorgersene
-  try { res.json({ ok: scoperte.scarta(req.params.id) }) } catch (e) { errore(res, e) }
-})
-// le ha viste: la schermata lo dice appena le mostra, e il fulmine si spegne
-app.post('/api/scoperte/viste', (_req, res) => {
-  try { scoperte.segnaVisti(); res.json({ nuovi: 0 }) } catch (e) { errore(res, e) }
-})
-
-app.get('/api/automazioni', (_req, res) => {
-  res.json({ automazioni: automazioni.elenco(), ricette: automazioni.statoRicette() })
-})
-
-/**
- * Vai a vedere se ce ne sono di nuove.
- *
- * C'è anche a mano, oltre che ogni sei ore, per il momento in cui serve
- * davvero: si è al telefono con un cliente, gli si è appena scritta
- * un'automazione, e la si vuole vedere comparire adesso invece che stasera.
- */
-/** Le undici del pacchetto: prenderle, o rimandarle indietro. */
-app.post('/api/automazioni/diSerie', (req, res) => {
-  cfg.aggiorna({ diSerie: req.body?.attivo === true })
-  automazioni.scordaLeRicette()
-  res.json({ ok: true, automazioni: automazioni.elenco() })
-})
-
-app.post('/api/automazioni/aggiorna', async (_req, res) => {
-  try {
-    const e = await automazioni.aggiornaRicette()
-    if (!e) return res.status(400).json({ errore: 'Non è impostato nessun repository di ricette.' })
-    res.json({ ok: true, ...e, automazioni: automazioni.elenco(), ricette: automazioni.statoRicette() })
-  } catch (e) { errore(res, e) }
-})
-
-/**
- * Scrivertene una tu.
- *
- * È la rotta che risponde a «ma queste posso farmele io?»: una frase, e dopo
- * qualche secondo c'è un'automazione tua nell'elenco, uguale in tutto a quelle
- * arrivate con l'azienda. Nasce accesa (E): il mese prima l'ha già fatta
- * vedere prima di crearla, e da lì gira dal vivo.
- */
-/** La frase diventa una ricetta da guardare, non ancora un file: il costruttore la mostra sui binari. */
-app.post('/api/automazioni/componi', async (req, res) => {
-  try {
-    const a = await automazioni.componi(String(req.body?.descrizione ?? ''), req.body?.attrezzi)
-    res.json({ ok: true, ricetta: a })
-  } catch (e) { errore(res, e, 400) }
-})
-
-/**
- * Una ricetta composta sui binari, a mano o dopo la frase: nasce accesa, dal
- * vivo. L'anteprima del mese prima l'ha già vista prima di crearla (`mese`).
- */
-app.post('/api/automazioni/nuova', (req, res) => {
-  try {
-    const a = automazioni.daCampi(req.body ?? {})
-    automazioni.accendi(a.id, true)
-    res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
-  } catch (e) { errore(res, e, 400) }
-})
-
-app.post('/api/automazioni', async (req, res) => {
-  try {
-    const a = await automazioni.daUnaFrase(String(req.body?.descrizione ?? ''), req.body?.attrezzi)
-    automazioni.accendi(a.id, true)
-    res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
-  } catch (e) { errore(res, e, 400) }
-})
-
-/**
- * L'anteprima del mese prima, per una ricetta non ancora scritta: «il mese
- * scorso avrebbe fatto queste N cose». Sola lettura, nessun modello.
- */
-app.post('/api/automazioni/mese', (req, res) => {
-  try { res.json({ ok: true, ...automazioni.mese(automazioni.daProvare(req.body?.ricetta ?? {})) }) }
-  catch (e) { errore(res, e, 400) }
-})
-
-/** La stessa anteprima, per una che c'è già. */
-app.get('/api/automazioni/:id/mese', (req, res) => {
-  const a = automazioni.ricette().find(x => x.id === req.params.id)
-  if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
-  try { res.json({ ok: true, ...automazioni.mese(a) }) } catch (e) { errore(res, e) }
-})
-
-/** Le quattro di partenza, con il loro interruttore (E). */
-app.get('/api/automazioni/pacchetto', (_req, res) => {
-  try { res.json({ pacchetto: automazioni.pacchetto(), offerta: automazioni.offertaPacchetto() }) } catch (e) { errore(res, e) }
-})
-
-/** «Non ora» sulla prima pagina: le quattro non si offrono più lì. */
-app.post('/api/automazioni/pacchetto-visto', (_req, res) => {
-  cfg.aggiorna({ pacchettoOfferto: true })
-  res.json({ ok: true })
-})
-
-app.post('/api/automazioni/pacchetto/:id', (req, res) => {
-  try {
-    automazioni.dalPacchetto(req.params.id, req.body?.accesa !== false)
-    res.json({ ok: true, pacchetto: automazioni.pacchetto(), offerta: automazioni.offertaPacchetto(), automazioni: automazioni.elenco() })
-  } catch (e) { errore(res, e, 400) }
-})
-
-/** Cambiarne una. Quella dell'azienda si copre con una tua, senza toccare l'originale. */
-app.patch('/api/automazioni/:id', (req, res) => {
-  try {
-    collaudo.annulla(req.params.id)
-    automazioni.cambia(req.params.id, req.body ?? {})
-    res.json({ ok: true, automazioni: automazioni.elenco() })
-  } catch (e) { errore(res, e, 400) }
-})
-
-app.delete('/api/automazioni/:id', (req, res) => {
-  collaudo.annulla(req.params.id)
-  if (!automazioni.butta(req.params.id)) {
-    return res.status(400).json({ errore: 'Questa automazione non è tua da buttare.' })
-  }
-  res.json({ ok: true, automazioni: automazioni.elenco() })
-})
-
-app.post('/api/automazioni/:id/accendi', (req, res) => {
-  const c = automazioni.ricette().find(a => a.id === req.params.id)
-  if (!c) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
-  automazioni.accendi(req.params.id, req.body?.accesa !== false)
-  res.json({ ok: true, automazioni: automazioni.elenco() })
-})
-
-/** Falla girare adesso, senza aspettare la sua ora. Per vederla lavorare. */
-app.post('/api/automazioni/:id/adesso', async (req, res) => {
-  const a = automazioni.ricette().find(x => x.id === req.params.id)
-  if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
-  // dal vivo, subito: anche in pausa un dito che preme è il suo consenso, e
-  // non c'è più un vassoio di prova che lo tenga lontano dalla lista
-  try {
-    // a mano: un dito che preme non è la spesa ricorrente che il tetto del
-    // giorno tiene a bada, e «ha guardato e non c'era niente» sarebbe una bugia
-    const esito = await automazioni.fai(a, { aMano: true })
-    res.json({ ok: true, esito, automazioni: automazioni.elenco(), compiti: compitiAttuali() })
-  } catch (e) {
-    store.automazioneGirata(a.id, 'guaio', e instanceof Error ? e.message : String(e))
-    errore(res, e)
-  }
-})
-
-/**
- * Cambiarla dicendo a parole cosa deve cambiare.
- *
- * Sta accanto al `PATCH` a campi e non al suo posto: sono due gesti diversi
- * per due momenti diversi. Il modulo serve quando sai già quale tendina
- * toccare; questo serve quando sai cosa vuoi e non dove sta.
- */
-/**
- * Cosa guarderebbe adesso, senza fare niente.
- *
- * Non è «provala adesso» con un altro nome: quella scrive una riga in lista e
- * chiama il modello. Questa fa girare solo la metà che sceglie il materiale e
- * si ferma — nessuna scrittura, nessun token, nessun `ultima` spostato — e
- * serve a rispondere alla domanda che si fa chi sta scrivendo le parole della
- * ricerca: «con queste, cosa troverebbe?». Si può premere venti volte di fila.
- */
-app.get('/api/automazioni/:id/anteprima', (req, res) => {
-  try {
-    res.json({ ok: true, ...automazioni.anteprima(req.params.id) })
-  } catch (e) { errore(res, e, 404) }
-})
-
-app.post('/api/automazioni/:id/riscrivi', async (req, res) => {
-  try {
-    collaudo.annulla(req.params.id)
-    const a = await automazioni.riscrivi(req.params.id, String(req.body?.richiesta ?? ''))
-    res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
-  } catch (e) { errore(res, e, 400) }
-})
-
-/** Falla guardare a Claude e falla scrivere meglio. Solo su richiesta. */
-app.post('/api/automazioni/:id/ottimizza', async (req, res) => {
-  try {
-    // quello che la prova ha trovato giusto e sbagliato entra nella richiesta (P6)
-    const esempi = collaudo.esempi(req.params.id)
-    collaudo.annulla(req.params.id)
-    const a = await automazioni.ottimizza(req.params.id, esempi)
-    res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
-  } catch (e) { errore(res, e, 400) }
-})
-
-/** Spostarla in una cartella. `raccolta: null` la tira fuori da tutte. */
-app.post('/api/automazioni/:id/raccolta', (req, res) => {
-  if (!automazioni.ricette().some(a => a.id === req.params.id)) {
-    return res.status(404).json({ errore: 'Non conosco questa automazione.' })
-  }
-  const dove = req.body?.raccolta
-  const nome = dove == null ? null : String(dove).trim().slice(0, 40) || null
-  // in una cartella che non esiste non ci si mette niente: sparirebbe
-  if (nome && !store.raccolte().some(r => r.nome === nome)) {
-    return res.status(400).json({ errore: 'Questa cartella non c’è.' })
-  }
-  store.mettiInRaccolta(req.params.id, nome)
-  res.json({ ok: true, automazioni: automazioni.elenco(), raccolte: store.raccolte() })
-})
-
-// — le cartelle in cui te le organizzi —
-
-app.get('/api/raccolte', (_req, res) => {
-  res.json({ raccolte: store.raccolte() })
-})
-
-app.post('/api/raccolte', (req, res) => {
-  const nome = String(req.body?.nome ?? '').trim().slice(0, 40)
-  if (!nome) return res.status(400).json({ errore: 'Dalle un nome.' })
-  if (!store.creaRaccolta(nome)) return res.status(400).json({ errore: 'Ce n’è già una che si chiama così.' })
-  res.json({ ok: true, raccolte: store.raccolte() })
-})
-
-app.patch('/api/raccolte/:nome', (req, res) => {
-  const a = String(req.body?.nome ?? '').trim().slice(0, 40)
-  if (!a) return res.status(400).json({ errore: 'Dalle un nome.' })
-  if (!store.rinominaRaccolta(req.params.nome, a)) {
-    return res.status(400).json({ errore: 'Non si può: o non c’è, o ce n’è già una con quel nome.' })
-  }
-  res.json({ ok: true, raccolte: store.raccolte(), automazioni: automazioni.elenco() })
-})
-
-app.delete('/api/raccolte/:nome', (req, res) => {
-  // quello che c'era dentro torna in elenco: si butta la cartella, non il lavoro
-  if (!store.buttaRaccolta(req.params.nome)) return res.status(404).json({ errore: 'Questa cartella non c’è.' })
-  res.json({ ok: true, raccolte: store.raccolte(), automazioni: automazioni.elenco() })
-})
-
-/**
- * Il catalogo degli attrezzi, con dentro cosa è collegato.
- *
- * È quello che riempie il menù della chiocciola. `collegato` non serve a
- * nascondere niente — un attrezzo che non puoi ancora usare si vede lo stesso,
- * spento, perché è così che uno scopre che Myynd saprebbe leggergli il
- * calendario. Serve a non far scrivere un'automazione che ogni mattina non
- * troverà niente senza che nessuno le abbia detto perché.
- */
-app.get('/api/attrezzi', (_req, res) => {
-  res.json({ attrezzi: attrezzi.catalogo(), cartelle: cfg.leggi().desktop?.cartelle ?? [] })
 })
 
 // — portare il proprio Myynd altrove —
@@ -5767,73 +5458,6 @@ app.get('/api/rassegna/gusto', (_req, res) => {
 store.quandoNeAspettaUna(() => compiti.annunciaCambio())
 // — P5: rotte, fine —
 
-// — P6: rotte, inizio —
-
-/** Un rifiuto della prova porta il suo stato (409, 404); il resto è un guasto. */
-function erroreProva(res: express.Response, e: unknown) {
-  if (e instanceof collaudo.Rifiuto) return res.status(e.status).json({ errore: e.message })
-  errore(res, e)
-}
-
-app.post('/api/automazioni/:id/prova', (req, res) => {
-  const a = automazioni.ricette().find(x => x.id === req.params.id)
-  if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
-  try { res.json({ prova: collaudo.avvia(a, 'editor') }) } catch (e) { erroreProva(res, e) }
-})
-
-app.get('/api/automazioni/:id/prova', (req, res) => {
-  try { res.json({ prova: collaudo.ultimaVistaDi(req.params.id) }) } catch (e) { erroreProva(res, e) }
-})
-
-app.get('/api/prove/:id', (req, res) => {
-  try {
-    const v = collaudo.vista(req.params.id)
-    if (!v) return res.status(404).json({ errore: 'Non conosco questa prova.' })
-    res.json(v)
-  } catch (e) { erroreProva(res, e) }
-})
-
-app.post('/api/prove/esiti/:id/giudizio', (req, res) => {
-  const suo = req.body?.suo === 'giusto' || req.body?.suo === 'sbagliato' ? req.body.suo : null
-  try { res.json({ prova: collaudo.giudica(req.params.id, suo) }) } catch (e) { erroreProva(res, e) }
-})
-
-app.post('/api/prove/esiti/:id/bozza', (req, res) => {
-  try { collaudo.scriviAncora(req.params.id); res.json({ ok: true }) } catch (e) { erroreProva(res, e) }
-})
-
-app.get('/api/vassoio', (_req, res) => {
-  try { res.json({ gruppi: vassoio.elenco() }) } catch (e) { errore(res, e) }
-})
-
-app.post('/api/vassoio/visto', (_req, res) => {
-  try { vassoio.visto(); res.json({ ok: true }) } catch (e) { errore(res, e) }
-})
-
-app.post('/api/vassoio/:id/lista', async (req, res) => {
-  try {
-    await vassoio.inLista(req.params.id)
-    res.json({ compiti: compitiAttuali(), vassoio: vassoio.elenco() })
-  } catch (e) {
-    if (e instanceof vassoio.Superata) return res.status(409).json({ errore: e.message, codice: 'superata', quando: e.quando })
-    if (e instanceof Error && e.message === 'Questo risultato non è più nel vassoio.') return res.status(409).json({ errore: e.message })
-    errore(res, e)
-  }
-})
-
-app.delete('/api/vassoio/:id', (req, res) => {
-  try { vassoio.scarta(req.params.id); res.json({ vassoio: vassoio.elenco() }) } catch (e) { errore(res, e) }
-})
-
-app.get('/api/collaudo/misura', (_req, res) => {
-  if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Non trovato.' })
-  try { res.json(collaudo.misura()) } catch (e) { errore(res, e) }
-})
-
-// la scheda sa del suo vassoio e della sua ultima prova: automazioni.ts non conosce collaudo
-automazioni.arricchisci(v => ({ ...v, prova: collaudo.ultimaDi(v.id) }))
-// — P6: rotte, fine —
-
 // — P7: rotte, inizio —
 /** La riga delle preferenze sulla prova delle risposte: c'è un insieme, è accesa, l'ultimo esito, in corso. */
 app.get('/api/risposte/valutazione', (_req, res) => {
@@ -6003,9 +5627,9 @@ app.use((e: unknown, _req: express.Request, res: express.Response, _next: expres
  *
  * `void fai()` non è una rete: una promessa rifiutata e senza `catch` è un
  * rifiuto non gestito, e per Node quello è un motivo per chiudere il processo.
- * È successo davvero — il giro delle automazioni cercava una tabella che non
- * c'era — e da fuori non si vedeva un'automazione rotta: si vedeva Myynd che
- * non risponde più, due minuti dopo averlo aperto.
+ * È successo davvero — un giro di fondo cercava una tabella che non c'era — e
+ * da fuori non si vedeva un giro rotto: si vedeva Myynd che non risponde più,
+ * due minuti dopo averlo aperto.
  *
  * Un timer che chiama qualcosa non può decidere se l'app resta viva. Qui il
  * guaio finisce nel terminale, e al giro dopo ci si riprova.
@@ -6018,12 +5642,12 @@ function aParte(cosa: string, fai: () => Promise<unknown>): () => void {
 /**
  * Lo stesso lavoro, per ognuno.
  *
- * I giri di sfondo — rileggere le fonti, far girare le automazioni, mettere in
+ * I giri di sfondo — rileggere le fonti, il gemello, mettere in
  * ordine quello che si è imparato — sono nati quando la persona era una sola e
  * lavoravano su «la» configurazione e «l'» indice. Fuori da una richiesta non
  * c'è nessun contesto aperto, quindi senza questo giro lavorerebbero sulla
- * cartella radice: cioè su nessuno, in silenzio, mentre le automazioni di tutti
- * non girano mai.
+ * cartella radice: cioè su nessuno, in silenzio, mentre i giri di tutti
+ * non partono mai.
  *
  * Uno per volta e non tutti insieme, di proposito: sono letture di caselle di
  * posta e chiamate a un modello, e farne dieci in parallelo vuol dire dieci
@@ -6068,12 +5692,7 @@ await cfg.avvia()
   const vecchio = cfg.leggi().account
   if (vecchio && !conti.quanti()) {
     const id = await conti.adotta(vecchio.email, vecchio.sale, vecchio.hash, cfg.RADICE)
-    if (id) {
-      // chi c'era già le aveva, con la loro storia di quante volte sono girate:
-      // toglierle in un aggiornamento sarebbe stato peggio che non averle mai date
-      cfg.aggiorna({ diSerie: true })
-      console.log(`myynd · l'account che c'era già è adesso un conto: ${vecchio.email}`)
-    }
+    if (id) console.log(`myynd · l'account che c'era già è adesso un conto: ${vecchio.email}`)
   }
 }
 
@@ -6143,11 +5762,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
       // l'indice, e va detto con il peso giusto — non è più «hai perso tutto»
       console.error(postgres.ATTIVO
         ? `myynd · ATTENZIONE: ${ospitato.DATI} non sta su un volume. I conti e le credenziali sono su Postgres ` +
-          'e restano; ma a ogni ridistribuzione spariscono i compiti, la memoria, le chat, le automazioni scritte ' +
+          'e restano; ma a ogni ridistribuzione spariscono i compiti, la memoria, le chat scritte ' +
           `qui e il registro dell'uso — non si rifanno rileggendo le fonti. Su Railway: Volume → Mount path ${ospitato.DATI}.`
         : `myynd · ATTENZIONE: ${ospitato.DATI} non sta su un volume.\n` +
           '  È il disco del contenitore: a ogni ridistribuzione riparte vuoto —\n' +
-          '  nessun conto, nessun documento, nessuna automazione. Chi si era\n' +
+          '  nessun conto, nessun documento, nessuna chat. Chi si era\n' +
           '  registrato troverà «indirizzo o password non corretti» con la password giusta.\n' +
           `  Su Railway: Volume → Mount path ${ospitato.DATI}, poi ridistribuisci — ` +
           'oppure MYYND_POSTGRES, e i conti non dipendono più dal disco.')
@@ -6250,7 +5869,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    *
    * Un portatile chiuso per una notte ha i timer fermi allo stesso punto: la
    * prossima rilettura può essere fra cinque ore. Al risveglio si recupera
-   * — la rilettura e il giro delle automazioni, per ognuno — e due risvegli
+   * — la rilettura e i giri di fondo, per ognuno — e due risvegli
    * vicini ne fanno uno solo (vedi `sveglia.ts`). Fuori da Electron non c'è
    * nessun filo, e non è un errore.
    */
@@ -6263,7 +5882,6 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const recuperoDentro = async () => {
     await rileggiDaSola()
     await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
-    await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
     await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(preparazione))
     await runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro()))
     await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
@@ -6293,28 +5911,13 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   setTimeout(giroDelTurno, 45_000)
   setInterval(giroDelTurno, 60_000)
 
-  // Le automazioni guardano l'orologio ogni quarto d'ora. Il primo giro dopo
-  // due minuti e non subito: all'avvio c'è già la lettura delle fonti, e due
-  // cose pesanti insieme si sentono proprio nel momento in cui si apre l'app.
-  // dentro un contesto qualunque: le ricette di serie sono le stesse per
-  // tutti, e fuori da un contesto questa riga leggerebbe la cartella radice
-  const quante = conti.tutti().length
-    ? chi.dentro(conti.tutti()[0], () => automazioni.ricette().length)
-    : 0
-  if (quante) console.log(`myynd · ${quante} automazion${quante === 1 ? 'e' : 'i'} in linea`)
-  // il giro non conta come «questa persona sta usando Myynd»: vedi senzaToccare
+  // I giri di fondo partono dopo due minuti e non subito: all'avvio c'è già la
+  // lettura delle fonti, e due cose pesanti insieme si sentono proprio nel
+  // momento in cui si apre l'app. Il giro non conta come «questa persona sta
+  // usando Myynd»: vedi senzaToccare
   const filtraMittenti = perOgnuno('sender rules paused', () => runScheduled('sender_rules', 15 * 60_000, runSenderRules))
   setTimeout(filtraMittenti, 135_000)
   setInterval(filtraMittenti, 15 * 60_000)
-  const giro = perOgnuno('il giro delle automazioni si è fermato', () => runScheduled('automations', 15 * 60_000, () => tempi.misuraLavoro('automazioni', () => store.senzaToccare(() => automazioni.giro()))))
-  setTimeout(giro, 120_000)
-  setInterval(giro, automazioni.OGNI)
-  // il vassoio di prova (P6): una bozza per giro, nella fila delle prove
-  const vassoioDiProva = perOgnuno('il vassoio di prova non è riuscito', () => runScheduled('practice_tray', 15 * 60_000, () => store.senzaToccare(() => vassoio.giro())))
-  setTimeout(vassoioDiProva, 165_000)
-  setInterval(vassoioDiProva, 15 * 60_000)
-  // le prove d'idea dei suggerimenti già sul foglio, dieci minuti dopo l'avvio
-  setTimeout(perOgnuno('le prove d\'idea non sono partite', async () => { store.senzaToccare(() => scoperte.provaLeIdee()) }), 10 * 60_000)
   const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(preparazione)))
   setTimeout(preparaInAnticipo, 150_000)
   setInterval(preparaInAnticipo, 15 * 60_000)
@@ -6367,10 +5970,6 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   setTimeout(provaRisposte, 30 * 60_000)
   setInterval(provaRisposte, 6 * 3_600_000)
 
-  // E le ricette nuove: subito dopo l'avvio — è il momento in cui una persona
-  // ha appena riaperto l'app e potrebbe averne una che l'aspetta — e poi ogni
-  // sei ore. Prima del primo giro delle automazioni, così una ricetta appena
-  // pubblicata può girare oggi stesso.
   // Quello che è già scritto nella lingua sbagliata.
   //
   // Finora la traduzione partiva solo quando si *cambiava* lingua. Ma chi ha
@@ -6386,9 +5985,6 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     if (n) console.log(`myynd · ${n} cose riscritte nella lingua dell'app`)
   }), 40_000)
 
-  const ricette = perOgnuno('le ricette non si sono aggiornate', () => automazioni.aggiornaRicette())
-  setTimeout(ricette, 20_000)
-  setInterval(ricette, 6 * 3600_000)
 
   /*
    * Le due cose che si scrivono da sole.
@@ -6498,8 +6094,6 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   }
   for (const u of conti.tutti()) {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
-    // le prove sul passato rimaste a metà: interrotte (P6)
-    try { chi.dentro(u, () => collaudo.riprendiAppese()) } catch { /* uno rotto non ferma gli altri */ }
   }
   // e le righe ferme su un permesso (P3): lui l'ha dato nelle Impostazioni di
   // sistema e ha riaperto Myynd, come la riga fissa gli ha chiesto (P8)

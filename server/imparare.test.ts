@@ -7,8 +7,7 @@
 // deve fare mai.
 //
 //   · **riscrive quello che hai scritto tu.** È la regola che regge tutta la
-//     faccenda, ed è la stessa di `ottimizza` sulle automazioni: una cosa che
-//     ti riscrive addosso senza che tu l'abbia chiesto non è un aiuto, è una
+//     faccenda: una cosa che ti riscrive addosso senza che tu l'abbia chiesto non è un aiuto, è una
 //     cosa di cui non ti puoi fidare. Il giorno che quel campo si sovrascrive
 //     da solo, nessuno lo compila più a mano.
 //   · **spende un token per niente.** Girano in sottofondo, ogni sei ore, per

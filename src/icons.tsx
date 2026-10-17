@@ -110,12 +110,6 @@ export const IconChatPiena = ({ size = 18, style }: P) => (
   </svg>
 )
 
-export const IconFulmine = ({ size = 18, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" style={style}>
-    <path d="M13 2.5 5.5 13H11l-1 8.5L18.5 10H13Z" />
-  </svg>
-)
-
 /** I progetti: una cartella, quella in cui stanno le cose di un lavoro. */
 export const IconProgetti = ({ size = 16, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" style={style}>
@@ -169,20 +163,6 @@ export const IconGiro = ({ size = 14, style }: P) => (
 export const IconCroce = ({ size = 11, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" style={style}>
     <path d="M6 6l12 12M18 6L6 18" />
-  </svg>
-)
-
-/** Scrive: le automazioni che ti preparano un testo. */
-export const IconPenna = ({ size = 15, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={style}>
-    <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" /><path d="M14.5 7.5 16.5 9.5" />
-  </svg>
-)
-
-/** Segnala: quelle che ti lasciano una riga e basta. */
-export const IconOcchio = ({ size = 15, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={style}>
-    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="2.6" />
   </svg>
 )
 

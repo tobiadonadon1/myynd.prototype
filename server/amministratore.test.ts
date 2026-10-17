@@ -221,7 +221,7 @@ test('org_internal torna dal browser con la sua frase, non con una richiesta all
 // — la richiesta dice il vero: ogni frase attaccata al codice che la rende vera —
 //
 // La richiesta la legge un revisore della sicurezza. Se domani qualcuno fa
-// mandare la posta a un'automazione, o fa cancellare un messaggio a una
+// mandare la posta a un giro di fondo, o fa cancellare un messaggio a una
 // regola, queste prove si rompono prima che la frase diventi falsa.
 
 const { readFileSync, readdirSync } = await import('node:fs')

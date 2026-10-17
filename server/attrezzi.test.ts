@@ -2,12 +2,12 @@
 //
 // Quello che si prova qui non è che il codice giri: è che i tre modi in cui un
 // permesso si annacqua restino chiusi. Sono tre, e nessuno dei tre darebbe un
-// errore — l'app resterebbe aperta, l'automazione girerebbe, e farebbe una cosa
-// diversa da quella scritta sulla sua scheda:
+// errore — l'app resterebbe aperta, la riga girerebbe, e farebbe una cosa
+// diversa da quella scritta sul suo permesso:
 //
 //   · un nome inventato che passa e diventa un attrezzo che non esiste;
 //   · una ricerca «nella posta» che riporta indietro un file del disco;
-//   · un attrezzo eseguito da un'automazione che non l'aveva chiesto.
+//   · un attrezzo eseguito da una riga che non l'aveva chiesto.
 //
 //   node --test server/*.test.ts
 
@@ -72,23 +72,6 @@ test('un attrezzo che non esiste non esiste', () => {
   assert.equal(attrezzi.esiste(''), false)
 })
 
-test('ripulisci butta quello che non conosce e non inventa niente', () => {
-  assert.deepEqual(attrezzi.ripulisci(['posta.leggi', 'posta.manda']), ['posta.leggi'])
-  assert.deepEqual(attrezzi.ripulisci([]), [])
-  assert.deepEqual(attrezzi.ripulisci(undefined), [])
-  assert.deepEqual(attrezzi.ripulisci('posta.leggi'), [])
-  assert.deepEqual(attrezzi.ripulisci([1, null, {}]), [])
-})
-
-test('i doppioni non raddoppiano il permesso, e l’ordine è quello del catalogo', () => {
-  assert.deepEqual(attrezzi.ripulisci(['posta.leggi', 'posta.leggi']), ['posta.leggi'])
-  // scritti al contrario, tornano nell'ordine in cui si leggono sulla scheda
-  assert.deepEqual(
-    attrezzi.ripulisci(['chat.leggi', 'posta.leggi']),
-    ['posta.leggi', 'chat.leggi']
-  )
-})
-
 test('al modello arrivano solo gli attrezzi concessi', () => {
   const t = attrezzi.tools(['posta.leggi'])
   assert.equal(t.length, 1)
@@ -118,7 +101,7 @@ test('senza recinto si guarda tutto, come si è sempre fatto', () => {
 
 test('un recinto su una fonte vuota torna vuoto, non torna tutto', () => {
   // il guasto vero: un filtro ignorato in silenzio è peggio di zero risultati,
-  // perché l'automazione lavora su documenti che non aveva il permesso di aprire
+  // perché la riga lavora su documenti che non aveva il permesso di aprire
   assert.deepEqual(store.cerca('fattura', 20, ['notion']).map(d => d.id), ['notion:4'])
   assert.deepEqual(store.cerca('fattura', 20, ['agenda']), [])
 })
@@ -156,7 +139,7 @@ test('claude.lavora senza una cartella si ferma e lo dice', async () => {
 test('un attrezzo su una connessione che non c’è lo dice, e non cerca lo stesso', async () => {
   // Notion non è nel config finto. Il modo sbagliato di fallire sarebbe cercare
   // comunque e non trovare niente: da fuori è identico a «non c'era nulla da
-  // fare», ed è come un'automazione resta rotta per settimane senza dirlo.
+  // fare», ed è come una riga resta rotta per settimane senza dirlo.
   const e = await attrezzi.esegui('notion.leggi', { query: 'fattura' }, ['notion.leggi'])
   assert.equal(e.male, true)
   assert.equal(e.docs.length, 0)
@@ -183,32 +166,6 @@ test('le chat si cercano, e solo con tutte le parole', () => {
   // una parola sola in comune non basta: riporterebbe indietro mezza cronologia
   assert.equal(store.cercaChat('preventivo Bianchi').length, 0)
   assert.equal(store.cercaChat('').length, 0)
-})
-
-// — le cartelle —
-
-test('una cartella esiste anche da vuota', () => {
-  assert.equal(store.creaRaccolta('Fatture'), true)
-  // la seconda volta no: due cartelle con lo stesso nome sono una sola
-  assert.equal(store.creaRaccolta('Fatture'), false)
-  assert.deepEqual(store.raccolte().map(r => r.nome), ['Fatture'])
-})
-
-test('rinominarla si porta dietro quello che c’è dentro', () => {
-  store.creaRaccolta('Clienti')
-  store.mettiInRaccolta('auto-1', 'Clienti')
-  assert.equal(store.rinominaRaccolta('Clienti', 'I clienti'), true)
-  assert.equal(store.statoAutomazione('auto-1')?.raccolta, 'I clienti')
-  // senza questo l'automazione resterebbe in una cartella che non esiste: invisibile
-  assert.ok(store.raccolte().some(r => r.nome === 'I clienti'))
-})
-
-test('buttare la cartella non butta quello che c’era dentro', () => {
-  store.creaRaccolta('Da togliere')
-  store.mettiInRaccolta('auto-2', 'Da togliere')
-  assert.equal(store.buttaRaccolta('Da togliere'), true)
-  assert.equal(store.statoAutomazione('auto-2')?.raccolta, null)
-  assert.ok(!store.raccolte().some(r => r.nome === 'Da togliere'))
 })
 
 // — il permesso scritto sulla riga —

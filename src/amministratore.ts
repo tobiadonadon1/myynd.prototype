@@ -144,8 +144,7 @@ export type DoveVanno = {
  * Dove vanno i dati: ogni pezzo secondo quello che c'è davvero.
  *
  * Il modello non riceve solo «quello che chiedo»: la prima pagina si prepara
- * in sottofondo dopo ogni lettura, e così le automazioni e la preparazione
- * discreta. Lo si dice. Se il modello sta sulla stessa macchina, nessun
+ * in sottofondo dopo ogni lettura, e così la preparazione discreta. Lo si dice. Se il modello sta sulla stessa macchina, nessun
  * fornitore riceve niente, e anche questo si dice — ma non se c'è Jev, che
  * riceve pezzi dei documenti per giudicarli.
  */

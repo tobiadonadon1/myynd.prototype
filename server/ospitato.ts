@@ -30,7 +30,7 @@
 //     vorrebbe dire toglierlo. Allargarlo a un nome solo lo tiene intero.
 //   · **ognuno la sua cartella.** `DATI` è la radice, e sotto `utenti/<id>`
 //     vive una persona: la sua configurazione, il suo indice, le sue
-//     automazioni. È quello che rende sicuro lasciare aperta la registrazione.
+//     chat. È quello che rende sicuro lasciare aperta la registrazione.
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -106,12 +106,12 @@ export const PORTA = Number(process.env.PORT ?? process.env.MYYND_PORT ?? 5174)
 export const INDIRIZZO = OSPITATO ? '0.0.0.0' : '127.0.0.1'
 
 /**
- * Dove vive la mente: l'indice, la configurazione, le automazioni tue.
+ * Dove vive la mente: l'indice, la configurazione, le chat tue.
  *
  * `MYYND_DATI` deve puntare a un disco che sopravvive al riavvio del
  * contenitore — su Railway è un Volume, e va montato. Senza, il contenitore
  * riparte con `~/.myynd` vuoto: nessun account, nessun documento, nessuna
- * automazione, e nessun errore da nessuna parte. È il modo più silenzioso in
+ * chat, e nessun errore da nessuna parte. È il modo più silenzioso in
  * cui questa installazione può perdere tutto, e capita al primo redeploy.
  */
 export const DATI = (process.env.MYYND_DATI ?? '').trim() || join(homedir(), '.myynd')

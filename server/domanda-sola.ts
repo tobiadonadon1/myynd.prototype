@@ -11,7 +11,7 @@
 // riconoscono i generi duri dalla domanda stessa, prima di qualunque
 // etichetta. L'etichetta del modello (`presumere`, in `claude.ts`) può solo
 // far chiedere, mai far presumere una cosa che il pavimento ha detto dura.
-// E chi lavora nel fondo (le iniziative, le automazioni) non chiede mai.
+// E chi lavora nel fondo (le iniziative) non chiede mai.
 //
 // Puro: importa solo la cornice, e si prova con una tabella in un secondo.
 

@@ -1,8 +1,8 @@
 // Il cartellino del conto a secco.
 //
 // Il credito finito non è un guasto: è una cosa da fare, e ha tre passi. Ma
-// arriva sempre nel momento sbagliato — dentro una risposta, dentro
-// un'automazione che gira alle sette del mattino — e lì diventa una riga rossa
+// arriva sempre nel momento sbagliato — dentro una risposta, dentro un
+// lavoro che gira di notte — e lì diventa una riga rossa
 // che sparisce, o niente. Chi la riceve non capisce di aver toccato una
 // questione di soldi, riprova, e conclude che l'app è rotta.
 //

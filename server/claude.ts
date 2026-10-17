@@ -1,5 +1,4 @@
 import { recordUserDecision, recordNextResult, recordStateDecision } from './project-memory.ts'
-import * as provaChiusa from './prova-chiusa.ts'
 import { concludiDaTrascrizione, toccaConcludere, type Chiusura } from './chiusura-progetto.ts'
 import { richiestaSulleFonti, rispostaSulleFonti, type Lettura } from './fonti-in-chat.ts'
 import * as riferimento from './riferimento.ts'
@@ -27,14 +26,14 @@ import { delTetto } from './tetto.ts'
 import type { Motore } from './modello.ts'
 import { ancora, eUnRifiuto, NON_CE_LHO, type FonteAncorata, type Verifica, type Via } from './ancoraggio.ts'
 import * as chatgpt from './chatgpt.ts'
-import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, segnaNelDiario, stessoFilo, type Concessione, type Documento } from './store.ts'
+import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, segnaNelDiario, stessoFilo, type Documento } from './store.ts'
 import { rispostaA } from './filo.ts'
 import { linguaSbagliata, riflua, senzaTrattini, soloInLingua } from './testo.ts'
 import { documentoVero } from './veri.ts'
 import { attendibile, carta, cartaPerContesto, salvaProgettiEspliciti } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import * as progetti from './progetti.ts'
-import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsNelVassoio, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
 /**
  * La lista, per la chat che la tocca.
  *
@@ -492,7 +491,7 @@ function daDove(c: Compito): string {
   if (c.origine === 'punto') pezzi.push('proposta da te nel punto del giorno')
   else if (c.origine === 'feed') pezzi.push('presa da una voce del feed')
   else if (c.origine === 'avvio') pezzi.push('scritta al primo avvio')
-  else if (c.origine?.startsWith('auto:')) pezzi.push('scritta da un\'automazione')
+  else if (c.origine?.startsWith('auto:')) pezzi.push('scritta da Myynd in automatico')
   else if (c.origine === 'chat') pezzi.push('scritta in chat')
   else if (c.origine === 'mano') pezzi.push('scritta a mano da lei')
   if (c.nota) pezzi.push(`nota: ${c.nota.slice(0, 120).replace(/\s+/g, ' ')}`)
@@ -602,7 +601,7 @@ export function sistema(discorso = '', conLaLista = false, compatto = false, con
   if (progetto) pezzi.push(`\nProgetti attuali e obiettivi registrati, con attività reali:\n${compatto ? aRighe(progetto, 1100) : progetto}\nUsali per orientare il lavoro. Un obiettivo non è una scadenza né una nuova attività; "pronto" significa da rivedere, non completato.`)
   const direzione = fuoco()
   if (direzione) pezzi.push(`\nPriorità attuale indicata dalla persona: ${direzione.slice(0, compatto ? 200 : 700)}`)
-  pezzi.push(`\nData attuale: ${new Date(provaChiusa.adesso()).toISOString().slice(0, 10)}. Controlla le date delle fonti prima di chiamare qualcosa attuale o urgente.`)
+  pezzi.push(`\nData attuale: ${new Date(Date.now()).toISOString().slice(0, 10)}. Controlla le date delle fonti prima di chiamare qualcosa attuale o urgente.`)
   pezzi.push('\nNon dichiarare di avere salvato o modificato progetti e obiettivi: una proposta scritta non è un salvataggio. I salvataggi espliciti sono confermati dal sistema dopo la scrittura in Memoria.')
 
   // In fondo, e solo con gli strumenti in mano. Sta dentro il blocco tenuto in
@@ -689,33 +688,6 @@ export function evidenzePerPiano(domanda: string, docs: Documento[], fissati: Re
   })
 }
 
-type SelezioneLavoro = Pick<Concessione, 'selezione' | 'ambitoSelezione' | 'origine'>
-
-/** A workflow's saved selection policy survives its later model tool calls.
- * Existing task rows are intentionally not excluded: this is their own work. */
-export function documentiPerSelezione(docs: Documento[], vincolo?: SelezioneLavoro | null, domanda = ''): Documento[] {
-  if (vincolo?.selezione !== 'richieste-dirette') return docs
-  const ambito = vincolo.ambitoSelezione || domanda
-  const registrati = progetti.perContesto(true)
-  const dalFiltro = registrati.filter(p => progetti.tocca({ nome: p.nome, obiettivo: '' }, ambito))
-  const nominati = dalFiltro.length ? dalFiltro : registrati.filter(p => progetti.tocca({ nome: p.nome, obiettivo: '' }, domanda))
-  const ignorati = docsIgnoratiDalFeed(docs)
-  return docs.filter(d => {
-    if (d.tipo !== 'email' || ignorati.has(d.id) || classificaAttenzione(d).destinazione !== 'feed') return false
-    if (nominati.length && !nominati.some(p => p.stato !== 'chiuso' && progetti.tocca({ nome: p.nome, obiettivo: '' }, `${d.titolo}\n${corpoAttuale(d)}`))) return false
-    if (!d.filo) return true
-    const ricevuta = Date.parse(d.quando ?? '')
-    return !stessoFilo(d.filo, [d.id], 30).some(r => r.inviato && Date.parse(r.quando ?? '') >= ricevuta)
-  })
-}
-
-export function verificaFontiSelezione(ids: string[], vincolo?: SelezioneLavoro | null, domanda = ''): boolean {
-  if (vincolo?.selezione !== 'richieste-dirette') return true
-  const unici = [...new Set(ids)]
-  const docs = unici.flatMap(id => documento(id) ?? [])
-  return docs.length === unici.length && documentiPerSelezione(docs, vincolo, domanda).length === unici.length
-}
-
 /** Il materiale su cui rispondere, o niente se non c'è nulla di pertinente. */
 /** Le fonti fatte di file: dove sta un listino, un preventivo, una presentazione. */
 const FONTI_DI_FILE = new Set(['desktop', 'note', 'drive', 'notion', 'dropbox', 'microsoft'])
@@ -747,7 +719,7 @@ export function materiale(domanda: string, storico: Turno[], recinto?: string[] 
   // "e la seconda?" da soli non troverebbero niente. Mai con il testo generato
   // da me — cercare sulle proprie parole amplifica la deriva a ogni giro.
   const coda = storico.filter(t => t.ruolo === 'u').slice(-1).map(t => t.testo).join(' ')
-  // il recinto, quando c'è, è quello che l'automazione ha il permesso di aprire:
+  // il recinto, quando c'è, è quello che la riga ha il permesso di aprire:
   // un elenco vuoto vuol dire «nessuna fonte», e allora non si cerca affatto
   if (recinto && !recinto.length) return []
   const fonti = recinto ?? undefined
@@ -1821,7 +1793,6 @@ async function rispondiInStreamingDentro(
     } catch (e) {
       // il tetto di oggi non è un guasto dell'account, e la chiave non lo scavalca
       if (delTetto(e)) throw e
-      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla chat:',
         e instanceof Error ? e.message : e)
@@ -2197,7 +2168,7 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
    * la stessa cosa può stare anche in un altro documento.
    *
    * E quello che sta già in lista nemmeno: un'email con la sua riga — scritta
-   * a mano, dal feed o da un'automazione — è già stata vista.
+   * a mano, dal feed o da Myynd — è già stata vista.
    */
   const aperte = feedAperto(40)
   // quello che non merita nemmeno una lettura si toglie *prima* di contare i
@@ -2259,8 +2230,7 @@ export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivat
   const ids = candidati.map(d => d.id)
   // aperte, fatte, scartate o scadute da poco: quel documento ha già avuto la sua voce
   const giaSulFeed = docsSulFeed(ids)
-  // una mail che aspetta nel vassoio di prova (P6) non è anche una carta
-  const inLista = new Set([...docsConRiga(ids), ...docsNelVassoio(ids)])
+  const inLista = docsConRiga(ids)
   const ignorati = docsIgnoratiDalFeed(candidati)
   // e a chi ha già risposto: nel filo, dopo la mail, o per «risponde»
   const risposti = rispostiPerId(candidati.map(d => d.messageId ?? '').filter(Boolean))
@@ -2996,11 +2966,11 @@ export const ATTREZZI_LAVORO: Anthropic.Tool[] = [
  *
  * Senza questa riga il modello ha gli attrezzi ma non sa di averli, e il
  * comportamento che ne esce è quello di prima: cerca una volta nell'indice
- * generale e si arrende. Gli strumenti dichiarati sono il *punto* di
- * un'automazione — «guarda nella posta ogni mattina» vuol dire guardaci
- * davvero, non guardaci se ti viene in mente.
+ * generale e si arrende. Gli strumenti dichiarati sono il *punto* della
+ * riga: «guarda nella posta» vuol dire guardaci davvero, non guardaci se ti
+ * viene in mente.
  *
- * E c'è la metà che protegge: gli attrezzi che *non* ha. Un'automazione senza
+ * E c'è la metà che protegge: gli attrezzi che *non* ha. Una riga senza
  * `posta.leggi` deve dirlo — «collegami la casella» — invece di scrivere una
  * risposta plausibile su una posta che non ha mai aperto.
  */
@@ -3011,9 +2981,8 @@ export function conQuali(concessi: attrezzi.Nome[]): string {
     .filter((a): a is attrezzi.Attrezzo => !!a)
     .map(a => `· \`${a.tool.name}\`: ${a.spiega.it}${attrezzi.collegato(a.nome) ? '' : ' (NON È COLLEGATO: non puoi usarlo, e devi dirlo).'}`)
 
-  // «viene da un'automazione» non è più sempre vero: una riga di un progetto
-  // con una cartella di lavoro sul disco si porta dietro `claude.lavora` da
-  // sola, e dirle che è un'automazione le farebbe rifiutare il proprio lavoro
+  // una riga di un progetto con una cartella di lavoro sul disco si porta
+  // dietro `claude.lavora` da sola: la frase non dice chi l'ha scritta
   const testa =
     '\n\nQuesta riga si porta dietro degli attrezzi in più, e chi li ha dichiarati ha detto ' +
     'cosa aprono. Questi sono i tuoi attrezzi:\n' + righe.join('\n') +
@@ -3025,7 +2994,7 @@ export function conQuali(concessi: attrezzi.Nome[]): string {
   /*
    * Il recinto si spiega solo quando c'è.
    *
-   * Un'automazione che dichiara solo `claude.lavora` non ha ristretto nessuna
+   * Una riga che dichiara solo `claude.lavora` non ha ristretto nessuna
    * fonte, e dirle «vedi soltanto queste: nessuna» sarebbe una bugia che le
    * fa rifiutare un lavoro che può fare.
    */
@@ -3045,23 +3014,21 @@ export function conQuali(concessi: attrezzi.Nome[]): string {
  * Le fonti dell'indice che questa riga ha il permesso di aprire.
  *
  * `null` vuol dire «tutto», che è il comportamento di sempre: un compito
- * scritto a mano, o un'automazione i cui attrezzi non leggono l'indice. Un
- * elenco vuol dire quello e solo quello, **anche per `cerca` e `apri`**. La
- * regola sta in `attrezzi.recinto`, che è lo stesso posto da cui la legge la
- * pescata iniziale delle automazioni.
+ * scritto a mano, o una riga i cui attrezzi non leggono l'indice. Un elenco
+ * vuol dire quello e solo quello, **anche per `cerca` e `apri`**. La regola
+ * sta in `attrezzi.recinto`.
  *
  * Qui c'era la decisione opposta, e va detto perché è cambiata. Il ragionamento
- * di prima: se un'automazione con `posta.leggi` non può vedere il listino sul
+ * di prima: se una riga con `posta.leggi` non può vedere il listino sul
  * disco, scriverà una bozza con dentro un prezzo inventato — e una cifra
  * plausibile e falsa è il difetto che questo prodotto non si può permettere.
  * Vero, ma la conclusione non seguiva: fra «leggi anche quello che non ti è
  * stato concesso» e «inventa» c'è la terza strada, che è **dire che non puoi**.
  * Quella la insegna `conQuali` qui sopra.
  *
- * E dall'altra parte c'era una promessa rotta. Sulla scheda dell'automazione
- * una persona legge quali fonti apre alle sette di mattina, e può toglierne
- * una. Se poi la ricerca generale le apriva tutte, quella riga non era un
- * permesso: era una decorazione. Un attrezzo è un permesso — è la regola di
+ * E dall'altra parte c'era una promessa rotta: se la ricerca generale apriva
+ * tutte le fonti, il permesso scritto sulla riga non era un permesso: era una
+ * decorazione. Un attrezzo è un permesso — è la regola di
  * `attrezzi.ts`, ed è quella che vale.
  */
 const recintoDi = (concessi: attrezzi.Nome[]): string[] | null => attrezzi.recinto(concessi)
@@ -3098,9 +3065,9 @@ export async function svolgi(
    * Gli attrezzi in più che questa riga si porta dietro.
    *
    * Vuoto — cioè un compito scritto a mano — vuol dire quello di sempre:
-   * `cerca` e `apri` sull'indice intero. Un elenco vuol dire che la riga viene
-   * da un'automazione che ha dichiarato cosa apre, e allora oltre ai due di
-   * sempre riceve *quelli e solo quelli*.
+   * `cerca` e `apri` sull'indice intero. Un elenco vuol dire che la riga ha
+   * dichiarato cosa apre, e allora oltre ai due di sempre riceve *quelli e
+   * solo quelli*.
    */
   concessi: attrezzi.Nome[] = [],
   /** In che cartella lavora `claude.lavora`, se c'è. */
@@ -3118,8 +3085,8 @@ export async function svolgi(
   /**
    * Il documento da cui è nata la riga, se ne ha uno.
    *
-   * «Rispondere a Rossi sul preventivo» scritto da un'automazione che ha letto
-   * la mail di Rossi non è un compito da cercare: è una risposta a *quella*
+   * «Rispondere a Rossi sul preventivo» nato dalla mail di Rossi non è un
+   * compito da cercare: è una risposta a *quella*
    * mail. Senza questo, la bozza partiva da una ricerca con le parole del
    * titolo, che trovava il filo giusto quasi sempre — e quel «quasi» era una
    * risposta a un messaggio diverso, indirizzata alla persona sbagliata. Qui
@@ -3129,7 +3096,6 @@ export async function svolgi(
    * funzionare com'era.
    */
   doc?: string | null,
-  selezione?: SelezioneLavoro | null,
   /**
    * Come si esegue. Le quattro voci nuove (P3) sono tutte facoltative:
    * `fissa` sono documenti da tenere davanti fin dall'inizio (quelli letti
@@ -3148,7 +3114,7 @@ export async function svolgi(
    * prompt di sistema. Vedi `MaterialeProgetto`.
    */
   progetto?: MaterialeProgetto | null
-): Promise<{ testo: string; fonti: Fonte[]; lette?: string[]; verificaDocumenti?: string[]; eseguito?: boolean; daChiedere?: boolean; consegna?: DocumentoCreato & {revisione?: Pick<RevisioneVisiva, 'esito' | 'problemi'>}; fatti?: mani.Fatto[] }> {
+): Promise<{ testo: string; fonti: Fonte[]; lette?: string[]; eseguito?: boolean; daChiedere?: boolean; consegna?: DocumentoCreato & {revisione?: Pick<RevisioneVisiva, 'esito' | 'problemi'>}; fatti?: mani.Fatto[] }> {
   const produzioneIniziata = Date.now()
   const tracciaProduzione = (fase: string) => console.info(`myynd · production · run=${produzioneIniziata} · ${fase} · elapsed_ms=${Date.now() - produzioneIniziata}`)
   tracciaProduzione('provider-selection-start')
@@ -3189,40 +3155,34 @@ export async function svolgi(
    *
    * Solo se esiste ancora e sta dentro il recinto: uno sparito dall'indice
    * non è un errore — la riga si svolge come una scritta a mano — e uno fuori
-   * dal recinto non si apre nemmeno qui, o la scheda dell'automazione
+   * dal recinto non si apre nemmeno qui, o il permesso della riga
    * mentirebbe. La ricerca di sempre segue, senza ripetere quello che c'è già.
    */
   const dalDoc = doc ? documento(doc) : null
   if (doc && !dalDoc) throw new Error(cfgLingua() === 'en'
     ? 'The source for this task is no longer available. Reconnect it or choose the current source before trying again.'
     : 'La fonte di questo compito non è più disponibile. Ricollegala o scegli la fonte attuale prima di riprovare.')
-  const selezioneAttiva = selezione?.selezione === 'richieste-dirette'
-  if (selezioneAttiva && dalDoc && !documentiPerSelezione([dalDoc], selezione, domanda).length) {
-    throw new Error('La fonte selezionata non è più una richiesta attuale pertinente. Rileggi le fonti prima di riprovare.')
-  }
-  const dalla = documentiPerSelezione(dalDoc && (!recinto || recinto.includes(dalDoc.fonte)) ? conIlFilo([dalDoc]) : [], selezione, domanda)
+  const dalla = dalDoc && (!recinto || recinto.includes(dalDoc.fonte)) ? conIlFilo([dalDoc]) : []
   /*
    * La cartella di lavoro del progetto entra come fonte fissa, dopo il
    * documento della riga: il README, gli ultimi commit, gli appunti — cioè a
-   * che punto è la cosa. Non con una selezione attiva, che è una regola
-   * dell'automazione sulla posta, e non fuori dal recinto.
+   * che punto è la cosa. Non fuori dal recinto.
    */
   const dallaCartella = progetto?.cartella
-  if (dallaCartella && !selezioneAttiva && (!recinto || recinto.includes(dallaCartella.fonte)) && !dalla.some(d => d.id === dallaCartella.id)) dalla.push(dallaCartella)
+  if (dallaCartella && (!recinto || recinto.includes(dallaCartella.fonte)) && !dalla.some(d => d.id === dallaCartella.id)) dalla.push(dallaCartella)
   /*
    * I documenti fissati da chi chiama (P3): quelli letti al giro prima,
    * quando si riscrive con un'ipotesi o con i problemi della rilettura. Lo
-   * stesso recinto e la stessa selezione di `dalla`: uno sconosciuto o uno
-   * fuori dal recinto si salta in silenzio.
+   * stesso recinto di `dalla`: uno sconosciuto o uno fuori dal recinto si
+   * salta in silenzio.
    */
   for (const id of esecuzione?.fissa ?? []) {
     if (dalla.some(d => d.id === id)) continue
     const d = documento(id)
     if (!d || (recinto && !recinto.includes(d.fonte))) continue
-    if (!documentiPerSelezione([d], selezione, domanda).length) continue
     dalla.push(d)
   }
-  const fissati = new Set(selezioneAttiva ? [] : dalla.map(d => d.id))
+  const fissati = new Set(dalla.map(d => d.id))
   /*
    * L'obiettivo nudo si fa, non si chiede.
    *
@@ -3239,17 +3199,15 @@ export async function svolgi(
   /** La copia in cui Claude Code ha lavorato, se ha lavorato: lì `scrivi_file` può scrivere. */
   let copiaDiLavoro: string | null = null
   const pianoAttuale = progettiPerPiano(domanda).length > 0
-  const soloAttuali = pianoAttuale || selezioneAttiva
-  const perQuestoLavoro = (docs: Documento[]) => evidenzePerPiano(domanda, documentiPerSelezione(docs, selezione, domanda), fissati)
-  const senzaEvidenzeAttuali = selezioneAttiva
-    ? 'Nessuna nuova email diretta recente soddisfa i criteri salvati per questa automazione. Dillo chiaramente nel riepilogo. Non includere richieste già completate, scartate, già risposte, vecchie, promozionali o di altri progetti; non riempire il riepilogo con fonti escluse.'
-    : 'Non ci sono nuove fonti attuali pertinenti per questo progetto. Usa il suo obiettivo registrato per consegnare un piano proposto, indica che lo stato attuale non è verificato e distingui le ipotesi dai fatti. Non cercare vecchie menzioni per riempire i vuoti.'
+  const soloAttuali = pianoAttuale
+  const perQuestoLavoro = (docs: Documento[]) => evidenzePerPiano(domanda, docs, fissati)
+  const senzaEvidenzeAttuali = 'Non ci sono nuove fonti attuali pertinenti per questo progetto. Usa il suo obiettivo registrato per consegnare un piano proposto, indica che lo stato attuale non è verificato e distingui le ipotesi dai fatti. Non cercare vecchie menzioni per riempire i vuoti.'
   if (dalla.length) passo({ passo: 'apro', dettaglio: dalla[0].titolo })
   const giaDentro = new Set(dalla.map(d => d.id))
   tracciaProduzione('material-start')
   // il file che la mail chiede, cercato fra i file: «Send Jonas the pricing one-pager»
   // voleva «Jonas» anche nel listino, e il listino non c'era mai
-  const chiesti = dalDoc && !selezioneAttiva ? perQuestoLavoro(fileChiesti(domanda, dalDoc, recinto)).filter(d => !giaDentro.has(d.id)) : []
+  const chiesti = dalDoc ? perQuestoLavoro(fileChiesti(domanda, dalDoc, recinto)).filter(d => !giaDentro.has(d.id)) : []
   for (const d of chiesti) giaDentro.add(d.id)
   const partenza = [
     ...dalla,
@@ -3270,8 +3228,7 @@ export async function svolgi(
   const visti: Documento[] = [...partenza]
   const risultatoVerificato = (testo: string) => {
     const ids = visti.map(d => d.id)
-    if (!verificaFontiSelezione(ids, selezione, domanda)) throw new Error('Una fonte è stata completata, scartata o non è più pertinente mentre preparavo il risultato. Rileggi le fonti prima di riprovare.')
-    return { testo, fonti: fontiCitate(testo, visti), lette: ids, ...(selezioneAttiva ? { verificaDocumenti: ids } : {}) }
+    return { testo, fonti: fontiCitate(testo, visti), lette: ids }
   }
   const nuoviDa = (trovati: Documento[]) => {
     const freschi = perQuestoLavoro(trovati).filter(t => !visti.some(v => v.id === t.id))
@@ -3317,15 +3274,13 @@ export async function svolgi(
   /*
    * Le mani, oltre ai due di sempre.
    *
-   * Una riga scritta a mano — nessun attrezzo dichiarato, nessuna selezione
-   * di un'automazione — riceve le mani di `mani.ts`: leggere un file o una
-   * pagina, cercare sul web, e, se il compito lo chiede, una nota, un file,
-   * il lavoro nel codice. Un'automazione no: i suoi attrezzi li ha dichiarati
-   * chi l'ha scritta, e una scheda che dice «legge la posta» non deve
-   * scoprirsi a leggere il web. Un prompt nemmeno: consegna la richiesta,
-   * non fa la cosa.
+   * Una riga senza attrezzi dichiarati riceve le mani di `mani.ts`: leggere
+   * un file o una pagina, cercare sul web, e, se il compito lo chiede, una
+   * nota, un file, il lavoro nel codice. Una riga con i suoi attrezzi no: chi
+   * li ha dichiarati ha detto cosa apre. Un prompt nemmeno: consegna la
+   * richiesta, non fa la cosa.
    */
-  const leMani = !concessi.length && !selezioneAttiva && selezione?.origine !== 'automazione' && modo !== 'prompt'
+  const leMani = !concessi.length && modo !== 'prompt'
     // il «fatto» della carta (F1) conta per le mani: «un file sulla Scrivania»
     // o «una nota in Note» vogliono la mano che lo fa
     ? mani.perQuestoCompito({ compito, nota: [nota, esecuzione?.criterio].filter(Boolean).join('\n') || null, cartella, ospitato: OSPITATO, mani: esecuzione?.mani ?? null })
@@ -3389,13 +3344,12 @@ export async function svolgi(
   /*
    * F8 · l'account cade: si passa alla chiave, se c'è, ma solo finché nessuna
    * mano ha scritto niente. Una nota o un file già fatti e poi rifatti dalla
-   * chiave sarebbero due note e due file; il tetto, «Stop now» e una prova
-   * sul passato (P6) non sono guasti dell'account, e non passano mai.
+   * chiave sarebbero due note e due file; il tetto e «Stop now» non sono
+   * guasti dell'account, e non passano mai.
    */
   const riservaDellAccount = (e: unknown): Motore | null => {
     if (m?.tipo !== 'abbonamento') return null
     if (delTetto(e) || esecuzione?.signal.aborted) return null
-    if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
     abbonamento.nonRisponde()
     console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
     const giaScritto = !!copiaDiLavoro || tentativiVisivi > 0 || fatti.some(f => mani.CHE_PRODUCONO.includes(f.attrezzo))
@@ -3489,7 +3443,6 @@ export async function svolgi(
         // Verification is checked before the side effect and again on return.
         risultatoVerificato('')
         passo({ passo: 'apro', dettaglio: appNativa })
-        provaChiusa.vietato('mani.crea_documento_app')
         const documentoCreato = await creaDocumento({...input, stile: {pagine:pagineRichieste, corpo: brief.tipografia.font, titolo: brief.tipografia.font, dimensione: brief.tipografia.punti, nome: brief.tipografia.origine === 'documento' ? 'From a relevant reference' : brief.tipografia.origine === 'preferenza_esplicita' ? 'Your requested style' : 'Editorial'}}, esecuzione?.signal)
         esecuzione?.signal.throwIfAborted()
         passo({passo:'scrivo', dettaglio: cfgLingua() === 'en' ? 'Checking the rendered pages' : 'Controllo le pagine impaginate'})
@@ -3610,13 +3563,13 @@ export async function svolgi(
               content: 'Non esiste nessun documento con questo id. Usa la riga «id:» di uno che ti ho già dato.'
             }
           }
-          // esiste, ma sta fuori da quello che questa automazione può aprire: si
+          // esiste, ma sta fuori da quello che questa riga può aprire: si
           // dice *quello*, non «non esiste» — la differenza è ciò che permette a
           // chi legge la bozza di concedere il permesso che manca
           if (recinto && !recinto.includes(d.fonte)) {
             return {
               type: 'tool_result' as const, tool_use_id: c.id, is_error: true,
-              content: `Questo documento sta in «${d.fonte}», e questa automazione può aprire ` +
+              content: `Questo documento sta in «${d.fonte}», e questa riga può aprire ` +
                 `soltanto ${recinto.join(', ')}. Non posso dartelo. ` +
                 'Scrivi che ti servirebbe e da dove viene.'
             }

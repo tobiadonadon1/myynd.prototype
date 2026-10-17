@@ -22,7 +22,6 @@ import * as chi from './chi.ts'
 import * as cfg from './config.ts'
 import * as conti from './conti.ts'
 import * as store from './store.ts'
-import * as automazioni from './automazioni.ts'
 import * as progetti from './progetti.ts'
 import * as riferimento from './riferimento.ts'
 import * as risposteArchivio from './risposte-archivio.ts'
@@ -71,7 +70,7 @@ export function senzaLeChiavi(valore: unknown, dentro = ''): unknown {
 
 /**
  * I file di stato che Myynd tiene accanto all'indice: il punto, le priorità,
- * il tavolo, le scoperte, le regole dei mittenti, le prove dei progetti.
+ * il tavolo, le regole dei mittenti, le prove dei progetti.
  *
  * Tutti i `.json` della cartella di questa persona tranne la configurazione,
  * che sta già sopra senza le chiavi: così un file nuovo ci entra da solo. Ognuno
@@ -230,9 +229,6 @@ export function* scrivi(gettoniDelConto: Gettone[] = []): Generator<string> {
     primo = false
   }
   yield '\n]'
-
-  // — le automazioni, e cosa hanno fatto —
-  yield ',\n' + riga('automazioni', automazioni.elenco())
 
   // — quello che è uscito da qui: mail mandate, file scritti —
   yield ',\n"azioni":'

@@ -145,8 +145,6 @@ const EN: Record<string, string> = {
   'Impossibile caricare le regole mittenti.': 'Could not load sender rules.',
   'Impossibile salvare la regola mittente.': 'Could not save the sender rule.',
   'Impossibile rimuovere la regola mittente.': 'Could not remove the sender rule.',
-  'Preparo il lavoro da rivedere.': 'Preparing work for your review.',
-  'Nessun nuovo lavoro da preparare adesso.': 'No new work to prepare right now.',
   'Fino a due preparazioni al giorno: risposte nella tua posta, prossimi passi, fatture e campi di moduli da rivedere. Nessun invio, pagamento o finestra aperta.': 'Up to two preparations a day: replies in your email, next steps, invoices and form fields to review. No sending, payments or opened windows.',
   'Ora non valida nel fuso locale.': 'That time does not exist in your local time zone.',
   'Il progetto contiene un ciclo di cartelle.': 'The project contains a folder loop.',
@@ -161,8 +159,6 @@ const EN: Record<string, string> = {
   'Bozze pronte prima che le chieda': 'Drafts ready before you ask',
   'Mittenti che hai messo via': 'Senders you filed away',
   'La posta di questi mittenti va dritta in archivio.': 'Mail from these senders goes straight to the archive.',
-  'Guardo cosa si ripete nel tuo lavoro…': 'Looking at what repeats in your work…',
-  'Nuove automazioni proposte': 'New automations suggested',
   'Fino a due bozze di risposta al giorno, salvate nelle bozze della tua posta quando il collegamento lo consente. Niente viene inviato e nessuna finestra viene aperta.': 'Up to two reply drafts a day, saved in your email Drafts when the connection supports it. Nothing is sent and no windows are opened.',
   'In pausa: la tua autonomia è impostata su chiedere prima.': 'Paused: your autonomy setting is Ask first.',
   'Salvata nelle bozze della tua posta. Nessun messaggio inviato.': 'Saved in your email Drafts. Nothing sent.',
@@ -170,7 +166,6 @@ const EN: Record<string, string> = {
   'La bozza è qui, ma non è stata salvata nella posta.': 'The draft is here, but could not be saved in your email.',
   'Preparo una bozza nella tua posta.': 'Preparing a draft in your email.',
   'Nessuna nuova bozza da preparare adesso.': 'No new draft to prepare right now.',
-  'Prepara ora': 'Prepare now',
 
   'Dettagli': 'Details',
   'Sto aggiornando il documento': 'Revising your document',
@@ -273,7 +268,6 @@ const EN: Record<string, string> = {
   'Raccontami di te': 'Tell me about yourself',
   'Nessun progetto ancora.': 'No project yet.',
   'Un progetto e un obiettivo: da lì scelgo cosa conta.': 'A project and a goal: that is where I start picking what matters.',
-  'Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.': 'Everything goes: documents, list, chats, memory, automations and sources. There is no way back.',
   'Apre il richiamo da qualunque programma.': 'Opens the quick bar from any program.',
   'Un avviso di sistema, solo se Myynd non è davanti.': 'A system notification, only when Myynd is not in front.',
   // — chi ragiona: una carta sola, tre strade; e il nome chiesto al primo giorno —
@@ -360,7 +354,6 @@ const EN: Record<string, string> = {
   "Da cosa partiamo?": "What shall we start with?",
   "Mostra meno": "Show less",
   "Tutte le fonti": "All sources",
-  "Ragionamento e automazioni": "Reasoning and automations",
   "Leggo…": "Reading…",
   "Cosa vuoi tenere?": "What’s worth keeping?",
   "Partiamo dal tuo obiettivo.": "We’ll start with your goal.",
@@ -483,72 +476,8 @@ const EN: Record<string, string> = {
   'attività': 'tasks',
   "Risposte": "Replies",
   "Fatture": "Invoices",
-  "Preventivi": "Proposals",
-  "Usa @ per scegliere le fonti. Nasce in pausa.": "Use @ to choose sources. Starts paused.",
-  "Cosa vuoi delegare?": "What would you like to delegate?",
-  'Flusso': 'Workflow',
-  'Suggerimenti': 'Suggestions',
-  'Suggerita': 'Suggested',
-  'ultima corsa': 'last run',
-  'Nessuna automazione ancora. Descrivine una, o accendi un suggerimento quando compare.': 'No automations yet. Describe one, or switch on a suggestion when it appears.',
-  'Aggiorna i suggerimenti': 'Refresh suggestions',
   'Rivedi': 'Review',
-  'Nessuna automazione, per ora.': 'No automations yet.',
-  'Hai modifiche non salvate.': 'You have unsaved changes.',
-  'Continua a modificare': 'Keep editing',
-  'Scarta e chiudi': 'Discard and close',
-  'Salva le modifiche per vedere quali documenti leggerà.': 'Save your changes to preview the documents this workflow will read.',
 
-  "Aggiorna": "Refresh",
-  "Attiva": "Active",
-  "Attive": "Active",
-  "Cerca automazioni…": "Search automations…",
-  "Cerco opportunità nel tuo lavoro…": "Looking for opportunities in your work…",
-  "Ci sono richieste che richiedono una risposta…": "There are requests that need a reply…",
-  "Condizione": "Condition",
-  "Continua solo se…": "Continue only if…",
-  "Cosa legge": "Read from",
-  "Crea automazione": "Create automation",
-  "Cronologia esecuzioni": "Run history",
-  "Da controllare": "Needs attention",
-  "Dai documenti collegati, idee già pronte da rivedere. Le accendi tu.": "Ready-to-review ideas from your connected documents. You decide when they go live.",
-  "Descrivi cosa ripeti ogni giorno. Myynd prepara il flusso, tu gli dai gli ultimi ritocchi.": "Describe something you repeat every day. Myynd builds the workflow; you make it yours.",
-  "Documenti indicizzati": "Indexed documents",
-  "Elabora con AI": "Process with AI",
-  "Estrai le scadenze e raggruppa per progetto…": "Extract deadlines and group them by project…",
-  "Filtra automazioni": "Filter automations",
-  "Il prossimo passo lo prepara Myynd.": "Let Myynd find your next shortcut.",
-  "Il risultato passa al prossimo passo.": "The result becomes the input for the next step.",
-  "Il risultato per te": "Your result",
-  "Il tuo primo aiuto quotidiano.": "Your first everyday helper.",
-  "Istruzione": "Instruction",
-  "Le automazioni girano mentre Myynd è aperto su questo computer.": "Automations run while Myynd is open on this computer.",
-  "Le automazioni girano nel tuo spazio.": "Automations run in your workspace.",
-  "Le idee migliori partono dal tuo lavoro.": "The best ideas start with your work.",
-  "Le tue automazioni": "Your automations",
-  // — gli ordini fissi (E): le automazioni chiamate come quello che sono —
-  'Ordini fissi': 'Standing orders',
-  'I tuoi ordini fissi': 'Your standing orders',
-  'Nuovo ordine fisso': 'New standing order',
-  'Nessun ordine fisso ancora.': 'No standing orders yet.',
-  'Gli ordini fissi girano nel tuo spazio.': 'Standing orders run in your workspace.',
-  'Gli ordini fissi girano mentre Myynd è aperto su questo computer.': 'Standing orders run while Myynd is open on this computer.',
-  'Per cominciare': 'To start',
-  'Ordini fissi per cominciare': 'Standing orders to start with',
-  'Crea e accendi': 'Create and turn on',
-  'Guardo il mese scorso…': 'Looking at last month…',
-  'Il mese scorso non avrebbe fatto niente.': 'Last month it would have done nothing.',
-  'Aspetta che chiudi la sua riga.': 'Waiting for you to close its line.',
-  'Il budget di oggi è finito: riprende domani.': 'Today’s budget is spent: back tomorrow.',
-  'Non c’era niente di nuovo da guardare.': 'There was nothing new to look at.',
-  'Fallo ogni settimana': 'Do this every week',
-  'Diventa un ordine fisso': 'Becomes a standing order',
-  'Vai agli ordini fissi': 'Go to standing orders',
-  'Apri gli ordini fissi': 'Open standing orders',
-  '«{nome}» non è riuscito: riprovo alle {ora}.': '“{nome}” failed: retrying at {ora}.',
-  '«{nome}» non è riuscito.': '“{nome}” failed.',
-  '{n} ordini fissi non sono riusciti: riprovo alle {ora}.': '{n} standing orders failed: retrying at {ora}.',
-  '{n} ordini fissi non sono riusciti.': '{n} standing orders failed.',
   // le proposte da approvare con un dito: mai mandate
   'Approva': 'Approve',
   'da approvare': 'to approve',
@@ -558,57 +487,21 @@ const EN: Record<string, string> = {
   'Da salvare come file': 'To save as a file',
   'restano bozze: non parte niente': 'they stay drafts: nothing is sent',
   'La nota è in Note.': 'The note is in Notes.',
-  "Meno lavoro ripetitivo": "Less busywork",
-  "Modifica dettagli": "Edit details",
-  "Mostra tutte": "Show all",
-  "Nascondi dettagli": "Hide details",
-  "Nessun risultato": "No matching automations",
-  "Nessuna esecuzione. Provala per vedere il primo risultato.": "No runs yet. Try it to see your first result.",
-  "Niente da fare": "Nothing to do",
-  "Non collegato": "Not connected",
-  "Non ora": "Dismiss",
-  "Passo AI": "AI step",
-  "Pensate per te": "Suggested for you",
-  "Perché questa idea": "Why this idea",
+  "Nessun risultato": "No results",
   "Prepara": "Prepare",
-  "Preparano risultati e bozze da rivedere.": "They prepare results and drafts for you to review.",
-  "Prova un altro nome o cambia i filtri.": "Try another name or change your filters.",
-  "Quando": "When",
-  "Quando nei documenti collegati emergono fatture, preventivi o note di riunioni ricorrenti, trovi qui una proposta. Puoi sempre crearne una a parole.": "As recurring invoices, proposals or meeting notes appear in your connected documents, suggestions show up here. You can also describe your own.",
-  "Quando parte": "Start when",
-  "Rimandata": "Deferred",
-  "Rimuovi passo": "Remove step",
-  "Risultato": "Result",
-  "Risultato preparato": "Result prepared",
-  "Rivedi automazione": "Review workflow",
-  "Salva e prova": "Save and try",
-  "Se la condizione non è soddisfatta, il flusso si ferma senza creare una riga.": "If the condition is not met, the workflow stops without creating a task.",
-  "Solo i nuovi documenti": "New documents only",
   "Sposta giù": "Move down",
   "Sposta su": "Move up",
-  "Tutte le cartelle": "All folders",
-  "Ultima esecuzione": "Last run",
-  "Un piccolo aiuto, che diventa una buona abitudine.": "A little help. A lighter day.",
-  "attive": "active",
   "passi": "steps",
 
-  'Ho già un Myynd: portalo qui': 'I already have a Myynd: bring it here',
-  'Il file che hai scaricato da un altro Myynd, con dentro i tuoi documenti e le tue fonti.':
-    'The file you downloaded from another Myynd, with your documents and sources in it.',
-  "Crea l'accesso e portalo qui": 'Create the account and bring it over',
 
 // — portare il proprio Myynd altrove —
   'Portalo su un’altra macchina': 'Move it to another machine',
-  'Scarica un file con dentro tutto (i documenti, la lista, la memoria, le automazioni e le fonti collegate) e caricalo su un altro Myynd per ritrovartelo identico.':
-    'Download one file with everything in it (documents, list, memory, automations and connected sources) and upload it to another Myynd to find it exactly as it was.',
   'Dentro ci sono anche le password delle caselle e i token delle fonti: quel file apre la tua posta. Spostalo e cancellalo.':
     'It also contains your mailbox passwords and source tokens: that file opens your mail. Move it, then delete it.',
   'Scaricalo': 'Download it',
   'Caricane uno': 'Upload one',
   'Preparo…': 'Preparing…',
   'Carico…': 'Uploading…',
-  'Quello che c’è adesso in questo account viene sostituito: documenti, lista, memoria, automazioni. Non si fondono.':
-    'What is in this account now gets replaced: documents, list, memory, automations. They are not merged.',
   'Sostituisci': 'Replace',
   'Questo file non è un Myynd da spostare.': 'This file is not a Myynd to move.',
   'Questo file viene da una versione che non so leggere.': 'This file comes from a version I cannot read.',
@@ -626,8 +519,6 @@ const EN: Record<string, string> = {
   // cose faceva sembrare tradotto a macchina proprio il primo schermo.
   'Accedi': 'Sign in',
   'Crea un account': 'Create an account',
-  'La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.':
-    'Your mail, your files and your automations stay yours: every account has its own memory, separate from anyone else\u2019s.',
   'C’è già un account con questo indirizzo: entra con la tua password.': 'There is already an account with this address: sign in with your password.',
   'Hai raggiunto il tetto di token di oggi. Si riparte domani.': 'You have reached today’s token limit. It resets tomorrow.',
   'Il tetto è un numero di token al giorno, o zero per nessun tetto.': 'The limit is a number of tokens per day, or zero for no limit.',
@@ -697,24 +588,6 @@ const EN: Record<string, string> = {
   'apro i documenti': 'opening the documents',
   'apro i siti': 'opening the sites',
   'apro la cartella': 'opening the folder',
-
-// — le automazioni: cosa troverebbe, e perché non fa niente —
-  'Cosa troverebbe adesso': 'What it would find now',
-  'Adesso non troverebbe niente.': 'Right now it would find nothing.',
-  'Non è collegato:': 'Not connected:',
-  'Guarda solo quello che è arrivato dall’ultima volta: se non è arrivato niente, è normale.':
-    'It only looks at what arrived since last time: if nothing arrived, that is normal.',
-  'Prova a cambiare le parole: vanno scritte come le userebbe chi ha scritto quei documenti, nella loro lingua.':
-    'Try different words: they have to be the ones whoever wrote those documents would use, in their language.',
-  'a breve': 'shortly',
-  'aspetta che chiudi la sua riga': 'waiting for you to close its row',
-  'l’ultima volta è andata storta': 'last run went wrong',
-  'L’ultima volta è andata storta.': 'The last run went wrong.',
-  'Uno degli attrezzi che ha dichiarato non è collegato: finché resta così, non troverà mai niente.':
-    'One of the tools it declared is not connected: while that lasts, it will never find anything.',
-  'C’è già una sua riga aperta in lista: finché resta lì non ne nasce un’altra. Chiudila e la prossima arriva da sé.':
-    'One of its rows is still open on the list: while it sits there, no new one is created. Close it and the next arrives by itself.',
-  'Riscrivile le parole': 'Rewrite its words',
 
 // — le fonti nuove: Slack, Drive, Microsoft, Dropbox, WhatsApp —
   'Outlook e Calendario': 'Outlook and Calendar',
@@ -1055,13 +928,9 @@ const EN: Record<string, string> = {
 
   // — portarsi via tutto, e andarsene —
   'Tutto quello che tengo su di te': 'Everything I hold about you',
-  'Un file che si legge, con dentro il tuo conto, i documenti, la lista, quello che ho imparato su di te, le chat, le automazioni e quanto è costato. Le password e i token non ci sono: per spostare un’installazione serve il file qui sopra.':
-    'A file you can read, with your account, the documents, the list, what I have learned about you, the chats, the automations and what it has cost. Passwords and tokens are not in it: to move an installation you need the file above.',
   'Scarica i miei dati': 'Download my data',
   'Scaricato: è nella cartella dei download.': 'Downloaded: it is in your downloads folder.',
   'Cancella il conto': 'Delete the account',
-  'Sparisce tutto: i documenti che ho letto, la lista, le chat, quello che ho imparato su di te, le automazioni e le fonti collegate. Non si torna indietro, e non ne tengo una copia. Se vuoi portarti via qualcosa, fallo prima da qui sopra.':
-    'Everything goes: the documents I have read, the list, the chats, what I have learned about you, the automations and the connected sources. There is no going back, and I keep no copy. If you want to take anything with you, do it above first.',
   'Voglio cancellare il conto': 'I want to delete the account',
   'La tua password': 'Your password',
   'Il tuo indirizzo, per conferma': 'Your address, to confirm',
@@ -1076,7 +945,6 @@ const EN: Record<string, string> = {
   'Arriva presto, insieme a Gmail.': 'Coming soon, together with Gmail.',
   'Arriva presto, insieme a Outlook.': 'Coming soon, together with Outlook.',
   'Non sono riuscito a salvare le tue risposte. Riprova.': 'I could not save your answers. Try again.',
-  'Quello che leggono resta nel tuo spazio. Le automazioni descrivono solo cosa guardare e cosa farne: non contengono niente di tuo.': 'What they read stays in your space. An automation only describes what to look at and what to do with it: it contains nothing of yours.',
   'Quello che sai tu e non sta scritto da nessuna parte. Due righe bastano.': 'What you know and nobody wrote down. Two lines are enough.',
   'Il resto dopo': 'The rest later',
   'Come decidi?': 'How do you decide?',
@@ -1176,7 +1044,6 @@ const EN: Record<string, string> = {
   'Google Drive non è ancora disponibile su questo server.': 'Google Drive is not available on this server yet.',
   'Microsoft non è ancora disponibile su questo server.': 'Microsoft is not available on this server yet.',
   'Il server non conosce il proprio dominio: chi lo ospita deve impostare MYYND_PUBBLICO.': 'The server does not know its own domain: whoever hosts it must set MYYND_PUBBLICO.',
-  'Non riesco a leggere le automazioni.': 'I cannot read the automations.',
   'Non sono riuscito a rileggere questa fonte.': 'I could not re-read this source.',
   'Non sono riuscito a collegare.': 'I could not connect.',
   'Porta il lavoro fino all’ultimo passo. Invia resta tuo.': 'Takes work to the last step. Send stays yours.',
@@ -1264,7 +1131,6 @@ const EN: Record<string, string> = {
   'Come funziona': 'How it works',
   // — quello che dice il server: arriva in italiano e si traduce qui —
   'Collega Claude e potrò lavorarci.': 'Connect Claude and I can work on it.',
-  'Non sono riuscito a comporla. Riprova, o riempi i binari a mano.': 'I could not compose it. Try again, or fill in the steps by hand.',
   'Il lavoro si è interrotto. Riaffidamelo quando vuoi.': 'The work was cut off. Hand it back to me whenever.',
   'Non ho trovato niente nel tuo materiale su cui basare questo. Dimmi qualcosa in più, o collega la fonte che serve.':
     'I found nothing in your material to base this on. Tell me a bit more, or connect the source it needs.',
@@ -1344,7 +1210,6 @@ const EN: Record<string, string> = {
   "Chiama qualcuno che non senti da un po'.": "Call someone you haven't spoken to in a while.",
   'Esci prima.': 'Leave early.',
   'Mettila in lista': 'Put it on the list',
-  'in lista': 'to the list',
   'Messa in lista.': 'On the list.',
   'Non sono riuscito a metterla in lista.': 'I could not put it on the list.',
   'Chiudi': 'Close',
@@ -1429,7 +1294,6 @@ const EN: Record<string, string> = {
   // — la colonna di sinistra —
   'Cerca  ⌘K': 'Search  ⌘K',
   'Chat': 'Chat',
-  'Automazioni': 'Automations',
   'Mappa': 'Knowledge Map',
   'Connettori': 'Sources',
   'Preferenze': 'Preferences',
@@ -1527,9 +1391,6 @@ const EN: Record<string, string> = {
   'Presa.': 'Got it.',
   'Segnato.': 'Noted.',
   'Non trovo più il documento.': "I can't find that document any more.",
-  'La fonte selezionata non è più una richiesta attuale pertinente. Rileggi le fonti prima di riprovare.': 'This source no longer contains a relevant current request. Refresh your sources before trying again.',
-  'Una fonte è stata completata, scartata o non è più pertinente mentre preparavo il risultato. Rileggi le fonti prima di riprovare.': 'While I was working, a source was completed, dismissed or became irrelevant. Refresh your sources before trying again.',
-  'Una fonte è stata completata, scartata o non è più pertinente. Rileggi le fonti prima di riprovare.': 'A source was completed, dismissed or is no longer relevant. Refresh your sources before trying again.',
   'Da adesso guardo prima lì.': "From now on I'll look there first.",
   'Fuoco tolto.': 'Focus cleared.',
   'Non sono riuscito a segnarlo.': "I couldn't save that.",
@@ -1663,11 +1524,7 @@ const EN: Record<string, string> = {
   'Non so scrivere quel tipo di file.': 'I do not know how to write that kind of file.',
   'So aprire i file solo su Mac, per ora.': 'I can only open files on a Mac, for now.',
   'Vai': 'Go',
-  'Cerca automazioni nuove': 'Check for new automations',
-  'Guardo…': 'Checking…',
   'Nessuna novità.': 'Nothing new.',
-  'Non è impostato nessun repository di ricette.': 'No recipe repository is set.',
-  'Il repository si scrive «proprietario/nome».': 'The repository is written “owner/name”.',
   'Da mettere nel cestino': 'To move to the bin',
   'Da archiviare': 'To archive',
   'Li sposto…': 'Moving them…',
@@ -1687,8 +1544,6 @@ const EN: Record<string, string> = {
   "Questi hanno bisogno di un'app registrata o di un OAuth: restano qui perché fanno parte del disegno, ma non sono ancora collegabili.":
     'These need a registered app or an OAuth flow: they stay here because they are part of the design, but they cannot be connected yet.',
 
-  "Un'automazione è una routine che Myynd esegue da sola: archiviare le fatture che tornano, preparare il brief prima di una call, scrivere il sollecito dopo quindici giorni.":
-    'An automation is a routine Myynd runs on its own: filing the invoices that come back, preparing the brief before a call, writing the chaser after fifteen days.',
   'Perché possa proporne una deve prima vedere la stessa cosa ripetersi nel tuo materiale. Continua a usarla: le prime arrivano da sole, e niente parte senza il tuo sì.':
     'Before it can propose one it has to see the same thing repeat in your material. Keep using it: the first ones arrive on their own, and nothing starts without your yes.',
 
@@ -1868,9 +1723,6 @@ const EN: Record<string, string> = {
   'Scarica': 'Download',
   'Senza password né token.': 'No passwords, no tokens.',
   'azienda': 'the company',
-  // — le automazioni —
-  'quando arriva qualcosa di nuovo': 'when something new arrives',
-  'ogni giorno alle': 'every day at',
   'ogni': 'every',
   'alle': 'at',
   'lunedì': 'Monday',
@@ -1880,27 +1732,11 @@ const EN: Record<string, string> = {
   'venerdì': 'Friday',
   'sabato': 'Saturday',
   'domenica': 'Sunday',
-  'mette una riga in': 'puts a line in',
-  'prepara la bozza e la mette in': 'writes the draft and puts it in',
-  'Non è ancora girata.': 'It hasn\'t run yet.',
-  'l’ultima': 'last',
-  'Falla girare adesso': 'Run it now',
-  'Salva e falla girare': 'Save and run it',
-  'Gira…': 'Running…',
-  'Spegnila': 'Turn it off',
-  'Accendila': 'Turn it on',
-  'Fatto: guarda in lista.': 'Done: look in your list.',
-  'Ce n’è già una in lista da questa.': 'There is already one in your list from this.',
-  'Ha guardato, e non c’era niente.': 'It looked, and there was nothing.',
   'Non ce l’ha fatta.': 'It could not.',
 // — quanto ne ha letto, delle fonti che non stanno in un giro solo —
   'letti finora': 'read so far',
   'è tutto dentro': 'everything is in',
   'Su questa installazione non ce n’è nessuna.': 'There are none on this installation.',
-  'Le automazioni arrivano insieme all’app, disegnate sul lavoro della tua azienda. Se qui è vuoto, chiedile a chi te l’ha installata.':
-    'Automations come with the app, designed around your company\u2019s work. If this is empty, ask whoever installed it for you.',
-  'Quello che leggono resta su questo computer. Le automazioni descrivono solo cosa guardare e cosa farne: non contengono niente di tuo.':
-    'What they read stays on this computer. An automation only describes what to look at and what to do with it: it contains nothing of yours.',
 
 // — la rassegna —
   'La rassegna': 'The briefing',
@@ -1960,7 +1796,6 @@ const EN: Record<string, string> = {
   'Questa agenda si legge e basta.': 'This calendar is read-only.',
   'Non ho capito la data.': 'I did not understand the date.',
   'Dimmi cosa vuoi cambiare.': 'Tell me what you want to change.',
-  'Gli attrezzi devono essere un elenco.': 'The tools must be a list.',
   'Non sono riuscito a cambiarla. Riprova dicendola in un altro modo.': 'I could not change it. Try saying it a different way.',
   'Le ore devono essere un numero fra 0 e un anno.': 'The hours must be a number between 0 and a year.',
   'Non c\'è ancora niente da mandare.': 'There is nothing to send yet.',
@@ -1972,11 +1807,6 @@ const EN: Record<string, string> = {
   'Collega la posta e potrò farlo.': 'Connect mail and I can do it.',
   'Non ce n\'è nessuno che si possa spostare.': 'There is nothing that can be moved.',
   'Non c\'è ancora niente da salvare.': 'There is nothing to save yet.',
-  'Questa automazione non è tua da buttare.': 'This automation is not yours to throw away.',
-  'Non conosco questa automazione.': 'I do not know this automation.',
-  'Questa cartella non c’è.': 'That folder is not there.',
-  'Ce n’è già una che si chiama così.': 'There is already one called that.',
-  'Non si può: o non c’è, o ce n’è già una con quel nome.': 'Cannot: either it is not there, or one with that name already exists.',
   'Non c\'è niente da riordinare.': 'There is nothing to tidy.',
   'Non sono riuscito a riordinarla.': 'I could not tidy it.',
   'Per svuotare la mente serve la conferma con la tua email.': 'Emptying the mind needs confirmation with your email address.',
@@ -1985,115 +1815,15 @@ const EN: Record<string, string> = {
   'Collega Claude e potrò ragionare sul tuo materiale.': 'Connect Claude and I can reason over your material.',
   // — il modello di casa: quello che può andare storto scaricandolo o accendendolo —
   'Non c’è niente da salvare.': 'There is nothing to save.',
-// — gli attrezzi di un'automazione (src/automazioni/) —
-//   Quattro chiavi che quel pezzo usa e che qui non c'erano: senza, quelle
-//   parole restano italiane con l'app in inglese.
-  'Staccalo': 'Detach it',
-  'cosa può aprire': 'what it can open',
-  'da collegare': 'to connect',
-  'non è collegato': 'not connected',
-// — le automazioni —
-  'Guardano i tuoi documenti a un’ora che decidi tu e ti lasciano una riga in lista. Non mandano niente a nessuno.':
-    'They look through your documents at an hour you choose and leave you a line in your list. They send nothing to anyone.',
-  'Scrivine una tua': 'Write your own',
-  'Dilla a parole tue, la scrivo io.': 'Say it in your own words, I will write it.',
-  'Ogni lunedì mattina dimmi quali preventivi sono ancora senza risposta':
-    'Every Monday morning tell me which quotes are still unanswered',
-  'Dille quando guardare, cosa cercare e cosa fartene. Al resto penso io: nasce in pausa, la provi, e la accendi quando ti convince.':
-    'Tell it when to look, what to look for and what to make of it. I will handle the rest: it starts paused, you try it, and you switch it on when it convinces you.',
-  'Creala': 'Create it',
-  'La scrivo…': 'Writing it…',
-  'Provala adesso': 'Try it now',
-  'Modificala': 'Edit it',
-  'Buttala': 'Throw it away',
   'In pausa': 'Paused',
-  'Gira da sola': 'Runs on its own',
-  'non gira finché non la riaccendi': 'it will not run until you switch it back on',
-  'Mettila in pausa': 'Pause it',
-  'Falla girare da sola': 'Let it run on its own',
-  'Cosa fa, in una riga': 'What it does, in one line',
-  'Quando gira': 'When it runs',
-  'In che giorno': 'On which day',
-  'A che ora': 'At what time',
-  'Che parole cercare': 'Which words to look for',
-  'Cosa deve farne': 'What it should do with them',
-  'Cosa ne fa': 'What it makes of it',
-  'Dove la mette': 'Where it puts it',
-  'ogni giorno': 'every day',
-  'ogni settimana': 'every week',
-  'quando arriva qualcosa': 'when something comes in',
-  'le parole da cercare nei tuoi documenti; vuoto: guarda tutto':
-    'the words to look for in your documents; empty: it looks at everything',
-  'mette solo una riga': 'just leaves a line',
-  'prepara anche la bozza': 'writes the draft too',
-  'in Oggi': 'in Today',
-  'in Questa settimana': 'in This week',
-  'in Prima o poi': 'in Sooner or later',
-  'Non ce n’è ancora nessuna. Scrivine una qui sotto.': 'There are none yet. Write one below.',
-  'Scrive': 'Writes',
-  'Segnala': 'Flags',
-  'Mette via': 'Tidies',
-  'E poi': 'And then',
-  'Cosa deve fare': 'What it should do',
-  'Salvata.': 'Saved.',
-  'Quando arriva una fattura, controlla l’importo e mettimela in lista':
-    'When an invoice arrives, check the amount and put it on my list',
-  'Ogni sera prepara la risposta a chi mi ha scritto e aspetta ancora':
-    'Every evening draft the reply to whoever wrote to me and is still waiting',
-  'Dimmi in una frase cosa dovrebbe fare.': 'Tell me in one sentence what it should do.',
-  'Non sono riuscito a scriverla. Riprova dicendola in un altro modo.':
-    'I could not write it. Try saying it a different way.',
   'Non la trovo.': 'I cannot find it.',
-  'Niente di nuovo dai giornali.': 'Nothing new from the papers.',
-  'Non ho ancora guardato i giornali.': 'I have not looked at the papers yet.',
   'Non sono riuscito a raggiungere nessun giornale.': 'I could not reach any of the papers.',
-  'Di cosa ti tengo aggiornato': 'What I keep you up to date on',
   'intelligenza artificiale, startup, Medio Oriente, mercati': 'artificial intelligence, startups, the Middle East, markets',
   'Salvato': 'Saved',
 
-  // — le automazioni: la griglia, le cartelle, la chiocciola —
   'Nuova': 'New',
-  'Tutte': 'All',
   'cartelle': 'folders',
-  'Nuova cartella': 'New folder',
-  'come si chiama': 'what it’s called',
-  'Rinominala': 'Rename it',
-  'Butta la cartella': 'Delete the folder',
-  'in nessuna cartella': 'in no folder',
-  'In che cartella': 'Which folder',
-  'Questa cartella è vuota. Trascinacene dentro una.': 'This folder is empty. Drag one into it.',
-  'Guardano quello che gli hai concesso di guardare, all’ora che decidi tu, e ti lasciano una riga in lista. Non mandano niente a nessuno.': 'They look at what you let them look at, at a time you choose, and leave you a line on your list. They never send anything to anyone.',
-  'Non ce n’è ancora nessuna. Scrivine una a parole: dille quando guardare e cosa può aprire.': 'There aren’t any yet. Write one in words: tell it when to look and what it may open.',
-  'Scrivine una a parole': 'Write one in words',
-  'manca una connessione': 'a connection is missing',
-  // I due titoli sopra i gruppi dell'elenco: le automazioni sono femminili.
-  'Pronte': 'Ready',
-  'Manca una connessione': 'A connection is missing',
-  'A parole': 'In words',
-  'I campi': 'The fields',
-  'Ottimizza': 'Optimise',
-  'Falla guardare a Claude e falla scrivere meglio': 'Have Claude look at it and write it better',
-  'Riscritta. Guarda cosa è cambiato prima di accenderla.': 'Rewritten. Look at what changed before you switch it on.',
-  'Fatto. Guarda com’è venuta.': 'Done. See how it turned out.',
-  'Cosa vuoi cambiare': 'What do you want to change',
-  'Dillo come lo diresti a voce. Tengo tutto il resto com’è. Con @ aggiungi cosa può aprire.': 'Say it the way you’d say it out loud. I keep everything else as it is. Use @ to add what it may open.',
-  'falla girare anche il sabato, e guarda pure in @': 'run it on Saturdays too, and look in @ as well',
-  'Riscrivila': 'Rewrite it',
-  'La riscrivo…': 'Rewriting…',
-  'Cosa può aprire': 'What it may open',
-  'Solo quello che le serve: ognuno è un permesso.': 'Only what it needs: each one is a permission.',
-  'Uno di questi non è collegato: finché non lo colleghi, quell’automazione non troverà niente.': 'One of these isn’t connected: until you connect it, that automation will never find anything.',
-  'In che cartella lavora Claude Code': 'Which folder Claude Code works in',
-  'Legge il progetto e scrive cosa farebbe. Non tocca un file: quello lo decidi tu.': 'It reads the project and writes what it would do. It touches no file: that’s your call.',
-  'Collega una cartella del desktop e potrà lavorarci.': 'Connect a desktop folder and it will be able to work there.',
-  'Scegline una': 'Pick one',
-  'Le parole di chi ha scritto quei documenti, nella loro lingua. Vuoto: guarda tutto.': 'The words of whoever wrote those documents, in their language. Empty: it looks at everything.',
-  'Scrivi @ per dirle cosa può aprire: la posta, il desktop, l’agenda. Al resto penso io: nasce in pausa, la provi, e la accendi quando ti convince.': 'Type @ to tell it what it may open: your email, your desktop, your calendar. I’ll do the rest: it starts paused, you try it, and you switch it on when it convinces you.',
-  'Fuori dalle cartelle': 'Outside every folder',
-  'Nessuna apre questo, per ora.': 'None of them opens this, for now.',
   'Sicuro?': 'Sure?',
-  'per cosa aprono': 'by what they open',
-  'Ogni lunedì dimmi quali preventivi in @ sono ancora senza risposta': 'Every Monday tell me which quotes in @ are still unanswered',
 
   // — il fornitore compatibile con OpenAI —
   'Modello locale o altro fornitore': 'Local model or other provider',
@@ -2130,7 +1860,6 @@ const EN: Record<string, string> = {
   'Apri la lista': 'Open the list',
   'Apri la chat': 'Open the chat',
   'Vai alla prima pagina': 'Go to the front page',
-  'Apri le automazioni': 'Open automations',
   'Apri la memoria': 'Open memory',
   'Apri le preferenze': 'Open preferences',
   'Scrivi a Tobia': 'Write to Tobia',
@@ -2173,7 +1902,6 @@ const EN: Record<string, string> = {
   'in ascolto': 'watching',
   'Una riga per ogni documento': 'One line per document',
   'Una riga per ogni documento.': 'One line per document.',
-  'Non sono riuscito a smistare i documenti: riprovo al prossimo giro.': 'I could not sort the documents: I will try again next round.',
 // — le conversazioni: la scheda, e quello che può dire il connettore —
   'Le chat che hai già avuto con ChatGPT e con Claude, e se vuoi le sessioni di Claude Code su questo computer.':
     'The chats you already had with ChatGPT and Claude, and if you want the Claude Code sessions on this computer.',
@@ -2368,7 +2096,6 @@ const EN: Record<string, string> = {
   'Manca cosa cercare.': 'There is nothing to search for.',
   'La ricerca sul web non ha risposto entro quindici secondi.': 'The web search did not answer within fifteen seconds.',
   'Le note in Note si creano solo da Myynd sul Mac.': 'Notes are created only from Myynd on the Mac.',
-  'Questa si approva solo da Myynd sul Mac.': 'This one can only be approved from Myynd on the Mac.',
   'Serve un titolo per la nota, in una riga sotto i duecento caratteri.': 'The note needs a title, on one line under two hundred characters.',
   'Serve il testo della nota, sotto i ventimila caratteri.': 'The note needs its text, under twenty thousand characters.',
   'Il nome della cartella di Note è troppo lungo.': 'The Notes folder name is too long.',
@@ -2423,7 +2150,6 @@ const EN: Record<string, string> = {
   'il primo progetto': 'the first project',
   // da quale riga è nata: il filo che prima non si leggeva da nessuna parte
   'la riga che l’ha fatta nascere': 'the line it came from',
-  'un’automazione': 'an automation',
   'il feed': 'the feed',
   'i tuoi post su X': 'your posts on X',
   // — la carta in cima: sotto il titolo, una riga sola che dice cosa apre —
@@ -2463,7 +2189,6 @@ const EN: Record<string, string> = {
   'Copiato.': 'Copied.',
   'Non sono riuscito a copiarlo.': 'I could not copy it.',
   'Apri in Claude Code…': 'Open in Claude Code…',
-  'prepara il prompt': 'writes the prompt',
 
   // — tutto il Mac, le Note di Apple, l'accesso completo al disco —
 
@@ -2870,94 +2595,18 @@ const EN: Record<string, string> = {
   'Quale modello, per quale lavoro': 'Which model, for which work',
   'Haiku costa un decimo di Sonnet, Opus cinque volte tanto. Scegli dove spendere.': 'Haiku costs a tenth of Sonnet, Opus five times as much. Choose where to spend.',
   'Lavoro di servizio': 'Housekeeping',
-  'Titoli, smistamento della posta, traduzioni, rassegna, ritratto.': 'Titles, mail sorting, translations, the news digest, your portrait.',
   'Letture di ogni giorno': 'Everyday reading',
   'Il feed, la cernita della posta, le domande che ti fa.': 'The feed, mail triage, the questions it asks you.',
   'Quello che leggi e firmi': 'What you read and sign',
-  'La chat, le bozze, le email, il punto, le ricette.': 'Chat, drafts, emails, the briefing, automation recipes.',
   'I modelli del tuo piano ChatGPT. Vuoto: quello predefinito del piano.': 'The models of your ChatGPT plan. Empty: the plan’s default.',
   'I modelli della tua chiave OpenAI. Il più piccolo per il lavoro di servizio, il migliore per quello che firmi.': 'The models of your OpenAI key. The smallest for housekeeping, the best for what you sign.',
   'Il modello del piano': 'The plan’s model',
   'Non riesco a leggere i modelli.': 'I could not read the models.',
   'Prima scegli OpenAI come motore.': 'Choose OpenAI as the engine first.',
 
-  // — i binari: l'automazione composta a pezzi —
-  'Nuova automazione': 'New automation',
-  'Dilla in una frase, o componila sui binari. Nasce in pausa.': 'Say it in a sentence, or build it on the rail. It starts paused.',
-  'Dilla in una frase': 'Say it in a sentence',
-  'Ogni lunedì mattina dimmi quali preventivi nella posta sono ancora senza risposta': 'Every Monday morning tell me which quotes in my mail are still unanswered',
-  'Componi con Myynd': 'Compose with Myynd',
-  'La compongo…': 'Composing…',
-  'Composta. Guarda i binari: se dicono quello che volevi, creala.': 'Composed. Check the rail: if it says what you meant, create it.',
-  'Preventivi fermi': 'Quotes gone quiet',
-  'La creo…': 'Creating…',
-  'Nasce in pausa: la accendi dalla sua scheda.': 'It starts paused: switch it on from its card.',
-  'Le manca cosa deve fare: scrivilo nel tratto «Fa», o componila con Myynd.': 'It still needs what to do: write it in the “Does” stretch, or compose it with Myynd.',
-  'Binari': 'Builder',
-  'Legge': 'Reads',
-  'Solo se': 'Only if',
-  'Poi': 'Then',
-  'Fa': 'Does',
-  'Mette': 'Puts',
-  'Quando arriva qualcosa': 'When something arrives',
-  'Ogni giorno': 'Every day',
-  'Ogni settimana': 'Every week',
-  'Dal lunedì al venerdì': 'Weekdays',
-  'Ogni mese': 'Every month',
-  'il giorno': 'on day',
-  'Che giorno del mese': 'Which day of the month',
-  'Che giorno': 'Which day',
   'Le fonti': 'Sources',
-  'Scrivi @ per dire da dove legge': 'Type @ to say what it reads',
-  '@ per un’altra': '@ for another',
-  'Senza nessuna fonte, guarda solo quello che ha già letto.': 'With no source, it only looks at what it has already read.',
-  'Senza parole di ricerca guarda tutto quello che arriva da lì.': 'With no search words it looks at everything that arrives from there.',
-  'Con queste parole': 'With these words',
-  'preventivo, offerta, in attesa…': 'quote, offer, pending…',
-  'Le parole di chi ha scritto quei documenti, nella loro lingua. Vuoto: solo quello che è arrivato dall’ultima volta.': 'The words of whoever wrote those documents, in their language. Empty: only what arrived since last time.',
-  'Trascina per riordinare': 'Drag to reorder',
-  'continua solo se c’è una richiesta che aspetta una risposta…': 'continue only if there is a request waiting for an answer…',
-  'estrai le scadenze e raggruppale per progetto…': 'pull out the deadlines and group them by project…',
-  'Solo se…': 'Only if…',
-  'Poi rielabora…': 'Then rework…',
-  'Dimmi quali preventivi sono ancora senza risposta: chi, cosa, da quanto. Se non ce n’è, dillo e basta.': 'Tell me which quotes are still unanswered: who, what, for how long. If there are none, just say so.',
-  'Quanto fa': 'How much it does',
-  'Mette una riga': 'Puts a line',
-  'Prepara anche il lavoro': 'Prepares the work too',
-  'Fa tutto il lavoro': 'Does the whole job',
-  'Prepara il prompt': 'Prepares the prompt',
-  'Cosa ti consegna': 'What it hands you',
-  'Una riga in lista': 'A line on your list',
-  'Bozze nella casella': 'Drafts in your mailbox',
-  'In agenda': 'In your calendar',
-  'Una nota': 'A note',
-  'Un file': 'A file',
-  'prepara le risposte fra le bozze, da approvare': 'prepares replies in your drafts, for you to approve',
-  'prepara gli eventi da mettere in agenda, da approvare': 'prepares events for your calendar, for you to approve',
-  'prepara una nota, da approvare': 'prepares a note, for you to approve',
-  'prepara un file, da approvare': 'prepares a file, for you to approve',
-  'propone cosa archiviare': 'offers what to archive',
-  'propone cosa mettere nel cestino': 'offers what to move to the bin',
-  'In che lista': 'Which list',
-  'Una riga per ogni documento, non una riga con l’elenco': 'One line per document, not one line with the list',
-  'Ogni volta, anche senza niente da leggere': 'Every time, even with nothing to read',
   'legge': 'reads',
-  'guarda quello che ha già letto': 'looks at what it has already read',
-  'cercando': 'looking for',
-  'un passaggio in mezzo': 'one step in between',
-  'passaggi in mezzo': 'steps in between',
-  'prepara anche il lavoro': 'prepares the work too',
-  'fa tutto il lavoro': 'does the whole job',
-  'mette una riga in lista': 'puts a line on your list',
-  'una per documento': 'one per document',
-  'Quello che ha già letto': 'What it has already read',
   'e': 'and',
-  'Dalle un nome.': 'Give it a name.',
-  'Dille cosa deve fare con quello che trova.': 'Tell it what to do with what it finds.',
-  'Manca la ricetta.': 'The recipe is missing.',
-  'Non so fare questa cosa.': 'I can’t do that.',
-  'Non è fra quelle di partenza.': 'That isn’t one of the starter standing orders.',
-  'Non sono riuscito a preparare la proposta: riprovo fra poco.': 'I couldn’t prepare the proposal: I’ll try again shortly.',
   'Una lettura delle fonti è già in corso. Attendi che finisca e riprova.': 'A source read is already running. Wait for it to finish and try again.',
   // — la riga fissa delle fonti non lette, e i progetti in una scheda sola —
   'Vai alle Fonti': 'Go to Sources',
@@ -3335,57 +2984,9 @@ const EN: Record<string, string> = {
   'Spostato o cancellato': 'Moved or deleted',
   'Memoria, cose nuove da guardare': 'Memory, new things to check',
   // «Fonti», un nome solo
-  'Manca una fonte': 'A source is missing',
-  'manca una fonte': 'a source is missing',
   'Apri le Fonti': 'Open Sources',
   'Cerca fonti…': 'Search sources…',
   // — P5: fine —
-
-  // — P6: inizio —
-  // la prova sugli ultimi 30 giorni, il vassoio, la riga sulla scheda
-  'Prova': 'Practice',
-  'La provo…': 'Trying it…',
-  'La faccio girare…': 'Running it…',
-  'Termina la prova': 'Go live now',
-  'cambiata da allora': 'changed since',
-  'La provo sugli ultimi 30 giorni…': 'Trying it on the last 30 days…',
-  'Negli ultimi 30 giorni non ha trovato niente da leggere.': 'It found nothing to read in the last 30 days.',
-  'Fermata al tetto di spesa di oggi.': 'Stopped at today\'s spending cap.',
-  'Fermata: il tuo account Claude è occupato.': 'Stopped: your Claude account is busy.',
-  'Sei prove oggi. La prossima domani.': 'Six practices today. The next one tomorrow.',
-  'Interrotta: Myynd si è chiuso.': 'Interrupted: Myynd closed.',
-  'La prova non è riuscita.': 'The practice didn\'t finish.',
-  'Collega un modello per provarla.': 'Connect a model to try it.',
-  'Cambiata dopo questa prova.': 'Changed since this practice.',
-  'Provala di nuovo': 'Try it again',
-  'Senza agenda: nel passato non si legge.': 'Without the calendar: it can\'t be read in the past.',
-  'Senza Claude Code: nel passato non gira.': 'Without Claude Code: it doesn\'t run in the past.',
-  'Ancora pochi risultati per giudicare': 'Not enough results to judge yet',
-  'Tutta la bozza': 'Full draft',
-  'Scrivi la bozza': 'Write the draft',
-  'La tua risposta': 'Your reply',
-  'Fonte non più disponibile': 'Source no longer available',
-  'Giusta': 'Right',
-  'Sbagliata': 'Wrong',
-  'Vassoio di prova': 'Practice tray',
-  'Metti in lista': 'Move to list',
-  'Non serve': 'Not needed',
-  'Non manda e non cancella. Le bozze ti aspettano.': 'Never sends or deletes. Drafts wait for you.',
-  'Nuovi risultati in prova': 'New practice results',
-  // gli errori del server
-  'È in pausa: provala sugli ultimi 30 giorni.': 'It is paused: try it on the last 30 days.',
-  'È ancora in prova: provala sugli ultimi 30 giorni.': 'It is still in practice: try it on the last 30 days.',
-  'Questa prova ha già dieci bozze.': 'This practice already has ten drafts.',
-  'Non conosco questa prova.': 'I don\'t know this practice.',
-  'Non conosco questo risultato.': 'I don\'t know this result.',
-  'Questo risultato non è più nel vassoio.': 'This result is no longer in the tray.',
-  'La prova ha finito il suo budget.': 'The practice ran out of its budget.',
-  'Il calendario nel passato non si legge.': 'The calendar can\'t be read in the past.',
-  'Claude Code nel passato non gira.': 'Claude Code doesn\'t run in the past.',
-  'Hai già risposto.': 'You already replied.',
-  'Nella prova questa porta resta chiusa.': 'In a practice this door stays closed.',
-  'Ora della prova non valida.': 'The practice time is not valid.',
-  // — P6: fine —
 
   // — P7: inizio —
   'Dalla tua memoria': 'From your memory',
@@ -3550,7 +3151,6 @@ const EN: Record<string, string> = {
   'Da una riunione': 'From a meeting',
   'Da Myynd': 'From Myynd',
   'Il passo dopo': 'Next step',
-  'Da un’automazione': 'From an automation',
   'Dal feed': 'From the feed',
   'Controllo contro il suo «fatto»': 'Checking against done means',
   'Mani': 'Hands',
@@ -3727,6 +3327,11 @@ const EN: Record<string, string> = {
   'Fuori dagli obiettivi dei tuoi progetti.': 'Outside your projects’ goals.',
   'Meno urgente delle altre di oggi.': 'Less urgent than today’s others.',
   // — mentre non c'eri: fine —
+  // — via le automazioni: inizio —
+  // da dove viene una riga «auto:» scritta prima, quando Myynd le scriveva da sé
+  'Myynd, da sé': 'Myynd, on its own',
+  'Sparisce tutto: documenti, lista, chat, memoria e fonti. Non si torna indietro.': 'Everything goes: documents, list, chats, memory and sources. There is no going back.',
+  // — via le automazioni: fine —
 }
 
 
@@ -3954,13 +3559,6 @@ export const frasi = {
   guardatiIGiornali: (quando: string) => corrente === 'en'
     ? `Papers checked ${quando}` : `Giornali guardati ${quando}`,
 
-  // — le automazioni —
-  //
-  // La riga che toglie il dubbio fra l'interruttore e il bottone: acceso vuol
-  // dire che gira da sola, e questa dice quando.
-  giraDaSolaProssima: (quando: string) => corrente === 'en'
-    ? `Runs on its own · next ${quando}` : `Gira da sola · la prossima ${quando}`,
-
   daFare: (n: number) => corrente === 'en'
     ? (n === 1 ? 'One thing to do.' : `${n} things to do.`)
     : (n === 1 ? 'Una cosa da fare.' : `${n} cose da fare.`),
@@ -4038,29 +3636,6 @@ export const frasi = {
       : `${n.toLocaleString(loc())} cartelle non si sono aperte: serve l’Accesso completo al disco`),
 
   /**
-   * L'automazione che gira e non trova mai niente.
-   *
-   * Il numero c'è apposta: «non trova niente» una volta è la risposta normale
-   * — è quello che succede quasi sempre, ed è giusto — mentre sette volte di
-   * fila è un'automazione che sta cercando parole che in quei documenti non
-   * compaiono. Senza il conto, le due frasi si leggono uguali.
-   */
-  maiTrovatoNiente: (n: number) => corrente === 'en'
-    ? `Nothing found ${n} times running` : `Non trova niente da ${n} giri`,
-
-  /**
-   * La stessa diagnosi, con lo spazio per dire cosa fare.
-   *
-   * Sulla scheda è una riga di sei parole, perché lì serve a scegliere quale
-   * automazione aprire. Qui è aperta, e la frase corta diventerebbe un'accusa
-   * senza rimedio: quello che serve è la causa più probabile, che nove volte
-   * su dieci sono le parole della ricerca scritte nella lingua sbagliata.
-   */
-  maiTrovatoNienteLungo: (n: number) => corrente === 'en'
-    ? `It has run ${n} times and never had anything to look at. Nearly always this is the search words: they have to be the words whoever wrote those documents would use, in their language.`
-    : `È girata ${n} volte senza mai avere niente da guardare. Quasi sempre sono le parole della ricerca: devono essere quelle di chi ha scritto quei documenti, nella loro lingua.`,
-
-  /**
    * Una risposta andata storta di cui il server non ha detto niente.
    *
    * Il numero c'è apposta. Senza, questa riga è la stessa per un 400, per un
@@ -4073,9 +3648,9 @@ export const frasi = {
   traslocoPronto: (nome: string) => corrente === 'en'
     ? `Downloaded as ${nome}. Upload it on the other Myynd.` : `Scaricato come ${nome}. Caricalo sull'altro Myynd.`,
 
-  traslocoArrivato: (documenti: number, automazioni: number) => corrente === 'en'
-    ? `Arrived: ${documenti} document${documenti === 1 ? '' : 's'}, ${automazioni} automation${automazioni === 1 ? '' : 's'}. Reloading…`
-    : `Arrivato: ${documenti} document${documenti === 1 ? 'o' : 'i'}, ${automazioni} automazion${automazioni === 1 ? 'e' : 'i'}. Ricarico…`,
+  traslocoArrivato: (documenti: number) => corrente === 'en'
+    ? `Arrived: ${documenti} document${documenti === 1 ? '' : 's'}. Reloading…`
+    : `Arrivato: ${documenti} document${documenti === 1 ? 'o' : 'i'}. Ricarico…`,
 
   /** Chi ha scritto quella riga del ritratto, e quando. */
   scrittoDaMe: (quando: string) => corrente === 'en'
@@ -4307,16 +3882,6 @@ export const frasi = {
 
   guardatoIl: (quando: string) => corrente === 'en' ? `last checked ${quando}` : `guardato il ${quando}`,
   salvatoIn: (nome: string) => corrente === 'en' ? `Saved as “${nome}”.` : `Salvato come «${nome}».`,
-  /** Quello che è arrivato davvero: si dicono solo i numeri che non sono zero. */
-  ricetteArrivate: (nuove: number, cambiate: number, tolte: number) => {
-    const en = corrente === 'en'
-    const p: string[] = []
-    if (nuove) p.push(en ? `${nuove} new` : `${nuove} nuov${nuove === 1 ? 'a' : 'e'}`)
-    if (cambiate) p.push(en ? `${cambiate} changed` : `${cambiate} cambiat${cambiate === 1 ? 'a' : 'e'}`)
-    if (tolte) p.push(en ? `${tolte} removed` : `${tolte} tolt${tolte === 1 ? 'a' : 'e'}`)
-    return p.join(' · ')
-  },
-
   spostati: (n: number, dove: string) => corrente === 'en'
     ? (n === 1 ? `One message moved to “${dove}”.` : `${n} messages moved to “${dove}”.`)
     : (n === 1 ? `Un messaggio spostato in «${dove}».` : `${n} messaggi spostati in «${dove}».`),

@@ -30,7 +30,7 @@
 // che è il modo in cui una porta di servizio diventa una porta.
 //
 // **Si legge, non si scrive.** La Cloud API saprebbe anche mandare messaggi.
-// Da qui non si può, e non perché ci si sia dimenticati: un'automazione che
+// Da qui non si può, e non perché ci si sia dimenticati: un Myynd che
 // scrive a un cliente su WhatsApp alle sette di mattina è esattamente la cosa
 // che questo prodotto ha promesso di non essere.
 

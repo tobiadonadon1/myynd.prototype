@@ -72,8 +72,8 @@ test('il lavoro sul codice ha la sua mano e trenta minuti, solo se Claude Code c
   assert.match(k.criterio, /copy of the project, with its checks passing/)
 })
 
-test('una carta di un’automazione non riceve mani', () => {
-  const id = carta('Summarize direct email', { attrezzi: { nomi: ['posta.leggi'], origine: 'automazione' } })
+test('una carta con i suoi attrezzi dichiarati non riceve mani', () => {
+  const id = carta('Summarize direct email', { attrezzi: { nomi: ['posta.leggi'] } })
   assert.deepEqual(contratto.diBase(store.compito(id)!).mani, [])
 })
 

@@ -12,8 +12,7 @@
 //   · **l'indice** si aggiorna quasi subito: un secondo e mezzo dopo l'ultimo
 //     evento su quel file, perché un salvataggio è una raffica di eventi e
 //     leggerli tutti vorrebbe dire estrarre lo stesso PDF cinque volte.
-//   · **quello che viene dopo** — la prima pagina, una domanda, le automazioni
-//     «quando arriva» — aspetta che si faccia silenzio per qualche minuto, e
+//   · **quello che viene dopo** — la prima pagina, una domanda — aspetta che si faccia silenzio per qualche minuto, e
 //     non parte più di una volta ogni dieci. Duecento file trascinati in una
 //     cartella sono duecento eventi e *una* chiamata al modello, non duecento.
 //

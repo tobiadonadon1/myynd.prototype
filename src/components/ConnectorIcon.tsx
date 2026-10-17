@@ -4,11 +4,6 @@ import { IconAvanti } from '../icons'
 import { MARCHI } from './marchi'
 import { COLORE_NOTE } from '../../server/colori-fonti.ts'
 
-export function connectorPerAttrezzo(nome: string, serve?: string | null) {
-  const id = serve ?? nome.split('.')[0]
-  return id === 'agenda' ? 'calendario' : id === 'chat' ? 'conversazioni' : id
-}
-
 /**
  * Quale marchio vero porta ogni fonte.
  *

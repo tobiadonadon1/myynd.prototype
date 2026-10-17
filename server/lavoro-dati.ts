@@ -3,8 +3,7 @@
 // Tutto quello che P3 scrive sul database sta qui, e solo qui: le domande
 // fatte, l'ipotesi, la voce usata, la bozza mandata dalla sua posta, e la
 // tabella `misure_compiti` (una riga per compito affidato). Il resto del
-// lavoro (`stesura.ts`, `voce.ts`, `domanda-sola.ts`) non scrive niente, e
-// P6 può riusarlo in un recinto che non scrive.
+// lavoro (`stesura.ts`, `voce.ts`, `domanda-sola.ts`) non scrive niente.
 //
 // I contatori crescono e basta: una domanda fatta resta fatta anche se la
 // riga viene riaffidata, e il primo invio vince sul secondo.
@@ -73,7 +72,7 @@ export function segnaMandata(id: string, m: NonNullable<store.Compito['mandata']
   return Number(r.changes) > 0
 }
 
-/** All'affido: una riga di misure, se non c'è. Il fondo (iniziative, automazioni) si segna come tale. */
+/** All'affido: una riga di misure, se non c'è. Il fondo (le iniziative) si segna come tale. */
 export function registraAffido(c: Pick<store.Compito, 'id' | 'modo' | 'origine' | 'chiesto'>, nativa: boolean) {
   db.prepare('INSERT OR IGNORE INTO misure_compiti (compito, affidato, modo, origine) VALUES (?, ?, ?, ?)')
     .run(c.id, c.chiesto ?? ora(), c.modo ?? null, nativa ? (c.origine || 'mano') : 'fondo')

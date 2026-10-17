@@ -61,9 +61,9 @@ test('il numero che esce è quello che è entrato', () => {
 })
 
 test('le altre frasi contate, al singolare e al plurale', () => {
-  assert.equal(in_('en', () => frasi.traslocoArrivato(1, 1)), 'Arrived: 1 document, 1 automation. Reloading…')
-  assert.equal(in_('it', () => frasi.traslocoArrivato(1, 1)), 'Arrivato: 1 documento, 1 automazione. Ricarico…')
-  assert.match(in_('en', () => frasi.traslocoArrivato(4, 2)), /4 documents, 2 automations/)
+  assert.equal(in_('en', () => frasi.traslocoArrivato(1)), 'Arrived: 1 document. Reloading…')
+  assert.equal(in_('it', () => frasi.traslocoArrivato(1)), 'Arrivato: 1 documento. Ricarico…')
+  assert.match(in_('en', () => frasi.traslocoArrivato(4)), /4 documents\./)
   assert.match(in_('en', () => frasi.documentiEGruppi('1', 1)), /1 document · 1 group$/)
   assert.match(in_('en', () => frasi.documentiEGruppi('7', 3)), /7 documents · 3 groups$/)
   assert.match(in_('en', () => frasi.ritrattoAggiornato(1, 1)), /1 line rewritten, from 1 thing it/)

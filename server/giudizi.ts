@@ -55,16 +55,6 @@ import type { Documento } from './store.ts'
  */
 export const SOGLIA_FEED = 0.35
 
-/**
- * Sulla coda delle risposte si sbaglia per difetto.
- *
- * Qui dietro nasce una riga nella sua lista, e a volte una bozza già scritta.
- * «Una riga che manca la aggiunge lei in tre secondi, otto righe inutili le
- * fanno spegnere l'automazione» sta scritto nel prompt di `automazioni.ts` dal
- * primo giorno: questa soglia è la stessa frase, in un numero.
- */
-export const SOGLIA_RISPOSTE = 0.6
-
 export type Genere = 'richiesta' | 'scadenza' | 'aggiornamento' | 'rumore'
 const GENERI = new Set<string>(['richiesta', 'scadenza', 'aggiornamento', 'rumore'])
 /**

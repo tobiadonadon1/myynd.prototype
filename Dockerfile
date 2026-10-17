@@ -35,10 +35,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=costruzione /app/dist ./dist
 COPY server ./server
-COPY automazioni ./automazioni
 
 # Dove vive la mente. Va montato un volume qui sopra, o a ogni ridistribuzione
-# il contenitore riparte con l'indice vuoto, senza account e senza automazioni
+# il contenitore riparte con l'indice vuoto, senza account e senza chat
 # — e senza un errore da nessuna parte che lo dica.
 ENV MYYND_DATI=/dati
 RUN mkdir -p /dati

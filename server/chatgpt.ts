@@ -1,6 +1,5 @@
 // Official Codex app-server integration. Codex owns login and refresh tokens;
 // Myynd only sees account status and uses its existing guarded tool loop.
-import * as provaChiusa from './prova-chiusa.ts'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import type Anthropic from '@anthropic-ai/sdk'
@@ -128,8 +127,7 @@ async function connessione(): Promise<Ponte> {
   if (!exe) throw new Error('The ChatGPT connection component is missing. Update or reinstall Myynd.')
   const contesto = ambienteChatGPT()
   let p = ponti.get(contesto.chiave)
-  // creato fuori da una prova (P6): i suoi ascoltatori vivono più di lei
-  if (!p || p.chiuso) { p = provaChiusa.fuori(() => new Ponte(exe, contesto)); ponti.set(contesto.chiave, p) }
+  if (!p || p.chiuso) { p = new Ponte(exe, contesto); ponti.set(contesto.chiave, p) }
   try { await p.iniziato } catch (e) { p.stop(); if (ponti.get(contesto.chiave) === p) ponti.delete(contesto.chiave); throw e }
   return p
 }
@@ -201,8 +199,8 @@ export async function cancellaAccesso(loginId: string): Promise<StatoAccesso | n
 /**
  * Codex accetta solo schemi «stretti»: ogni proprietà in `required`, niente
  * proprietà in più. I nostri schemi hanno campi facoltativi — «giorno» solo se
- * ogni=settimana, «cerca» se serve — e mandati così tornavano un 400 e nessuna
- * automazione si poteva comporre con ChatGPT. Qui il facoltativo diventa
+ * ogni=settimana, «cerca» se serve — e mandati così tornavano un 400. Qui il
+ * facoltativo diventa
  * «obbligatorio ma può essere null», e `senzaNulli` toglie i null prima che
  * la risposta arrivi a chi la legge: per il resto dell'app niente è cambiato.
  */

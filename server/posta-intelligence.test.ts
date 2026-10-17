@@ -14,7 +14,7 @@ const { dovePortare, paginaBuona } = await import('./scrivania.ts')
 const rete = globalThis.fetch
 after(() => { globalThis.fetch = rete; rmSync(casa, { recursive: true, force: true }); delete process.env.MYYND_DATI })
 
-test('mailing list and automation headers survive provider differences', () => {
+test('mailing list and auto-submitted headers survive provider differences', () => {
   assert.equal(postaAutomatica([{ name: 'List-ID', value: 'weekly.example' }]), true)
   assert.equal(postaAutomatica([{ name: 'Auto-Submitted', value: 'auto-generated' }]), true)
   assert.equal(postaAutomatica([{ name: 'Auto-Submitted', value: 'no' }]), false)

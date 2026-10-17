@@ -223,7 +223,7 @@ export function cartaPerContesto(testo: string, tetto = 3): string {
   return [...ambiti].slice(0, Math.floor(tetto)).map(a => cartaDi(a)).filter(Boolean).join('\n\n')
 }
 
-/** Shared working context for suggestions, automation design and other AI
+/** Shared working context for suggestions, priorities and other AI
  * surfaces. It is rebuilt on every call so corrections apply immediately. */
 export function contestoOperativo(discorso = '', tettoProgetti = 8): string {
   const blocchi = [carta(), cartaPerContesto(discorso)]

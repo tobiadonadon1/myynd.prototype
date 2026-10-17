@@ -4,7 +4,7 @@
 
 import { loc } from './lingua'
 
-export type Screen = 'myynd' | 'oggi' | 'progetti' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto'
+export type Screen = 'myynd' | 'oggi' | 'progetti' | 'chat' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto'
 
 export type Campo = { k: string; v: string }
 export type Fonte = { id: string; label: string }
@@ -78,9 +78,9 @@ export const MODELLI = [
  * che il server conosce.
  */
 export const LIVELLI = [
-  { id: 'casa', titolo: 'Lavoro di servizio', nota: 'Titoli, smistamento della posta, traduzioni, rassegna, ritratto.' },
+  { id: 'casa', titolo: 'Lavoro di servizio', nota: 'Titoli, traduzioni, rassegna, ritratto.' },
   { id: 'media', titolo: 'Letture di ogni giorno', nota: 'Il feed, la cernita della posta, le domande che ti fa.' },
-  { id: 'frontiera', titolo: 'Quello che leggi e firmi', nota: 'La chat, le bozze, le email, il punto, le ricette.' }
+  { id: 'frontiera', titolo: 'Quello che leggi e firmi', nota: 'La chat, le bozze, le email, il punto.' }
 ] as const
 
 export const LINGUE = [

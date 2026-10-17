@@ -242,7 +242,7 @@ export const misura = () => acceso
 
 // — i lavori di fondo —
 
-export type NomeLavoro = 'rilettura' | 'arrivi' | 'lettura-chiesta' | 'recupero' | 'manutenzione' | 'rassegna' | 'priorita' | 'automazioni'
+export type NomeLavoro = 'rilettura' | 'arrivi' | 'lettura-chiesta' | 'recupero' | 'manutenzione' | 'rassegna' | 'priorita'
 
 export async function misuraLavoro<T>(nome: NomeLavoro, fai: () => Promise<T>): Promise<T> {
   const inizio = ferri.ora()

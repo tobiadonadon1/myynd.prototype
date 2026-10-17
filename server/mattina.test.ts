@@ -156,7 +156,7 @@ test('mattina(): dal database di chi chiede, con le bozze partite questa settima
   assert.equal(m.week.comeEra, 1)
 })
 
-test('la proposta di un ordine fisso aspetta il suo «Approva»: è fra le cose che aspettano lui', () => {
+test('una riga con la sua proposta aspetta il suo «Approva»: è fra le cose che aspettano lui', () => {
   const proposta = { azione: 'posta.bozza', bozze: [{ doc: 'posta:INBOX:202', a: 'nora@harbor.example', oggetto: 'Re: quote', corpo: 'Thanks' }] } as unknown as C['proposta']
   const m = mattina.componi({
     ...vuoto,

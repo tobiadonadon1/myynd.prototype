@@ -52,7 +52,6 @@ import * as lavoro from './lavoro.ts'
 import { landReport } from './esecuzione-isolata.ts'
 import { detectRuntime } from './agent-runtime.ts'
 import { openInProva } from './senza-open.ts'
-import { vietato } from './prova-chiusa.ts'
 import * as notionScrivi from './connettori/notion-scrivi.ts'
 
 // — cosa è stato fatto —
@@ -634,7 +633,6 @@ export function scriviFile(o: { percorso: string; testo: string; word?: boolean 
  * Scrivania.
  */
 export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo; sotto?: string | null }): { percorso: string; nome: string; luogo: Luogo } {
-  vietato('mani.salvaConsegna')
   if (ferri.ospitato()) throw new Error('Su un server non ho una Scrivania su cui scrivere.')
   // una sottocartella per progetto, col suo nome ripulito: «Desktop/Myynd/tobiadonadon.com»
   const sotto = o.sotto ? o.sotto.replace(/[\/\\:*?"<>|\0]+/g, ' ').replace(/^\.+/, '').replace(/\s+/g, ' ').trim().slice(0, 60) : ''
@@ -966,8 +964,6 @@ export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: stri
  * collega a cui il sito non risponde.
  */
 export async function esegui(nome: string, input: unknown, contesto: Contesto = {}): Promise<Uscita> {
-  // nella prova (P6) le mani che scrivono non si aprono: si lancia fuori, non è un guaio della mano
-  if (nome === CREA_NOTA.name || nome === SCRIVI_FILE.name || nome === LAVORA_NEL_CODICE.name || nome === SCRIVI_NOTION.name) vietato(`mani.${nome}`)
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
   const s = (k: string) => typeof i[k] === 'string' ? i[k] as string : ''
   const guaio = (attrezzo: Attrezzo, dettaglio: string, e: unknown): Uscita =>

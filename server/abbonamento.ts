@@ -35,7 +35,6 @@
 // una bolletta, si spende il tetto.
 
 import * as bandiere from './bandiere-cli.ts'
-import * as provaChiusa from './prova-chiusa.ts'
 import { spawn as spawnVero } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -801,8 +800,6 @@ function lanciaInStreaming(exe: string, domanda: string, o: { system: string; si
  * parte e muore prima di andare dove sarebbe dovuto andare subito.
  */
 export function nonRisponde() {
-  // una prova sul passato non mette a riposo l'account di nessuno (P6)
-  if (provaChiusa.inProva()) return
   spento = Date.now() + RIPOSO
 }
 

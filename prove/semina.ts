@@ -10,7 +10,7 @@
 //
 // Il conto è `sviluppo@myynd.local`, il primo e unico: il server lanciato con
 // MYYND_DEV=1 gli apre la sessione `sviluppo-non-in-produzione`. La
-// configurazione dice lingua, nome, onboarding e giro fatti, niente automazioni
+// configurazione dice lingua, nome, onboarding e giro fatti
 // di serie, e una fonte «desktop» con `scelte: true` su una cartella dentro la
 // casa finta (senza `scelte`, all'avvio il server la allargherebbe a tutta la
 // casa). Con --modello il conto ragiona col modello finto (prove/finto-modello.mjs).
@@ -129,7 +129,7 @@ for (const f of scena.file ?? []) writeFileSync(join(cartella, f.nome), f.testo)
 chi.dentro(conto.id, () => {
   cfg.scrivi({
     lingua: scena.lingua ?? 'en', nome: scena.nome ?? 'Alex', ...(scena.ruolo ? { ruolo: scena.ruolo } : {}),
-    onboarding: true, giro: true, diSerie: false,
+    onboarding: true, giro: true,
     desktop: { cartelle: [cartella], scelte: true },
     ...(urlModello ? { motore: 'compatibile', compatibile: { url: urlModello, chiave: 'sk-finta', modello: 'finto' } } : {})
   })
@@ -445,13 +445,6 @@ if ((scena as Record<string, unknown>).p8) {
   chi.dentro(conto.id, () => p8.semina((scena as Record<string, unknown>).p8, { casa: CASA }))
 }
 // — P8: fine —
-
-// — P6: inizio —
-if ((scena as Record<string, unknown>).p6) {
-  const p6 = await import(join(QUI, 'semina-p6.ts'))
-  chi.dentro(conto.id, () => p6.semina((scena as Record<string, unknown>).p6, { dati: DATI }))
-}
-// — P6: fine —
 
 // — da sé: inizio —
 if ((scena as Record<string, unknown>).dase) {

@@ -146,7 +146,7 @@ export async function vivo(o: { dati: string; tetto: number; solo?: number }): P
   const casi = o.solo ? CORPUS.slice(0, o.solo) : CORPUS
   const esiti: EsitoCaso[] = []
   await chi.dentro(id, async () => {
-    cfg.scrivi({ lingua: 'en', nome: 'Alex', diSerie: false, onboarding: true, giro: true, claudeCon: 'abbonamento', abbonamento: { attivo: true } })
+    cfg.scrivi({ lingua: 'en', nome: 'Alex', onboarding: true, giro: true, claudeCon: 'abbonamento', abbonamento: { attivo: true } })
     store.azzeraTutto()
     store.salvaDocumenti(DOCUMENTI)
     for (const caso of casi) {
@@ -155,7 +155,7 @@ export async function vivo(o: { dati: string; tetto: number; solo?: number }): P
       let chiamate = 0
       const lavora = (nota: string | null, extra?: { fissa?: string[]; giri?: number }) => {
         if (++chiamate > o.tetto) throw new Error(`oltre il tetto di ${o.tetto} stesure`)
-        return claude.svolgi(c.testo, nota, 'tutto', [], null, undefined, c.doc, null, { nativa: true, signal: new AbortController().signal, taskId: c.id, ...(extra ?? {}) }, null)
+        return claude.svolgi(c.testo, nota, 'tutto', [], null, undefined, c.doc, { nativa: true, signal: new AbortController().signal, taskId: c.id, ...(extra ?? {}) }, null)
       }
       try {
         const s = await stesura.stendi({

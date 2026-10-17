@@ -207,18 +207,3 @@ test('project activity agrees with To do without deleting hidden suggestions or 
   assert.equal(progress.prossima?.id, 'manual-work')
   assert.deepEqual(new Set(progress.attivita.map(c => c.id)), new Set(['manual-work', 'history']))
 })
-
-test('direct-email execution policy excludes answered threads without excluding its own active task', () => {
-  const p = progetti.scrivi({ nome: 'Aurora' })
-  const incoming = mail('awaiting', { titolo: 'Aurora scope request', filo: 'aurora-scope' })
-  store.salvaDocumenti([incoming])
-  store.scriviCompito({ id: 'own-task', testo: 'Prepare the scope reply', doc: incoming.id, attrezzi: { nomi: ['posta.leggi'], selezione: 'richieste-dirette', ambitoSelezione: 'Aurora' }, ordine: 'a' })
-  const policy = store.compito('own-task')!.attrezzi!
-  assert.deepEqual(claude.documentiPerSelezione([incoming], policy).map(d => d.id), ['awaiting'])
-  assert.deepEqual(claude.documentiPerSelezione([incoming, mail('other-project', { titolo: 'Borealis scope', corpo: 'Could you confirm the Borealis scope?' })],
-    { selezione: 'richieste-dirette', ambitoSelezione: 'scope requests' }, 'Summarize requests about Aurora').map(d => d.id), ['awaiting'])
-  store.salvaDocumenti([mail('sent-reply', { titolo: 'Re: Aurora scope request', filo: 'aurora-scope', inviato: true, quando: new Date().toISOString() })])
-  assert.deepEqual(claude.documentiPerSelezione([incoming], policy), [])
-  progetti.chiudi(p.id)
-  assert.equal(claude.verificaFontiSelezione(['awaiting'], policy), false)
-})

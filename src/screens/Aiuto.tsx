@@ -53,10 +53,6 @@ const ETICHETTE: Record<string, () => string> = {
   nonMiInteressa: () => t('Non mi interessa'),
   guardaIGiornali: () => t('Guarda i giornali'),
   rassegna: () => t('Notizie'),
-  nuovoOrdine: () => t('Nuovo ordine fisso'),
-  creaEAccendi: () => t('Crea e accendi'),
-  failoOgniSettimana: () => t('Fallo ogni settimana'),
-  ottimizza: () => t('Ottimizza'),
   comeLavori: () => t('Come lavori'),
   ilTuoRitratto: () => t('Il tuo ritratto'),
   pensavaPrima: () => t('Prima pensava'),
@@ -111,8 +107,8 @@ const SEZIONI: Sezione[] = [
     pezzi: [
       {
         p: {
-          it: 'Myynd legge le fonti che colleghi (posta, file, note, chat) e risponde alle tue domande da quello che ha letto, citando da dove viene ogni risposta. Prepara anche lavoro per te: risposte, bozze, documenti, piccole automazioni. Niente esce senza un tuo clic.',
-          en: 'Myynd reads the sources you connect (mail, files, notes, chats) and answers your questions from what it has read, citing where each answer comes from. It also prepares work for you: replies, drafts, documents, small automations. Nothing leaves without your click.'
+          it: 'Myynd legge le fonti che colleghi (posta, file, note, chat) e risponde alle tue domande da quello che ha letto, citando da dove viene ogni risposta. Prepara anche lavoro per te: risposte, bozze, documenti. Niente esce senza un tuo clic.',
+          en: 'Myynd reads the sources you connect (mail, files, notes, chats) and answers your questions from what it has read, citing where each answer comes from. It also prepares work for you: replies, drafts, documents. Nothing leaves without your click.'
         }
       }
     ]
@@ -381,51 +377,6 @@ const SEZIONI: Sezione[] = [
     azione: { etichetta: () => t('Vai alla prima pagina'), vai: v => v.goMyynd() }
   },
   {
-    id: 'aiuto-automazioni',
-    titolo: { it: 'Gli ordini fissi', en: 'Standing orders' },
-    pezzi: [
-      {
-        p: {
-          it: 'Un ordine fisso è un lavoro che Myynd fa da solo: ogni giorno, dal lunedì al venerdì, un giorno alla settimana, una volta al mese, oppure quando arriva qualcosa di nuovo. Ti lascia una riga in lista, o una cosa pronta da approvare: una bozza nella casella, un evento in agenda, una nota, un file. Non manda niente a nessuno.',
-          en: 'A standing order is a job Myynd does on its own: every day, on weekdays, one day a week, once a month, or when something new arrives. It leaves you a line in your list, or something ready to approve: a draft in your mailbox, a calendar event, a note, a file. It sends nothing to anyone.'
-        }
-      },
-      {
-        voci: [
-          {
-            nome: { it: 'Scriverne uno', en: 'Writing one' },
-            testo: {
-              it: 'Premi {{nuovoOrdine}} e descrivilo a parole: «Ogni lunedì dimmi quali preventivi nella posta sono ancora senza risposta». Sotto vedi cosa avrebbe fatto il mese scorso; {{creaEAccendi}} lo fa partire subito. Da una riga in lista, {{failoOgniSettimana}} lo scrive per te.',
-              en: 'Press {{nuovoOrdine}} and describe it in words: “Every Monday tell me which quotes in my mail are still unanswered”. Below it you see what it would have done last month; {{creaEAccendi}} starts it right away. From a line in your list, {{failoOgniSettimana}} writes it for you.'
-            }
-          },
-          {
-            nome: { it: 'Cosa può leggere', en: 'What it may read' },
-            testo: {
-              it: 'Solo gli attrezzi che gli hai dato: la posta, il desktop, Notion, Granola, le conversazioni, Slack, Drive, SharePoint, Dropbox, WhatsApp, l’agenda, le chat passate. Claude Code è un attrezzo a parte: guarda un progetto e scrive cosa farebbe, senza toccare niente. Un attrezzo è un permesso: se la fonte non è collegata, l’ordine fisso lo dice e non trova niente.',
-              en: 'Only the tools you gave it: mail, desktop, Notion, Granola, conversations, Slack, Drive, SharePoint, Dropbox, WhatsApp, calendar, past chats. Claude Code is a tool of its own: it reads a project and writes what it would do, touching nothing. A tool is a permission: if the source is not connected, the standing order says so and finds nothing.'
-            }
-          },
-          {
-            nome: { it: 'Come sta', en: 'How it is doing' },
-            testo: {
-              it: 'Ogni giro lascia una riga sulla sua scheda: quanti documenti ha guardato e quante cose ha fatto, o perché niente. Se un giro non riesce, riprova entro l’ora e la prima pagina lo dice. {{ottimizza}} lo fa riscrivere meglio a Claude, solo se lo chiedi tu.',
-              en: 'Every run leaves a line on its card: how many documents it looked at and how many things it made, or why nothing. If a run fails, it retries within the hour and the first page says so. {{ottimizza}} has Claude rewrite it better, only when you ask.'
-            }
-          },
-          {
-            nome: { it: 'Le cartelle', en: 'Folders' },
-            testo: {
-              it: 'Le cartelle a sinistra sono tue: creale come vuoi e trascinaci dentro le schede. Sotto, «per cosa aprono» filtra gli ordini fissi per attrezzo.',
-              en: 'The folders on the left are yours: create them as you like and drag cards into them. Below, “by what they open” filters standing orders by tool.'
-            }
-          }
-        ]
-      }
-    ],
-    azione: { etichetta: () => t('Apri gli ordini fissi'), vai: v => v.goAuto() }
-  },
-  {
     id: 'aiuto-memoria',
     titolo: { it: 'La memoria', en: 'Memory' },
     pezzi: [
@@ -525,15 +476,15 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Portarli altrove', en: 'Moving them elsewhere' },
             testo: {
-              it: 'In {{preferenze}}, sotto {{iTuoiDati}}, {{scarica}} ti dà un file con tutto quello che Myynd tiene di te: documenti, lista, chat, memoria, automazioni. Le chiavi e le password non ci sono, ma c’è la posta letta: chiede la tua password prima di prepararlo.',
-              en: 'In {{preferenze}}, under {{iTuoiDati}}, {{scarica}} gives you a file with everything Myynd keeps about you: documents, list, chats, memory, automations. Keys and passwords are not in it, but the mail it has read is: it asks for your password before preparing it.'
+              it: 'In {{preferenze}}, sotto {{iTuoiDati}}, {{scarica}} ti dà un file con tutto quello che Myynd tiene di te: documenti, lista, chat, memoria. Le chiavi e le password non ci sono, ma c’è la posta letta: chiede la tua password prima di prepararlo.',
+              en: 'In {{preferenze}}, under {{iTuoiDati}}, {{scarica}} gives you a file with everything Myynd keeps about you: documents, list, chats, memory. Keys and passwords are not in it, but the mail it has read is: it asks for your password before preparing it.'
             }
           },
           {
             nome: { it: 'Cancellare tutto', en: 'Deleting everything' },
             testo: {
-              it: 'In {{preferenze}}, in fondo a {{accountEApp}}, {{cancellaIlConto}} toglie tutto: documenti, lista, chat, memoria, automazioni e fonti. Chiede la password e il tuo indirizzo, e non si torna indietro.',
-              en: 'In {{preferenze}}, at the bottom of {{accountEApp}}, {{cancellaIlConto}} removes everything: documents, list, chats, memory, automations and sources. It asks for your password and your address, and there is no going back.'
+              it: 'In {{preferenze}}, in fondo a {{accountEApp}}, {{cancellaIlConto}} toglie tutto: documenti, lista, chat, memoria e fonti. Chiede la password e il tuo indirizzo, e non si torna indietro.',
+              en: 'In {{preferenze}}, at the bottom of {{accountEApp}}, {{cancellaIlConto}} removes everything: documents, list, chats, memory and sources. It asks for your password and your address, and there is no going back.'
             }
           }
         ]

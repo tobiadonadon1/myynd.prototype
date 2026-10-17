@@ -1,4 +1,4 @@
-// Le proposte che un ordine fisso prepara, eseguite con un dito (E).
+// Le proposte scritte su una riga, eseguite con un dito (E).
 //
 // La rotta `/api/compiti/:id/esegui` sapeva fare tre cose: mettere nel
 // cestino, archiviare, mettere in agenda. Qui le tre nuove: le risposte fra le

@@ -88,7 +88,7 @@ before(async () => {
   const n = BANCO ? 8000 : 50
   const ora = Date.now()
   chi.dentro(a.id, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, claude: { apiKey: 'sk-ant-finta' } } as Parameters<typeof cfg.scrivi>[0])
+    cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, claude: { apiKey: 'sk-ant-finta' } } as Parameters<typeof cfg.scrivi>[0])
     const docs = Array.from({ length: n }, (_, i) => ({
       id: `posta:INBOX:${i}`, fonte: 'posta', tipo: 'email', titolo: `Weekly note ${i}`,
       corpo: `Thanks for the update on item ${i}. Nothing to do here.`, autore: `Person ${i % 30} <p${i % 30}@example.com>`,
@@ -99,7 +99,7 @@ before(async () => {
     store.salvaFeed([{ tipo: 'Priority', titolo: 'Fix the three Northwind account issues', testo: 'Unblocks the submission.', urgenza: 'today', fonte: 'posta', doc: 'posta:INBOX:1', offerta: 'I can list the fixes.' }])
   })
   chi.dentro(b.id, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true } as Parameters<typeof cfg.scrivi>[0])
+    cfg.scrivi({ lingua: 'en', onboarding: true, giro: true } as Parameters<typeof cfg.scrivi>[0])
     store.salvaDocumenti([{ id: 'posta:INBOX:5', fonte: 'posta', tipo: 'email', titolo: 'Q3 invoice', corpo: 'Can you call me about the Q3 invoice? Dana', autore: 'Dana <dana@example.com>', quando: new Date(ora - 3_600_000).toISOString(), percorso: 'INBOX' }])
     store.salvaFeed([{ tipo: 'Priority', titolo: 'Call the accountant about the Q3 invoice', testo: 'Dana asks for a call.', urgenza: 'no rush', fonte: 'posta', doc: 'posta:INBOX:5', offerta: 'I can prepare the call notes.' }])
   })
