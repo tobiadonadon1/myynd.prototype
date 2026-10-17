@@ -47,7 +47,7 @@ function fornitoreFinto(giri: { testo?: string; chiamate?: { name: string; input
 const sistemaDi = (r: Record<string, unknown>) => ((r.messages ?? []) as { role: string; content: string }[]).filter(m => m.role === 'system').map(m => m.content).join('\n')
 
 test('su un conto vuoto non c’è memoria', () => {
-  cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
+  cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
   assert.equal(claude.haMemoria(), false)
 })
 

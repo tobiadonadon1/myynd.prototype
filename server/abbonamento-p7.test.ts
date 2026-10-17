@@ -52,7 +52,7 @@ const righe = () => (store.default.prepare('SELECT lavoro, motore FROM uso ORDER
 const HARBOR = 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026. The fee is €4,800 for the first phase. Nora'
 
 before(() => {
-  cfg.scrivi({ lingua: 'en', claudeCon: 'abbonamento', tetto: 0, diSerie: false, onboarding: true, giro: true })
+  cfg.scrivi({ lingua: 'en', claudeCon: 'abbonamento', tetto: 0, onboarding: true, giro: true })
   store.salvaDocumenti([{ id: 'posta:INBOX:701', fonte: 'posta', tipo: 'email', titolo: 'Harbor pilot kickoff', corpo: HARBOR, autore: 'Nora <n@h.example>', quando: new Date().toISOString() }])
 })
 after(() => {

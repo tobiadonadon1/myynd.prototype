@@ -45,7 +45,7 @@ before(async () => {
   utente = k.id
   await conti.perProva.apriCon(token, k.id)
   chi.dentro(k.id, () => {
-    cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', diSerie: false, onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true } })
+    cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true } })
     cartella = cfg.cartella()
     store.scriviCompito({ id: 'm1', testo: 'Reply to Dana', quando: 'oggi', ordine: 'a0' })
     store.default.prepare("UPDATE compiti SET stato = 'fatto', creato = '2026-09-02T08:00:00.000Z', chiesto = ?, chiuso = ? WHERE id = 'm1'").run('2026-09-15T08:00:00.000Z', '2026-09-17T09:00:00.000Z')
@@ -83,7 +83,7 @@ test('GET /api/resoconto?quale=scorsa: la forma, con l’orologio della scena', 
   assert.equal(resoconto.da, '2026-09-13T22:00:00.000Z')
   assert.equal(resoconto.numeri.mail, 1)
   assert.equal(resoconto.voci[0]!.titolo, 'October quote')
-  for (const k of ['inizio', 'preparate', 'stime', 'riscritte', 'punteggio', 'notato', 'segnalate', 'automazioni', 'copertura', 'vuoto']) assert.ok(k in resoconto, k)
+  for (const k of ['inizio', 'preparate', 'stime', 'riscritte', 'punteggio', 'notato', 'segnalate', 'copertura', 'vuoto']) assert.ok(k in resoconto, k)
 })
 
 test('un periodo sconosciuto è un 400 tradotto', async () => {

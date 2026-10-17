@@ -51,7 +51,7 @@ before(async () => {
   await conti.perProva.apriCon(due, b.id)
   for (const id of [a.id, b.id]) {
     chi.dentro(id, () => {
-      cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', diSerie: false, onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true }, turno: { notteDa: '23:00', notteA: '07:00' } } as Parameters<typeof cfg.scrivi>[0])
+      cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true }, turno: { notteDa: '23:00', notteA: '07:00' } } as Parameters<typeof cfg.scrivi>[0])
       store.scriviCompito({ id: 'c-file', testo: 'Write the course outline', quando: 'oggi', ordine: 'a' })
       store.affidaCompito('c-file', 'tutto')
       store.risultatoCompito('c-file', 'Done: saved the outline.', [])

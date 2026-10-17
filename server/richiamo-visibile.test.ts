@@ -55,7 +55,7 @@ function ascolta(id: string) {
 function modelloCheAspetta() {
   let segnale: AbortSignal | undefined
   prova({
-    svolgi: async (_t, _n, _m, _a, _c, passo, _d, _s, esecuzione) => {
+    svolgi: async (_t, _n, _m, _a, _c, passo, _d, esecuzione) => {
       segnale = esecuzione?.signal
       passo?.({ passo: 'apro', dettaglio: 'docs' })
       passo?.({ passo: 'scrivo' })

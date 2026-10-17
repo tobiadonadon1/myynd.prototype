@@ -99,7 +99,7 @@ before(async () => {
   writeFileSync(FILE_PIANO, 'The Q4 plan.\n\nFour weeks, two engineers.\n')
   chi.dentro(account.id, () => {
     cfg.scrivi({
-      lingua: 'en', diSerie: false, onboarding: true, giro: true,
+      lingua: 'en', onboarding: true, giro: true,
       desktop: { cartelle: [cartella], scelte: true },
       // una posta «collegata» il cui SMTP è finto: «Manda» parte, e non parte niente
       posta: { host: '127.0.0.1', porta: 1, utente: 'alex@harbor.example', password: 'x', smtp: { host: '127.0.0.1', porta: portaSmtp } },

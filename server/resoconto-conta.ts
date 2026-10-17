@@ -42,7 +42,6 @@ export type Voce = {
   scade?: string | null
   presa?: 'fatta' | 'nella lista' | 'vista' | null
   prova: string
-  automazione?: string | null
   /** riordino: nel cestino invece che archiviati */
   cestino?: boolean
 }
@@ -79,7 +78,7 @@ export type Materiale = {
 }
 
 export type Escluso = { chiave: string; perche: string }
-export type Conto = { voci: Voce[]; esclusi: Escluso[]; automazioni: { id: string; usate: number; prodotte: number }[] }
+export type Conto = { voci: Voce[]; esclusi: Escluso[] }
 
 function oggetto<T>(v: Json<T> | undefined): T | null {
   if (v === null || v === undefined || v === '') return null
@@ -180,15 +179,15 @@ function classifica(m: Materiale, fuso: string, min: Minuti): { uscite: Uscita[]
   for (const [r, membri] of catene) {
     const root = per.get(r)!
     const origine = root.origine ?? ''
+    // «auto:» sono le righe che Myynd scriveva da sé prima: preparate anche quelle
     const preparata = origine === 'iniziativa' || origine === 'guadagnata' || origine.startsWith('auto:')
-    const automazione = origine.startsWith('auto:') ? origine.slice(5) : null
     const tutte = membri.flatMap(c => azioniDi.get(c.id) ?? [])
     const chiaveDi = (c: RigaCompito) => `compito:${c.id}`
     const ids = membri.map(c => c.id)
-    const esci = (c: RigaCompito, v: Omit<Voce, 'chiave' | 'preparata' | 'automazione'>, registro = false) => {
+    const esci = (c: RigaCompito, v: Omit<Voce, 'chiave' | 'preparata'>, registro = false) => {
       if (!registro && tolta(c)) { esclusi.push({ chiave: chiaveDi(c), perche: 'riga lasciata o tolta' }); return }
       catenaConVoce.add(r)
-      uscite.push({ voce: { chiave: chiaveDi(c), ...v, preparata, automazione }, compiti: ids })
+      uscite.push({ voce: { chiave: chiaveDi(c), ...v, preparata }, compiti: ids })
     }
 
     // 1. mail: dal registro, o dalla sua posta
@@ -406,17 +405,7 @@ export function conta(m: Materiale, opz: { da: string; a: string; fuso: string; 
 
   voci.sort((x, y) => Date.parse(y.quando) - Date.parse(x.quando))
 
-  // le automazioni: quante voci ha dato, quante righe ha scritto nella finestra
-  const perAuto = new Map<string, { usate: number; prodotte: number }>()
-  const di = (id: string) => { const g = perAuto.get(id) ?? { usate: 0, prodotte: 0 }; perAuto.set(id, g); return g }
-  for (const v of voci) if (v.automazione) di(v.automazione).usate++
-  for (const r of m.compiti) if (r.origine?.startsWith('auto:') && dentro(r.creato, opz.da, opz.a)) di(r.origine.slice(5)).prodotte++
-
-  return {
-    voci,
-    esclusi: [...c.esclusi, ...k.esclusi],
-    automazioni: [...perAuto].map(([id, n]) => ({ id, ...n }))
-  }
+  return { voci, esclusi: [...c.esclusi, ...k.esclusi] }
 }
 
 export type Numeri = { mail: number; lavori: number; scadenze: number; segnalate: number; minuti: number }

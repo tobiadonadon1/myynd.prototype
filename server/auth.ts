@@ -447,7 +447,7 @@ const PRIMA_DELL_ACCESSO = new Set([
  *
  * Riconosciuto il token si sa di chi è la richiesta, e da lì in avanti tutto
  * quello che gira dentro `chi.dentro` lavora sui dati di quella persona —
- * `config.leggi()`, l'indice, le automazioni — senza che nessuna delle
+ * `config.leggi()`, l'indice, le chat — senza che nessuna delle
  * duecento funzioni sotto debba saperlo.
  *
  * È l'unico punto in cui quel contesto si apre, ed è voluto: un secondo posto

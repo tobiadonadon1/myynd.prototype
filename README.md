@@ -100,7 +100,7 @@ Support/Myynd` sul Mac, `%APPDATA%\Myynd` su Windows).
 
 **Vive anche a finestra chiusa.** La X nasconde la finestra e basta: il segno
 nella barra dei menù (e il Dock, sul Mac) tengono l'app viva, e con lei il
-server e le automazioni che ha in programma. Si esce da «Esci» — nel menù
+server e i giri di fondo che ha in programma. Si esce da «Esci» — nel menù
 del segno, nel menù dell'app, o con ⌘Q. Dove il segno nella barra non è
 riuscito a nascere (Windows e Linux senza vassoio), la X chiude come prima:
 un'app viva che non si vede e non si riapre è peggio di una chiusa. Con
@@ -140,7 +140,7 @@ davanti.
 **Il prompt.** Una riga della lista ha tre colonne — la faccio io, me ne fa
 una bozza, se ne occupa lui — e un quarto modo che non è una colonna: sotto i
 tre puntini della riga, «Preparami il prompt» (`/prompt` nella barra e nel
-richiamo, `metti.modo: prompt` in una ricetta). Myynd non consegna la cosa
+richiamo). Myynd non consegna la cosa
 fatta ma la richiesta con cui farla fare a un altro assistente — Claude,
 ChatGPT o Claude Code — cercando prima nel materiale come in «tutto» e
 scrivendo poi per un lettore che quel materiale non ce l'ha: l'obiettivo in
@@ -239,8 +239,7 @@ Con Claude, i lavori che non lo sono vanno a Haiku — il più
 piccolo della famiglia — anche quando il modello scelto è un altro: sono le
 chiamate più frequenti, e non escono dall'azienda.
 
-Le ore delle automazioni («ogni giorno alle 7») e il conto delle bozze del
-giorno sono nel fuso di chi usa, che il browser manda una volta e resta nella
+Le ore dei giri di fondo e il conto delle bozze del giorno sono nel fuso di chi usa, che il browser manda una volta e resta nella
 configurazione: su un server la macchina sta in UTC.
 
 ## Il feed
@@ -270,8 +269,7 @@ tabella nuova: è una giunzione fra le voci scartate e i documenti.
 
 Quando torni dopo un po' — tre ore, o la prima volta nella giornata — in cima
 alla prima pagina c'è il punto: cosa è arrivato che conta, cosa ha fatto Myynd
-nel frattempo (bozze preparate, mail mandate su tua richiesta, automazioni
-girate), le mosse che fanno andare avanti il lavoro con la riga pronta da
+nel frattempo (bozze preparate, mail mandate su tua richiesta), le mosse che fanno andare avanti il lavoro con la riga pronta da
 approvare in testa, una o due notizie della rassegna con il perché, e i tuoi
 progetti: dove stanno, e un angolo — un'idea sua su quel progetto, radicata in
 quello che ha letto e in quello che sa di te. «Tienilo» la mette nella memoria
@@ -313,22 +311,6 @@ con un altro nome. Gli angoli tenuti restano nella memoria (`progetto:<nome>`).
 I progetti che il punto teneva in `punto.json` entrano in tabella al primo
 avvio, con la loro data. Rotte: `GET/POST /api/progetti`,
 `PATCH/DELETE /api/progetti/:id` — `DELETE` chiude, non cancella.
-
-## Le automazioni
-
-Una ricetta in `automazioni/_comuni` scrive di norma **una riga** con l'elenco
-di quello che ha guardato. Con `metti.perDocumento: true` scrive invece **una
-riga per ogni documento** che merita attenzione: un modello piccolo (il lavoro
-`smistamento`, mai di frontiera) legge i candidati con l'istruzione `fai`
-davanti e sceglie quali meritano una riga e con che titolo — «Rispondere a
-Rossi sul preventivo di marzo» — e ogni riga nasce col suo documento attaccato,
-così la bozza parte da *quel* messaggio ed è una risposta a chi l'ha scritto.
-Un documento che ha già una riga da quella ricetta — viva, chiusa o buttata —
-non ne riceve una seconda; il tetto delle bozze del giorno vale riga per riga,
-e oltre il tetto le righe nascono lo stesso, senza bozza. È la ricetta di serie
-«Risposte da dare» (`risposte-da-dare.json`): a ogni lettura della posta, una
-riga per ogni messaggio in arrivo che aspetta una tua risposta, con la risposta
-già scritta. Un'email che sta già in lista non viene riproposta nel feed.
 
 ## Connettori
 
@@ -383,8 +365,8 @@ Le cartelle del desktop si guardano anche dal vivo — *la vedetta*
 (`server/connettori/vedetta.ts`). Un file salvato, spostato o cancellato entra
 o esce dall'indice nel giro di qualche secondo, con le stesse regole della
 lettura intera: niente file nascosti, niente progetti di codice, gli stessi
-limiti di peso. Quello che viene dopo — la prima pagina, una domanda, le
-automazioni «quando arriva» — aspetta invece che le cartelle si calmino per
+limiti di peso. Quello che viene dopo — la prima pagina, una domanda —
+aspetta invece che le cartelle si calmino per
 qualche minuto e non parte più di una volta ogni dieci: duecento file
 trascinati dentro sono una chiamata al modello, non duecento. Il giro delle
 sei ore resta, ma non rilegge più quello che ha la stessa data di modifica di
@@ -456,14 +438,13 @@ server/                 Node 24+, TypeScript eseguito direttamente (solo type st
   compatibile.ts        il fornitore compatibile con OpenAI, tradotto in forma Anthropic
   claude.ts             il ragionamento: recupero, prompt, strumenti, bozze
   compiti.ts            la coda delle cose affidate a Myynd
-  automazioni.ts        le ricette che girano da sole
   connettori/           posta · calendario · google · microsoft · drive · dropbox · slack · whatsapp · notion · desktop · granola · note · conversazioni · accesso
                         oauth.ts: il ballo su 127.0.0.1 in casa, via web ospitati
 
 src/
   Accesso.tsx           entrare e registrarsi
   onboarding/           il primo avvio
-  screens/              una schermata per file (Myynd, Oggi, Chat, Automazioni, Memoria, Mappa, Preferenze, Aiuto)
+  screens/              una schermata per file (Myynd, Oggi, Chat, Memoria, Mappa, Preferenze, Aiuto)
   lingua.ts             il dizionario: chiavi in italiano, valori in inglese
   vals.ts               lo stato dell'app
 ```

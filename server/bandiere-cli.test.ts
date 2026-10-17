@@ -52,7 +52,7 @@ const lanci = () => existsSync(ARGS) ? readFileSync(ARGS, 'utf8').split('\n').fi
 const chiedi = () => abbonamento.chiedi({ system: 'Be brief.', messages: [{ role: 'user', content: 'Outline?' }], attesa: 10_000, lavoro: 'bozza' })
 const flusso = (sforzo?: 'low') => abbonamento.inStreaming({ system: 'Chat.', messages: [{ role: 'user', content: 'When?' }], silenzio: 10_000, onTesto: () => {}, sforzo })
 
-cfg.scrivi({ lingua: 'en', claudeCon: 'abbonamento', tetto: 0, diSerie: false, onboarding: true, giro: true })
+cfg.scrivi({ lingua: 'en', claudeCon: 'abbonamento', tetto: 0, onboarding: true, giro: true })
 beforeEach(() => {
   rmSync(ARGS, { force: true })
   delete process.env.FINTO_RIFIUTA

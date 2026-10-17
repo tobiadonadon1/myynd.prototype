@@ -53,7 +53,7 @@ before(async () => {
   utente = account.id
   await conti.perProva.apriCon(token, account.id)
   chi.dentro(account.id, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true } })
+    cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true } })
     store.salvaDocumenti([
       ...[1, 2, 3].map(i => ({ id: `posta:INBOX:7${i}`, fonte: 'posta', tipo: 'email', titolo: ['Hiring plan', 'Offsite budget', 'Vendor shortlist'][i - 1]!, corpo: `The document number ${i}, for the team.`, autore: 'Tom Reed <tom@reed.example>', quando: fa(5 + i), percorso: 'INBOX', messageId: `tom${i}@ex`, filo: `tom${i}@ex` })),
       { id: 'posta:INBOX:80', fonte: 'posta', tipo: 'email', titolo: 'Pilot scope', corpo: 'Can you confirm the pilot scope?', autore: `Nora <${NORA}>`, quando: fa(2), percorso: 'INBOX', messageId: 'nora80@ex', filo: 'nora80@ex' }

@@ -2,7 +2,7 @@
 //
 // Le bozze le prepara il turno: a turno spento l'interruttore non fa niente, e
 // non si mostra; con l'autonomia su «chiedere prima» resta acceso ma fermo, e
-// lo dice la riga di stato, come in Automazioni. Mai acceso e muto.
+// lo dice la riga di stato. Mai acceso e muto.
 
 export type Iniziativa = { attiva: boolean; inPausa: boolean }
 

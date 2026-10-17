@@ -92,11 +92,11 @@ export function localeDelGiorno(iso: string): string {
 }
 
 /** Da dove viene la carta, in due o tre parole: la fonte vera, non il meccanismo. */
-export type Provenienza = 'posta' | 'riunione' | 'tu' | 'myynd' | 'seguito' | 'automazione' | 'feed'
+export type Provenienza = 'posta' | 'riunione' | 'tu' | 'myynd' | 'seguito' | 'feed'
 export function provenienza(c: Compito): Provenienza {
   if (c.origine === 'seguito') return 'seguito'
-  if (c.origine === 'iniziativa' || c.origine === 'punto' || c.origine === 'proposta' || c.origine === 'turno') return 'myynd'
-  if (c.origine?.startsWith('auto:')) return 'automazione'
+  // «auto:» sono le righe che Myynd scriveva da sé, prima
+  if (c.origine === 'iniziativa' || c.origine === 'punto' || c.origine === 'proposta' || c.origine === 'turno' || c.origine?.startsWith('auto:')) return 'myynd'
   if (c.doc?.startsWith('posta') || c.doc?.startsWith('gmail') || c.doc?.startsWith('outlook')) return 'posta'
   if (c.doc?.startsWith('granola') || c.doc?.startsWith('riunion')) return 'riunione'
   if (c.origine === 'feed' || c.voce) return 'feed'

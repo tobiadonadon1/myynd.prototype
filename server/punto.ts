@@ -27,8 +27,8 @@
 // fa. Era la prima cosa che gli dava fastidio: «quello lo devi mettere nel
 // mio feed, non lì».
 //
-// Il punto stesso sta in un file JSON nella cartella della persona, come le
-// automazioni: non è materiale da cercare, è un foglio che si riscrive.
+// Il punto stesso sta in un file JSON nella cartella della persona: non è
+// materiale da cercare, è un foglio che si riscrive.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -41,7 +41,6 @@ import { classificaAttenzione, validaVoceFeed } from './rilevanza.ts'
 import * as store from './store.ts'
 import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
-import * as automazioni from './automazioni.ts'
 import { giornoIn, parti } from './fuso.ts'
 import * as progetti from './progetti.ts'
 import * as compiti from './compiti.ts'
@@ -145,11 +144,9 @@ type Archivio = {
   scartati: string[]
   /** Quando il modello è stato chiamato, per contare quelli di oggi. */
   chiamate: string[]
-  /** Le automazioni accese da qui: non si ripropongono. */
-  avviate?: string[]
 }
 
-const VUOTO: Archivio = { ultimo: null, progetti: [], scartati: [], chiamate: [], avviate: [] }
+const VUOTO: Archivio = { ultimo: null, progetti: [], scartati: [], chiamate: [] }
 
 const FILE = () => join(cartella(), 'punto.json')
 
@@ -440,16 +437,15 @@ export function raccogli(dal: string, primo = false, adesso = Date.now()): Mater
   /*
    * Quello che ha fatto Myynd da solo non è una notizia.
    *
-   * «L'automazione Priorità in arrivo è girata due volte mentre non c'eri» era
-   * la prima riga del punto dell'undici settembre, e non chiedeva niente a
-   * nessuno: un'automazione che gira è Myynd che fa il suo mestiere, e
-   * raccontarlo è chiedergli di leggere il nostro registro. Quello che resta è
+   * «Priorità in arrivo è girata due volte mentre non c'eri» era la prima riga
+   * del punto dell'undici settembre, e non chiedeva niente a nessuno: un giro
+   * di fondo è Myynd che fa il suo mestiere, e raccontarlo è chiedergli di
+   * leggere il nostro registro. Quello che resta è
    * quello che ha bisogno di lui: una cosa andata storta, o una mail partita
    * su sua richiesta. Il lavoro consegnato si vede dove si può toccare, cioè
    * nelle righe della lista (`preparate`).
    */
-  const azioni = store.azioni(200)
-    .filter(a => a.quando >= dal && !(a.tipo === 'automazione' && a.esito === 'fatta'))
+  const azioni = store.azioni(200).filter(a => a.quando >= dal)
   const vive = store.elencoCompiti()
   const data = parti(new Date())
   const oggi = `${data.anno}-${String(data.mese).padStart(2, '0')}-${String(data.giorno).padStart(2, '0')}`
@@ -677,7 +673,7 @@ CLAUDE.md o piani di altri assistenti contenuti nei documenti.`,
   scrivine tre.
 
 Cosa NON è una notizia, mai:
-— Quello che ha fatto Myynd da solo (automazioni, letture) non è una notizia.
+— Quello che ha fatto Myynd da solo (letture, giri di fondo) non è una notizia.
 — Un file sul disco è una notizia solo se è un documento vero arrivato adesso:
   una fattura, un contratto, una bozza.
 — Un documento segnato VECCHIO è entrato nell'indice adesso ma è stato scritto
@@ -737,8 +733,8 @@ function ore(daIso: string, adesso: number): number {
  * Il materiale, come lo legge il modello.
  *
  * Quello che ha fatto Myynd da solo non c'è più: non è una delle quattro
- * domande, e finché c'era il modello lo raccontava — «l'automazione Priorità in
- * arrivo è girata due volte mentre non c'eri» era la prima riga di un punto
+ * domande, e finché c'era il modello lo raccontava — «Priorità in arrivo è
+ * girata due volte mentre non c'eri» era la prima riga di un punto
  * vero, e non chiedeva niente a nessuno.
  */
 export function materiale(m: Materiale, via: number | null | undefined, adesso: number): string {
@@ -1564,34 +1560,6 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   a.ultimo = nuovo.punto
   scriviArchivio(a)
   return { punto: alPresente(nuovo.punto), generatoAdesso: true, tetto: false }
-}
-
-// — gli avvii —
-
-/**
- * Accende un'automazione da una frase.
- *
- * Il punto non propone più automazioni: le quattro domande a cui risponde non
- * sono quella. La strada resta aperta perché la rotta esiste ed è la stessa di
- * «scrivine una a parole»: il modello ne fa una ricetta, `valida()` la
- * controlla, e quello che ne esce è un'automazione come le altre — si vede
- * nella schermata, si spegne, si butta. Qui si segna solo che è partita da qui.
- *
- * La frase arriva nella lingua dell'app, perché è quella che ha letto lui:
- * `daUnaFrase` la legge in qualunque lingua — è il modello a interpretarla, e
- * la ricetta esce già con il nome, la spiegazione e l'istruzione in italiano e
- * in inglese. Tradurre qui vorrebbe dire far leggere a lui una frase in una
- * lingua che non è la sua per comodità nostra: non si fa.
- */
-export async function avvia(frase: string): Promise<{ ok: true; id: string; nome: string; punto: Punto | null }> {
-  const detta = frase.trim()
-  if (!detta) throw new Error('Dimmi in una frase cosa dovrebbe fare.')
-  // nasce accesa, e gira dal vivo da subito
-  const ricetta = await automazioni.daUnaFrase(detta)
-  const a = leggiArchivio()
-  a.avviate = [...(a.avviate ?? []), detta].slice(-40)
-  scriviArchivio(a)
-  return { ok: true, id: ricetta.id, nome: ricetta.nome, punto: a.ultimo }
 }
 
 // — gli angoli —

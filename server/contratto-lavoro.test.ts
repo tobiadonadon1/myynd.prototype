@@ -73,7 +73,7 @@ test('il criterio arriva a chi scrive e a chi rilegge; la prova si scrive e il d
   let criterioRiletto: string | null | undefined
   compiti.perProva({
     contratto: id => { const k = CONTRATTO(); store.scriviContrattoCompito(id, k); return k },
-    svolgi: async (_t, _n, _m, _a, _c, passo, _d, _s, esecuzione) => {
+    svolgi: async (_t, _n, _m, _a, _c, passo, _d, esecuzione) => {
       criterioScritto = esecuzione?.criterio
       passo?.({ passo: 'cerco', dettaglio: 'Lumen notes' })
       passo?.({ passo: 'scrivo' })
@@ -149,7 +149,7 @@ test('il budget di tempo: una carta che non torna si ferma, con la frase fissa, 
   let fermata = false
   compiti.perProva({
     contratto: id => { const k = CONTRATTO(0.0015); store.scriviContrattoCompito(id, k); return k },
-    svolgi: (_t, _n, _m, _a, _c, _p, _d, _s, esecuzione) => new Promise((_r, rifiuta) => {
+    svolgi: (_t, _n, _m, _a, _c, _p, _d, esecuzione) => new Promise((_r, rifiuta) => {
       esecuzione?.signal.addEventListener('abort', () => { fermata = true; rifiuta(new Error('La richiesta è stata interrotta a metà.')) })
     }),
     chiedeAiuto: nonChiede, domandeDaFare: async () => [], prossimoPasso: async () => null, salvaConsegna: salvaInCasa
@@ -184,7 +184,7 @@ test('F3 · le mani del contratto arrivano a chi scrive, anche per una carta nat
   let ricevute: readonly string[] | undefined
   compiti.perProva({
     contratto: id => { const k = { ...CONTRATTO(), mani: ['file' as const, 'nota' as const] }; store.scriviContrattoCompito(id, k); return k },
-    svolgi: async (_t, _n, _m, _a, _c, _p, _d, _s, esecuzione) => { ricevute = esecuzione?.mani; return { testo: OUTLINE, fonti: [] } },
+    svolgi: async (_t, _n, _m, _a, _c, _p, _d, esecuzione) => { ricevute = esecuzione?.mani; return { testo: OUTLINE, fonti: [] } },
     chiedeAiuto: nonChiede, domandeDaFare: async () => [], prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
     giudica: async () => ({ esito: 'pass', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] }) as Giudizio
   })

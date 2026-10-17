@@ -316,8 +316,7 @@ export function evidenzaDalLavoro(giorni = 30): Evidenza {
  *
  * **La regola che tiene in piedi la cosa: si scrive solo dove non c'è già
  * qualcosa di suo.** Se ha scritto lui, quel campo è suo e non si tocca mai
- * più — al massimo gli si offre un'aggiunta, che accetta con un clic. È la
- * stessa regola di `ottimizza` sulle automazioni, e per lo stesso motivo: una
+ * più — al massimo gli si offre un'aggiunta, che accetta con un clic: una
  * cosa che riscrive quello che hai scritto tu, senza che tu l'abbia chiesto,
  * non è un aiuto.
  */

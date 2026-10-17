@@ -258,9 +258,8 @@ export function BottoneSicuro({ fai, guaio, titolo, chiaro, subito, style, child
 /**
  * Il cestino che chiede una volta.
  *
- * Cinque posti ne avevano uno ciascuno — una riga della lista, una convinzione,
- * una chat, la scheda di un'automazione e la sua finestra — e tre buttavano al
- * primo clic. La regola è una sola, ed è `useConferma`.
+ * Più posti ne avevano uno ciascuno — una riga della lista, una convinzione,
+ * una chat — e alcuni buttavano al primo clic. La regola è una sola, ed è `useConferma`.
  *
  * Armato, la domanda si posa *sopra* la riga invece di allargarla: un cestino
  * largo ventidue pixel che diventa una pastiglia di cinquanta spingerebbe il
@@ -288,7 +287,7 @@ export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona =
    * su un gesto che si fa dieci volte al giorno.
    *
    * Resta dov'è invece per quello che non torna: scollegare una casella,
-   * buttare un'automazione scritta a mano, dimenticare una convinzione. Lì
+   * dimenticare una convinzione. Lì
    * la domanda non è attrito, è l'ultima occasione.
    *
    * Una chat no, dal 16 settembre: «voglio che sia il cestino a dire che si
@@ -405,9 +404,9 @@ export function useFocoDialogo(ref: RefObject<HTMLElement | null>, chiudi?: () =
      * Esc chiude, anche con il cursore in un campo.
      *
      * Prima si usciva subito su INPUT/TEXTAREA/SELECT, «ci pensa il campo» —
-     * ma nelle due finestre delle automazioni il fuoco *parte* dentro un'area
-     * di testo che di Esc non fa niente, e quelle finestre non si potevano
-     * chiudere da tastiera affatto. Un campo che vuole Esc per sé lo ferma con
+     * ma in una finestra il cui fuoco *parte* dentro un'area di testo che di
+     * Esc non fa niente, la finestra non si poteva chiudere da tastiera
+     * affatto. Un campo che vuole Esc per sé lo ferma con
      * `stopPropagation`, ed è quello che fa la casella con la chiocciola
      * aperta; per tutti gli altri Esc vuol dire «chiudi questa finestra».
      */

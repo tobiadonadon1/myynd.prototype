@@ -41,9 +41,8 @@ test('le faccende di codice non passano, le mosse vere sì', () => {
   for (const titolo of ['Ship the sito worktree changes to tobiadonadon.com', 'Fill the Myynd website launch values for Vercel', 'Turn the Evermute deck outline into full slides', 'Merge the site branch into main', 'Freeze engine work and post one original weekly', 'Focus on the launch this week'])
     assert.equal(quadro.ripulisciMossa({ ...base, titolo }, fonti, []), null, titolo)
   assert.ok(quadro.ripulisciMossa({ ...base, titolo: 'Write a new blog post: it has been 18 days' }, fonti, []))
-  // un'automazione si accende con un tocco solo se l'offerta lo dice così
-  assert.equal(quadro.ripulisciMossa({ ...base, genere: 'automazione', titolo: 'Check the blog every Monday' }, fonti, []), null)
-  assert.ok(quadro.ripulisciMossa({ ...base, genere: 'automazione', titolo: 'Check the blog every Monday', offerta: 'I set up an automation that checks the blog every Monday.' }, fonti, []))
+  // un genere che non c'è più, o che non c'è mai stato, non passa
+  assert.equal(quadro.ripulisciMossa({ ...base, genere: 'ricorrente', titolo: 'Check the blog every Monday' }, fonti, []), null)
 })
 
 test('la pagina pubblica: gli indirizzi giusti, il testo senza markup, le date del blog', () => {
@@ -125,7 +124,7 @@ test('il lavoro che fa da sé va in coda per la notte, non sul feed; la domanda 
         stato: 'The site sells one product; the blog stopped on September 14.', traguardo: 'A new post every two weeks', blocco: '',
         mosse: [
           { genere: 'lavoro', titolo: 'Draft two blog posts from your recent work', testo: 'The blog stopped on September 14 and search traffic depends on it.', leva: 2, urgenza: 'settimana', offerta: 'I write two drafts and save them in your Myynd folder.', prova: 'Ultime date di pubblicazione trovate (sitemap o feed): 2026-09-14', fonte: 'esterno:https://tobiadonadon.com' },
-          { genere: 'automazione', titolo: 'Watch the blog and draft a post every two weeks', testo: 'A post every two weeks keeps the site alive without you thinking about it.', leva: 2, urgenza: 'settimana', offerta: 'I set up an automation that checks the blog every Monday and drafts a post.', prova: 'The blog lives in /blog.', fonte: 'lavoro:/Users/t/Desktop/tobiaweb' }
+          { genere: 'consiglio', titolo: 'Publish a post every two weeks from your notes', testo: 'A post every two weeks keeps the site alive and brings search traffic back.', leva: 2, urgenza: 'settimana', offerta: 'I pick the first topic from your notes and outline it.', prova: 'The blog lives in /blog.', fonte: 'lavoro:/Users/t/Desktop/tobiaweb' }
         ]
       }
     }) as never
@@ -142,8 +141,8 @@ test('il lavoro che fa da sé va in coda per la notte, non sul feed; la domanda 
   assert.match(riga.nota ?? '', /subfolder «tobiadonadon\.com»/)
   const feed = feedAttuale() as Record<string, unknown>[]
   assert.ok(!feed.some(v => v.titolo === 'Draft two blog posts from your recent work'), 'il lavoro non è una carta: torna fatto')
-  const auto = feed.find(v => v.titolo === 'Watch the blog and draft a post every two weeks')
-  assert.ok(auto && auto.tipo === 'Proposta' && /^I set up an automation/.test(String(auto.offerta)))
+  const consiglio = feed.find(v => v.titolo === 'Publish a post every two weeks from your notes')
+  assert.ok(consiglio && consiglio.tipo === 'Proposta' && /^I pick the first topic/.test(String(consiglio.offerta)))
   // la domanda sull'obiettivo: per Orbita sì, per il sito (certezza 0.85) no
   const aperte = store.domandeConTema(priorita.TEMA_QUADRO).filter(d => d.stato === 'aperta')
   assert.deepEqual(aperte.map(d => d.progetto), [vaga.id])

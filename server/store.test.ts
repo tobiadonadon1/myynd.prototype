@@ -1338,7 +1338,7 @@ test('allargando la ricerca non passa chi ha una parola sola su sei', () => {
   // e una parola sola resta una ricerca normale, senza soglie
   assert.ok(store.cerca('Boca', 20, undefined, true).map(d => d.id).includes('ms-affitto'))
 
-  // le parole chiave di un'automazione sono sinonimi in fila: lì una su tre è
+  // le parole chiave sono sinonimi in fila: lì una su tre è
   // la risposta giusta, e la soglia non c'è
   // «lease» c'è solo nel primo, «quote» e «deadline» non ci sono: una su tre,
   // e senza soglia passa comunque

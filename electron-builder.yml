@@ -12,7 +12,7 @@ directories:
   buildResources: build
 
 # Solo quello che serve a far girare l'app: il guscio, il server così com'è,
-# le ricette, l'interfaccia costruita. Le prove del server restano fuori. Le
+# l'interfaccia costruita. Le prove del server restano fuori. Le
 # dipendenze di produzione le raccoglie electron-builder da solo e non vanno
 # elencate qui; quelle di sviluppo le toglie lui.
 files:
@@ -21,7 +21,6 @@ files:
   - "!desktop/bin/*.swift"
   - server/**
   - "!server/**/*.test.ts"
-  - automazioni/**
   - dist/**
   - package.json
   - "!.env*"
@@ -35,7 +34,6 @@ files:
 asar: true
 asarUnpack:
   - server/**
-  - automazioni/**
   - dist/**
   - "**/*.node"
   # il programma che dice chi c'è davanti (desktop/bin/myynd-fronte): un

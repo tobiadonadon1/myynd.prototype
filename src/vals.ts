@@ -6,7 +6,7 @@ import { coloreProgetto } from './colori-progetto'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
-import { api, apiP2, apiP6, memoriaP5, type Connettore, type EventoLettura, type Lettura, type Stato } from './api'
+import { api, apiP2, memoriaP5, type Connettore, type EventoLettura, type Lettura, type Stato } from './api'
 import { chiediSezione } from './sezioni.ts'
 import type { RagioneNonUtile } from './feed-carta'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
@@ -267,22 +267,6 @@ export function registraPortaFonti(f: (() => void) | null) { portaAlleConnession
 /** Vera quando c'è chi sa aprirle: senza, il collegamento non si disegna. */
 export function siPuoAprireLeFonti(): boolean { return !!portaAlleConnessioni }
 export function portaAlleFonti() { portaAlleConnessioni?.() }
-
-/**
- * «Fallo ogni settimana», detto da una carta (E).
- *
- * Una riga in Da fare o una carta del feed diventano un ordine fisso: la
- * pagina degli ordini fissi si apre con la scheda nuova già scritta, «Ogni
- * lunedì mattina: …». Stessa mano delle altre porte: le righe di Da fare non
- * ricevono `v`.
- */
-/** Quello che una carta passa alla scheda nuova: la frase da leggere, e il testo della carta che diventa la cosa da fare. */
-export type DaCarta = { frase: string; testo: string }
-let portaOrdine: ((x: DaCarta) => void) | null = null
-export function registraPortaOrdine(f: ((x: DaCarta) => void) | null) { portaOrdine = f }
-/** Vera quando c'è chi sa aprirla: senza, il gesto non si disegna. */
-export function siPuoFareOgniSettimana(): boolean { return !!portaOrdine }
-export function portaAllOrdineFisso(x: DaCarta) { if (x.frase.trim() && x.testo.trim()) portaOrdine?.(x) }
 
 /**
  * Come si chiama il bottone che porta lì: dice *cosa* apre.
@@ -853,25 +837,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     }
   }, [stato, mostraToast])
 
-  /**
-   * Le proposte di automazione sono state mostrate: il fulmine si spegne.
-   *
-   * Lo dice la schermata delle automazioni appena le ha sotto gli occhi. Si
-   * chiama sempre, anche quando lo stato dice zero: una proposta scritta
-   * durante l'apertura della pagina lo stato non l'ha ancora contata. Stabile
-   * apposta, senza dipendenze: la schermata la mette fra le dipendenze del suo
-   * caricamento, e non deve rifarlo a ogni disegno.
-   */
-  const segnaSuggerimentiVisti = useCallback(async () => {
-    await api.segnaSuggerimentiVisti()
-    setStato(s => ({ ...s, suggerimentiNuovi: 0 }))
-  }, [])
-  // il vassoio di prova (P6): aprire la pagina lo segna visto, e il punto si spegne
-  const segnaVassoioVisto = useCallback(async () => {
-    setStato(s => ({ ...s, vassoioNuovi: 0 }))
-    await apiP6.vassoioVisto()
-  }, [])
-
   // — azioni —
 
   const go = (s: Screen) => (e?: { preventDefault?: () => void }) => {
@@ -1344,17 +1309,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     return () => registraPortaFonti(null)
   }, [])
 
-  // e quella degli ordini fissi, per «Fallo ogni settimana» su una carta: vedi `portaAllOrdineFisso`
-  const [ordineDaCarta, setOrdineDaCarta] = useState<DaCarta | null>(null)
-  useEffect(() => {
-    registraPortaOrdine((x: DaCarta) => { setOrdineDaCarta(x); setScreen('auto'); setSearch(false); setMenu(false) })
-    return () => registraPortaOrdine(null)
-  }, [])
-
   return {
     threadRef, cvA, cvB,
 
-    isMyynd: screen === 'myynd', isOggi: screen === 'oggi', isChat: screen === 'chat', isAuto: screen === 'auto',
+    isMyynd: screen === 'myynd', isOggi: screen === 'oggi', isChat: screen === 'chat',
     isMappa: screen === 'mappa', isPref: screen === 'pref', isConn: screen === 'conn',
     isMemoria: screen === 'memoria',
     isProgetti: screen === 'progetti',
@@ -1364,25 +1322,14 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     goOggi: (e?: { preventDefault: () => void }) => { e?.preventDefault(); setScreen('oggi') },
     mostraToast,
     navChat: screen === 'chat' ? NAV_ON : NAV_OFF,
-    navAuto: screen === 'auto' ? NAV_ON : NAV_OFF,
     navProgetti: screen === 'progetti' ? NAV_ON : NAV_OFF,
-    /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende. */
-    suggerimentiNuovi: stato.suggerimentiNuovi ?? 0,
-    vassoioNuovi: stato.vassoioNuovi ?? 0,
-    segnaVassoioVisto,
-    /** Gli ordini fissi il cui ultimo giro è andato storto: la riga fissa del motore li dice (E). */
-    automazioniInGuaio: stato.automazioniInGuaio ?? [],
-    /** La frase con cui una carta ha chiesto un ordine fisso: la pagina la apre già scritta, poi la scorda. */
-    ordineDaCarta,
-    scordaOrdineDaCarta: () => setOrdineDaCarta(null),
-    segnaSuggerimentiVisti,
     menuPref: screen === 'pref' ? MENU_ON : MENU_OFF,
     menuMappa: screen === 'mappa' ? MENU_ON : MENU_OFF,
     menuConn: screen === 'conn' ? MENU_ON : MENU_OFF,
     menuMemoria: screen === 'memoria' ? MENU_ON : MENU_OFF,
     menuOpen: menu, toggleMenu: () => setMenu(m => !m), chiudiMenu: () => setMenu(false),
     chevron: { display: 'flex', transform: menu ? 'none' : 'rotate(180deg)', transition: 'transform .2s' } as CSSProperties,
-    goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'), goProgetti: go('progetti'),
+    goMyynd: go('myynd'), goChat: go('chat'), goProgetti: go('progetti'),
     goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'), goMemoria: go('memoria'),
     /** P5: una pagina a sezioni, su una sezione e una scheda precise (la scheda si cerchia di rame). */
     apri: (pagina: 'pref' | 'memoria', sezione?: string, scheda?: string) => { chiediSezione(pagina, sezione, scheda); go(pagina)() },

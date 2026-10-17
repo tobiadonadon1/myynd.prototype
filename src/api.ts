@@ -92,8 +92,6 @@ export type Stato = {
     argomentiDaMe: boolean
     /** E il fuoco: scritto da Myynd dalle sue attività, non da lei. */
     fuocoDaMe: boolean
-    /** Ha chiesto le undici automazioni che arrivano col pacchetto. */
-    diSerie: boolean
     posta: { host: string; utente: string; giorni: number } | null
     desktop: { cartelle: string[]; tutto: boolean } | null
     /** `scrive`: la pagina di Notion dove Myynd scrive, se lui l'ha scelta. */
@@ -160,12 +158,6 @@ export type Stato = {
   /** Le cartelle del desktop guardate dal vivo: se è in ascolto, e su quante. */
   vedetta: { attiva: boolean; cartelle: number }
   suggerimentiDesktop: string[]
-  /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende finché non apre la schermata. */
-  suggerimentiNuovi: number
-  /** I risultati nuovi del vassoio di prova (P6): accendono lo stesso punto. */
-  vassoioNuovi?: number
-  /** Gli ordini fissi accesi il cui ultimo giro è andato storto (E): la riga fissa del motore li dice. */
-  automazioniInGuaio?: { id: string; nome: string; riprova: string | null }[]
   /** P5: le cose da guardare nate dopo l'ultima visita alla Memoria. */
   memoriaNuove?: { quante: number; dove: 'come-lavori' | 'ritratto' | null }
   /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
@@ -438,10 +430,6 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
     if ((corpo as { coda?: unknown }).coda === true) (e as Error & { coda?: boolean }).coda = true
     const giorni = (corpo as { giorni?: unknown }).giorni
     if (typeof giorni === 'number' && giorni > 0) (e as Error & { giorni?: number }).giorni = giorni
-    // il risultato del vassoio superato (P6): il codice e il giorno, per la frase nella lingua giusta
-    const p6 = corpo as { codice?: unknown; quando?: unknown }
-    if (typeof p6.codice === 'string') (e as Error & { codice?: string }).codice = p6.codice
-    if (typeof p6.quando === 'string') (e as Error & { quando?: string }).quando = p6.quando
     /*
      * Il no che non è suo: l'ha deciso l'amministratore della sua azienda.
      *
@@ -623,37 +611,6 @@ export type Proposta =
   | { azione: 'posta.bozza'; bozze: { doc: string; titolo: string; a: string; oggetto: string; corpo: string; perche: string }[] }
   | { azione: 'nota.crea'; note: { titolo: string; testo: string; perche: string }[] }
   | { azione: 'file.crea'; file: { titolo: string; testo: string; perche: string }[] }
-
-/** Cosa un ordine fisso consegna oltre a una riga in lista: una proposta da approvare con un dito. */
-export type Proponi = 'posta.cestina' | 'posta.archivia' | 'posta.bozza' | 'agenda.aggiungi' | 'nota.crea' | 'file.crea'
-
-/** Quando gira un ordine fisso. */
-export type Quando =
-  | { ogni: 'giorno'; ora: number }
-  | { ogni: 'feriali'; ora: number }
-  | { ogni: 'settimana'; giorno: number; ora: number }
-  | { ogni: 'mese'; giorno: number; ora: number }
-  | { quandoArriva: true }
-
-/** Un giro, com'è andato: la ricevuta che resta sull'ordine fisso (E). */
-export type Giro = {
-  quando: string; esito: string; quanti: number; fatti?: number
-  perche?: 'vuoto' | 'niente' | 'condizione' | 'gia' | 'tetto' | 'guaio'
-  risultato?: string
-}
-
-/** «Il mese scorso avrebbe fatto queste N cose»: l'anteprima che si guarda prima di crearlo. */
-export type MesePrima = {
-  ok: true; cose: number; volte: number; documenti: number
-  docs: { id: string; titolo: string; fonte: string; quando: string | null }[]
-  staccati: string[]
-}
-
-/** Una delle quattro di partenza, con il suo interruttore. */
-export type DelPacchetto = { id: string; nome: string; spiega: string; quando: Quando; attrezzi: string[]; accesa: boolean; staccati: string[] }
-
-/** Da dove arrivano le automazioni, e quand'è andata l'ultima volta. */
-export type StatoRicette = { repo: string | null; quando: string | null; guaio: string | null }
 
 /** Una domanda con le risposte già pronte da toccare. */
 export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
@@ -1016,104 +973,6 @@ export type Blocco = { etichetta: string; descrizione: string; valore: string; t
   /** Quando l'ha scritto Myynd. Null = l'ultima parola è tua. */
   daMe?: string | null
 }
-
-/**
- * Un'automazione, come la vede chi la usa.
- *
- * La ricetta arriva con l'azienda e non si modifica da qui: quello che è tuo
- * è se tenerla accesa, e la storia di quello che ha fatto su questa macchina.
- */
-export type Passo = { id: string; tipo: 'condizione' | 'trasforma'; testo: string }
-/** Quello che il costruttore tiene in mano: i campi di una ricetta, prima e dopo il salvataggio. */
-export type RicettaComposta = {
-  nome: string
-  spiega: string
-  quando: Quando
-  guarda: { cerca?: string; soloNuovi?: boolean; ogniVolta?: boolean; limite?: number }
-  fai: string
-  passi?: Passo[]
-  metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto' | 'prompt'; perDocumento?: boolean }
-  attrezzi?: string[]
-  cartella?: string
-  /** Cosa consegna oltre a una riga: niente = una riga in lista. */
-  proponi?: Proponi
-}
-/**
- * Una proposta, con dentro i campi di una ricetta vera.
- *
- * `quando` non è un di più: la scheda suggerita sta nella griglia in mezzo
- * alle altre e in fondo scrive quando girerebbe. Senza, la riga avrebbe dovuto
- * inventarsi un'ora — e accendendola ne sarebbe girata un'altra.
- */
-export type SuggerimentoAutomazione = {
-  id: string; nome: string; spiega: string; quanti: number; esempi: string[]; attrezzi: string[]
-  quando: Quando
-  /** La prova d'idea passata (P6): solo quelle passate si mostrano. */
-  prova?: RiassuntoProva
-}
-
-export type Automazione = {
-  passi?: Passo[]
-  id: string
-  nome: string
-  spiega: string
-  quando: Quando
-  metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto' | 'prompt'; perDocumento?: boolean }
-  accesa: boolean
-  ultima: string | null
-  quante: number
-  esito: string | null
-  guaio: string | null
-  /** L'hai già cambiata tu: sta nella tua cartella, non in quella del pacchetto. */
-  mia: boolean
-  /** Quando girerà da sola. Null = è in pausa, o non va a orologio. */
-  prossima: string | null
-  /** Cosa guarda e cosa fa: sta nel dettaglio, non nella riga. `ogniVolta`: un promemoria, anche senza niente da leggere. */
-  guarda: { cerca?: string; soloNuovi?: boolean; ogniVolta?: boolean; limite?: number }
-  fai: string
-  /** C'è solo su quelle che propongono una cosa da approvare invece di una riga. */
-  proponi?: Proponi
-  /** Cosa può aprire mentre gira. Vuoto = solo l'indice, come una volta. */
-  attrezzi: string[]
-  /** Dove lavora Claude Code, per quelle che ce l'hanno. */
-  cartella?: string
-  /** In che cartella te la sei messa. Null = in nessuna. */
-  raccolta: string | null
-  /**
-   * Come sta, e perché non fa niente quando non fa niente.
-   *
-   * È la risposta a una domanda che la schermata non sapeva porre: un'automazione
-   * che non trova mai niente si scrive uguale a una che funziona su una casella
-   * tranquilla, e senza questa riga la differenza non si vede da nessuna parte.
-   */
-  salute: { stato: 'bene' | 'scollegata' | 'guaio' | 'ferma' | 'muta'; quante: number }
-  /** Il turno è già passato: girerà al primo giro utile, non all'ora scritta. */
-  inRitardo: boolean
-  /** Le ultime volte, dalla più vecchia alla più recente. */
-  storia: Giro[]
-  /** La ricevuta dell'ultimo giro, anche di quelli che non hanno guardato niente (E). */
-  ricevuta?: Giro | null
-  /** Se l'ultimo giro è andato storto: quando riprova da sola. */
-  riprova?: string | null
-  /** Quanti risultati aspettano ancora nel vecchio vassoio di prova (P6). */
-  inVassoio?: number
-  /** L'ultima prova sugli ultimi 30 giorni. */
-  prova?: RiassuntoProva | null
-}
-
-/** Un attrezzo del catalogo, come lo mostra il menù della chiocciola. */
-export type Attrezzo = {
-  nome: string
-  etichetta: string
-  spiega: string
-  tinta: string
-  serve: string | null
-  /** Falso se manca la connessione che gli serve: si vede, spento. */
-  collegato: boolean
-  vuoleCartella: boolean
-}
-
-export type Raccolta = { nome: string; ordine: number }
 
 /** Una cosa uscita da questa macchina, con la data e il destinatario. */
 export type Azione = {
@@ -1713,8 +1572,6 @@ export const api = {
     json<{ ok: true; id: string }>('/api/punto/tieni', { method: 'POST', body: JSON.stringify({ nome, angolo }) }),
   scartaAngolo: (nome: string, angolo: string) =>
     json<{ ok: true }>('/api/punto/scarta', { method: 'POST', body: JSON.stringify({ nome, angolo }) }),
-  avviaDalPunto: (frase: string) =>
-    json<{ ok: true; id: string; nome: string; punto: Punto | null }>('/api/punto/avvia', { method: 'POST', body: JSON.stringify({ frase }) }),
 
   // — i progetti: su cosa lavora, e a cosa punta ciascuno —
   progetti: (collegato?: string) => json<{ progetti: Progetto[] }>(`/api/progetti${collegato ? `?collegato=${encodeURIComponent(collegato)}` : ''}`),
@@ -1822,8 +1679,6 @@ export const api = {
     return json<{ ok: true; motore: string }>('/api/modello/motore', { method: 'POST', body: JSON.stringify({ motore }) })
   },
 
-  // — le automazioni —
-
   /** Cosa scriverebbe negli argomenti da quello che leggi. Non lo scrive: lo propone. */
   proponiArgomenti: () =>
     json<{ ok: true; argomenti: string }>('/api/argomenti/proposta', { method: 'POST' }),
@@ -1831,11 +1686,6 @@ export const api = {
   /** Rimettere in ordine adesso quello che ha imparato di come lavori. */
   consolidaMemoria: () =>
     json<{ ok: true; blocchi: string[]; guardate: number }>('/api/memoria/consolida', { method: 'POST' }),
-
-  /** Le undici del pacchetto: prenderle, o rimandarle indietro. */
-  automazioniDiSerie: (attivo: boolean) =>
-    json<{ ok: true; automazioni: Automazione[] }>('/api/automazioni/diSerie',
-      { method: 'POST', body: JSON.stringify({ attivo }) }),
 
   /**
    * Scaricare il proprio Myynd. Passa da `fetch` e non da un link.
@@ -1913,7 +1763,7 @@ export const api = {
     return { nome: `myynd-${oggi}.myynd`, dati: await r.blob() }
   },
 
-  async caricaTrasloco(file: File): Promise<{ documenti: number; automazioni: number }> {
+  async caricaTrasloco(file: File): Promise<{ documenti: number }> {
     const r = await fetch('/api/trasloco', {
       method: 'POST',
       headers: { authorization: `Bearer ${sessione.token()}`, 'content-type': 'application/octet-stream' },
@@ -1924,101 +1774,12 @@ export const api = {
     return corpo
   },
 
-  /** Senza `rifai` non costa niente: il server risponde con quelli di ieri finché sono freschi. */
-  suggerimentiAutomazioni: (rifai = false) =>
-    json<{ suggerimenti: SuggerimentoAutomazione[] }>(`/api/automazioni/suggerimenti${rifai ? '?rifai=1' : ''}`),
-  adottaAutomazione: (id: string) => json<{ id: string; automazioni: Automazione[] }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'POST' }),
-  ignoraAutomazione: (id: string) => json<{ ok: true }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  /** Le proposte sono state mostrate: il fulmine in colonna si spegne. */
-  segnaSuggerimentiVisti: () => json<{ nuovi: number }>('/api/scoperte/viste', { method: 'POST' }),
   regoleMittenti: () => json<{ rules: SenderRule[] }>('/api/posta/regole'),
   aggiungiRegolaMittente: (sender: string) => json<{ rules: SenderRule[] }>('/api/posta/regole', { method: 'POST', body: JSON.stringify({ sender }) }),
   rimuoviRegolaMittente: (id: string) => json<{ rules: SenderRule[] }>(`/api/posta/regole/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   iniziativa: () => json<{ attiva: boolean; inPausa: boolean; oggi: number; limiteGiornaliero: number; prossima: number | null }>('/api/iniziativa'),
   impostaIniziativa: (attiva: boolean) => json<{ attiva: boolean; inPausa: boolean; oggi: number; limiteGiornaliero: number; prossima: number | null }>('/api/iniziativa', { method: 'PATCH', body: JSON.stringify({ attiva }) }),
   preparaInAnticipo: () => json<{ compito: string | null }>('/api/iniziativa/prepara', { method: 'POST' }),
-  automazioni: () => json<{ automazioni: Automazione[]; ricette: StatoRicette }>('/api/automazioni'),
-
-  /** Va a vedere adesso se il repository ne ha di nuove. */
-  aggiornaRicette: () =>
-    json<{ ok: true; nuove: number; cambiate: number; tolte: number; automazioni: Automazione[]; ricette: StatoRicette }>(
-      '/api/automazioni/aggiorna', { method: 'POST' }),
-
-  /** La frase composta, non ancora scritta: torna la ricetta da mettere sui binari. */
-  componiAutomazione: (descrizione: string, attrezzi?: string[]) =>
-    json<{ ok: true; ricetta: RicettaComposta }>('/api/automazioni/componi',
-      { method: 'POST', body: JSON.stringify({ descrizione, attrezzi }) }),
-  /** Una ricetta assemblata sui binari, salvata: nasce accesa, dal vivo (E). */
-  nuovaAutomazione: (ricetta: Record<string, unknown>) =>
-    json<{ ok: true; id: string; automazioni: Automazione[] }>('/api/automazioni/nuova',
-      { method: 'POST', body: JSON.stringify(ricetta) }),
-
-  creaAutomazione: (descrizione: string, attrezzi?: string[]) =>
-    json<{ ok: true; id: string; automazioni: Automazione[] }>('/api/automazioni',
-      { method: 'POST', body: JSON.stringify({ descrizione, attrezzi }) }),
-
-  cambiaAutomazione: (id: string, patch: Record<string, unknown>) =>
-    json<{ ok: true; automazioni: Automazione[] }>(`/api/automazioni/${encodeURIComponent(id)}`,
-      { method: 'PATCH', body: JSON.stringify(patch) }),
-
-  buttaAutomazione: (id: string) =>
-    json<{ ok: true; automazioni: Automazione[] }>(`/api/automazioni/${encodeURIComponent(id)}`,
-      { method: 'DELETE' }),
-
-  attrezzi: () => json<{ attrezzi: Attrezzo[]; cartelle: string[] }>('/api/attrezzi'),
-
-  raccolte: () => json<{ raccolte: Raccolta[] }>('/api/raccolte'),
-
-  creaRaccolta: (nome: string) =>
-    json<{ ok: true; raccolte: Raccolta[] }>('/api/raccolte',
-      { method: 'POST', body: JSON.stringify({ nome }) }),
-
-  rinominaRaccolta: (da: string, nome: string) =>
-    json<{ ok: true; raccolte: Raccolta[]; automazioni: Automazione[] }>(
-      `/api/raccolte/${encodeURIComponent(da)}`,
-      { method: 'PATCH', body: JSON.stringify({ nome }) }),
-
-  buttaRaccolta: (nome: string) =>
-    json<{ ok: true; raccolte: Raccolta[]; automazioni: Automazione[] }>(
-      `/api/raccolte/${encodeURIComponent(nome)}`, { method: 'DELETE' }),
-
-  mettiInRaccolta: (id: string, raccolta: string | null) =>
-    json<{ ok: true; automazioni: Automazione[]; raccolte: Raccolta[] }>(
-      `/api/automazioni/${encodeURIComponent(id)}/raccolta`,
-      { method: 'POST', body: JSON.stringify({ raccolta }) }),
-
-  ottimizzaAutomazione: (id: string) =>
-    json<{ ok: true; id: string; automazioni: Automazione[] }>(
-      `/api/automazioni/${encodeURIComponent(id)}/ottimizza`, { method: 'POST' }),
-
-  riscriviAutomazione: (id: string, richiesta: string) =>
-    json<{ ok: true; id: string; automazioni: Automazione[] }>(
-      `/api/automazioni/${encodeURIComponent(id)}/riscrivi`,
-      { method: 'POST', body: JSON.stringify({ richiesta }) }),
-
-  accendiAutomazione: (id: string, accesa: boolean) =>
-    json<{ ok: true; automazioni: Automazione[] }>(`/api/automazioni/${encodeURIComponent(id)}/accendi`,
-      { method: 'POST', body: JSON.stringify({ accesa }) }),
-
-  /**
-   * Il mese prima di una ricetta non ancora scritta: sola lettura (E). Ha
-   * preso il posto di «cosa troverebbe adesso», che guardava un istante solo.
-   */
-  mesePrima: (ricetta: Record<string, unknown>) =>
-    json<MesePrima>('/api/automazioni/mese', { method: 'POST', body: JSON.stringify({ ricetta }) }),
-  /** Il mese prima di una che c'è già. */
-  meseDi: (id: string) => json<MesePrima>(`/api/automazioni/${encodeURIComponent(id)}/mese`),
-  /** Le quattro di partenza, e il loro interruttore. */
-  pacchetto: () => json<{ pacchetto: DelPacchetto[]; offerta: boolean }>('/api/automazioni/pacchetto'),
-  dalPacchetto: (id: string, accesa: boolean) =>
-    json<{ ok: true; pacchetto: DelPacchetto[]; offerta: boolean; automazioni: Automazione[] }>(`/api/automazioni/pacchetto/${encodeURIComponent(id)}`,
-      { method: 'POST', body: JSON.stringify({ accesa }) }),
-  /** «Non ora» sulla prima pagina: le quattro di partenza non si offrono più lì. */
-  pacchettoVisto: () => json<{ ok: true }>('/api/automazioni/pacchetto-visto', { method: 'POST' }),
-  /** Falla girare adesso invece di aspettare la sua ora. */
-  automazioneAdesso: (id: string) =>
-    json<{ ok: true; esito: 'fatta' | 'niente' | 'gia' | 'saltata'; automazioni: Automazione[] }>(
-      `/api/automazioni/${encodeURIComponent(id)}/adesso`, { method: 'POST' }),
 
   // — la rassegna —
   //
@@ -2473,50 +2234,6 @@ export const memoriaP5 = {
 }
 // — P5: fine —
 
-// — P6: inizio —
-// la prova sugli ultimi 30 giorni e il vassoio dei primi 14 (server/collaudo.ts, server/vassoio.ts)
-
-export type VoceProva = {
-  doc: string | null; titolo: string; chi: string | null; quando: string | null
-  verdetto: 'giusto' | 'sbagliato' | 'incerto'; da: 'tuo' | 'mosse' | 'modello' | null; perche: string | null
-  estratto: string | null
-}
-export type ProvaPoi = { cosa: 'risposto' | 'fatto' | 'riga' | 'scartato'; quando: string }
-export type EsitoVista = {
-  id: string; quando: string; anche: string[]; tipo: 'riga' | 'proposta'; testo: string; voci: VoceProva[]
-  bozza: string | null; ipotesi: string[]; chiede: string | null; prova: ProvaPoi | null
-  risposta: { doc: string; quando: string } | null; stato: string; suo: 'giusto' | 'sbagliato' | null; scrive: boolean
-  forma: 'documento' | 'riga' | 'proposta'
-}
-export type RiassuntoProva = {
-  id: string; stato: string; esito: 'pronta' | 'poco' | 'non passa' | null; giusti: number; giudicati: number
-  tue: number; documenti: number; risultati: number; bozze: number; al: string | null; cambiata: boolean
-  parziale: ('agenda' | 'codice')[]; davanti: string | null
-}
-export type ProvaVista = RiassuntoProva & { esiti: EsitoVista[]; altri: number; puoScrivere: boolean }
-export type GruppoVassoio = { automazione: string; nome: string; esiti: EsitoVista[] }
-
-export const apiP6 = {
-  provaAutomazione: (id: string) =>
-    json<{ prova: ProvaVista }>(`/api/automazioni/${encodeURIComponent(id)}/prova`, { method: 'POST' }),
-  ultimaProva: (id: string) =>
-    json<{ prova: ProvaVista | null }>(`/api/automazioni/${encodeURIComponent(id)}/prova`),
-  prova: (id: string) => json<ProvaVista>(`/api/prove/${encodeURIComponent(id)}`),
-  giudicaEsito: (id: string, suo: 'giusto' | 'sbagliato' | null) =>
-    json<{ prova: RiassuntoProva }>(`/api/prove/esiti/${encodeURIComponent(id)}/giudizio`, { method: 'POST', body: JSON.stringify({ suo }) }),
-  bozzaEsito: (id: string) =>
-    json<{ ok: true }>(`/api/prove/esiti/${encodeURIComponent(id)}/bozza`, { method: 'POST' }),
-  vassoio: () => json<{ gruppi: GruppoVassoio[] }>('/api/vassoio'),
-  vassoioVisto: () => json<{ ok: true }>('/api/vassoio/visto', { method: 'POST' }),
-  inLista: (id: string) =>
-    json<{ compiti: unknown; vassoio: GruppoVassoio[] }>(`/api/vassoio/${encodeURIComponent(id)}/lista`, { method: 'POST' }),
-  scartaEsito: (id: string) =>
-    json<{ vassoio: GruppoVassoio[] }>(`/api/vassoio/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  suggerimentiConProva: (rifai = false) =>
-    json<{ suggerimenti: SuggerimentoAutomazione[]; inProva?: number }>(`/api/automazioni/suggerimenti${rifai ? '?rifai=1' : ''}`)
-}
-// — P6: fine —
-
 // — P7: inizio —
 /** Una fonte di una risposta, ancorata: chi, quando, e il passo che regge la frase. «[M] …» per la memoria. La stessa forma di `Fonte` in src/citazioni.ts e di `FonteAncorata` sul server. */
 export type FonteChat = {
@@ -2565,7 +2282,7 @@ export type VoceResoconto = {
   chiave: string; genere: GenereResoconto; titolo: string; chi?: string | null; quando: string
   apre: { doc: string } | { compito: string } | null
   anteprima?: string | null; minuti: number; quanti?: number | null; riscritta?: boolean; preparata?: boolean
-  scade?: string | null; presa?: 'fatta' | 'nella lista' | 'vista' | null; prova: string; automazione?: string | null
+  scade?: string | null; presa?: 'fatta' | 'nella lista' | 'vista' | null; prova: string
   cestino?: boolean; perso?: boolean
 }
 export type NumeriResoconto = { mail: number; lavori: number; scadenze: number; segnalate: number; minuti: number }
@@ -2578,7 +2295,6 @@ export type Resoconto = {
   notato: { chiave: string; genere: string; dati: Record<string, string | number> | null; testoSuo: string | null; stato: string }[]
   segnalate: { utili: number; viste: number; mancate: number } | null
   voci: VoceResoconto[]
-  automazioni: { id: string; nome: string; usate: number; prodotte: number }[]
   copertura: { postaInviata: boolean; bozzeInCasella: number }
   vuoto: boolean
 }

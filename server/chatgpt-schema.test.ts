@@ -3,7 +3,28 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { rigido, senzaNulli } from './chatgpt.ts'
-import { formaRicetta } from './automazioni.ts'
+
+/** Uno schema con campi richiesti e facoltativi, un elenco e un oggetto dentro. */
+const formaRicetta = () => ({
+  type: 'object',
+  required: ['nome', 'ora', 'cerca', 'passi', 'en'],
+  properties: {
+    nome: { type: 'string' },
+    giorno: { type: 'number' },
+    ora: { type: 'number' },
+    cerca: { type: 'string' },
+    cartella: { type: 'string' },
+    passi: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['id', 'tipo', 'testo'],
+        properties: { id: { type: 'string' }, tipo: { type: 'string', enum: ['condizione', 'azione'] }, testo: { type: 'string' } }
+      }
+    },
+    en: { type: 'object', required: ['nome'], properties: { nome: { type: 'string' }, cerca: { type: 'string' } } }
+  }
+})
 
 test('ogni proprietà diventa richiesta, e quella facoltativa ammette null', () => {
   const s = rigido(formaRicetta() as Record<string, unknown>) as { required: string[]; properties: Record<string, { type: unknown; enum?: unknown[] }>; additionalProperties: boolean }

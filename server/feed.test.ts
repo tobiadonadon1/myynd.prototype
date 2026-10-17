@@ -29,7 +29,6 @@ const store = await import('./store.ts')
 const claude = await import('./claude.ts')
 const compatibile = await import('./compatibile.ts')
 const compiti = await import('./compiti.ts')
-const automazioni = await import('./automazioni.ts')
 const progetti = await import('./progetti.ts')
 const jev = await import('./jev.ts')
 const giudizi = await import('./giudizi.ts')
@@ -211,13 +210,11 @@ test('con tutto già sul feed non si chiama nessun modello', async () => {
   assert.equal(ricevute.length, 0, 'ha chiamato il modello senza niente da leggere')
 })
 
-test('senza un motore la lettura non finge: torna vuota, e scriversi un’automazione lo dice', async () => {
+test('senza un motore la lettura non finge: torna vuota', async () => {
   cfg.scrivi({})
   compatibile.usaRete(null)
   store.salvaDocumenti([doc('posta:INBOX:30', 'Qualcosa')])
   assert.deepEqual(await claude.generaFeed(), [])
-  await assert.rejects(automazioni.daUnaFrase('Ogni lunedì dimmi quali preventivi sono senza risposta'),
-    /Collega Claude e potrò lavorarci/)
 })
 
 // — cosa non arriva nemmeno al modello —

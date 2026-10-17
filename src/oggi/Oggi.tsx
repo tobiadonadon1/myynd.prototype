@@ -27,7 +27,7 @@ import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito, type ProjectExecutionReport, type ProjectRuntime } from '../api'
-import { nomePorta, portaAlleFonti, portaAllOrdineFisso, portaAlProgetto, portaInChat, siPuoAprireLeFonti, siPuoFareOgniSettimana, siPuoParlarne } from '../vals'
+import { nomePorta, portaAlleFonti, portaAlProgetto, portaInChat, siPuoAprireLeFonti, siPuoParlarne } from '../vals'
 import { Calendario } from './Calendario'
 import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
@@ -38,7 +38,7 @@ import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-emai
 import { RigaIpotesi } from './RigaIpotesi'
 import { LasciaConRagione, RigaGuadagnata, RigaImparato } from './Imparato'
 import { bloccoDi, haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
-import { approva, fraseOgniSettimana } from '../automazioni/quando'
+import { approva } from './approva'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -465,21 +465,6 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                     <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 1 }}>{t('Se è un obiettivo e non un compito')}</div>
                   </Hov>
                 )}
-                {/* una cosa che torna ogni settimana diventa un ordine fisso, già scritto (E) */}
-                {siPuoFareOgniSettimana() && (
-                  <Hov as="button" type="button" role="menuitem"
-                    onClick={() => { setMenu(false); portaAllOrdineFisso({ frase: fraseOgniSettimana(c.testo), testo: c.testo }) }}
-                    onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
-                      padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
-                      color: 'var(--inchiostro)', fontSize: '13px'
-                    }}
-                    hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
-                    <div>{t('Fallo ogni settimana')}</div>
-                    <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 1 }}>{t('Diventa un ordine fisso')}</div>
-                  </Hov>
-                )}
               </MenuGiu>
             )}
           </span>
@@ -693,8 +678,8 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
 
   /*
    * Le voci, una per una, come le eseguirà il server: quello che si vede è
-   * quello che succede. Le proposte degli ordini fissi (E) hanno la stessa
-   * forma: le risposte da mettere fra le bozze, gli eventi, una nota, un file.
+   * quello che succede. Tutte le proposte hanno la stessa forma: le risposte
+   * da mettere fra le bozze, gli eventi, una nota, un file.
    */
   const voci: { chiave: string; titolo: string; perche: string; testo?: string }[] =
     p.azione === 'posta.bozza' ? p.bozze.map(b => ({ chiave: b.doc, titolo: `${b.oggetto} · ${b.a}`, perche: b.perche, testo: b.corpo }))

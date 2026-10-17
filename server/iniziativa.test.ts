@@ -130,7 +130,7 @@ test('actual task queue refuses publication when the user answers during model c
   initiative.imposta(true); store.salvaDocumenti([email('race', { filo: 'race-thread' })])
   let native: boolean | undefined
   compiti.perProva({
-    svolgi: async (_t, _n, _m, concessi, _c, _p, _d, _s, execution) => {
+    svolgi: async (_t, _n, _m, concessi, _c, _p, _d, execution) => {
       native = execution?.nativa; assert.deepEqual(concessi, [])
       return { testo: 'Dear Jane, thank you for your proposal. Here is my draft feedback.', fonti: [] }
     },

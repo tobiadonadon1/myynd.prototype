@@ -36,7 +36,6 @@ import { projectMemoryContext } from './project-memory.ts'
 import { fonteValida } from './iniziativa.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import * as mailDelMac from './bozza-mail-mac.ts'
-import { eChiusa } from './prova-chiusa.ts'
 import { senzaTrattini, tutteLeDomande } from './testo.ts'
 import { giudica, prossimoPasso, simili } from './revisione-lavoro.ts'
 import * as mani from './mani.ts'
@@ -181,20 +180,6 @@ export function annunciaCollegamento(aTutti = false, o: { riprendi?: boolean } =
 export function annunciaSalute(o: { guarite?: string[] } = {}) {
   annuncia({ fase: 'collegamento' })
   if (o.guarite?.length) void riprendiBloccati().catch(() => {})
-}
-
-/**
- * «Questa riga è pronta»: si apre da sola, come una bozza appena scritta.
- *
- * Serve alle automazioni che propongono. Il loro lavoro non passa da `affida()`
- * — non c'è niente da far scrivere al modello, la scelta è già fatta — quindi
- * senza questa riga la proposta nascerebbe chiusa: una riga in più in lista,
- * uguale a tutte le altre, e nessun modo di capire che dentro c'è qualcosa che
- * aspetta solo un sì.
- */
-export function annunciaPronto(id: string) {
-  const c = store.compito(id)
-  if (c) annuncia({ fase: 'pronto', id, compito: c })
 }
 
 /**
@@ -448,11 +433,7 @@ export function perProva(f: Partial<Ferri> | null) {
   ferri = f ? { ...VERI, ...f } : VERI
 }
 
-/**
- * C'è lavoro dal vivo di questa persona, in fila o in corso? (P6)
- *
- * La prova e il vassoio aspettano: il suo lavoro affidato viene prima.
- */
+/** C'è lavoro dal vivo di questa persona, in fila o in corso? Il turno aspetta che non ce ne sia. */
 export function occupatoPer(utente: string): boolean {
   return inCorsoDi.has(utente) || coda.some(v => (v.utente ?? '') === utente)
 }
@@ -573,8 +554,8 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
      * materiale (`materialeDelProgetto`), e la cartella arriva a `svolgi` come
      * percorso: se la riga è lavoro di codice e Claude Code c'è, è `svolgi`
      * che si dà la mano `lavora_nel_codice` (vedi `mani.ts`), che lavora in
-     * una copia. Un'automazione ha già i suoi attrezzi e la sua cartella, e
-     * non si toccano.
+     * una copia. Una riga che ha già i suoi attrezzi e la sua cartella li
+     * tiene.
      */
     const materiale = progetto && progetto.stato !== 'chiuso' ? materialeDelProgetto(progetto) : null
     const cartella = dato?.cartella ?? materiale?.cartella?.percorso ?? null
@@ -600,7 +581,6 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean) {
       // la riga può essere nata da un documento preciso — «rispondere a
       // Rossi» — e allora la bozza parte da lì, non da una ricerca
       c.doc,
-      dato,
       {
         nativa, signal: controller.signal, taskId: c.id,
         // F9 · di notte una carta del turno non posa il codice nel progetto vero: resta nella copia
@@ -826,15 +806,13 @@ export function turnoAlLavoro(utente: string | null = chi.adesso()): boolean {
 export const TEMPO_FINITO = 'Ci ha messo più del tempo che aveva. Riaffidamela, o dividila in due.'
 
 /**
- * Quello che succede dopo la stesura (P6): il file, la verifica delle fonti,
+ * Quello che succede dopo la stesura: il file, la verifica delle fonti,
  * il risultato sulla riga, la domanda o la mail, l'annuncio, la cosa dopo.
  *
- * Era la seconda metà di `svolgiUno`, nello stesso ordine. Sta qui a parte
- * perché la stessa sequenza serve quando un risultato del vassoio di prova
- * va in lista: una bozza promossa fa esattamente quello che fa una bozza
- * nata dal vivo. Le misure di P3 restano dove erano, intrecciate ai passi.
+ * Era la seconda metà di `svolgiUno`, nello stesso ordine. Le misure di P3
+ * restano dove erano, intrecciate ai passi.
  */
-export async function dopoLaStesura(
+async function dopoLaStesura(
   c: store.Compito,
   stesa: Stesa,
   progetto: progetti.Progetto | null,
@@ -843,9 +821,8 @@ export async function dopoLaStesura(
   const id = c.id
   const nota = o.nota
   const v = o.voce
-  const dato = c.attrezzi
   let { testo } = stesa
-  const { fonti, verificaDocumenti, eseguito, consegna, mossa, genere, domanda, lette, verdetto, giri } = stesa
+  const { fonti, eseguito, consegna, mossa, genere, domanda, lette, verdetto, giri } = stesa
   const fatti = stesa.fatti
   /** Il lavoro per intero, prima che la riga ne tenga solo la chiusura: la cosa dopo si cerca da qui. */
   const lavoroIntero = testo
@@ -933,13 +910,6 @@ export async function dopoLaStesura(
    */
   const detto = mossa === 'chiedi' && domanda ? [stesa.visto, tutteLeDomande(domanda, 1)].filter(Boolean).join('\n') : testo
 
-  // Classification is asynchronous too: feedback arriving after drafting
-  // must still win before an automated current-email summary becomes ready.
-  const controlla = verificaDocumenti ?? [...fonti.map(f => f.id), ...(c.doc ? [c.doc] : [])]
-  if (!claude.verificaFontiSelezione(controlla, dato, `${c.testo}\n${nota ?? ''}`)) {
-    throw new Error('Una fonte è stata completata, scartata o non è più pertinente. Rileggi le fonti prima di riprovare.')
-  }
-
   if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
     // Withdraw automatic work without inventing user dismissal feedback.
     store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
@@ -965,7 +935,7 @@ export async function dopoLaStesura(
   if (revisione) console.info(`myynd · revisione · ${id} · ${revisione.esito} · ${giri} giri`)
   ritentati.delete(chiave(id))
 
-  const tipo = tipoDiLavoro({ testo: c.testo, modo: c.modo, consegna: consegna ?? consegnaFile, email: messaggio, codice: !!dato?.cartella || leManiSulCodice(c.testo, c.nota) })
+  const tipo = tipoDiLavoro({ testo: c.testo, modo: c.modo, consegna: consegna ?? consegnaFile, email: messaggio, codice: !!c.attrezzi?.cartella || leManiSulCodice(c.testo, c.nota) })
   if (mossa === 'chiedi') {
     /*
      * La domanda scritta: si conta qui e solo qui, sulla riga e nelle
@@ -1306,8 +1276,7 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
      * Solo se la carta è ancora pronta, e non è stata richiamata.
      */
     try {
-      // dentro una prova (P6) la casella è chiusa apposta: non è un guasto da mostrare
-      if (email && !eChiusa(e) && !richiamati.has(chiave(c.id)) && store.compito(c.id)?.stato === 'pronto') {
+      if (email && !richiamati.has(chiave(c.id)) && store.compito(c.id)?.stato === 'pronto') {
         store.scriviEmailCompito(c.id, { ...email, casella: { stato: 'errore', errore: message } })
         annunciaCambio()
       }

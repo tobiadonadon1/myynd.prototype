@@ -25,7 +25,7 @@ import { giornoLocale } from './giorni'
 import { secchioVivo } from './secchi'
 import { preparaApertura } from '../navigazione.ts'
 import { fraseSeguita, rigaImparata } from '../gemello-frasi.ts'
-import { approvata } from '../automazioni/quando'
+import { approvata } from './approva'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -949,7 +949,7 @@ export function useCompiti(
     perSecchio,
     // «chiede» conta come da fare: è una riga che aspetta te, e dire «tutto
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima
-    // e una proposta di un ordine fisso da approvare è una cosa da fare: «Tutto pronto» sopra a
+    // e una proposta da approvare è una cosa da fare: «Tutto pronto» sopra a
     // tre righe «da approvare» diceva il contrario della lista
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato) || (c.stato === 'pronto' && !!c.proposta)).length,
     appenaFinite, appenaCorrette,

@@ -10,15 +10,14 @@
 //   · **la firma di WhatsApp.** È l'unica difesa di un indirizzo che, per come
 //     è fatta l'API di Meta, deve stare aperto a internet. Se si potesse
 //     aggirare, chiunque scriverebbe nella mente di qualcun altro.
-//   · **il recinto delle automazioni.** `attrezzi.ts` e `automazioni.ts`
-//     tenevano due elenchi della stessa corrispondenza, e uno solo veniva
-//     aggiornato. Il difetto non dà errore: dà un'automazione che dichiara di
+//   · **il recinto delle fonti.** Due elenchi della stessa corrispondenza
+//     divergono, e il difetto non dà errore: dà una riga che dichiara di
 //     guardare una fonte e le guarda tutte.
 //   · **le scritte di Slack.** `<@U04J8KQ2M>` indicizzato com'è vuol dire che
 //     cercare il nome di una persona non trova la conversazione con quella
 //     persona — cioè la ricerca che si farà più spesso.
 //   · **il catalogo.** Una fonte nuova che porta documenti e che nessuno ha
-//     messo nel recinto è una fonte che nessuna automazione può restringere.
+//     messo nel recinto è una fonte che nessuna riga può restringere.
 //
 //   node --test server/fonti.test.ts
 
@@ -179,9 +178,8 @@ test('ogni fonte che porta documenti è raggiungibile da un attrezzo', () => {
    * È il difetto che non dà errore.
    *
    * Una fonte nuova collegata, che riempie l'indice, e nessun attrezzo che la
-   * nomini: nessuna automazione può dichiararla, quindi nessuna può
-   * *restringersi* a lei — e chi ne scrive una che dovrebbe guardare lì si
-   * ritrova una cosa che gira ogni mattina guardando altrove.
+   * nomini: nessuna riga può dichiararla, quindi nessuna può
+   * *restringersi* a lei.
    */
   const raggiunte = new Set(attrezzi.ATTREZZI.flatMap(a => attrezzi.fontiDi(a.nome)))
   const orfane = registro.FONTI.filter(f => !raggiunte.has(f))
@@ -220,7 +218,7 @@ test('gli attrezzi non hanno due volte lo stesso nome né la stessa tinta', () =
   const nomi = attrezzi.ATTREZZI.map(a => a.nome)
   assert.equal(new Set(nomi).size, nomi.length, 'due attrezzi con lo stesso nome')
   // la tinta è come si riconosce una pastiglia da lontano: due uguali vuol
-  // dire due fonti che sembrano la stessa cosa sulla scheda di un'automazione
+  // dire due fonti che sembrano la stessa cosa
   const tinte = attrezzi.ATTREZZI.map(a => a.tinta)
   assert.equal(new Set(tinte).size, tinte.length, 'due attrezzi con la stessa tinta')
 })

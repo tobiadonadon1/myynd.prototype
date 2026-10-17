@@ -704,7 +704,7 @@ test('l’istruzione dice le quattro sezioni, dove finiscono i compiti, e la lin
   assert.match(istr, /Un file sul disco è una notizia solo se/)
   assert.match(istr, /dalle dieci alle dodici parole al massimo/)
   assert.match(istr, /non compare MAI la lineetta lunga/)
-  // quello che il punto non racconta più: le mosse, e le automazioni da accendere
+  // quello che il punto non racconta più: le mosse, e gli avvii
   assert.doesNotMatch(istr, /«adesso»/)
   assert.doesNotMatch(istr, /«avvii»/)
 })
@@ -1051,9 +1051,9 @@ test('quello che ha fatto Myynd da solo non arriva più al modello', async () =>
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   seminaLista()
-  store.registraAzione({ tipo: 'automazione', cosa: 'Priorità in arrivo', esito: 'fatta' })
+  store.registraAzione({ tipo: 'lettura', cosa: 'Priorità in arrivo', esito: 'fatta' })
   store.registraAzione({ tipo: 'email', cosa: 'Preventivo aggiornato', verso: 'bianchi@esempio.it', esito: 'fatta', compito: 'c1' })
-  store.registraAzione({ tipo: 'automazione', cosa: 'Rassegna del mattino', esito: 'fallita' })
+  store.registraAzione({ tipo: 'lettura', cosa: 'Rassegna del mattino', esito: 'fallita' })
 
   const ricevute = fornitoreFinto()
   await punto.punto({}, adesso())
@@ -1366,7 +1366,7 @@ test('un punto scritto prima della regola perde la freccia alla prima lettura', 
       progetti: [{ id: p.id, nome: 'Myynd', novita: 'La cartella si è mossa.', doc: 'lavoro:/Users/prova/x-engine' }],
       github: [], daLeggere: [], risposte: [], aggiornamenti: []
     },
-    progetti: [], scartati: [], chiamate: [], avviate: []
+    progetti: [], scartati: [], chiamate: [], avviate: ['un campo di prima, che si ignora']
   }))
   const e = await punto.punto({}, adesso())
   assert.equal(e.punto?.progetti[0]?.doc ?? null, null, 'la freccia si decide a ogni lettura, non una volta per sempre')

@@ -1,35 +1,16 @@
 import { COLORE_NOTE } from './colori-fonti.ts'
-// Quello che un'automazione ha il permesso di aprire.
+// Quello che una riga ha il permesso di aprire.
 //
-// Fino a qui un'automazione guardava «l'indice»: un mucchio solo con dentro la
-// posta, i file del disco e Notion, frugato con delle parole. Funziona finché
-// tutte le automazioni vogliono la stessa cosa, e smette di funzionare al primo
-// «guarda solo nella cartella dei progetti» — perché non c'era modo di dirlo.
+// Gli attrezzi sono un **vocabolario chiuso**: una riga non descrive *come*
+// leggere la posta, dice `posta.leggi`, un nome che questo file sa tradurre in
+// una funzione. Non può inventarne uno: se non è in questa tabella non esiste.
 //
-// Qui gli attrezzi diventano un **vocabolario chiuso**, e la scelta è la stessa
-// che regge tutto il resto di `automazioni.ts`: una ricetta è dati, non codice.
-// Un'automazione non descrive *come* leggere la posta, dice `posta.leggi` — un
-// nome, che questo file sa tradurre in una funzione. Non può inventarne uno:
-// se non è in questa tabella non esiste, e `valida()` rifiuta la ricetta prima
-// che tocchi il disco.
-//
-// Perché conta più qui che altrove: un attrezzo è un permesso. La differenza
-// fra un'automazione che legge la posta e una che non può è tutta in una riga
-// di JSON che una persona vede scritta sulla sua scheda, e che può togliere. Se
-// gli attrezzi fossero impliciti — «il modello si arrangia con quello che
-// trova» — quella riga non ci sarebbe, e nessuno saprebbe cosa quell'automazione
-// apre alle sette di mattina mentre dorme.
-//
-// E il permesso vale fino in fondo, non solo per l'attrezzo che porta il nome.
-// Per un po' `cerca` e `apri` — i due attrezzi che ogni bozza ha comunque —
-// hanno guardato l'indice intero anche dentro un'automazione che dichiarava
-// una fonte sola. Il ragionamento era difendibile: se non può leggere il
-// listino, inventa un prezzo. Ma la conclusione non seguiva, perché fra
-// «leggi anche quello che non ti è stato concesso» e «inventa» c'è la terza
-// strada — **dire che non puoi** — ed è quella che adesso gli si insegna
-// (`conQuali` in `claude.ts`). Il recinto lo costruisce `recintoDi` da questa
-// stessa tabella `FONTI`, così la riga che una persona legge sulla scheda è
-// esattamente quello che succede alle sette di mattina.
+// Un attrezzo è un permesso, e vale fino in fondo, non solo per l'attrezzo che
+// porta il nome: anche `cerca` e `apri`, i due che ogni bozza ha comunque,
+// restano dentro il recinto. Fra «leggi anche quello che non ti è stato
+// concesso» e «inventa» c'è la terza strada, **dire che non puoi**, ed è
+// quella che gli si insegna (`conQuali` in `claude.ts`). Il recinto lo
+// costruisce `recintoDi` da questa stessa tabella `FONTI`.
 //
 // **Tutti leggono, nessuno scrive.** Non è una fase di sviluppo: è la regola.
 // L'unico che si avvicina a fare qualcosa è `claude.lavora`, e ci si avvicina
@@ -39,7 +20,6 @@ import { COLORE_NOTE } from './colori-fonti.ts'
 // modifica qualcosa da solo alle sette di mattina, questo prodotto ha smesso di
 // essere affidabile.
 
-import * as provaChiusa from './prova-chiusa.ts'
 import type Anthropic from '@anthropic-ai/sdk'
 import { leggi } from './config.ts'
 import * as store from './store.ts'
@@ -139,7 +119,7 @@ export const ATTREZZI: Attrezzo[] = [
   },
   {
     nome: 'desktop.leggi',
-    // si chiama come la fonte, «Il mio Mac» o «Il mio PC»: nella frase di un'automazione è quello che legge
+    // si chiama come la fonte, «Il mio Mac» o «Il mio PC»
     etichetta: process.platform === 'darwin' ? { it: 'il mio Mac', en: 'my Mac' } : { it: 'il mio PC', en: 'my PC' },
     spiega: { it: 'Legge i file nelle cartelle che hai collegato.', en: 'Reads files in your connected folders.' },
     serve: 'desktop',
@@ -319,7 +299,7 @@ export const ATTREZZI: Attrezzo[] = [
           cartella: {
             type: 'string',
             description:
-              'La cartella del progetto. Lasciala vuota per usare quella scritta nell\'automazione, ' +
+              'La cartella del progetto. Lasciala vuota per usare quella scritta sulla riga, ' +
               'che è quasi sempre quella giusta.'
           }
         },
@@ -331,15 +311,7 @@ export const ATTREZZI: Attrezzo[] = [
 
 const PER_NOME = new Map(ATTREZZI.map(a => [a.nome, a]))
 
-/**
- * Le fonti dell'indice che questo attrezzo apre. Vuoto = non legge documenti.
- *
- * Esiste perché `automazioni.ts` teneva una copia a mano di questa stessa
- * tabella per costruire il recinto della pescata iniziale. Due elenchi della
- * stessa cosa divergono, e qui divergere vuol dire un'automazione che dichiara
- * di guardare una fonte sola e ne riceve otto — senza un errore, e con la
- * dichiarazione sulla scheda ridotta a una scritta.
- */
+/** Le fonti dell'indice che questo attrezzo apre. Vuoto = non legge documenti. */
 export function fontiDi(n: Nome): string[] {
   return FONTI[n] ?? []
 }
@@ -351,14 +323,11 @@ export function fontiDi(n: Nome): string[] {
  * stessa risposta. Nessun attrezzo dichiarato — un compito scritto a mano — non
  * ha mai promesso niente a nessuno. E attrezzi dichiarati che *non leggono
  * l'indice* (`chat.leggi`, `claude.lavora`) non sono una dichiarazione sulle
- * fonti: restringere a zero un'automazione che ha chiesto solo di far lavorare
+ * fonti: restringere a zero una riga che ha chiesto solo di far lavorare
  * Claude Code vorrebbe dire spegnerla.
  *
- * Un elenco vuol dire quello e solo quello — per la pescata iniziale
- * (`automazioni.ts`) come per `cerca` e `apri` (`claude.ts`). Le due strade
- * chiamano questa funzione invece di tenere ciascuna la sua copia della
- * tabella: due elenchi della stessa cosa divergono sempre, e qui divergere vuol
- * dire una scheda che dichiara una fonte sola mentre ne apre otto.
+ * Un elenco vuol dire quello e solo quello, anche per `cerca` e `apri`
+ * (`claude.ts`).
  */
 export function recinto(nomi: Nome[]): string[] | null {
   const fonti = new Set(nomi.flatMap(n => fontiDi(n)))
@@ -369,20 +338,11 @@ export function esiste(n: string): n is Nome {
   return PER_NOME.has(n as Nome)
 }
 
-/** Solo i nomi che esistono davvero, senza doppioni e nell'ordine del catalogo. */
-export function ripulisci(x: unknown): Nome[] {
-  if (!Array.isArray(x)) return []
-  const chiesti = new Set(x.map(String).filter(esiste) as Nome[])
-  return ATTREZZI.filter(a => chiesti.has(a.nome)).map(a => a.nome)
-}
-
 /**
  * È collegato quello che gli serve?
  *
- * Un attrezzo su un connettore che non c'è non è un errore da nascondere: è la
- * riga che spiega perché quell'automazione non trova mai niente. Va detta sulla
- * scheda, in chiaro, prima che qualcuno passi una settimana a chiedersi perché
- * gira ogni mattina senza fare nulla.
+ * Un attrezzo su un connettore che non c'è non è un errore da nascondere: va
+ * detto in chiaro, invece di girare senza trovare mai niente.
  */
 export function collegato(n: Nome): boolean {
   const a = PER_NOME.get(n)
@@ -403,7 +363,7 @@ export function collegato(n: Nome): boolean {
     case 'github': return !!c.github
     /*
       Il calendario: quello del Mac, o quello di Outlook.
-      Prima era solo il primo, e quindi su Windows un'automazione che diceva
+      Prima era solo il primo, e quindi su Windows una riga che diceva
       «guarda cos'ho domani» non poteva funzionare — senza che niente lo
       dicesse: l'attrezzo compariva collegato, girava, e non trovava mai un
       evento. Adesso o c'è un Mac, o c'è Outlook, o l'attrezzo si dichiara
@@ -414,20 +374,6 @@ export function collegato(n: Nome): boolean {
   }
 }
 
-/** Il catalogo come lo vede la schermata: cosa c'è, e cosa è pronto all'uso. */
-export function catalogo(lingua = leggi().lingua) {
-  const en = lingua !== 'it'
-  return ATTREZZI.map(a => ({
-    nome: a.nome,
-    etichetta: en ? a.etichetta.en : a.etichetta.it,
-    spiega: en ? a.spiega.en : a.spiega.it,
-    tinta: a.tinta,
-    serve: a.serve,
-    collegato: collegato(a.nome),
-    /** Solo `claude.lavora` vuole sapere in che cartella. */
-    vuoleCartella: a.nome === 'claude.lavora'
-  }))
-}
 
 /** Le definizioni da passare al modello, per gli attrezzi concessi. */
 export function tools(concessi: Nome[]): Anthropic.Tool[] {
@@ -510,7 +456,7 @@ export async function esegui(
   contesto?: { cartella?: string | null }
 ): Promise<Esito> {
   if (!concessi.includes(nome)) {
-    return { testo: 'Questa automazione non ha il permesso di usare questo attrezzo.', docs: [], male: true }
+    return { testo: 'Questa riga non ha il permesso di usare questo attrezzo.', docs: [], male: true }
   }
   if (!collegato(nome)) {
     const a = PER_NOME.get(nome)!
@@ -524,15 +470,12 @@ export async function esegui(
    * L'agenda prima della ricerca, e l'ordine è la cosa importante.
    *
    * `agenda.leggi` sta in `FONTI` perché *apre* la fonte «calendario» — serve
-   * al recinto delle automazioni, che deve sapere quali fonti tocca. Ma non ci
+   * al recinto, che deve sapere quali fonti tocca. Ma non ci
    * cerca dentro: guarda i prossimi giorni e li racconta in ordine. Sotto il
    * ramo della ricerca chiederebbe una `query` che nessuno gli manda mai, e
    * l'attrezzo risponderebbe «manca la query» per sempre.
    */
   if (nome === 'agenda.leggi') {
-    // nel passato il calendario non si legge (P6): la prova lo dice e va avanti
-    const prova = provaChiusa.inProva()
-    if (prova) { prova.parziale.add('agenda'); return { testo: 'Il calendario nel passato non si legge.', docs: [], male: true } }
     const giorni = Math.min(30, Math.max(1, Math.round(Number(input.giorni) || 7)))
     try {
       const eventi = await prossimiOvunque(giorni)
@@ -593,14 +536,12 @@ export async function esegui(
   }
 
   if (nome === 'claude.lavora') {
-    const prova = provaChiusa.inProva()
-    if (prova) { prova.parziale.add('codice'); return { testo: 'Claude Code nel passato non gira.', docs: [], male: true } }
     const richiesta = String(input.richiesta ?? '').trim()
     if (!richiesta) return { testo: 'Non c’è niente da chiedergli.', docs: [], male: true }
     const cartella = String(input.cartella ?? '').trim() || contesto?.cartella || ''
     if (!cartella) {
       return {
-        testo: 'Questa automazione non dice in che cartella lavorare. Aprila e scegline una.',
+        testo: 'Questa riga non dice in che cartella lavorare.',
         docs: [], male: true
       }
     }

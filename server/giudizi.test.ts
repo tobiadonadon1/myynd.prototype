@@ -31,7 +31,6 @@ const store = await import('./store.ts')
 const cfg = await import('./config.ts')
 const jev = await import('./jev.ts')
 const giudizi = await import('./giudizi.ts')
-const auto = await import('./automazioni.ts')
 
 const ORA = Date.now()
 const mail = (id: string, patch: Partial<Documento> = {}): Documento => ({
@@ -61,10 +60,10 @@ function jevDice(quanto: (id: string) => { chiede: number; urgenza: number; gene
 beforeEach(() => {
   store.azzeraTutto()
   cfg.scrivi({ lingua: 'en', jev: { apiKey: 'apikey_prova' } })
-  jev.dimentica(); jev.perProva(null); giudizi.scorda(); auto.perProva(null)
+  jev.dimentica(); jev.perProva(null); giudizi.scorda()
 })
 after(() => {
-  jev.perProva(null); auto.perProva(null); store.chiudiIndici()
+  jev.perProva(null); store.chiudiIndici()
   process.env.HOME = CASA_VERA
   rmSync(CASA, { recursive: true, force: true })
 })
@@ -287,59 +286,6 @@ test('le due domande sulla carta viaggiano insieme, con la data di oggi; senza c
   assert.equal(stato!.carta.urgenza, 'Tomorrow 9:30')
   cfg.scrivi({ lingua: 'en' }, { togli: ['jev'] })
   assert.equal((await giudizi.giudicaCarte([carta])).size, 0)
-})
-
-// — dove cambia qualcosa per lui —
-
-const RISPOSTE = {
-  id: 'risposte-da-dare', nome: 'Replies', spiega: 'Prepare relevant replies.',
-  quando: { quandoArriva: true }, guarda: { soloNuovi: true, limite: 10 },
-  fai: 'Pick messages waiting on a direct reply.',
-  metti: { inLista: 'oggi' as const, modo: 'io' as const, perDocumento: true },
-  attrezzi: ['posta.leggi'],
-  en: { nome: 'Replies', spiega: 'Prepare relevant replies.', fai: 'Pick messages waiting on a direct reply.' }
-}
-
-test('la coda delle risposte non scrive una riga per un «grazie, ricevuto»', async () => {
-  const docs = [
-    mail('marta', { titolo: 'marta', corpo: 'Ciao Tobia, mi confermi il preventivo entro venerdì?' }),
-    mail('luca', { titolo: 'luca', corpo: 'Grazie mille, ricevuto tutto. Non serve altro.' })
-  ]
-  store.salvaDocumenti(docs)
-  jevDice(id => id === 'marta'
-    ? { chiede: 0.96, urgenza: 2.2, genere: 'richiesta' }
-    : { chiede: 0.05, urgenza: 0.1, genere: 'aggiornamento' })
-
-  // il modello grande vede solo quello che Jev ha lasciato passare
-  const visti: string[] = []
-  auto.perProva({ collegato: () => true, chiediJSON: async o => {
-    const dentro = JSON.parse(String((o.messages[0] as { content: string }).content)) as { id: string }[]
-    visti.push(...dentro.map(d => d.id))
-    return { righe: dentro.map(d => ({ doc: d.id, testo: `Rispondere a ${d.id}` })) }
-  } })
-  const r = auto.scrivi(RISPOSTE)
-  assert.equal(await auto.fai(r, { aMano: true }), 'fatta')
-  assert.deepEqual(visti, ['marta'], 'a Luca non si risponde, e il modello non l’ha nemmeno visto')
-  const righe = store.elencoCompiti().filter(c => c.origine === 'auto:risposte-da-dare')
-  assert.deepEqual(righe.map(c => c.doc), ['marta'])
-})
-
-test('e quando Jev tace, la coda delle risposte resta quella di sempre', async () => {
-  const docs = [
-    mail('marta', { titolo: 'marta', corpo: 'Ciao Tobia, mi confermi il preventivo entro venerdì?' }),
-    mail('luca', { titolo: 'luca', corpo: 'Grazie mille, ricevuto tutto. Non serve altro.' })
-  ]
-  store.salvaDocumenti(docs)
-  jev.perProva(async () => { throw new Error('rete giù') })
-  const visti: string[] = []
-  auto.perProva({ collegato: () => true, chiediJSON: async o => {
-    const dentro = JSON.parse(String((o.messages[0] as { content: string }).content)) as { id: string }[]
-    visti.push(...dentro.map(d => d.id))
-    return { righe: [] }
-  } })
-  const r = auto.scrivi({ ...RISPOSTE, id: 'risposte-da-dare' })
-  await auto.fai(r, { aMano: true })
-  assert.deepEqual(visti.sort(), ['luca', 'marta'], 'tutt’e due, come prima che Jev esistesse')
 })
 
 // — la stessa cosa due volte —

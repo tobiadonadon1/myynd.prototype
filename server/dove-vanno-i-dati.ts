@@ -4,8 +4,8 @@
 // dove finisce quello che Myynd legge. La prima versione diceva «solo i
 // passaggi che servono vanno al modello, quando chiedo qualcosa», ed era
 // falso: la prima pagina si prepara in sottofondo dopo ogni lettura
-// (`priorita.forse` dentro `rileggiDaSola`, con `rifinitura.ts`), e così le
-// automazioni e la preparazione discreta. Qui non si scrive una promessa: si
+// (`priorita.forse` dentro `rileggiDaSola`, con `rifinitura.ts`), e così la
+// preparazione discreta. Qui non si scrive una promessa: si
 // guarda chi riceve davvero, adesso, su questa macchina.
 //
 //   · il modello che ragiona, lo stesso che sceglie `modello.motore()`: ChatGPT,

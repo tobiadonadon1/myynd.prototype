@@ -81,8 +81,7 @@ test('dove vanno i dati: la riga segue chi li riceve davvero', () => {
   const riga = (dati: DoveVanno) => richiestaAmministratore({ servizio: 'gmail' }, { inglese: true, dati }).corpo.split('\n').find(r => r.startsWith('Where the data goes'))!
   /*
    * «Solo i passaggi che servono, quando chiedo qualcosa» era falso: la pagina
-   * del giorno si prepara in sottofondo dopo ogni lettura, e così le
-   * automazioni. La riga lo dice.
+   * del giorno si prepara in sottofondo dopo ogni lettura. La riga lo dice.
    */
   const claude = riga(CASA)
   assert.match(claude, /Parts of it go to Anthropic \(Claude\), the AI model I use, when I ask something and in background jobs/)

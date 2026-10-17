@@ -28,7 +28,7 @@ const senzaCommenti = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(
 /**
  * Dove un campo grezzo ha una ragione: il palco (accesso e primo avvio, col
  * suo disegno scuro), le barre che scrivono (la chat, la lista, la barra
- * rapida), le date e le ore, le ricerche, gli editor delle automazioni, e la
+ * rapida), le date e le ore, le ricerche, e la
  * correzione sul posto di una riga (P1B e la convinzione che la imita).
  */
 const CAMPI_CONSENTITI = new Set([
@@ -36,7 +36,6 @@ const CAMPI_CONSENTITI = new Set([
   'components/forms.tsx', 'onboarding/Onboarding.tsx', 'Accesso.tsx',
   'screens/Chat.tsx', 'oggi/Barra.tsx', 'screens/Myynd.tsx', 'oggi/Oggi.tsx',
   'screens/Agenda.tsx', 'oggi/Dettaglio.tsx', 'modals.tsx',
-  'automazioni/Costruttore.tsx', 'automazioni/Editor.tsx', 'automazioni/Chiocciola.tsx', 'screens/Automazioni.tsx',
   'screens/ComeLavori.tsx', 'screens/RigaConvinzione.tsx', 'screens/ProgettoEditor.tsx', 'screens/Mappa.tsx',
   'components/SenderRules.tsx', 'oggi/Calendario.tsx', 'oggi/Giro.tsx', 'richiamo/Richiamo.tsx',
   // P3: la correzione dell'ipotesi sta dentro la `Scatola` della barra, come i campi della prima pagina

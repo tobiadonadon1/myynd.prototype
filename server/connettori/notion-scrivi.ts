@@ -19,7 +19,6 @@
 import type { Client } from '@notionhq/client'
 import * as chi from '../chi.ts'
 import * as cfg from '../config.ts'
-import { vietato } from '../prova-chiusa.ts'
 import { senzaTrattini, senzaTrattiniFuoriCodice } from '../testo.ts'
 import { cliente, conCalma, stessoId, titolo as titoloDi } from './notion.ts'
 import { segnaPagina } from '../via.ts'
@@ -338,7 +337,6 @@ function titoloNotion(t: string) {
  * guaio di Notion arriva com'è.
  */
 export async function scrivi(o: { chiave: string; titolo: string; markdown: string }): Promise<Scritta> {
-  vietato('notion.scrivi')
   const chiave = String(o.chiave ?? '').trim()
   if (!chiave || chiave.length > 200) throw new NonScrive('Serve una chiave per la pagina.')
   const di = `${chi.adesso() ?? ''}\u0000${chiave}`

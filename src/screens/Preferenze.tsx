@@ -14,6 +14,7 @@
 //   · le sezioni e l'ordine delle schede li decide src/sezioni.ts, provato
 //     sotto node; `v.apri('pref', sezione, scheda)` porta su una scheda.
 
+import { SenderRules } from '../components/SenderRules'
 import { useEffect, useMemo, useState } from 'react'
 import { api, memoriaP5, sessione, type ChatGPT, type ClaudeCon, type Incluso, type StatoTurno } from '../api'
 import { rilettura, suCollegamento } from '../collegamenti'
@@ -200,7 +201,7 @@ function CartaNotizie({ v }: { v: Vals }) {
 /**
  * Per chi è Myynd: si diceva una volta sola, al primo avvio, e un conto di
  * prima contava per sempre come «solo per me». Cambia l'ordine delle fonti,
- * gli esempi e l'ordine fisso di partenza; mai quello che si può fare.
+ * e gli esempi; mai quello che si può fare.
  */
 function PerChi({ avvisa }: { avvisa: (m: string) => void }) {
   const [scelta, setScelta] = useState<'persona' | 'azienda' | null>(null)
@@ -392,7 +393,7 @@ function Cancella() {
 
   return (
     <Carta titolo={t('Cancella il conto')} id="cancella" quieta larga>
-      <div className="f-stato">{t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}</div>
+      <div className="f-stato">{t('Sparisce tutto: documenti, lista, chat, memoria e fonti. Non si torna indietro.')}</div>
       {!aperto ? (
         <div className="f-piede">
           <div style={{ flex: 1 }} />
@@ -760,6 +761,9 @@ export function Preferenze({ v }: { v: Vals }) {
           </Carta>
         </div>
       )}
+      {/* i mittenti messi via: stavano nella pagina degli ordini fissi, che non c'è più.
+          Senza regole la riga non si disegna */}
+      {sezione === 'myynd' && <SenderRules />}
 
       {sezione === 'intelligenza' && (
         <div className="f-griglia">

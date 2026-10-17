@@ -146,7 +146,7 @@ test('sull’account una chiave rimasta scritta non lavora mai: né prima di una
 
 test('una carta per Pages sull’account non dice più «Collega Claude»: il giro parte, con crea_documento_app', async () => {
   copione = () => JSON.stringify({ text: 'What topic should the essay cover?', calls: [] })
-  const r = await claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null, null,
+  const r = await claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null,
     { nativa: true, signal: new AbortController().signal })
   assert.match(giri[0].sistema, /crea_documento_app/)
   assert.match(r.testo, /topic/)

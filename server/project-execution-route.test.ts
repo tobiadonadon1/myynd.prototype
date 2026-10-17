@@ -59,7 +59,7 @@ before(async () => {
   await conti.perProva.apriCon(firstToken, first.id)
   await conti.perProva.apriCon(secondToken, second.id)
   chi.dentro(first.id, () => {
-    cfg.scrivi({ lingua: 'en', diSerie: false, desktop: { cartelle: [source], scelte: true } })
+    cfg.scrivi({ lingua: 'en', desktop: { cartelle: [source], scelte: true } })
     assert.deepEqual(cfg.leggi().desktop?.cartelle, [source])
     store.scriviCompito({ id: 'route-edit', testo: 'Update the local value', origine: 'mano', ordine: 'a' })
     store.scriviCompito({ id: 'route-hermes', testo: 'Update selected value with Hermes', origine: 'mano', ordine: 'b' })

@@ -91,7 +91,7 @@ before(async () => {
   await conti.perProva.apriCon(token, account.id)
   chi.dentro(account.id, () => {
     cfg.scrivi({
-      lingua: 'en', diSerie: false,
+      lingua: 'en',
       /*
        * Un conto che ha finito l'avvio. Senza, è uno sconosciuto ancora sul
        * passo delle fonti, e da P4 la rilettura di sottofondo lì non fa né la

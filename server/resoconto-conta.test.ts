@@ -333,7 +333,7 @@ test('i minuti sono la somma della tabella', () => {
   assert.equal(altro.numeri.minuti, 10 + 15 + 2 + 1.2 + 5)
 })
 
-test('prodotte e usate per automazione', () => {
+test('le righe «auto:» di prima contano come preparate', () => {
   const m = con({
     compiti: [
       riga('u1', { origine: 'auto:follow-up', creato: g(15) }),
@@ -343,8 +343,6 @@ test('prodotte e usate per automazione', () => {
     azioni: [azione('u1', 'email', g(18))]
   })
   const r = conta(m, S1)
-  assert.deepEqual(r.automazioni, [{ id: 'follow-up', usate: 1, prodotte: 2 }])
-  assert.equal(r.voci[0]!.automazione, 'follow-up')
   assert.equal(r.voci[0]!.preparata, true)
   assert.equal(numeri(r.voci).numeri.minuti, 4)
 })

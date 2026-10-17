@@ -1,7 +1,6 @@
 // L'indice locale: un file SQLite in ~/.myynd/mente.db.
 // Usa il modulo `node:sqlite` incluso in Node — nessuna dipendenza nativa.
 
-import * as provaChiusa from './prova-chiusa.ts'
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -106,8 +105,8 @@ setInterval(chiudiGliInattivi, 10 * 60_000).unref()
 /*
  * I giri di sfondo non contano come «usato».
  *
- * Il giro delle automazioni passa da ogni conto ogni quarto d'ora e tocca il
- * database anche per chi non ha nessuna ricetta: con quello che segna l'uso,
+ * I giri di fondo passano da ogni conto ogni quarto d'ora e toccano il
+ * database anche per chi non ha niente da fare: con quello che segna l'uso,
  * la mezz'ora di inattività non scadeva mai per nessuno e gli indici restavano
  * aperti tutti, per sempre — cioè esattamente quello che questa cache doveva
  * evitare. Dentro `senzaToccare` si legge e si scrive come sempre, ma
@@ -118,7 +117,7 @@ export function senzaToccare<T>(f: () => T): T {
   disImpegnato++
   let r: T
   try { r = f() } catch (e) { disImpegnato--; throw e }
-  // il giro delle automazioni è asincrono: il conto si chiude quando finisce
+  // un giro di fondo è asincrono: il conto si chiude quando finisce
   // lui, non al primo `await` — altrimenti restava tutto aperto lo stesso
   if (r instanceof Promise) return (r as Promise<unknown>).finally(() => { disImpegnato-- }) as unknown as T
   disImpegnato--
@@ -126,9 +125,6 @@ export function senzaToccare<T>(f: () => T): T {
 }
 
 function mio(): DatabaseSync {
-  // dentro una prova (P6): la connessione di sola lettura, com'era a quell'ora
-  const p = provaChiusa.inProva()
-  if (p) return dellaProva(p)
   const dove = cartella()
   if (!disImpegnato) ultimoUso.set(dove, Date.now())
   let d = aperti.get(dove)
@@ -887,6 +883,10 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   //   destinatario. Non si cancella e non si riscrive — un registro che si può
   //   correggere non è un registro.
   // 10 → 11 · le automazioni, e cosa hanno fatto.
+  //
+  //   (Le automazioni sono state tolte il 17 ottobre 2026. Le migrazioni che
+  //   le riguardano restano qui come storia: l'elenco non cambia né lunghezza
+  //   né ordine, e i dati di chi le aveva restano dove sono. Nessuno li legge.)
   //
   //   La *ricetta* non sta qui: sta in un file, scritta da chi costruisce
   //   Myynd, uguale per tutta un'azienda. Qui sta solo quello che riguarda
@@ -1824,8 +1824,8 @@ export type Documento = {
   /**
    * L'ha scritta lei, non le è arrivata.
    *
-   * Serve a `appenaArrivati`, che è quello che alimenta la prima pagina e le
-   * automazioni «quando arriva»: la posta inviata entra nell'indice — è l'unico
+   * Serve a `appenaArrivati`, che è quello che alimenta la prima pagina: la
+   * posta inviata entra nell'indice — è l'unico
    * esempio vero di come scrive — ma non «arriva», e trattarla come un arrivo
    * vorrebbe dire una prima pagina fatta delle sue stesse email.
    */
@@ -1938,7 +1938,7 @@ function istr(): Istruzioni {
      * Il filo è arrivato dopo, e la prima lettura successiva lo scrive su ogni
      * email che c'era già. Se passasse da `updDoc` ogni messaggio conterebbe
      * come «cambiato»: `indicizzato` si sposterebbe a oggi e la mattina dopo
-     * il feed e le automazioni «guarda cos'è arrivato» vedrebbero tremila
+     * il feed e «guarda cos'è arrivato» vedrebbero tremila
      * email nuove che nuove non sono. Una chiave in più non è un arrivo.
      *
      * E non tocca `radici`: il trigger sull'indice guarda proprio quelle
@@ -2121,21 +2121,9 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
  * inviata, la prima lettura dopo l'aggiornamento la indicizza tutta insieme —
  * e siccome «appena arrivato» si misura da quando è entrata nell'indice, non
  * da quando è stata scritta, quelle finivano in cima. Il risultato sarebbe
- * stato una prima pagina fatta delle email che ha mandato lei, e delle
- * automazioni «quando arriva una fattura» che si mettono a preparare risposte
- * alle sue stesse mail. Arrivare vuol dire arrivare da fuori.
+ * stato una prima pagina fatta delle email che ha mandato lei. Arrivare vuol
+ * dire arrivare da fuori.
  */
-/**
- * Arrivati fra due istanti, per data del documento (P6): la prova sul passato
- * non può andare per `indicizzato`, che alla prima lettura è uguale per tutti.
- */
-export function arrivatiFra(da: string, al: string, limite = 30): Documento[] {
-  return db.prepare(`
-    SELECT ${CAMPI} FROM documenti WHERE quando > ? AND quando <= ? AND COALESCE(inviato, 0) = 0
-    ORDER BY quando DESC LIMIT ?
-  `).all(da, al, limite) as unknown as Documento[]
-}
-
 export function appenaArrivati(dal: string, limite = 30): Documento[] {
   return db.prepare(`
     SELECT ${CAMPI} FROM documenti WHERE indicizzato >= ? AND (inviato IS NULL OR inviato = 0)
@@ -2179,7 +2167,8 @@ export function svuotaFonte(fonte: string) {
   db.exec('BEGIN')
   try {
     scollegaDalFeed(righe.map(r => r.id))
-    togliEsitiDellaFonte(fonte)
+    // i risultati delle prove di prima sui suoi documenti: la tabella resta, i dati della fonte no
+    db.prepare('DELETE FROM esiti WHERE doc IN (SELECT id FROM documenti WHERE fonte = ?)').run(fonte)
     // niente da togliere a mano dall'indice: la cancellazione fa scattare il
     // trigger, che è l'unico posto che sa passargli i vecchi valori
     db.prepare('DELETE FROM documenti WHERE fonte = ?').run(fonte)
@@ -2451,7 +2440,7 @@ function quanteParole(d: Documento & { punti: number }, parole: string[]): numbe
  * Cercare per una domanda, o cercare per delle parole chiave.
  *
  * Sono due mestieri diversi, e la differenza sta tutta in cosa vuol dire
- * allargare. «preventivo offerta inviato» è la ricerca di un'automazione: tre
+ * allargare. «preventivo offerta inviato» è una ricerca per parole chiave: tre
  * sinonimi, e un documento che ne contiene uno solo è esattamente quello che
  * si cercava. «deadline for H-Farm AI systems» è una domanda: un documento che
  * contiene solo «systems» non è un risultato debole, è un altro documento.
@@ -2467,7 +2456,7 @@ export function cerca(q: string, limite = 20, fonti?: string[], stretta = false)
   /**
    * Il recinto delle fonti, quando c'è.
    *
-   * Serve alle automazioni che dichiarano cosa possono aprire: «guarda nella
+   * Serve alle righe che dichiarano cosa possono aprire: «guarda nella
    * posta» dev'essere una ricerca che *non può* tornare un file del disco, non
    * una ricerca su tutto con la raccomandazione di ignorare il resto. Il filtro
    * sta nell'SQL e non dopo, altrimenti un limite di otto risultati riempito da
@@ -2516,7 +2505,7 @@ export function cerca(q: string, limite = 20, fonti?: string[], stretta = false)
    * bastano tre. È la regola che qualunque motore di ricerca chiama «minimum
    * should match», e costa una passata sui titoli.
    *
-   * Solo per le domande, però: `stretta`. Le parole di un'automazione sono
+   * Solo per le domande, però: `stretta`. Le parole chiave sono
    * sinonimi messi in fila apposta, e lì una su tre è la risposta giusta.
    */
   let trovati = conQuery(parole.map(clausola).join(' AND '))
@@ -2559,7 +2548,7 @@ export function cerca(q: string, limite = 20, fonti?: string[], stretta = false)
 
   // il riordino per data sta qui e non nell'SQL apposta: è una scelta di
   // prodotto, e deve restare leggibile da chi la vorrà cambiare
-  const ora = provaChiusa.adesso()
+  const ora = Date.now()
   const punteggio = (d: Documento & { punti: number }) => {
     const giorni = d.quando ? (ora - Date.parse(d.quando)) / 86_400_000 : 3650
     const freschezza = Number.isFinite(giorni) ? Math.exp(-Math.max(0, giorni) / 180) : 0
@@ -2650,17 +2639,14 @@ export function segnaUso(u: Uso) {
    * Contare è accessorio; scrivere in un indice orfano no.
    */
   if (OSPITATO && !chi.adesso()) return
-  // i gettoni sono soldi veri: anche dentro una prova si contano e si scrivono,
-  // ed è l'unica scrittura che una prova fa sul database vivo (P6); con
-  // l'etichetta del contesto («prova:risposta»), se una prova delle risposte
-  // sta girando (P7): vedi etichetta-uso.ts
-  provaChiusa.conta(u.entrata + u.uscita)
+  // con l'etichetta del contesto («prova:risposta»), se una prova delle
+  // risposte sta girando (P7): vedi etichetta-uso.ts
   // F9 · il costo, e la carta a cui va: quella al lavoro nel contesto (vedi etichetta-uso.ts)
   const scritti = Math.min(u.entrata, Math.max(0, u.scritti ?? 0))
   const costo = u.costo ?? prezzi.costo(u.modello, { entrata: u.entrata - scritti, scritti, cache: u.cache, uscita: u.uscita })
   const compito = compitoInCorso()?.id ?? null
-  provaChiusa.fuori(() => db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita, compito, costo) VALUES (?,?,?,?,?,?,?,?)')
-    .run(new Date().toISOString(), etichettato(u.lavoro), u.motore, u.entrata, u.cache, u.uscita, compito, costo))
+  db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita, compito, costo) VALUES (?,?,?,?,?,?,?,?)')
+    .run(new Date().toISOString(), etichettato(u.lavoro), u.motore, u.entrata, u.cache, u.uscita, compito, costo)
 }
 
 /**
@@ -3688,15 +3674,12 @@ export type Compito = {
    * Cosa gli è concesso aprire mentre ci lavora, e dove.
    *
    * Null vuol dire «quello che ha sempre avuto»: l'indice intero, come ogni
-   * compito scritto a mano. Un oggetto vuol dire che questa riga viene da
-   * un'automazione che ha dichiarato le sue fonti, e fuori da lì non si va.
+   * compito scritto a mano. Un oggetto vuol dire che questa riga ha
+   * dichiarato le sue fonti, e fuori da lì non si va.
    *
-   * `cartella` sta qui dentro e non altrove perché è parte del permesso, non
-   * un dettaglio dell'automazione: «puoi far girare Claude Code» senza dire
-   * *dove* non è un permesso, è un assegno in bianco. Tenerli insieme vuol
-   * dire anche che questo compito non ha bisogno di andare a rileggere la
-   * ricetta che l'ha scritto — e infatti non lo fa, il che tiene `compiti.ts`
-   * e `automazioni.ts` separati come sono sempre stati.
+   * `cartella` sta qui dentro e non altrove perché è parte del permesso:
+   * «puoi far girare Claude Code» senza dire *dove* non è un permesso, è un
+   * assegno in bianco.
    */
   attrezzi: Concessione | null
   /**
@@ -3816,17 +3799,10 @@ export type EmailPronta = {
   allegato?: { id: string; titolo: string } | null
 }
 
-/** Quello che una riga nata da un'automazione ha il permesso di aprire. */
+/** Quello che una riga ha il permesso di aprire, scritto sulla riga. */
 export type Concessione = {
   nomi: string[]
   cartella?: string | null
-  selezione?: 'richieste-dirette'
-  ambitoSelezione?: string
-  /**
-   * Nata da un'automazione (P6): anche con `nomi` vuoto la riga non riceve le
-   * mani delle righe scritte a mano. Un attrezzo è un permesso di leggere.
-   */
-  origine?: 'automazione'
 }
 
 /** Una domanda con le risposte già pronte da toccare. */
@@ -4092,8 +4068,8 @@ export function scriviCompito(c: {
       priorita   = COALESCE(excluded.priorita, compiti.priorita),
       -- da chi sei nata non cambia: una riscrittura senza madre non taglia il filo
       madre      = COALESCE(excluded.madre, compiti.madre),
-      -- il permesso si riscrive con la riga: se l'automazione nel frattempo ha
-      -- perso un attrezzo, la riga rifatta non se lo tiene
+      -- il permesso si riscrive con la riga: se nel frattempo ha perso un
+      -- attrezzo, la riga rifatta non se lo tiene
       attrezzi   = excluded.attrezzi,
       -- COALESCE e non excluded secco: chi riscrive una riga senza mandare la
       -- nota non sta dicendo «cancella la nota», sta dicendo «non la tocco».
@@ -4111,7 +4087,7 @@ export function scriviCompito(c: {
   `).run(
     c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ora ?? null, c.progetto ?? null, c.priorita ?? null, c.ordine,
     c.origine ?? 'mano', c.voce ?? null, c.doc ?? null, c.madre ?? null,
-    c.attrezzi && (c.attrezzi.nomi?.length || c.attrezzi.origine) ? JSON.stringify(c.attrezzi) : null, ora, ora
+    c.attrezzi && c.attrezzi.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
 }
 
@@ -4259,9 +4235,8 @@ export function scordaChieste(id: string) {
  * Fatta o rifiutata, la proposta non deve restare lì premibile una seconda volta.
  *
  * Una proposta di risposte lascia scritto quali mail copriva, in `fonti` con
- * `coperta`: senza, alla volta dopo lo stesso ordine fisso riproponeva le stesse
- * mail, e approvandole la casella aveva due bozze per lo stesso messaggio
- * (`docsConRisposta`).
+ * `coperta`: senza, la volta dopo si riproponevano le stesse mail, e
+ * approvandole la casella aveva due bozze per lo stesso messaggio.
  */
 export function scordaProposta(id: string) {
   const r = db.prepare('SELECT proposta, fonti FROM compiti WHERE id = ?').get(id) as { proposta: string | null; fonti: string | null } | undefined
@@ -5000,383 +4975,20 @@ export function scordaBlocco(etichetta: string) {
   db.prepare('DELETE FROM blocchi WHERE etichetta = ?').run(etichetta)
 }
 
-// — le automazioni: quello che sa questa installazione —
-
-export type StatoAutomazione = {
-  id: string; spenta: number; ultima: string | null
-  quante: number; esito: string | null; guaio: string | null
-  /** In che cartella l'hai messa. Assente o null = in nessuna. */
-  raccolta?: string | null
-  /** Da quando questa installazione la conosce. Serve a chi non è mai girata. */
-  dal?: string | null
-  /** Le ultime volte, in JSON. Si legge con `storiaDi`. */
-  storia?: string | null
-  /** Il giorno a cui si riferisce `bozze`, come AAAA-MM-GG. */
-  giorno?: string | null
-  /** Quante bozze ha fatto fare in quel giorno. Il tetto si legge da qui. */
-  bozze?: number | null
-  /** Fin dove ha guardato il materiale: si muove solo con un giro riuscito. */
-  vista?: string | null
-  /** Fino a quando era nel vassoio di prova (P6). Non si apre più: resta per i database di prima. */
-  vassoio?: string | null
-  /** Dopo un giro andato storto: quando riprova da sola. Null quando è andata bene. */
-  riprova?: string | null
-  /** La ricevuta dell'ultimo giro, anche di quelli che non hanno guardato niente. Si legge con `ricevutaDi`. */
-  ricevuta?: string | null
-}
-
-/**
- * Una bozza in più oggi, per questa automazione.
- *
- * Il giorno sta accanto al numero: quando cambia, il numero riparte da uno
- * senza che nessuno debba passare a mezzanotte ad azzerare niente.
- */
-export function segnaBozza(id: string, giorno: string): number {
-  const s = statoAutomazione(id)
-  const quante = s?.giorno === giorno ? Number(s.bozze ?? 0) + 1 : 1
-  db.prepare(`
-    INSERT INTO automazioni (id, giorno, bozze) VALUES (?,?,?)
-    ON CONFLICT(id) DO UPDATE SET giorno = excluded.giorno, bozze = excluded.bozze
-  `).run(id, giorno, quante)
-  return quante
-}
-
-/**
- * Perché un giro non ha fatto niente, in una parola:
- *   · `vuoto` — non c'era niente da guardare;
- *   · `niente` — ha guardato, e niente meritava una riga;
- *   · `condizione` — un passo «solo se» l'ha fermata;
- *   · `gia` — c'è ancora una sua riga aperta in lista;
- *   · `tetto` — il budget di oggi per le automazioni è finito;
- *   · `guaio` — è andata storta (il perché sta in `guaio`).
- */
-export type PercheNiente = 'vuoto' | 'niente' | 'condizione' | 'gia' | 'tetto' | 'guaio'
-
-/** Un giro, com'è andato: quanti documenti ha guardato, quante cose ha fatto, o perché niente. */
-export type Giro = { quando: string; esito: string; quanti: number; fatti?: number; perche?: PercheNiente; risultato?: string }
-
-/** Dopo quanto riprova da sola un giro andato storto: entro l'ora, non al turno dopo. */
-export const RIPROVA_DOPO = 30 * 60_000
-
-/** Il tetto dell'attesa fra un guaio e l'altro: quattro tentativi al giorno, non novanta. */
-export const RIPROVA_AL_PIU = 6 * 60 * 60_000
-
-/**
- * Quanto aspettare dopo un guaio, contati quelli di fila prima di lui.
- *
- * Il primo riprova entro l'ora; poi l'attesa raddoppia (un'ora, due, quattro)
- * fino a sei ore. Un guasto che si ripete uguale — una risposta troncata, un
- * fornitore che rifiuta — costava una chiamata al modello ogni mezz'ora per
- * sempre; così costa quattro al giorno, e il primo guaio di passaggio
- * riprova presto come prima.
- */
-export function attesaDopoGuai(storia: Giro[]): number {
-  let diFila = 0
-  for (let i = storia.length - 1; i >= 0 && storia[i].esito === 'guaio'; i--) diFila++
-  return Math.min(RIPROVA_DOPO * 2 ** diFila, RIPROVA_AL_PIU)
-}
-
-/** La ricevuta dell'ultimo giro; senza, l'ultimo della storia. */
-export function ricevutaDi(s: StatoAutomazione | null | undefined): Giro | null {
-  if (s?.ricevuta) {
-    try {
-      const x = JSON.parse(s.ricevuta)
-      if (x && typeof x === 'object' && typeof x.quando === 'string') return x as Giro
-    } catch { /* si ripiega sulla storia */ }
-  }
-  const storia = storiaDi(s)
-  return storia[storia.length - 1] ?? null
-}
-
-/** Quanti giri si tengono. Venti: bastano a vedere un'abitudine, non un anno. */
-const GIRI = 20
-
-/**
- * La storia di una, già letta.
- *
- * Una colonna JSON scritta male non deve poter buttare giù la schermata delle
- * automazioni: qui un contenuto illeggibile diventa «non so niente», che è
- * vero e innocuo, invece di un'eccezione dentro `elenco()`.
- */
-export function storiaDi(s: StatoAutomazione | null | undefined): Giro[] {
-  if (!s?.storia) return []
-  try {
-    const x = JSON.parse(s.storia)
-    return Array.isArray(x) ? x.slice(-GIRI) : []
-  } catch { return [] }
-}
-
-// — le raccolte: le cartelle in cui te le organizzi —
-
-/**
- * Le cartelle, comprese quelle vuote.
- *
- * Tenerle in una tabella invece di dedurle da chi ci sta dentro è la
- * differenza fra una cartella che esiste e una che compare solo quando ha
- * qualcosa dentro. La seconda è inservibile: la fai, la schermata non cambia,
- * e ci trascini dentro la prima automazione senza avere un posto dove
- * lasciarla cadere.
- */
-export function raccolte(): { nome: string; ordine: number }[] {
-  return db.prepare('SELECT nome, ordine FROM raccolte ORDER BY ordine, nome')
-    .all() as { nome: string; ordine: number }[]
-}
-
-export function creaRaccolta(nome: string): boolean {
-  const n = nome.trim().slice(0, 40)
-  if (!n) return false
-  const coda = db.prepare('SELECT COALESCE(MAX(ordine), 0) AS m FROM raccolte').get() as { m: number }
-  const r = db.prepare('INSERT OR IGNORE INTO raccolte (nome, ordine, quando) VALUES (?,?,?)')
-    .run(n, coda.m + 1, new Date().toISOString())
-  return r.changes > 0
-}
-
-/**
- * Rinominarla porta con sé quello che ci sta dentro.
- *
- * Il nome *è* la chiave — è quello che sta scritto sulla riga di ogni
- * automazione — quindi cambiarlo senza spostare le automazioni le lascerebbe
- * tutte in una cartella che non esiste più: invisibili, senza che nessuno le
- * abbia buttate. Le due scritture stanno in una transazione per la stessa
- * ragione.
- */
-export function rinominaRaccolta(da: string, a: string): boolean {
-  const n = a.trim().slice(0, 40)
-  if (!n || !db.prepare('SELECT 1 FROM raccolte WHERE nome = ?').get(da)) return false
-  if (n !== da && db.prepare('SELECT 1 FROM raccolte WHERE nome = ?').get(n)) return false
-  // le due scritture insieme o nessuna: fra l'una e l'altra le automazioni
-  // starebbero in una cartella che non esiste più, cioè da nessuna parte
-  db.exec('BEGIN')
-  try {
-    db.prepare('UPDATE raccolte SET nome = ? WHERE nome = ?').run(n, da)
-    db.prepare('UPDATE automazioni SET raccolta = ? WHERE raccolta = ?').run(n, da)
-    db.exec('COMMIT')
-  } catch (e) {
-    db.exec('ROLLBACK')
-    throw e
-  }
-  return true
-}
-
-/**
- * Butta la cartella, non quello che c'è dentro.
- *
- * Le automazioni tornano fuori dalle cartelle e restano in elenco. Una cartella
- * che si porta via il suo contenuto è il modo più veloce di far sparire del
- * lavoro con un gesto solo — e qui il gesto è «faccio ordine», non «cancello».
- */
-export function buttaRaccolta(nome: string): boolean {
-  db.exec('BEGIN')
-  try {
-    db.prepare('UPDATE automazioni SET raccolta = NULL WHERE raccolta = ?').run(nome)
-    const via = db.prepare('DELETE FROM raccolte WHERE nome = ?').run(nome).changes
-    db.exec('COMMIT')
-    return Number(via) > 0
-  } catch (e) {
-    db.exec('ROLLBACK')
-    throw e
-  }
-}
-
-/** Spostarne una. `null` la tira fuori da tutte. */
-export function mettiInRaccolta(id: string, raccolta: string | null) {
-  db.prepare(`
-    INSERT INTO automazioni (id, raccolta) VALUES (?,?)
-    ON CONFLICT(id) DO UPDATE SET raccolta = excluded.raccolta
-  `).run(id, raccolta)
-}
-
-/** Quelle che hai tolto di mezzo: non tornano, nemmeno dopo un aggiornamento. */
-export function automazioniTolte(): Set<string> {
-  const righe = db.prepare('SELECT id FROM automazioni WHERE tolta IS NOT NULL').all() as { id: string }[]
-  return new Set(righe.map(r => r.id))
-}
-
-/**
- * Toglila di mezzo.
- *
- * Non «spenta»: spenta vuol dire che potrebbe tornare a girare, e resta in
- * elenco a ricordartelo. Questa sparisce.
- */
-export function togliAutomazione(id: string) {
-  db.prepare(`
-    INSERT INTO automazioni (id, tolta) VALUES (?,?)
-    ON CONFLICT(id) DO UPDATE SET tolta = excluded.tolta
-  `).run(id, new Date().toISOString())
-}
-
-/**
- * Rimettila in elenco.
- *
- * Serve quando ne riscrivi una con lo stesso nome di una che avevi buttato:
- * senza, il file c'è, la ricetta è valida, e in elenco non compare — la scrivi
- * due volte, poi tre, e sembra rotto tutto.
- */
-export function rivediAutomazione(id: string) {
-  db.prepare('UPDATE automazioni SET tolta = NULL WHERE id = ?').run(id)
-}
-
-export function statiAutomazioni(): Record<string, StatoAutomazione> {
-  const righe = db.prepare('SELECT * FROM automazioni').all() as unknown as StatoAutomazione[]
-  return Object.fromEntries(righe.map(r => [r.id, r]))
-}
-
-export function statoAutomazione(id: string): StatoAutomazione | null {
-  return (db.prepare('SELECT * FROM automazioni WHERE id = ?').get(id) as unknown as StatoAutomazione) ?? null
-}
-
-/**
- * È girata: si segna quando, quante volte in tutto, e com'è andata.
- *
- * `quanti` è quanti documenti ha guardato, e non è statistica: è la sola cosa
- * che distingue un'automazione che non trova niente perché non c'è niente da
- * una che non trova niente perché sta cercando parole che nei documenti non
- * compaiono. Le due si scrivono uguali nell'esito, e sono problemi opposti.
- */
-export function automazioneGirata(id: string, esito: string, guaio?: string, quanti = 0, risultato?: string, ricevuta: { fatti?: number; perche?: PercheNiente } = {}) {
-  const adesso = new Date()
-  const ora = adesso.toISOString()
-  const prima = storiaDi(statoAutomazione(id))
-  const perche: PercheNiente | undefined = esito === 'guaio' ? 'guaio' : esito === 'fatta' ? undefined : ricevuta.perche ?? (quanti ? 'niente' : 'vuoto')
-  const giro: Giro = { quando: ora, esito, quanti, ...(esito === 'fatta' ? { fatti: ricevuta.fatti ?? 1 } : {}), ...(perche ? { perche } : {}) }
-  const storia = JSON.stringify([...prima, { ...giro, ...(risultato ? { risultato: risultato.slice(0, 24000) } : {}) }].slice(-GIRI))
-  /*
-   * Un guaio non muove niente: né l'orologio (`ultima`) né il paletto
-   * (`vista`). Prima `ultima` si spostava, e un giro fallito alle nove
-   * aspettava le nove del giorno dopo: un giorno intero perso in silenzio.
-   * Adesso resta scaduta, e `riprova` dice quando riprovare: entro l'ora.
-   */
-  const fallita = esito === 'guaio'
-  const vista = fallita ? null : ora
-  const riprova = fallita ? new Date(adesso.getTime() + attesaDopoGuai(prima)).toISOString() : null
-  db.prepare(`
-    INSERT INTO automazioni (id, ultima, vista, quante, esito, guaio, storia, riprova, ricevuta) VALUES (?,?,?,1,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET
-      ultima = CASE WHEN excluded.esito = 'guaio' THEN automazioni.ultima ELSE excluded.ultima END,
-      vista  = COALESCE(excluded.vista, automazioni.vista),
-      quante = automazioni.quante + 1,
-      esito  = excluded.esito,
-      guaio  = excluded.guaio,
-      storia = excluded.storia,
-      riprova = excluded.riprova,
-      ricevuta = excluded.ricevuta
-  `).run(id, fallita ? null : ora, vista, esito, guaio ?? null, storia, riprova, JSON.stringify(giro))
-}
-
-/**
- * Rimandata: c'è già una sua riga aperta, e non si è guardato niente.
- *
- * **`ultima` non si tocca, ed è tutto il senso di questa funzione.** Prima
- * questo caso passava da `automazioneGirata`, che `ultima` la sposta — e
- * `ultima` è anche il paletto da cui `soloNuovi` riparte a guardare. Quindi:
- * un'automazione «guarda le fatture appena arrivate» con una riga rimasta
- * aperta in lista continuava a spostare il paletto in avanti ogni quarto d'ora
- * senza leggere niente, e tutto quello che arrivava nel frattempo finiva
- * *dietro* al paletto. Non veniva rimandato: veniva saltato, per sempre, in
- * silenzio, e la cosa saltata era esattamente una fattura.
- *
- * Non muovendo `ultima`, il turno resta scaduto e riprova al giro dopo: appena
- * quella riga viene chiusa, la successiva compare da sé.
- */
-export function automazioneRimandata(id: string) {
-  const ricevuta = JSON.stringify({ quando: new Date().toISOString(), esito: 'gia', quanti: 0, perche: 'gia' } satisfies Giro)
-  db.prepare(`
-    INSERT INTO automazioni (id, esito, ricevuta) VALUES (?, 'gia', ?)
-    ON CONFLICT(id) DO UPDATE SET esito = 'gia', ricevuta = excluded.ricevuta
-  `).run(id, ricevuta)
-}
-
-/**
- * Saltata: aveva già scritto le sue bozze di oggi, e non si è guardato niente.
- *
- * Vale quello che vale per `automazioneRimandata`: `ultima` non si tocca,
- * perché è il paletto da cui «guarda cos'è arrivato» riparte, e qui non si è
- * guardato niente. E `guaio` resta com'è: la scheda lo mostra in rosso, e un
- * tetto raggiunto non è un guasto — è la ricetta che funziona fin troppo.
- */
-export function automazioneSaltata(id: string) {
-  const ricevuta = JSON.stringify({ quando: new Date().toISOString(), esito: 'saltata', quanti: 0, perche: 'tetto' } satisfies Giro)
-  db.prepare(`
-    INSERT INTO automazioni (id, esito, ricevuta) VALUES (?, 'saltata', ?)
-    ON CONFLICT(id) DO UPDATE SET esito = 'saltata', ricevuta = excluded.ricevuta
-  `).run(id, ricevuta)
-}
-
-/**
- * Da quando la conosciamo.
- *
- * Idempotente, e chiamata a ogni giro su tutte: costa una scrittura che non
- * scrive, e in cambio dà una data di nascita a ogni automazione — cioè l'unico
- * modo di sapere se una che non è mai girata sta aspettando il suo turno o se
- * il suo turno è passato mentre il computer era spento.
- */
-export function vediAutomazione(id: string) {
-  db.prepare('INSERT OR IGNORE INTO automazioni (id, dal) VALUES (?,?)')
-    .run(id, new Date().toISOString())
-}
-
-/**
- * Accesa o spenta, su questa macchina.
- *
- * La ricetta arriva uguale per tutta l'azienda; spegnerla è una decisione di
- * chi la usa, e resta sua. Per questo sta nel database e non nel file.
- */
-export function accendiAutomazione(id: string, accesa: boolean) {
-  db.prepare(`
-    INSERT INTO automazioni (id, spenta) VALUES (?,?)
-    ON CONFLICT(id) DO UPDATE SET spenta = excluded.spenta
-  `).run(id, accesa ? 0 : 1)
-}
-
-/**
- * Via la sua storia, insieme alla ricetta.
- *
- * Una ricetta buttata che lascia dietro il suo stato è un fantasma: rifanne
- * una con lo stesso nome e si ritrova addosso il «girata 14 volte» di quella
- * di prima, spenta perché l'altra era spenta.
- */
-export function scordaAutomazione(id: string) {
-  db.prepare('DELETE FROM automazioni WHERE id = ?').run(id)
-  togliProveDi(id)
-}
-
-/**
- * C'è già una riga viva nata da questa automazione?
- *
- * È la guardia che impedisce a un'automazione giornaliera di riempire la lista
- * della stessa cosa ogni mattina. Finché quella di ieri è ancora lì aperta, non
- * se ne scrive un'altra: la persona non l'ha ancora guardata, e ripeterla non
- * la aiuta — la seppellisce.
- */
-export function compitoVivoDa(automazione: string): boolean {
-  return !!db.prepare(`
-    SELECT 1 FROM compiti
-    WHERE origine = ? AND sparito IS NULL AND stato IN ('aperto','delegato','pronto','chiede')
-    LIMIT 1
-  `).get(`auto:${automazione}`)
-}
-
 /**
  * Fra questi documenti, quali hanno già una riga in lista.
  *
- * *Qualunque* riga: viva, chiusa, tolta. È la guardia delle automazioni che
- * scrivono una riga per documento — «rispondere a Rossi» non deve ricomparire
- * perché la riga di ieri è stata chiusa, né perché è stata buttata — ed è
- * quello che tiene fuori dal feed una email che sta già in lista. Con
- * `origine` si guarda solo le righe nate da lì: una ricetta non deve
- * ripetersi, ma non deve nemmeno tacere perché un'altra ha già parlato di
- * quel documento con un'altra cosa da fare.
+ * *Qualunque* riga: viva, chiusa, tolta. «Rispondere a Rossi» non deve
+ * ricomparire perché la riga di ieri è stata chiusa, né perché è stata
+ * buttata: è quello che tiene fuori dal feed una email che sta già in lista.
  */
 export function docsConRiga(
   ids: string[],
-  origine?: string,
   /**
    * Contano solo le righe vive, o chiuse da meno di tanti giorni.
    *
    * Senza, una riga chiusa mesi fa su un file che è ancora lì — e che
-   * intanto è cambiato — lo terrebbe fuori dal feed per sempre. Le
-   * automazioni non lo passano: per loro una riga già fatta su quel
-   * documento è fatta, e non si rifà.
+   * intanto è cambiato — lo terrebbe fuori dal feed per sempre.
    */
   entroGiorni?: number
 ): Set<string> {
@@ -5388,44 +5000,10 @@ export function docsConRiga(
     const pezzo = ids.slice(i, i + 200)
     const righe = db.prepare(`
       SELECT DISTINCT doc FROM compiti
-      WHERE doc IN (${pezzo.map(() => '?').join(',')})${origine ? ' AND origine = ?' : ''}
+      WHERE doc IN (${pezzo.map(() => '?').join(',')})
       ${soglia ? 'AND ((chiuso IS NULL AND sparito IS NULL) OR COALESCE(sparito, chiuso, aggiornato) >= ?)' : ''}
-    `).all(...pezzo, ...(origine ? [origine] : []), ...(soglia ? [soglia] : [])) as { doc: string }[]
+    `).all(...pezzo, ...(soglia ? [soglia] : [])) as { doc: string }[]
     for (const r of righe) fuori.add(r.doc)
-  }
-  return fuori
-}
-
-/**
- * Le mail che hanno già una risposta da un'altra parte (`automazioni.senzaRispostaAltrove`).
- *
- * Una riga su quel documento conta se è una risposta: una bozza della notte,
- * una risposta affidata, una proposta di risposte. Non conta la riga di un
- * ordine fisso che riassume (un riepilogo, una nota, un evento): mette lì il suo
- * primo documento, e quella mail non riceveva più nessuna bozza. E contano le
- * mail coperte da una proposta di risposte già chiusa (`scordaProposta`).
- * Righe vive, o chiuse da meno di `entroGiorni`.
- */
-export function docsConRisposta(ids: string[], entroGiorni = 14): Set<string> {
-  const fuori = new Set<string>()
-  if (!ids.length) return fuori
-  const soglia = new Date(Date.now() - entroGiorni * 86_400_000).toISOString()
-  const vivaORecente = '((chiuso IS NULL AND sparito IS NULL) OR COALESCE(sparito, chiuso, aggiornato) >= ?)'
-  for (let i = 0; i < ids.length; i += 200) {
-    const pezzo = ids.slice(i, i + 200)
-    const righe = db.prepare(`SELECT doc, origine, proposta FROM compiti WHERE doc IN (${pezzo.map(() => '?').join(',')}) AND ${vivaORecente}`)
-      .all(...pezzo, soglia) as { doc: string; origine: string | null; proposta: string | null }[]
-    for (const r of righe) {
-      const dellOrdine = String(r.origine ?? '').startsWith('auto:')
-      const proposta = jsonOppureNulla(r.proposta) as { azione?: string } | null
-      if (!dellOrdine || proposta?.azione === 'posta.bozza') fuori.add(r.doc)
-    }
-  }
-  const voluti = new Set(ids)
-  const chiuse = db.prepare(`SELECT fonti FROM compiti WHERE origine LIKE 'auto:%' AND fonti IS NOT NULL AND ${vivaORecente}`).all(soglia) as { fonti: string }[]
-  for (const r of chiuse) {
-    const f = jsonOppureNulla(r.fonti)
-    for (const x of Array.isArray(f) ? f as { id?: string; coperta?: boolean }[] : []) if (x?.coperta && x.id && voluti.has(x.id)) fuori.add(x.id)
   }
   return fuori
 }
@@ -5541,7 +5119,7 @@ export function potaSessioni() {
  * Le tabelle personali che «Scarica tutti i miei dati» esporta riga per riga.
  *
  * Il feed in tutti i suoi stati, le domande, le notizie (lette e scartate sono
- * cose sue), le cartelle delle automazioni, e tutte quelle nate dalla 48 in
+ * cose sue), le raccolte di prima, e tutte quelle nate dalla 48 in
  * poi: una tabella nuova scritta in `TABELLE` ci entra da sola, così il
  * fascicolo non può dimenticarsela.
  */
@@ -5635,227 +5213,6 @@ export function azzeraTutto() {
    */
   db.exec("INSERT INTO ricerca (ricerca) VALUES ('delete-all')")
 }
-
-// — P6: inizio —
-
-/*
- * La connessione della prova (P6).
- *
- * Una per recinto, aperta la prima volta che serve e chiusa da `nellaProva`.
- * Sola lettura (`query_only`): ogni INSERT, UPDATE, DELETE lancia, anche sulle
- * tabelle che altri hanno aggiunto dopo. Con un'ora (`al`), cinque viste
- * temporanee coprono le tabelle vere con il loro stato di quell'ora: le query
- * senza schema leggono il passato senza cambiare firma.
- */
-const ORA_DELLA_PROVA = /^\d{4}-\d\d-\d\dT[\d:.]+Z$/
-
-function colonneDi(d: DatabaseSync, t: string): string[] {
-  return (d.prepare(`PRAGMA main.table_info(${t})`).all() as { name: string }[]).map(c => c.name)
-}
-
-function vistePassate(d: DatabaseSync, al: string) {
-  if (!ORA_DELLA_PROVA.test(al)) throw new Error('Ora della prova non valida.')
-  const q = `'${al}'`
-  const tutte = (t: string, maschere: Record<string, string>) =>
-    colonneDi(d, t).map(c => maschere[c] ? `${maschere[c]} AS ${c}` : c).join(', ')
-  d.exec(`CREATE TEMP VIEW documenti AS SELECT * FROM main.documenti WHERE quando IS NULL OR quando <= ${q}`)
-  const cc = new Set(colonneDi(d, 'compiti'))
-  const dopo = (c: string) => cc.has(c) ? `(${c} IS NOT NULL AND ${c} > ${q})` : '0'
-  const riaperta = `(${dopo('chiuso')} OR ${dopo('sparito')})`
-  d.exec(`CREATE TEMP VIEW compiti AS SELECT ${tutte('compiti', {
-    chiuso: `CASE WHEN chiuso > ${q} THEN NULL ELSE chiuso END`,
-    sparito: `CASE WHEN sparito > ${q} THEN NULL ELSE sparito END`,
-    esito: `CASE WHEN ${riaperta} THEN NULL ELSE esito END`,
-    stato: `CASE WHEN ${riaperta} THEN 'aperto' ELSE stato END`
-  })} FROM main.compiti WHERE creato <= ${q}`)
-  const fc = new Set(colonneDi(d, 'feed'))
-  const risposta = fc.has('risposto') ? `(risposto IS NOT NULL AND risposto > ${q})` : '0'
-  d.exec(`CREATE TEMP VIEW feed AS SELECT ${tutte('feed', {
-    stato: `CASE WHEN ${risposta} THEN 'aperto' ELSE stato END`,
-    risposto: `CASE WHEN ${risposta} THEN NULL ELSE risposto END`,
-    ragione: `CASE WHEN ${risposta} THEN NULL ELSE ragione END`,
-    motivo: `CASE WHEN ${risposta} THEN NULL ELSE motivo END`
-  })} FROM main.feed WHERE quando <= ${q}`)
-  d.exec(`CREATE TEMP VIEW messaggi AS SELECT * FROM main.messaggi WHERE quando <= ${q}`)
-  d.exec(`CREATE TEMP VIEW azioni AS SELECT * FROM main.azioni WHERE quando <= ${q}`)
-}
-
-function dellaProva(p: provaChiusa.Contesto): DatabaseSync {
-  if (p.db) return p.db as DatabaseSync
-  const d = new DatabaseSync(join(cartella(), 'mente.db'))
-  try {
-    d.exec('PRAGMA busy_timeout = 5000')
-    if (p.al) vistePassate(d, p.al)
-    d.exec('PRAGMA query_only = ON')
-  } catch (e) {
-    try { d.close() } catch { /* già chiusa */ }
-    throw e
-  }
-  p.db = d
-  return d
-}
-
-/** Il lavoro dentro un recinto, e alla fine la sua connessione chiusa. Collaudo e vassoio passano sempre di qui. */
-export async function nellaProva<T>(c: provaChiusa.Contesto, fn: () => T | Promise<T>): Promise<T> {
-  try {
-    return await provaChiusa.dentroLaProva(c, fn)
-  } finally {
-    c.chiusa = true
-    if (c.db) { try { (c.db as DatabaseSync).close() } catch { /* già chiusa */ } }
-  }
-}
-
-export type RigaProva = {
-  id: string; automazione: string; tipo: 'prova' | 'vassoio'; origine: string | null
-  impronta: string | null; ricetta: string | null; dal: string | null; al: string | null
-  stato: string; documenti: number; occorrenze: number; gettoni: number; guaio: string | null
-  creata: string; finita: string | null
-}
-
-export type RigaEsito = {
-  id: string; prova: string; automazione: string; quando: string | null; tipo: string
-  testo: string | null; nota: string | null; doc: string | null; docs: string | null; inLista: string | null
-  modo: string | null; attrezzi: string | null; proposta: string | null; bozza: string | null
-  fonti: string | null; revisione: string | null; stato: string; giudizio: string | null
-  perche: string | null; jev: number | null; aPosteriori: string | null; risposta: string | null
-  suo: string | null; compito: string | null; creato: string
-}
-
-const CAMPI_PROVA = ['automazione', 'tipo', 'origine', 'impronta', 'ricetta', 'dal', 'al', 'stato', 'documenti', 'occorrenze', 'gettoni', 'guaio', 'creata', 'finita'] as const
-const CAMPI_ESITO = ['prova', 'automazione', 'quando', 'tipo', 'testo', 'nota', 'doc', 'docs', 'inLista', 'modo', 'attrezzi', 'proposta', 'bozza', 'fonti', 'revisione', 'stato', 'giudizio', 'perche', 'jev', 'aPosteriori', 'risposta', 'suo', 'compito', 'creato'] as const
-
-type Valore = string | number | null
-
-export function nuovaProva(p: Pick<RigaProva, 'id' | 'automazione' | 'tipo' | 'stato'> & Partial<RigaProva>): RigaProva {
-  const riga: RigaProva = {
-    origine: null, impronta: null, ricetta: null, dal: null, al: null, guaio: null, finita: null,
-    ...p, documenti: p.documenti ?? 0, occorrenze: p.occorrenze ?? 0, gettoni: p.gettoni ?? 0,
-    creata: p.creata ?? new Date().toISOString()
-  }
-  db.prepare(`INSERT INTO prove (id, ${CAMPI_PROVA.join(', ')}) VALUES (?, ${CAMPI_PROVA.map(() => '?').join(', ')})`)
-    .run(riga.id, ...CAMPI_PROVA.map(k => riga[k] as Valore))
-  return riga
-}
-
-export function aggiornaProva(id: string, patch: Partial<Omit<RigaProva, 'id'>>) {
-  const k = CAMPI_PROVA.filter(c => c in patch)
-  if (!k.length) return
-  db.prepare(`UPDATE prove SET ${k.map(c => `${c} = ?`).join(', ')} WHERE id = ?`)
-    .run(...k.map(c => (patch as Record<string, Valore>)[c] ?? null), id)
-}
-
-export function prova(id: string): RigaProva | null {
-  return (db.prepare('SELECT * FROM prove WHERE id = ?').get(id) as unknown as RigaProva) ?? null
-}
-
-export function proveDi(automazione: string, tipo: 'prova' | 'vassoio' = 'prova', limite = 5): RigaProva[] {
-  return db.prepare('SELECT * FROM prove WHERE automazione = ? AND tipo = ? ORDER BY creata DESC, rowid DESC LIMIT ?')
-    .all(automazione, tipo, limite) as unknown as RigaProva[]
-}
-
-export function proveInStato(stati: string[]): RigaProva[] {
-  return db.prepare(`SELECT * FROM prove WHERE tipo = 'prova' AND stato IN (${stati.map(() => '?').join(',')})`)
-    .all(...stati) as unknown as RigaProva[]
-}
-
-/** Le prove di oggi (giorno locale) di un'origine: «editor» o «suggerimento». */
-export function proveDiOggi(origine: string): number {
-  const inizio = new Date(); inizio.setHours(0, 0, 0, 0)
-  const r = db.prepare("SELECT COUNT(*) AS n FROM prove WHERE tipo = 'prova' AND origine = ? AND creata >= ?")
-    .get(origine, inizio.toISOString()) as { n: number }
-  return r.n
-}
-
-export function scriviEsito(e: Pick<RigaEsito, 'id' | 'prova' | 'automazione' | 'tipo' | 'stato'> & Partial<RigaEsito>): RigaEsito {
-  const riga = { ...Object.fromEntries(CAMPI_ESITO.map(k => [k, null])), ...e, creato: e.creato ?? new Date().toISOString() } as RigaEsito
-  db.prepare(`INSERT INTO esiti (id, ${CAMPI_ESITO.join(', ')}) VALUES (?, ${CAMPI_ESITO.map(() => '?').join(', ')})`)
-    .run(riga.id, ...CAMPI_ESITO.map(k => riga[k] as Valore))
-  return riga
-}
-
-export function aggiornaEsito(id: string, patch: Partial<Omit<RigaEsito, 'id'>>) {
-  const k = CAMPI_ESITO.filter(c => c in patch)
-  if (!k.length) return
-  db.prepare(`UPDATE esiti SET ${k.map(c => `${c} = ?`).join(', ')} WHERE id = ?`)
-    .run(...k.map(c => (patch as Record<string, Valore>)[c] ?? null), id)
-}
-
-export function esiti(prova: string): RigaEsito[] {
-  return db.prepare('SELECT * FROM esiti WHERE prova = ? ORDER BY quando DESC, rowid DESC').all(prova) as unknown as RigaEsito[]
-}
-
-export function esito(id: string): RigaEsito | null {
-  return (db.prepare('SELECT * FROM esiti WHERE id = ?').get(id) as unknown as RigaEsito) ?? null
-}
-
-/** Il risultato del vassoio va in lista, una volta sola: vero se l'ha preso adesso questa chiamata. */
-export function prendiEsito(id: string, compito: string): boolean {
-  const r = db.prepare(`UPDATE esiti SET compito = ?, stato = 'in lista' WHERE id = ? AND compito IS NULL
-    AND stato NOT IN ('in lista','scartata','superata')`).run(compito, id)
-  return Number(r.changes) === 1
-}
-
-const IN_ATTESA = "('senza bozza','da scrivere','scritta')"
-
-/** I documenti che hanno un risultato nel vassoio (in qualunque stato ma non superato). */
-export function docsNelVassoio(ids: string[], automazione?: string): Set<string> {
-  const dentro = new Set<string>()
-  if (!ids.length) return dentro
-  const cercati = new Set(ids)
-  const righe = db.prepare(`SELECT e.doc, e.docs FROM esiti e JOIN prove p ON p.id = e.prova
-    WHERE p.tipo = 'vassoio' AND e.stato != 'superata'${automazione ? ' AND e.automazione = ?' : ''}`)
-    .all(...(automazione ? [automazione] : [])) as { doc: string | null; docs: string | null }[]
-  for (const r of righe) {
-    if (r.doc && cercati.has(r.doc)) dentro.add(r.doc)
-    if (r.docs) {
-      try {
-        const x = JSON.parse(r.docs) as { ids?: string[] }
-        for (const d of x.ids ?? []) if (cercati.has(d)) dentro.add(d)
-      } catch { /* un JSON storto non tiene fuori niente */ }
-    }
-  }
-  return dentro
-}
-
-/** I risultati del vassoio in attesa, di tutte le automazioni, dal più nuovo. */
-export function vassoioInAttesa(): RigaEsito[] {
-  return db.prepare(`SELECT e.* FROM esiti e JOIN prove p ON p.id = e.prova
-    WHERE p.tipo = 'vassoio' AND e.stato IN ${IN_ATTESA} ORDER BY e.creato DESC, e.rowid DESC`).all() as unknown as RigaEsito[]
-}
-
-/** Il primo risultato del vassoio da scrivere, il più vecchio. */
-export function daScrivereNelVassoio(): RigaEsito | null {
-  return (db.prepare(`SELECT e.* FROM esiti e JOIN prove p ON p.id = e.prova
-    WHERE p.tipo = 'vassoio' AND e.stato = 'da scrivere' ORDER BY e.creato ASC, e.rowid ASC LIMIT 1`).get() as unknown as RigaEsito) ?? null
-}
-
-export function togliProveDi(automazione: string) {
-  db.prepare('DELETE FROM esiti WHERE automazione = ?').run(automazione)
-  db.prepare('DELETE FROM prove WHERE automazione = ?').run(automazione)
-}
-
-/** Le ultime n prove di un'automazione restano; le altre, coi loro esiti, se ne vanno. */
-export function tieniUltimeProve(automazione: string, n = 5) {
-  const vecchie = db.prepare(`SELECT id FROM prove WHERE automazione = ? AND tipo = 'prova'
-    ORDER BY creata DESC, rowid DESC LIMIT -1 OFFSET ?`).all(automazione, n) as { id: string }[]
-  for (const v of vecchie) {
-    db.prepare('DELETE FROM esiti WHERE prova = ?').run(v.id)
-    db.prepare('DELETE FROM prove WHERE id = ?').run(v.id)
-  }
-}
-
-/** La prova di un suggerimento passa all'automazione adottata. */
-export function spostaProve(da: string, a: string) {
-  db.prepare('UPDATE prove SET automazione = ? WHERE automazione = ?').run(a, da)
-  db.prepare('UPDATE esiti SET automazione = ? WHERE automazione = ?').run(a, da)
-}
-
-/** Una fonte scollegata si porta via anche i risultati delle prove sui suoi documenti. */
-export function togliEsitiDellaFonte(fonte: string) {
-  db.prepare('DELETE FROM esiti WHERE doc IN (SELECT id FROM documenti WHERE fonte = ?)').run(fonte)
-}
-
-// — P6: fine —
 
 // — P10: inizio —
 

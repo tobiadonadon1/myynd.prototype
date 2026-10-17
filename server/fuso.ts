@@ -2,8 +2,8 @@
 //
 // «Ogni giorno alle 7» lo dice una persona guardando il suo orologio. Su un
 // server la macchina sta in UTC, e alle 7 di Roma sono le 5: senza questo file
-// l'automazione partiva alle 9 d'estate e il tetto delle bozze si azzerava alle
-// due di notte. Il fuso lo manda il browser una volta, sta nella
+// il giro delle 7 partiva alle 9 d'estate e il tetto si azzerava alle due di
+// notte. Il fuso lo manda il browser una volta, sta nella
 // configurazione, e da lì ogni conto che parla di giorni e di ore passa di qui.
 // Senza, vale quello della macchina — che in casa è quello giusto.
 

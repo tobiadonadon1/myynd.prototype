@@ -1,6 +1,6 @@
 // «Scarica tutti i miei dati» vuol dire tutti.
 //
-// Il fascicolo esportava documenti, lista, memoria, chat, automazioni, azioni
+// Il fascicolo esportava documenti, lista, memoria, chat, azioni
 // e uso: mancavano il feed, i progetti, le domande, le notizie, il riferimento
 // e i file che Myynd tiene accanto all'indice (il punto, le priorità…). E ogni
 // tabella nuova rischiava di restarne fuori. Qui si semina un po' di tutto e si

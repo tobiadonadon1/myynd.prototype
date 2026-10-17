@@ -20,13 +20,12 @@
 // pesano dieci volte quello che pesa la mente vera.
 
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { CON_SEGRETI, cartella, leggi, scrivi, type Config } from './config.ts'
 import { OSPITATO, APP_GOOGLE, APP_MICROSOFT, hostRaggiungibile } from './ospitato.ts'
 import { indirizzoAmmesso } from './compatibile.ts'
 import * as store from './store.ts'
-import * as automazioni from './automazioni.ts'
 
 /** La forma del pacco. Cambia solo se cambia cosa c'è dentro. */
 const VERSIONE = 1
@@ -38,8 +37,6 @@ type Pacco = {
   config: unknown
   /** L'indice, com'è sul disco, in base64. */
   mente: string
-  /** Le automazioni scritte da questa persona. */
-  automazioni: Record<string, string>
 }
 
 /**
@@ -56,13 +53,6 @@ export function esporta(): Buffer {
   store.riversaIlWal()
 
   const mente = join(dove, 'mente.db')
-  const automazioni: Record<string, string> = {}
-  const cartellaAuto = join(dove, 'automazioni')
-  if (existsSync(cartellaAuto)) {
-    for (const f of readdirSync(cartellaAuto).filter(n => n.endsWith('.json'))) {
-      automazioni[f] = readFileSync(join(cartellaAuto, f), 'utf8')
-    }
-  }
 
   const pacco: Pacco = {
     versione: VERSIONE,
@@ -70,13 +60,12 @@ export function esporta(): Buffer {
     // da `leggi()` e non dal file: su Postgres il file non c'è, e la
     // configurazione sta dove `config.ts` sa trovarla
     config: senzaISegretiDiChiOspita(leggi()),
-    mente: existsSync(mente) ? readFileSync(mente).toString('base64') : '',
-    automazioni
+    mente: existsSync(mente) ? readFileSync(mente).toString('base64') : ''
   }
   return gzipSync(Buffer.from(JSON.stringify(pacco)), { level: 9 })
 }
 
-export type Esito = { documenti: number; automazioni: number }
+export type Esito = { documenti: number }
 
 /**
  * Il pacco è della persona, e dentro ci va quello che è suo. Il segreto
@@ -202,27 +191,7 @@ export function importa(dati: Buffer): Esito {
   // un trasloco sostituisce tutto, credenziali comprese: lo dice
   scrivi(config as Config, { togli: [...CON_SEGRETI] })
 
-  const auto = join(dove, 'automazioni')
-  if (!existsSync(auto)) mkdirSync(auto, { recursive: true, mode: 0o700 })
-  let quante = 0
-  for (const [nome, testo] of Object.entries(pacco.automazioni ?? {})) {
-    // solo nomi di file, mai percorsi: un `../../` qui dentro scriverebbe
-    // fuori dalla cartella di chi sta importando
-    if (!/^[\w.-]+\.json$/.test(nome)) continue
-    // e dev'essere testo: un valore che non lo è faceva esplodere la scrittura
-    // *dopo* che l'indice era già stato sostituito, lasciando il conto a metà
-    if (typeof testo !== 'string') continue
-    writeFileSync(join(auto, nome), testo, { mode: 0o600 })
-    quante++
-  }
-
-  /*
-   * Le ricette si rileggono dal disco.
-   *
-   * `ricette()` le tiene in memoria, e quella copia è di prima dell'importazione:
-   * senza questa riga il pacco arriva, i file ci sono, e la schermata continua a
-   * mostrare quelle di un attimo fa — comprese zero, se il conto era vuoto.
-   */
-  automazioni.scordaLeRicette()
-  return { documenti: store.conteggi().totale, automazioni: automazioni.elenco().length }
+  // un pacco di prima può portare altro accanto alla mente e alla
+  // configurazione: resta fuori, senza errore
+  return { documenti: store.conteggi().totale }
 }

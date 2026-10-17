@@ -27,7 +27,7 @@ const LOGO = 'Ciao Alex, la consegna dei file del logo Ã¨ confermata per venerdÃ
 const PRIYA = 'Owner: Priya Shah. Build 1.0.3 goes to App Review on 2 October 2026. ' + 'Checklist items follow in this release note. '.repeat(9)
 
 before(() => {
-  cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, nome: 'Alex' })
+  cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, nome: 'Alex' })
   progetti.scrivi({ nome: 'Harbor Labs', obiettivo: 'Launch the Harbor invoice pilot' })
   progetti.scrivi({ nome: 'Aurora', obiettivo: 'Launch the pilot' })
   store.salvaDocumenti([

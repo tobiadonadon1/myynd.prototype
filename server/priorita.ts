@@ -449,9 +449,6 @@ const DATA = new RegExp(
   `(?<![\\p{L}\\p{N}])(?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:di\\s+|of\\s+)?${MESE}|${MESE}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?|\\d{1,2}[/.-]\\d{1,2}(?:[/.-]\\d{2,4})?|\\d{4}-\\d{2}-\\d{2}|oggi|domani|dopodomani|today|tomorrow|(?:entro|by|on|il|next|prossimo)\\s+${GIORNO_SETTIMANA})(?![\\p{L}\\p{N}])`, 'iu')
 export const conUnaData = (s: string) => DATA.test(s)
 
-/** L'offerta con cui una proposta dice «questo lo faccio girare da solo». */
-const AUTOMAZIONE = /^(?:imposto un'automazione|i set up an automation)/i
-
 /** Le parole di una frase, spogliate: per capire se due righe dicono la stessa cosa. */
 function parole(s: string): Set<string> {
   return new Set(s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 3))
@@ -488,7 +485,7 @@ const testoDi = (v: unknown, min: number, max: number) => {
 export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>, gia: string[], morti: Set<string> = new Set(), fonti: FontiPriorita = SENZA_FONTI): Priorita | null {
   if (!g || typeof g !== 'object') return null
   const generi: Record<string, Genere> = { priorita: 'priorita', proposta: 'proposta', 'da-leggere': 'da-leggere', scadenza: 'scadenza' }
-  let genere = typeof g.genere === 'string' ? generi[g.genere] ?? null : null
+  const genere = typeof g.genere === 'string' ? generi[g.genere] ?? null : null
   if (!genere) return null
   const titolo = testoDi(g.titolo, 10, 140)
   // corti apposta: la carta in cima è piccola, e «molto pesante di testo» è
@@ -508,8 +505,6 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
   const quando = genere === 'scadenza' ? (testoDi(g.quando, 3, 80) ?? '') : ''
   // una scadenza senza la data letta nella fonte è una voce che tira a indovinare
   if (genere === 'scadenza' && !conUnaData(quando) && !conUnaData(testo)) return null
-  // «Imposto un'automazione…» è una proposta anche se l'ha chiamata priorità
-  if (AUTOMAZIONE.test(offerta)) genere = 'proposta'
   const nome = typeof g.progetto === 'string' ? g.progetto.trim().toLowerCase() : ''
   const progetto = nome ? nomi.get(nome) ?? null : null
   if (progetto && morti.has(progetto)) return null
@@ -653,7 +648,7 @@ ${indicazioni}
 
 Scrivi solo le priorità che passano l'asticella: cose che farebbe entro due giorni, o che le dispiacerebbe non aver visto. Le più importanti prima. Quello che una sessione mostra già fatto, o che sta facendo proprio adesso con un assistente, non è una voce: dirgli di fare quello che sta già facendo è rumore. Guarda ogni progetto registrato e ogni cartella di lavoro toccata nell'ultimo mese, ma se per uno niente passa l'asticella lascialo fuori. Zero è una risposta giusta. Ognuna nasce da UNA fonte che hai davanti e che citi alla lettera in «prova»: un documento del materiale, con il suo id; oppure una riga della memoria di un progetto o di quello che ha scritto lui sui progetti, con il nome esatto del progetto e l'id vuoto. Se non sai citarla, la voce non ci va. Quattro generi:
 — «priorita»: una cosa che dovrebbe fare adesso e che non è in lista. Un problema segnalato in una mail e lasciato lì, un passo che l'obiettivo di un progetto chiede e nessuno ha messo in lista, una cosa cominciata e lasciata a metà.
-— «proposta»: un'idea concreta che porta avanti un suo progetto o un suo obiettivo: un prodotto da un materiale che ha già, un miglioramento a una cosa sua, una mossa che le sue fonti suggeriscono. Solo se è ancorata a qualcosa di suo che hai letto qui. E un processo che si ripete e che potrei fare io da solo (una mail che manda ogni settimana, un file che riordina ogni volta, un controllo che rifà a mano) è una «proposta» con l'offerta che comincia con «Imposto un'automazione…» («I set up an automation…»): dì cosa farebbe e quando gira.
+— «proposta»: un'idea concreta che porta avanti un suo progetto o un suo obiettivo: un prodotto da un materiale che ha già, un miglioramento a una cosa sua, una mossa che le sue fonti suggeriscono. Solo se è ancorata a qualcosa di suo che hai letto qui.
 — «da-leggere»: una mail o un documento che vale la pena leggere adesso, perché dice una cosa che cambia un suo progetto o gli chiede una decisione, e che ha lasciato lì. Sempre con l'id del documento. Non una newsletter, non una ricevuta.
 — «scadenza»: un rinnovo, un pagamento, una consegna con la data letta nella fonte. La data va in «quando» come l'hai letta («rinnova il 3 ottobre»); senza data non è una scadenza, è un dubbio.
 
@@ -891,8 +886,8 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   const sue = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo)], alti, ['sblocco'])
   const inLista = mettiInLista(sue)
 
-  // le carte: consigli e automazioni
-  const scelte = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo), ...inLista.map(m => m.titolo)], alti, ['consiglio', 'automazione'])
+  // le carte: i consigli
+  const scelte = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo), ...inLista.map(m => m.titolo)], alti, ['consiglio'])
   const domande = salvaDomandeSullObiettivo(quadri)
   if (!scelte.length) {
     quadro.segnaMesse([...messi, ...inLista])
@@ -910,7 +905,7 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   const voci: Priorita[] = scelte.map(m => {
     const doc = m.doc && !daUnaFonteLunga(m.doc) && store.documento(m.doc) ? m.doc : null
     return {
-      genere: m.genere === 'consiglio' || m.genere === 'automazione' ? 'proposta' : 'priorita',
+      genere: m.genere === 'consiglio' ? 'proposta' : 'priorita',
       titolo: m.titolo, testo: m.testo, perche: m.perche, progetto: m.progetto,
       doc, offerta: m.offerta, quando: '', prova: m.prova,
       origine: doc || m.origine === 'doc' ? 'doc' : m.origine

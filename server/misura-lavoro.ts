@@ -4,7 +4,7 @@
 // dovuto rispondere a una domanda (l'obiettivo è otto su dieci senza, e mai
 // più di una), e quante bozze sono partite com'erano o con un ritocco (sei su
 // dieci). Si legge da `misure_compiti`, sul conto di chi chiede, e non
-// tocca niente. Il fondo (iniziative, automazioni) si conta a parte: non
+// tocca niente. Il fondo (le iniziative) si conta a parte: non
 // chiede mai, e il suo numero di domande dev'essere zero.
 //
 // Ogni tasso è null sotto le cinque righe: una percentuale su tre casi non

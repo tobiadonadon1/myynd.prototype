@@ -51,7 +51,7 @@ const INSIEME = (): Insieme => ({ versione: 1, lingua: 'en', creato: ieri(1), ag
 ] })
 
 before(() => {
-  cfg.scrivi({ lingua: 'en', diSerie: false, onboarding: true, giro: true, nome: 'Alex', motore: 'claude', claude: { apiKey: 'sk-ant-prova-finta' }, tetto: 0 })
+  cfg.scrivi({ lingua: 'en', onboarding: true, giro: true, nome: 'Alex', motore: 'claude', claude: { apiKey: 'sk-ant-prova-finta' }, tetto: 0 })
   progetti.scrivi({ nome: 'Harbor Labs', obiettivo: 'Launch the Harbor invoice pilot with two suppliers' })
   progetti.scrivi({ nome: 'Northwind', obiettivo: 'Ship Northwind 1.0 on the App Store' })
   const docs: Parameters<typeof store.salvaDocumenti>[0] = [
