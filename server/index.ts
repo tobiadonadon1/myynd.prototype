@@ -92,7 +92,7 @@ import * as accesso from './connettori/accesso.ts'
 import { fontiIncomplete, lettureInCorso, osservaLettura } from './lettura-feed.ts'
 import * as saluteFonti from './salute-fonti.ts'
 import * as saluteTeste from './salute-teste.ts'
-import { fraseDi, rimedioDi } from './connettori/guaio.ts'
+import { GuaioFonte, fraseDi, rimedioDi } from './connettori/guaio.ts'
 import { aperturaProgetto } from './apertura-progetto.ts'
 import { recordCurrentWork, nextResultSince } from './project-memory.ts'
 import * as priorita from './priorita.ts'
@@ -113,6 +113,7 @@ const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
+import * as slackSegnali from './slack-segnali.ts'
 import * as github from './connettori/github.ts'
 import * as amministratore from './connettori/amministratore.ts'
 import { doveVanno } from './dove-vanno-i-dati.ts'
@@ -2007,9 +2008,80 @@ app.post('/api/connettori/slack', async (req, res) => {
   try {
     const e = await slack.prova({ token })
     if (!e.ok) return res.status(400).json({ errore: e.errore })
-    cfg.aggiorna({ slack: { token, squadra: e.squadra, utente: e.utente, giorni: 30 } })
-    res.json({ ok: true, squadra: e.squadra, canali: e.canali, oltre: e.oltre })
+    // le esclusioni restano se lo spazio è lo stesso: rifare il token non le deve cancellare
+    const prima = cfg.leggi().slack
+    const esclusi = prima?.squadraId === e.squadraId ? prima?.esclusi : undefined
+    cfg.aggiorna({ slack: {
+      token, squadra: e.squadra, utente: e.utente, giorni: 30, utenteId: e.utenteId, squadraId: e.squadraId, url: e.url,
+      ...(e.ambiti ? { ambiti: e.ambiti } : {}), ...(esclusi?.length ? { esclusi } : {})
+    } })
+    res.json({ ok: true, squadra: e.squadra, utente: e.utente, canali: e.canali, oltre: e.oltre, mancano: e.mancano ?? [] })
   } catch (e) { errore(res, e) }
+})
+
+/**
+ * Slack, quello che la scheda delle Fonti mostra quando è collegato: lo
+ * spazio, chi, i permessi che mancano, l'ultimo giro, i conti, e i posti da
+ * cui scegliere le esclusioni. Il token non esce mai di qui.
+ */
+app.get('/api/slack/stato', (_req, res) => {
+  const c = cfg.leggi().slack
+  if (!c) return res.status(404).json({ errore: 'Slack non è collegato.' })
+  const s = slack.statoPerScheda()
+  res.json({
+    squadra: c.squadra ?? null, utente: c.utente ?? null, url: c.url ?? null,
+    ambiti: c.ambiti ?? null, mancano: c.ambiti ? slack.AMBITI.filter(a => !c.ambiti!.includes(a)) : [],
+    manifesto: slack.manifesto(),
+    ultima: s.ultima, conversazioni: s.conversazioni, fili: s.fili, aperte: slackSegnali.daRispondere().length,
+    esclusi: c.esclusi ?? [], posti: s.posti
+  })
+})
+
+/**
+ * Le conversazioni da non leggere. Escluderne una la toglie anche da quello
+ * che Myynd sa già: i documenti e i segnali di lì escono subito, non al giro dopo.
+ */
+app.post('/api/slack/esclusi', (req, res) => {
+  const c = cfg.leggi().slack
+  if (!c) return res.status(404).json({ errore: 'Slack non è collegato.' })
+  const esclusi: string[] = [...new Set<string>((Array.isArray(req.body?.esclusi) ? req.body.esclusi : [])
+    .map((x: unknown) => String(x)).filter((x: string) => /^[A-Z0-9]{2,20}$/.test(x)))].slice(0, 500)
+  const nuovi = esclusi.filter(x => !(c.esclusi ?? []).includes(x))
+  cfg.aggiorna({ slack: { ...c, esclusi } })
+  let tolti = 0
+  for (const id of nuovi) {
+    tolti += store.scordaDocumenti([...store.quandoPerPrefisso(`slack:${id}:`).keys()])
+    slackSegnali.dimenticaConversazione(id)
+  }
+  res.json({ ok: true, esclusi, tolti })
+})
+
+/** Le domande su Slack che aspettano lui, con chi, cosa, il link e da quanto. */
+app.get('/api/slack/da-rispondere', (_req, res) => {
+  res.json({ domande: slackSegnali.daRispondere(), promesse: slackSegnali.promesse(), decisioni: slackSegnali.decisioni() })
+})
+
+/**
+ * Manda una risposta preparata su Slack: solo da un tocco suo.
+ *
+ * Il segno è l'intestazione `x-myynd-tocco`, che mette il bottone «Manda» e
+ * nessun altro: nessun lavoro di fondo passa da qui, e `slack.invia` non ha
+ * altre strade. Torna il link al messaggio mandato.
+ */
+app.post('/api/slack/invia', async (req, res) => {
+  if (req.headers['x-myynd-tocco'] !== '1') return res.status(403).json({ errore: 'Si manda solo con un tocco.' })
+  const c = cfg.leggi().slack
+  if (!c) return res.status(400).json({ errore: 'Collega Slack e potrò mandarlo.' })
+  const conversazione = String(req.body?.conversazione ?? '')
+  const filo = req.body?.filo ? String(req.body.filo) : null
+  try {
+    const e = await slack.invia(c, { conversazione, testo: String(req.body?.testo ?? ''), filo })
+    slackSegnali.risoltoDaQui(conversazione, filo, e.ts)
+    res.json({ ok: true, permalink: e.permalink })
+  } catch (e) {
+    if (e instanceof GuaioFonte && e.rimedio === 'guarda') return res.status(400).json({ errore: e.message })
+    errore(res, e)
+  }
 })
 
 /**
@@ -2333,6 +2405,22 @@ async function leggiTutto(
     try { gemello.dopoLaLettura(partita, gemello.postaLettaBene({ fasi, collegate: gemello.casellePostali(cfg.leggi()), fermata: fermo() })) }
     catch { /* il registro non ferma la lettura */ }
   }
+}
+
+/**
+ * Quello che un giro di Slack ha portato, scritto: i documenti, quelli spariti,
+ * i segnali di lavoro (domande, promesse, decisioni) e, se lo spazio di prima
+ * non sapeva ancora chi è lui, chi è.
+ */
+async function dopoSlack(e: slack.EsitoSlack): Promise<store.EsitoScrittura> {
+  const scritti = await store.salvaDocumentiAPezzi(e.docs)
+  if (e.tolti.length) store.scordaDocumenti(e.tolti)
+  try { slackSegnali.registra(e) } catch (err) { console.error('myynd · i segnali di Slack non si sono scritti:', err instanceof Error ? err.message : err) }
+  const c = cfg.leggi().slack
+  if (c && e.io.utenteId && (c.utenteId !== e.io.utenteId || c.url !== e.io.url || (e.io.ambiti && e.io.ambiti.join() !== (c.ambiti ?? []).join()))) {
+    cfg.aggiorna({ slack: { ...c, utenteId: e.io.utenteId, squadraId: e.io.squadraId, url: e.io.url, ...(e.io.ambiti ? { ambiti: e.io.ambiti } : {}) } })
+  }
+  return scritti
 }
 
 async function leggiTuttoDentro(
@@ -2713,20 +2801,18 @@ async function leggiTuttoDentro(
   const slk = c.slack
   if (slk) await fonte('slack', async () => {
     avvisa({ fase: 'slack', stato: 'apro le conversazioni' })
-    const e = await slack.sincronizza({ ...slk, giorni: primaLettura.giorniDi('slack', slk.giorni) }, (fatti, tot) =>
-      avvisa({ fase: 'slack', stato: `${fatti} di ${tot} canali` }))
-    await store.salvaDocumentiAPezzi(e.docs)
     /*
-      Si riconcilia solo se nessun canale è caduto e non si è toccato il tetto.
-      Un canale che non risponde non prova che le sue conversazioni siano
-      sparite — e cancellarle vorrebbe dire perdere mesi di scambi per un
-      errore di rete durato tre secondi.
+      Si legge dal segno di ogni conversazione, non tutto da capo (vedi
+      `connettori/slack.ts`); la prima volta trenta giorni. Si cancella solo
+      quello che il connettore ha visto sparire dentro un tratto letto per
+      intero: un posto che non risponde non prova che le sue conversazioni
+      siano sparite.
     */
-    // e solo dentro la finestra letta: novanta giorni la prima volta, poi trenta (P4)
-    const tolti = store.riconcilia('slack', { completo: !e.falliti.length && !e.troncato, dal: e.dal },
-      e.docs.map(d => d.id))
+    const e = await slack.sincronizza(slk, (fatti, tot) =>
+      avvisa({ fase: 'slack', stato: `${fatti} di ${tot} conversazioni` }), { esistenti: store.quandoPerPrefisso('slack:') })
+    await dopoSlack(e)
     primaLettura.esito('slack', true)
-    avvisa({ fase: 'slack', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti, resto: e.resto })
+    avvisa({ fase: 'slack', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti: e.tolti.length, resto: e.resto })
     return e.docs.length
   })
   const gh = c.github
@@ -6354,6 +6440,24 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   })
   setTimeout(archivioNeiDownload, 2 * 60_000)
   setInterval(archivioNeiDownload, 10 * 60_000)
+
+  /*
+   * La corsia corta di Slack, ogni due minuti: le menzioni e i messaggi
+   * diretti nuovi, e nient'altro (vedi `slack.corsiaVeloce`). La domanda di un
+   * cliente entra in pochi minuti invece che al giro dei dieci; se gira il
+   * giro lungo, salta. Un guaio qui non si dice: lo dirà il giro lungo.
+   */
+  const slackVeloce = perOgnuno('la corsia corta di Slack non è passata', async () => {
+    const slk = cfg.leggi().slack
+    if (!slk) return
+    const inizio = new Date().toISOString()
+    const e = await slack.corsiaVeloce(slk, { esistenti: store.quandoPerPrefisso('slack:') }).catch(() => null)
+    if (!e) return
+    const scritti = await dopoSlack(e)
+    if (scritti.nuovi + scritti.cambiati > 0) await dopoLArrivo(inizio)
+  })
+  setTimeout(slackVeloce, 90_000)
+  setInterval(slackVeloce, 2 * 60_000)
 
   // La prova delle risposte (P7): spenta di serie, una volta alla settimana
   // quando è accesa. Il modulo si carica solo qui, quando serve: il server

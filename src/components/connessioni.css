@@ -69,6 +69,12 @@
 .connection-writes-row>span{flex:1;min-width:0;font-size:13px;color:var(--inchiostro);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .connection-writes-row .f-scatola{flex:0 1 260px;width:auto;padding:7px 12px;align-items:center}
 .connection-writes-row select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden;font-size:13px}
+.connection-slack-riga{margin:0 0 8px;font-size:12px;line-height:1.5;color:rgba(var(--inchiostro-rgb),.7);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.connection-slack-riga a{color:inherit;text-decoration:underline}
+.connection-slack-esclusi{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:4px}
+.connection-slack-esclusi li{display:flex;align-items:center;gap:10px;min-width:0;font-size:13px;color:var(--inchiostro)}
+.connection-slack-esclusi li span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.connection-slack-esclusi button{border:0;background:none;color:rgba(var(--inchiostro-rgb),.6);font-size:16px;line-height:1;padding:2px 6px;cursor:pointer}
 .connection-health p{margin:0 0 8px;font-size:12px;line-height:1.5;color:rgba(var(--inchiostro-rgb),.7);font-variant-numeric:tabular-nums}
 .connection-health-strip{display:grid;gap:3px}
 .connection-health-strip span{height:12px;min-width:0;border-radius:99px;box-sizing:border-box}
