@@ -67,6 +67,13 @@ test('acceso di serie: un conto solo sul Mac, nessuna configurazione, diventa pr
   assert.equal(s.acceso, true)
   assert.equal(s.testi, false, 'il testo della finestra resta spento finché non lo accende lui')
   assert.equal(s.ogni, 20)
+  assert.equal(s.titoli, false, 'i titoli non li aveva accesi: restano spenti anche col permesso')
+  assert.equal(s.avviso, true, 'acceso da Myynd: la riga che lo dice, una volta')
+  assert.equal(dentro(() => attivita.oggi(SERA)).avviso, true)
+  dentro(() => osservatore.imposta({ avvisoVisto: true }))
+  assert.equal(dentro(() => osservatore.statoPerChiChiede()).avviso, false)
+  // da qui le prove li vogliono, come chi li accende
+  dentro(() => osservatore.imposta({ titoli: true }))
 })
 
 /* --------------------------------------------------------------- ripulire */
@@ -90,6 +97,33 @@ test('redigi: carte (solo se passano Luhn), IBAN, chiavi, gettoni, password; il 
   assert.ok(t.includes('password: [nascosto]') && !t.includes('hunter2') && t.includes('pin=[nascosto]'))
   assert.ok(t.includes('[gettone]') && !t.includes('eyJhbGci'))
   assert.ok(t.includes('Northwind offer v2, 3 phases'))
+})
+
+test('redigi: email, telefoni, Stripe, segreti in JSON, connessioni, PEM e SSH, password senza segno, AWS e Google; date e ore no', () => {
+  const t = oss.redigi([
+    'Scrivi a mario.rossi@example.com o chiama +39 333 123 4567 oppure (02) 1234-5678',
+    'stripe sk_live_51HabcdEFGHijkl rk_live_abcdefghijk pk_test_abcdefghijk',
+    '{"client_secret": "cs_abc123", "access_token":"ya29.xyz"}',
+    'DATABASE_URL=postgres://admin:Sup3rS3cret@db.example.com:5432/app e mongodb+srv://u:p@cluster0.x.net redis://:pw@cache:6379',
+    '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----',
+    'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEXAMPLEKEYexamplekey anna@mac',
+    'the password hunter2 works; password reset link',
+    'AKIAIOSFODNN7EXAMPLE AIzaSyA1234567890abcdefghijklmnopqrstuv',
+    'Meeting 2026-10-16 09:30, order 12345'
+  ].join('\n'))
+  for (const via of ['mario.rossi@', '333 123 4567', '1234-5678', 'sk_live_', 'rk_live_', 'pk_test_', 'cs_abc123', 'ya29', 'Sup3rS3cret', 'admin:', 'u:p@', ':pw@', 'b3BlbnNzaC1rZXk', 'AAAAC3NzaC1lZDI1NTE5', 'hunter2', 'AKIAIOSFODNN7', 'AIzaSy']) {
+    assert.ok(!t.includes(via), `«${via}» è rimasto: ${t}`)
+  }
+  assert.ok(t.includes('[email]') && t.includes('[telefono]') && t.includes('postgres://[credenziali]@db.example.com'))
+  assert.ok(t.includes('password reset link'), 'una parola dopo «password» che non è una password resta')
+  assert.ok(t.includes('2026-10-16 09:30') && t.includes('order 12345'), 'date, ore e numeri corti restano')
+})
+
+test('la fonte di una finestra si ripulisce come il suo titolo', () => {
+  dentro(() => oss.registra({ kind: 'finestra', sourceId: 'finestra:com.apple.mail|Reset password for anna@esempio.it', app: 'Mail', title: 'Reset password for anna@esempio.it', text: 'x', observedAt: iso('06:00') }))
+  const r = dentro(() => db().prepare("SELECT sourceId, title FROM osservazioni WHERE app = 'Mail'").get()) as { sourceId: string; title: string }
+  assert.ok(!r.sourceId.includes('anna@') && !r.title.includes('anna@'), JSON.stringify(r))
+  dentro(() => db().exec("DELETE FROM osservazioni WHERE app = 'Mail'"))
 })
 
 test('impronta e somiglianza: le cifre e gli spazi non sono un cambio, le parole sì', () => {
@@ -124,6 +158,36 @@ test('il testo della finestra: spento non scrive; acceso ripulisce, non ripete, 
   ], SERA), 0)
   assert.equal(righe().length, 2)
   dentro(() => osservatore.imposta({ testi: false }))
+})
+
+test('il testo delle finestre ha un tetto: dodici per fonte in un’ora', () => {
+  dentro(() => osservatore.imposta({ testi: true }))
+  const base = R('10:00', '2026-10-14').getTime()
+  const testi = Array.from({ length: 15 }, (_, i) => ({ bundle: 'com.apple.TextEdit', app: 'TextEdit', titolo: 'Draft.rtf', documento: 'file:///Users/anna/Draft.rtf', url: null, testo: `Paragraph ${'abcdefghijklmnopqrstuvwxyz'[i]} ${'word'.repeat(i + 1)} about something entirely different number ${i} `.repeat(4), t: base + i * 60_000 }))
+  osservatore.scriviTesti(testi, SERA)
+  const n = (dentro(() => db().prepare("SELECT COUNT(*) AS n FROM osservazioni WHERE kind = 'finestra' AND day = '2026-10-14'").get()) as { n: number }).n
+  assert.equal(n, oss.TESTI_PER_ORA)
+  dentro(() => { db().exec("DELETE FROM osservazioni WHERE day = '2026-10-14'"); osservatore.imposta({ testi: false }) })
+})
+
+test('al modello va solo quello che può uscire: niente titoli di finestre, di file fuori dal progetto, di mail o ricerche, né autori', () => {
+  const g = '2026-10-13'
+  const metti = (n: Parameters<typeof oss.registra>[0]) => dentro(() => oss.registra({ ...n, projectId: nw }))
+  metti({ kind: 'app', sourceId: 'app:com.apple.mail|Reset password for anna@esempio.it', app: 'Mail', title: 'Reset password for anna@esempio.it', observedAt: iso('09:00', g), endAt: iso('09:20', g), seconds: 1200 })
+  metti({ kind: 'file', sourceId: 'file:/Users/anna/Downloads/Northwind Divorce_settlement_final.pdf', title: 'Northwind Divorce_settlement_final.pdf', observedAt: iso('23:00', g), eventAt: iso('09:05', g) })
+  metti({ kind: 'file', sourceId: 'file:/Users/anna/Code/northwind/src/pricing.ts', title: 'pricing.ts', observedAt: iso('23:00', g), eventAt: iso('09:10', g) })
+  metti({ kind: 'web', sourceId: 'web:mail.google.com', app: 'Chrome', title: 'Salary Mario Rossi - anna@esempio.it - Gmail', observedAt: iso('09:12', g), spans: [[R('09:12', g).getTime(), R('09:13', g).getTime()]] })
+  metti({ kind: 'web', sourceId: 'web:google.com', app: 'Chrome', title: 'divorce lawyer milan - Google Search', observedAt: iso('09:14', g), spans: [[R('09:14', g).getTime(), R('09:15', g).getTime()]] })
+  metti({ kind: 'web', sourceId: 'web:gdoc:doc:DOC9', app: 'Chrome', title: 'Northwind contract - Google Docs', observedAt: iso('09:16', g), spans: [[R('09:16', g).getTime(), R('09:17', g).getTime()]] })
+  metti({ kind: 'commit-altri', sourceId: 'commit:/Users/anna/Code/northwind@eeeeeeeeeeee', app: 'Marta Bianchi', title: 'Rotate token=abc123def456 for staging', observedAt: iso('23:00', g), eventAt: iso('09:18', g) })
+  const m = dentro(() => diario.materiale(g))!
+  for (const via of ['Reset password', 'anna@', 'Divorce', 'Salary', 'Mario Rossi', 'divorce lawyer', 'Marta', 'abc123def456', '/Users/anna']) {
+    assert.ok(!m.testo.includes(via), `«${via}» va al modello:\n${m.testo}`)
+  }
+  for (const resta of ['a .pdf file', '"src/pricing.ts"', 'mail.google.com', 'google.com', '"Northwind contract"', 'teammate commits: 1', 'Mail']) {
+    assert.ok(m.testo.includes(resta), `manca «${resta}»:\n${m.testo}`)
+  }
+  dentro(() => db().exec(`DELETE FROM osservazioni WHERE day = '${g}'`))
 })
 
 /* ------------------------------------------------------------- il giorno finto */
@@ -161,8 +225,8 @@ function lettoriFinti() {
     ],
     repository: async () => [],
     cartelle: () => ['/Users/anna/Code/northwind', '/Users/anna/Code/harbor-labs'],
-    cronologia: () => [{
-      profilo: { browser: 'Chrome', profilo: 'Default', file: '', tipo: 'chromium' },
+    cronologia: async () => [{
+      profilo: { browser: 'Chrome', profilo: 'Default', file: '', tipo: 'chromium' }, mtime: 0, saltato: false,
       visite: [
         visita('https://docs.google.com/document/d/DOC1/edit?usp=x', 'Northwind proposal - Google Docs', '09:41', 400),
         visita('https://docs.google.com/document/d/DOC1/edit', 'Northwind proposal - Google Docs', '09:50', 240),
@@ -178,7 +242,7 @@ function lettoriFinti() {
       : { percorso, nome: 'harbor-labs', ramo: 'main', modifiche: 0, rami: [],
           commit: [{ hash: 'cccccccccccc', quando: iso('14:20'), autore: 'Anna', email: 'anna@esempio.it', mio: true, messaggio: 'Nav fix' },
             { hash: 'dddddddddddd', quando: iso('14:50'), autore: 'Anna', email: 'anna@esempio.it', mio: true, messaggio: 'Nav tests' }] },
-    editor: () => []
+    editor: async () => []
   })
 }
 
@@ -269,6 +333,49 @@ test('il diario: una chiamata al giorno, sul livello economico, righe con le pro
   // e il contesto del progetto lo legge
   const contesto = dentro(() => memoria.dayLogContext(nw, R('20:00').getTime()))
   assert.ok(contesto.includes('Worked on pricing') && contesto.includes('[stuck]'))
+})
+
+test('il diario: un’ora dimenticata mentre il modello scrive toglie le righe che poggiavano anche solo in parte su lei', async () => {
+  const g = '2026-10-12'
+  for (const [h, x] of [['09:10', 'a'], ['11:10', 'b']] as const) {
+    dentro(() => oss.registra({ kind: 'commit', sourceId: `commit:/Users/anna/Code/northwind@${x.repeat(12)}`, title: `Step ${x}`, observedAt: iso('23:00', g), eventAt: iso(h, g), projectId: nw }))
+  }
+  dentro(() => { store.segnaCursore('diario:fatto', null); store.segnaCursore('diario:chiamata', null) })
+  diario.perProva({
+    collegato: () => true,
+    chiediJSON: (async (o: { messages: { content: string }[] }) => {
+      const tutti = /\[(e\d+)\] own commits/.exec(o.messages[0]!.content)![1]
+      const sera = /\[(e\d+)\] 11:10/.exec(o.messages[0]!.content)![1]
+      // lui dimentica le nove mentre il modello scrive
+      await dentro(() => attivita.dimentica({ ora: R('09:30', g) }, R('20:00', g)))
+      return { progetti: [{ progetto: nw, righe: [
+        { testo: 'Two steps committed', genere: 'mosso', prove: [tutti] },
+        { testo: 'Second step in the late morning', genere: 'mosso', prove: [sera] }
+      ] }] }
+    }) as typeof modello.chiediJSON
+  })
+  assert.equal(await dentro(() => diario.forse(R('20:00', g))), 1)
+  assert.deepEqual(dentro(() => oss.diarioDelGiorno(g)).map(r => r.text), ['Second step in the late morning'])
+})
+
+test('gli editor: solo le voci con la loro data entrano (una voce senza data sarebbe «vista adesso» a ogni giro); i repository fuori casa no', async () => {
+  const visti: string[] = []
+  attivita.perProva({
+    casa: '/Users/anna', recenti: async () => [], repository: async () => [], cronologia: async () => [],
+    cartelle: () => ['/Volumes/NAS/northwind', '/Users/anna/Code/northwind'],
+    statoRepo: async p => { visti.push(p); return null },
+    editor: async () => [
+      { editor: 'Cursor', percorso: '/Users/anna/Code/northwind', genere: 'cartella', quando: null },
+      { editor: 'Cursor', percorso: '/Users/anna/Code/harbor-labs', genere: 'cartella', quando: iso('10:00', '2026-10-11') }
+    ]
+  })
+  await dentro(() => attivita.raccogli(R('12:00', '2026-10-11'), { forza: true }))
+  const righe = dentro(() => db().prepare("SELECT sourceId FROM osservazioni WHERE kind = 'editor'").all()) as { sourceId: string }[]
+  assert.deepEqual(righe.map(r => r.sourceId), ['editor:Cursor:/Users/anna/Code/harbor-labs'])
+  assert.deepEqual(visti, ['/Users/anna/Code/northwind'])
+  dentro(() => db().exec("DELETE FROM osservazioni WHERE kind = 'editor'"))
+  // di nuovo i finti del giorno: i lettori veri non girano mai in una prova
+  lettoriFinti()
 })
 
 /* ------------------------------------------------------------- dimenticare */

@@ -55,6 +55,11 @@ let NODI_MASSIMI = 400
 let TESTO_MASSIMO = 8000
 let TEMPO_MASSIMO = 0.15
 let FIGLI_MASSIMI = 80
+/** Quanto si aspetta un elemento che non risponde, al massimo, per una domanda. */
+let ATTESA_ELEMENTO = 0.05
+
+// il tetto per tutti gli elementi, prima ancora di chiedere: vale per ogni app
+AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25)
 
 /** Le app da non leggere mai: le stesse dell'osservatore, più le sue. */
 let ESCLUSE: Set<String> = {
@@ -136,7 +141,10 @@ func leggiFinestra(_ w: AXUIElement) -> (testo: String, url: String?) {
   while !coda.isEmpty && nodi < NODI_MASSIMI && lunghezza < TESTO_MASSIMO && Date() < fine {
     let el = coda.removeFirst()
     nodi += 1
+    // un'app appesa non ferma il programma: ogni domanda a questo elemento aspetta al massimo quello che resta
+    AXUIElementSetMessagingTimeout(el, Float(max(0.01, min(ATTESA_ELEMENTO, fine.timeIntervalSinceNow))))
     let ruolo = stringa(el, kAXRoleAttribute as String) ?? ""
+    if Date() >= fine { break }
     let sottoruolo = stringa(el, kAXSubroleAttribute as String) ?? ""
     if ruolo == "AXSecureTextField" || sottoruolo == "AXSecureTextField" { continue }
     if ruolo == "AXWebArea" && url == nil { url = stringa(el, "AXURL") }
@@ -150,7 +158,10 @@ func leggiFinestra(_ w: AXUIElement) -> (testo: String, url: String?) {
         lunghezza += pezzo.count + 1
       }
     }
-    coda.append(contentsOf: figli(el))
+    for figlio in figli(el) {
+      if Date() >= fine || coda.count + nodi >= NODI_MASSIMI { break }
+      coda.append(figlio)
+    }
   }
   return (pezzi.joined(separator: "\n"), url)
 }

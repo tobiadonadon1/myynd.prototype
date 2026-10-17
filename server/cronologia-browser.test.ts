@@ -78,9 +78,9 @@ test('i profili: Default e Profile N di ogni browser, Safari solo se il file c�
   assert.deepEqual(p.map(x => `${x.browser}/${x.profilo}`).sort(), ['Chrome/Default', 'Chrome/Profile 1'])
 })
 
-test('leggiProfilo: copia del file, visite dopo il cursore, indirizzi puliti, banche fuori, durata in secondi', () => {
+test('leggiProfilo: copia del file, visite dopo il cursore, indirizzi puliti, banche fuori, durata in secondi', async () => {
   const [def] = c.profili(CASA).filter(p => p.profilo === 'Default')
-  const v = c.leggiProfilo(def!, T0 - 1)
+  const v = await c.leggiProfilo(def!, T0 - 1)
   assert.deepEqual(v.map(x => x.dominio), ['docs.google.com', 'docs.google.com', 'github.com', 'news.ycombinator.com', 'news.ycombinator.com'])
   assert.ok(v.every(x => !x.url.includes('?') && !x.url.includes('#')), 'nessuna query, nessun frammento')
   assert.ok(!JSON.stringify(v).includes('SEGRETO') && !JSON.stringify(v).includes('IT60X'), 'niente gettoni né IBAN')
@@ -89,13 +89,13 @@ test('leggiProfilo: copia del file, visite dopo il cursore, indirizzi puliti, ba
   assert.equal(v[0]!.quando, T0)
   assert.equal(v[2]!.documento, 'github:acme/northwind#42')
   // dal cursore: solo quello che viene dopo
-  assert.equal(c.leggiProfilo(def!, T0 + 45 * 60_000).length, 2)
+  assert.equal((await c.leggiProfilo(def!, T0 + 45 * 60_000)).length, 2)
   // le esclusioni sue
-  assert.equal(c.leggiProfilo(def!, T0 - 1, { esclusi: ['ycombinator.com'] }).length, 3)
+  assert.equal((await c.leggiProfilo(def!, T0 - 1, { esclusi: ['ycombinator.com'] })).length, 3)
 })
 
-test('perGiorno: un documento ha la sua riga, il resto del dominio una sola; titoli e durate sommati', () => {
-  const tutte = c.leggiTutto(() => T0 - 1, { casa: CASA }).flatMap(x => x.visite)
+test('perGiorno: un documento ha la sua riga, il resto del dominio una sola; titoli e durate sommati', async () => {
+  const tutte = (await c.leggiTutto(() => T0 - 1, { casa: CASA })).flatMap(x => x.visite)
   const g = c.perGiorno(tutte, ms => new Date(ms).toISOString().slice(0, 10))
   const doc = g.find(x => x.documento === 'gdoc:doc:1AbC_dEf')!
   assert.equal(doc.visite, 2)
@@ -108,4 +108,12 @@ test('perGiorno: un documento ha la sua riga, il resto del dominio una sola; tit
   assert.equal(hn.visite, 2)
   assert.equal(hn.url, 'https://news.ycombinator.com')
   assert.ok(g.find(x => x.documento === 'figma:KEY123'))
+})
+
+test('leggiTutto: un profilo il cui file non è cambiato dall’ultima lettura non si copia, e lo dice', async () => {
+  const prima = await c.leggiTutto(() => T0 - 1, { casa: CASA })
+  assert.ok(prima.every(l => !l.saltato && l.mtime > 0))
+  const date = new Map(prima.map(l => [l.profilo.profilo, l.mtime]))
+  const dopo = await c.leggiTutto(() => T0 - 1, { casa: CASA, visto: p => date.get(p.profilo) ?? 0 })
+  assert.ok(dopo.every(l => l.saltato && l.visite.length === 0))
 })

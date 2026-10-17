@@ -17,7 +17,8 @@
 // Niente di qui va in rete. Le prove usano file SQLite costruiti a mano.
 
 import { DatabaseSync } from 'node:sqlite'
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
+import { copyFile, mkdtemp, rm, stat } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -171,25 +172,36 @@ export function profili(casa = homedir()): ProfiloBrowser[] {
  * aperto tiene le ultime visite lì. Torna la cartella da buttare e il file.
  * Senza permesso (Safari senza accesso completo al disco) torna null.
  */
-function copia(file: string): { dir: string; file: string } | null {
-  const dir = mkdtempSync(join(tmpdir(), 'myynd-cronologia-'))
+export async function copiaBloccato(file: string, nome: string, prefisso: string): Promise<{ dir: string; file: string } | null> {
+  const dir = await mkdtemp(join(tmpdir(), prefisso))
   try {
-    const dentro = join(dir, 'History')
-    copyFileSync(file, dentro)
+    const dentro = join(dir, nome)
+    await copyFile(file, dentro)
     for (const coda of ['-wal', '-shm']) {
-      if (existsSync(file + coda)) { try { copyFileSync(file + coda, dentro + coda) } catch { /* senza il diario si legge il resto */ } }
+      try { await copyFile(file + coda, dentro + coda) } catch { /* senza il diario si legge il resto */ }
     }
     return { dir, file: dentro }
   } catch {
-    rmSync(dir, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true })
     return null
   }
 }
 
+/** Quando è cambiato per l'ultima volta il file o il suo diario `-wal`: se non cambia, non si ricopia. */
+export async function quandoCambiato(file: string): Promise<number> {
+  let t = 0
+  for (const f of [file, `${file}-wal`]) { try { t = Math.max(t, (await stat(f)).mtimeMs) } catch { /* non c'è */ } }
+  return t
+}
+
+/** Oltre questa grandezza un file non si copia (un profilo enorme non ferma il server). */
+export const COPIA_MASSIMA = 200 * 1024 * 1024
+
 /** Le visite di un profilo dopo `dal` (epoch ms), al massimo `tetto`, dalla più vecchia. */
-export function leggiProfilo(p: ProfiloBrowser, dal: number, o: { tetto?: number; esclusi?: readonly string[] } = {}): Visita[] {
+export async function leggiProfilo(p: ProfiloBrowser, dal: number, o: { tetto?: number; esclusi?: readonly string[] } = {}): Promise<Visita[]> {
   const tetto = o.tetto ?? 5000
-  const c = copia(p.file)
+  try { if ((await stat(p.file)).size > COPIA_MASSIMA) return [] } catch { return [] }
+  const c = await copiaBloccato(p.file, 'History', 'myynd-cronologia-')
   if (!c) return []
   let db: DatabaseSync | null = null
   try {
@@ -214,7 +226,7 @@ export function leggiProfilo(p: ProfiloBrowser, dal: number, o: { tetto?: number
     return []
   } finally {
     try { db?.close() } catch { /* già chiuso */ }
-    rmSync(c.dir, { recursive: true, force: true })
+    await rm(c.dir, { recursive: true, force: true })
   }
 }
 
@@ -259,7 +271,19 @@ export function perGiorno(visite: readonly Visita[], giornoDi: (ms: number) => s
   }))
 }
 
-/** Tutte le visite di tutti i profili dopo `dal` (per profilo: il suo cursore, se c'è). */
-export function leggiTutto(dal: (p: ProfiloBrowser) => number, o: { casa?: string; esclusi?: readonly string[] } = {}): { profilo: ProfiloBrowser; visite: Visita[] }[] {
-  return profili(o.casa).map(p => ({ profilo: p, visite: leggiProfilo(p, dal(p), { esclusi: o.esclusi }) }))
+export type Lettura = { profilo: ProfiloBrowser; visite: Visita[]; mtime: number; saltato: boolean }
+
+/**
+ * Tutte le visite di tutti i profili dopo `dal` (per profilo: il suo
+ * cursore). Un profilo il cui file non è cambiato da `visto` (l'ultima data
+ * letta) non si copia nemmeno: `saltato`.
+ */
+export async function leggiTutto(dal: (p: ProfiloBrowser) => number, o: { casa?: string; esclusi?: readonly string[]; visto?: (p: ProfiloBrowser) => number } = {}): Promise<Lettura[]> {
+  const fuori: Lettura[] = []
+  for (const p of profili(o.casa)) {
+    const mtime = await quandoCambiato(p.file)
+    if (mtime && o.visto && o.visto(p) === mtime) { fuori.push({ profilo: p, visite: [], mtime, saltato: true }); continue }
+    fuori.push({ profilo: p, visite: await leggiProfilo(p, dal(p), { esclusi: o.esclusi }), mtime, saltato: false })
+  }
+  return fuori
 }

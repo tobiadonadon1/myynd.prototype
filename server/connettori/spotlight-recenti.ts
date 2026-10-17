@@ -91,9 +91,22 @@ export function leggiRepository(testo: string, casa: string, profondita = 3): st
 
 export type Esegui = (cmd: string, argomenti: string[]) => Promise<string>
 
-const eseguiVero: Esegui = (cmd, argomenti) => new Promise(risolvi => {
-  execFile(cmd, argomenti, { timeout: 20_000, maxBuffer: 8 << 20 }, (errore, stdout) => risolvi(errore ? '' : String(stdout ?? '')))
-})
+/**
+ * Il comando, con un tetto all'uscita. Oltre il tetto non si butta tutto:
+ * si tiene quello che è arrivato fino all'ultima riga intera, che basta
+ * (le righe sono già i file usati per ultimi, e il resto si legge al giro dopo).
+ */
+export function creaEsegui(tetto = 8 << 20): Esegui {
+  return (cmd, argomenti) => new Promise(risolvi => {
+    execFile(cmd, argomenti, { timeout: 20_000, maxBuffer: tetto }, (errore, stdout) => {
+      const uscita = String(stdout ?? '')
+      if (!errore) return risolvi(uscita)
+      const pieno = (errore as NodeJS.ErrnoException).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+      risolvi(pieno ? uscita.slice(0, uscita.lastIndexOf('\n') + 1) : '')
+    })
+  })
+}
+const eseguiVero = creaEsegui()
 
 /** I file usati negli ultimi sette giorni. `esegui` si cambia solo nelle prove. */
 export async function recenti(o: { casa?: string; giorni?: number; esegui?: Esegui } = {}): Promise<FileRecente[]> {

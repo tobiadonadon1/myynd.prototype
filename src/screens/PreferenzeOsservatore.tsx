@@ -207,7 +207,7 @@ export function PreferenzeOsservatore({ parte }: { parte: 'osservazione' | 'sche
             <div className="f-nome" id="oss-siti-esclusi">{t('Siti da non guardare')}</div>
             <Campo etichettaDa="oss-siti-esclusi" valore={(s.siti ?? []).join(', ')} salva={v => esclusioni('siti', v)} esempio="mybank.com, example.org" limite={2000} />
           </div>
-          <div className="f-stato">{t('Quello che vedo resta su questo Mac. Al modello va solo il diario corto di ogni giorno.')}</div>
+          <div className="f-stato">{t('Al modello vanno solo riassunti corti, coi nomi di app, documenti e siti, e il diario del giorno. Il testo delle finestre non lascia mai questo Mac.')}</div>
         </>
       )}
 

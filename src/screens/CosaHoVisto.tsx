@@ -58,7 +58,13 @@ export function CosaHoVisto() {
   return (
     <div className="f-griglia">
       <Carta titolo={t('Cosa ho visto oggi')} id="visto-oggi" larga
-        stato={t('Resta su questo Mac. Al modello va solo il diario corto.')}>
+        stato={t('Al modello: nomi di app, documenti e siti, e il diario. Il testo delle finestre mai.')}>
+        {v.avviso && (
+          <div className="f-riga">
+            <div className="f-nome">{t('La linea delle attività è accesa. Si mette in pausa dalla barra dei menu o qui nelle Preferenze.')}</div>
+            <Bottone tipo="parola" piccolo onClick={() => { setV({ ...v, avviso: false }); gemelloApi.imposta({ avvisoVisto: true }).catch(() => setV(v)) }}>{t('Ho capito')}</Bottone>
+          </div>
+        )}
         {!ore.length && <div className="f-stato">{t('Niente ancora oggi.')}</div>}
         {ore.map(g => (
           <div key={g.ora} style={{ marginBottom: 10 }}>

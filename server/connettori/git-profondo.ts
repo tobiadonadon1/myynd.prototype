@@ -26,8 +26,22 @@ export type StatoRepo = {
 
 export type Git = (cartella: string, argomenti: string[]) => Promise<string | null>
 
+/**
+ * Git che guarda e basta: niente fsmonitor (un demone che partirebbe da
+ * solo), niente hook di un repository qualunque, niente lock opzionali che
+ * potrebbero intralciare il lavoro suo nello stesso momento.
+ */
+export function argomentiGit(cartella: string, argomenti: string[]): string[] {
+  return ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-C', cartella, ...argomenti]
+}
+
+/** Solo i repository dentro casa, e mai su un volume di rete o esterno. */
+export function repoAmmesso(percorso: string, casa: string): boolean {
+  return percorso.startsWith(casa + '/') && !percorso.startsWith('/Volumes/') && !/\/(Library|\.Trash)\//.test(percorso.slice(casa.length))
+}
+
 const gitVero: Git = (cartella, argomenti) => new Promise(risolvi => {
-  execFile('git', ['-C', cartella, ...argomenti], { timeout: 5000, maxBuffer: 1 << 20, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } },
+  execFile('git', argomentiGit(cartella, argomenti), { timeout: 5000, maxBuffer: 1 << 20, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } },
     (errore, stdout) => risolvi(errore ? null : String(stdout ?? '')))
 })
 
