@@ -2039,7 +2039,11 @@ export type LavoroVia = {
   nome: string | null; quando: string; visto: boolean; aspetta: boolean; url?: string | null
 }
 /** `conti` su tutto il lavoro fatto; `lavori` è l'elenco, tagliato a cento. */
-export type Via = { dal: string; letti: number; daParte: number; conti?: { bozze: number; file: number; notion: number }; lavori: LavoroVia[] }
+/** Una riga di quello che non è successo stanotte (`server/candidati.ts`): il perché in una parola. */
+export type RigaNotte = { id: string; compito: string | null; titolo: string; motivo: string | null }
+/** Le ricevute della notte: chi aspetta il Mac, chi ha perso la finestra, chi è stato trattenuto, e la notte senza niente che valesse. */
+export type NotteVia = { inAttesaDelMac: RigaNotte[]; saltate: RigaNotte[]; trattenute: RigaNotte[]; nienteDaFare: boolean; buchi: { da: string; a: string }[] }
+export type Via = { dal: string; letti: number; daParte: number; conti?: { bozze: number; file: number; notion: number }; lavori: LavoroVia[]; notte?: NotteVia }
 /** Una riga dietro «letto» o «messo da parte»: il documento, e perché non è diventato una carta. */
 export type RigaElencoVia = { doc: string; titolo: string; fonte: string; autore: string | null; quando: string; ragione: string | null; fase: string }
 /**

@@ -31,6 +31,7 @@ import { BLOCCHI, MANCA_UN_DATO } from './domanda-sola.ts'
 import { settimana, adesso as oraDelResoconto } from './resoconto.ts'
 import { iniziativeProgetti } from './attenzione.ts'
 import * as mentreVia from './via.ts'
+import * as candidati from './candidati.ts'
 
 /** Per quante ore, dopo la fine della notte, il titolo è «mentre dormivi». */
 export const ORE_DI_MATTINA = 6
@@ -211,7 +212,10 @@ export function mattina(chiesto?: string | null, adesso = oraDelResoconto()): Ma
     domanda: d ? { id: d.id, testo: d.testo } : null,
     turno: { inCoda: s.inCoda, prossimaNotte: s.prossimaNotte, acceso: s.acceso, motore: s.motore, fermo: !!s.fermo }
   }, f)
-  return { ...m, via: mentreVia.via(f.dal, compiti, consegnati) }
+  // e quello che non è successo, dalla coda dei candidati: la ricevuta dice la verità anche quando è «niente»
+  const r = candidati.ricevute(f.dal, adesso)
+  const buchi = s.stanotte.buchi.filter(b => b.a >= f.dal)
+  return { ...m, via: { ...mentreVia.via(f.dal, compiti, consegnati), notte: { ...r, buchi } } }
 }
 
 /**

@@ -51,6 +51,7 @@ import * as progettoRiga from './progetto-riga.ts'
 import * as titoloRiga from './titolo-riga.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as iniziativa from './iniziativa.ts'
+import * as candidati from './candidati.ts'
 import * as ordine from './ordine.ts'
 import * as domande from './domande.ts'
 import * as traduci from './traduci.ts'
@@ -4981,7 +4982,7 @@ app.post('/api/iniziativa/prepara', async (_req, res) => {
   // «Prepara ora»: la proposta entra in coda con la precedenza di una carta
   // di oggi, e il turno la prende al primo giro (F2)
   try {
-    const compito = await iniziativa.giro(Date.now(), iniziativa.inCodaPerIlTurno(true))
+    const compito = await iniziativa.giro(Date.now(), { presto: true })
     res.json({ ...iniziativa.stato(), compito })
     if (compito) void turno.giro()
   } catch (e) { errore(res, e) }
@@ -5421,13 +5422,13 @@ app.post('/api/gradino/ritira', (req, res) => {
 })
 
 /** La preparazione discreta di ogni quarto d'ora (`iniziativa.preparazione`). */
-const preparazione = async () => {
+const preparazione = () => candidati.lotto(async () => {
   const r = await iniziativa.preparazione()
-  // e il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione, le pagine di Notion, in coda per il turno
-  const nate = await daSe.giro()
-  if (nate.length) compiti.annunciaCambio()
+  // e il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione, le pagine di Notion.
+  // Tutti propongono alla coda unica (`candidati.ts`), e la politica decide una volta, alla fine del lotto
+  await daSe.giro()
   return r
-}
+}).finally(() => compiti.annunciaCambio())
 // — D: rotte, fine —
 
 const senzaOsservatore = (res: express.Response) => res.status(404).json({ disponibile: false })

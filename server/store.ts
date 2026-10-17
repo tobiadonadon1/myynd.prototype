@@ -620,6 +620,19 @@ const TABELLE = {
     );
     CREATE INDEX IF NOT EXISTS idx_tracce_compito ON tracce(compito, creata);
     CREATE INDEX IF NOT EXISTS idx_tracce_creata ON tracce(creata);
+  `,
+  // la coda unica dei candidati (`candidati.ts`): ogni lavoro che Myynd potrebbe fare da sé,
+  //   con la decisione della politica e il perché. `dati` è il candidato intero, in JSON.
+  candidati: `
+    CREATE TABLE IF NOT EXISTS candidati (
+      id TEXT PRIMARY KEY, utente TEXT, genere TEXT NOT NULL, progetto TEXT, chiave TEXT NOT NULL,
+      titolo TEXT NOT NULL, dati TEXT NOT NULL, punteggio REAL, stato TEXT NOT NULL DEFAULT 'proposto',
+      motivo TEXT, compito TEXT, nato TEXT NOT NULL, deciso TEXT, scade TEXT NOT NULL, eventAt TEXT,
+      ricevuta TEXT, ricevutaQuando TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_candidati_stato ON candidati(stato, scade);
+    CREATE INDEX IF NOT EXISTS idx_candidati_chiave ON candidati(chiave);
+    CREATE INDEX IF NOT EXISTS idx_candidati_compito ON candidati(compito);
   `
 } as const
 
@@ -1604,7 +1617,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => { d.exec(TABELLE.osservazioni); d.exec(TABELLE.osservazioni_dimenticate); d.exec(TABELLE.diario) },
   // 73 → 74 · il mandato di ogni progetto e la traccia di ogni lavoro. I progetti
   //   di prima non hanno una riga: valgono le regole di serie, finché lei non conferma.
-  d => { d.exec(TABELLE.mandati); d.exec(TABELLE.tracce) }
+  d => { d.exec(TABELLE.mandati); d.exec(TABELLE.tracce) },
+  // 74 → 75 · la coda unica: i candidati di ogni produttore, una politica sola, e le ricevute
+  d => { d.exec(TABELLE.candidati) }
 ]
 
 /**

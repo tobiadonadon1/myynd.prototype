@@ -10,7 +10,7 @@
 //
 //   node --test src/via.test.ts
 
-import type { LavoroVia, Via } from './api'
+import type { LavoroVia, NotteVia, Via } from './api'
 import { blocchiFeed, type Blocco, type CompitoDaBlocco, type ProgettoDaBlocco, type RigaBlocco, type VoceDaBlocco } from './blocchi-feed.ts'
 
 export type GenereConto = 'letti' | 'bozze' | 'file' | 'notion' | 'daParte'
@@ -196,3 +196,48 @@ export function aspettanoFuori(
 /** Da piegare: fatta, consegnata e vista, ma non in questa visita. Lo stesso per il guscio e per la pagina. */
 export const vistaDaPiegare = (c: LavoroInRiga & { id: string }, oraViste: { has(id: string): boolean }): boolean =>
   statoLavoro(c) === 'visto' && !oraViste.has(c.id)
+
+// — la coda unica: inizio —
+
+/** Perché una cosa è stata trattenuta, nelle parole che la carta usa. */
+export type Trattenuta = 'mandato' | 'mese' | 'notte' | 'budget_progetto'
+export type RigheNotte = {
+  /** Aspettano il Mac: quante, e i tratti in cui dormiva. */
+  mac: { n: number; buchi: { da: string; a: string }[]; titoli: string[] } | null
+  /** Hanno perso la finestra, o la fonte è cambiata. */
+  saltate: { n: number; titoli: string[] } | null
+  /** Trattenute, contate per perché, nell'ordine in cui si dicono. */
+  trattenute: { n: number; perche: [Trattenuta, number][]; titoli: string[] } | null
+  /** La notte non aveva niente che valesse: si dice solo se non c'è niente di fatto. */
+  niente: boolean
+}
+
+const ORDINE_TRATTENUTE: readonly Trattenuta[] = ['mandato', 'budget_progetto', 'mese', 'notte']
+
+/**
+ * Le righe di quello che non è successo, sotto la frase: al più una per
+ * genere, coi conti. «Niente da fare» solo quando è la verità intera: niente
+ * fatto, niente che aspetta, niente trattenuto.
+ */
+export function righeNotte(n: NotteVia | null | undefined, c: Conti): RigheNotte {
+  const vuote: RigheNotte = { mac: null, saltate: null, trattenute: null, niente: false }
+  if (!n) return vuote
+  const titoli = (xs: readonly { titolo: string }[]) => xs.map(x => x.titolo).filter(Boolean).slice(0, 5)
+  const perche = new Map<Trattenuta, number>()
+  for (const x of n.trattenute) {
+    const k = (ORDINE_TRATTENUTE as readonly string[]).includes(x.motivo ?? '') ? x.motivo as Trattenuta : 'notte'
+    perche.set(k, (perche.get(k) ?? 0) + 1)
+  }
+  const fatto = c.bozze + c.file + c.notion > 0
+  return {
+    mac: n.inAttesaDelMac.length ? { n: n.inAttesaDelMac.length, buchi: n.buchi.slice(0, 2), titoli: titoli(n.inAttesaDelMac) } : null,
+    saltate: n.saltate.length ? { n: n.saltate.length, titoli: titoli(n.saltate) } : null,
+    trattenute: n.trattenute.length ? { n: n.trattenute.length, perche: ORDINE_TRATTENUTE.filter(k => perche.has(k)).map(k => [k, perche.get(k)!] as [Trattenuta, number]), titoli: titoli(n.trattenute) } : null,
+    niente: n.nienteDaFare && !fatto && !n.inAttesaDelMac.length && !n.saltate.length && !n.trattenute.length
+  }
+}
+
+/** C'è qualcosa da dire della notte. */
+export const qualcosaDellaNotte = (r: RigheNotte): boolean => !!(r.mac || r.saltate || r.trattenute || r.niente)
+
+// — la coda unica: fine —

@@ -16,7 +16,8 @@
 // c'è), `saltato` (la fonte non reggeva più), `trattenuto` (il mandato o il
 // budget l'hanno fermato, col motivo), `niente_da_fare`.
 //
-// `candidato` è per la coda dei candidati che verrà: qui resta null.
+// `candidato` è l'id nella coda dei candidati (`candidati.ts`): la scrive
+// `candidati.promuovi` quando la carta nasce, e le partenze dopo la ereditano.
 // Non lancia mai verso chi la chiama: la traccia racconta il lavoro, non lo regge.
 
 import { randomUUID } from 'node:crypto'
@@ -87,9 +88,11 @@ export function ultimaDi(compito: string): Traccia | null {
 export function inizia(o: { compito: string; progetto?: string | null; genere?: string | null; prove?: readonly (string | null | undefined)[]; candidato?: string | null }): Traccia | null {
   return prova(() => {
     const id = 'tr-' + randomUUID()
+    // la partenza vera eredita il candidato dalla traccia nata con la carta
+    const candidato = o.candidato !== undefined ? o.candidato : ultimaDi(o.compito)?.candidato ?? null
     const prove = [...new Set((o.prove ?? []).filter((x): x is string => !!x))].slice(0, 40)
     db.prepare(`INSERT INTO tracce (id, utente, progetto, candidato, compito, genere, prove, creata, esito) VALUES (?,?,?,?,?,?,?,?, 'in_attesa')`)
-      .run(id, chi.adesso() ?? '', o.progetto ?? null, o.candidato ?? null, o.compito, o.genere ?? null, JSON.stringify(prove), new Date().toISOString())
+      .run(id, chi.adesso() ?? '', o.progetto ?? null, candidato, o.compito, o.genere ?? null, JSON.stringify(prove), new Date().toISOString())
     return ultimaDi(o.compito)
   }, null)
 }

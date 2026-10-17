@@ -40,7 +40,7 @@ import * as progetti from './progetti.ts'
 import * as compiti from './compiti.ts'
 import * as contratto from './contratto.ts'
 import * as turno from './turno.ts'
-import { fra } from './ordine.ts'
+import * as candidati from './candidati.ts'
 import { puoLavorare } from './modello.ts'
 import { indirizzoAttenzione } from './rilevanza.ts'
 import { fonteCollegata } from './fonti-collegate.ts'
@@ -264,6 +264,24 @@ export function scegli(adesso = Date.now(), quante = CARTE_MAX): Scelta[] {
 export const idCarta = (d: Pick<store.Documento, 'fonte' | 'id' | 'messageId'>) =>
   `primo-giorno-${createHash('sha256').update(`${d.fonte}:${d.messageId || d.id}`).digest('hex').slice(0, 24)}`
 
+/**
+ * Una carta del primo giorno come candidato: vale di più quella che pesa di
+ * più nella scelta (a chi risponde sempre, un'offerta, una fattura), e le
+ * prove reggono dieci giorni, perché la prima settimana di lei è tutta nuova.
+ */
+export function candidatoDi(s: Scelta, id: string, inCoda: boolean, adesso: Date): candidati.Candidato {
+  const chiave = iniziativa.chiaveDoc(s.doc)
+  const posta = s.doc.tipo === 'email' || (FONTI_POSTA as readonly string[]).includes(s.doc.fonte)
+  return {
+    id: `primo-giorno:${chiave}`, genere: 'primo-giorno', progetto: s.progetto, titolo: s.doc.titolo || s.testo, risultato: s.testo,
+    perche: 'From her first week.', prove: [s.doc.id, ...(s.voce ? [s.voce] : [])], eventAt: s.doc.quando ?? null,
+    valore: Math.min(0.9, 0.6 + 0.05 * s.punti), incertezza: 0.25, costo: candidati.COSTO_DI_SERIE['primo-giorno'],
+    classi: [posta ? 'bozza_posta' : 'file'], chiave, fresco: GIORNI_VALIDA,
+    scade: new Date(adesso.getTime() + 3 * GIORNO).toISOString(),
+    carta: { id, testo: s.testo, nota: s.nota, doc: s.doc.id, modo: 'bozza', origine: ORIGINE, voce: s.voce, ...(inCoda ? {} : { coda: false }) }
+  }
+}
+
 /** Il turno la prenderebbe: acceso e non in pausa, e lei non ha chiesto di essere interpellata prima. */
 function inCodaSiPuo(): boolean {
   if (cfg.autonomia() === 'chiedere') return false
@@ -284,19 +302,19 @@ export async function carte(adesso = new Date(), quante = CARTE_MAX): Promise<st
   if (!ferri.motore()) return null
   const scelte = scegli(adesso.getTime(), quante)
   const coda = inCodaSiPuo()
-  const nate: string[] = []
+  const proposte: string[] = []
   for (const s of scelte) {
-    if (via()) return nate
+    if (via()) return []
     const id = idCarta(s.doc)
     if (store.compito(id)) continue
-    store.scriviCompito({
-      id, testo: s.testo, nota: s.nota, doc: s.doc.id, progetto: s.progetto, voce: s.voce,
-      origine: ORIGINE, quando: 'oggi', ordine: fra(store.ultimoOrdine('oggi'), '')
-    })
-    if (s.voce) store.cambiaStatoFeed(s.voce, 'scaduto', undefined, 'superata')
-    if (coda && store.mettiCompitoInCoda(id, 'bozza', { da: 'myynd', quando: 'notte', dal: adesso.toISOString(), tentativi: 0 })) ferri.contratto(id)
-    nate.push(id)
+    // un candidato della coda unica (`candidati.ts`): la carta, la voce superata e la coda le fa `promuovi`
+    candidati.proponi(candidatoDi(s, id, coda, adesso))
+    proposte.push(id)
   }
+  if (proposte.length) candidati.decidi(adesso)
+  const nate = proposte.filter(id => !!store.compito(id))
+  // la base del contratto, per quelle in coda (la riga l'ha già: qui si assicura)
+  for (const id of nate) if (store.compito(id)?.turno) ferri.contratto(id)
   store.segnaCursore(CURS.carte, adesso.toISOString())
   if (nate.length) { ferri.annuncia(); compiti.annunciaFeed() }
   console.log(`myynd · primo giorno · ${nate.length} carte${coda ? ' in coda per la notte' : ''}`)

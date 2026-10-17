@@ -3409,6 +3409,9 @@ const EN: Record<string, string> = {
   'La quota è in dollari al mese, o zero per nessuna.': 'The allowance is in dollars per month, or zero for none.',
   'Con l’AI inclusa la quota si può solo abbassare.': 'With the included AI the allowance can only be lowered.',
   // — recinto del codice e quota del mese: fine —
+  // — la coda unica: inizio —
+  'Stanotte non c’era niente che valesse la pena.': 'Nothing worth doing last night.',
+  // — la coda unica: fine —
 }
 
 
@@ -4213,6 +4216,25 @@ export const frasi = {
     ? `This week: ${prese} accepted · ${frasi.dollari(costo)}`
     : `Questa settimana: ${prese} ${prese === 1 ? 'presa' : 'prese'} · ${frasi.dollari(costo)}`,
   /** Quanto ha speso il progetto questo mese: «$1.20 this month». */
-  spesaDelMese: (n: number) => corrente === 'en' ? `${frasi.dollari(n)} this month` : `${frasi.dollari(n)} questo mese`
+  spesaDelMese: (n: number) => corrente === 'en' ? `${frasi.dollari(n)} this month` : `${frasi.dollari(n)} questo mese`,
   // — il mandato e la traccia: fine —
+  // — la coda unica: inizio —
+  /** Sotto «Mentre non c'eri»: le carte scelte che aspettano il Mac addormentato. */
+  aspettanoIlMac: (n: number) => corrente === 'en' ? `Waiting for your Mac: ${n}` : `Aspettano il tuo Mac: ${n}`,
+  /** Le carte che hanno perso la loro finestra (il turno fermo, o la fonte cambiata). */
+  finestraPersa: (n: number) => corrente === 'en' ? `Missed this window: ${n}` : `Finestra persa: ${n}`,
+  /** Le carte trattenute, coi perché già detti: «Held back: 3 (2 monthly allowance, 1 mandate)». */
+  trattenute: (n: number, perche: string) => corrente === 'en' ? `Held back: ${n} (${perche})` : `Trattenute: ${n} (${perche})`,
+  /** Un perché di una trattenuta, col suo conto. */
+  perTrattenuta: (motivo: 'mandato' | 'mese' | 'notte' | 'budget_progetto', n: number) => {
+    const en = corrente === 'en'
+    const parole = {
+      mandato: en ? 'mandate' : 'mandato',
+      budget_progetto: en ? 'project budget' : 'budget del progetto',
+      mese: en ? 'monthly allowance' : 'quota del mese',
+      notte: en ? 'nightly cap' : 'tetto della notte'
+    }[motivo]
+    return `${n} ${parole}`
+  }
+  // — la coda unica: fine —
 }

@@ -33,15 +33,12 @@ import * as compiti from './compiti.ts'
 import * as contratto from './contratto.ts'
 import * as presenza from './presenza.ts'
 import * as regole from './turno-regole.ts'
-import { fonteValida } from './iniziativa.ts'
-import * as primoGiorno from './primo-giorno.ts'
-import * as gradino from './gradino.ts'
 import { suo as diSe } from './da-se.ts'
+import * as candidati from './candidati.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 import * as budgetNotte from './budget-notte.ts'
 import * as quotaMese from './quota-mese.ts'
 import { conCompito } from './etichetta-uso.ts'
-import * as tracce from './tracce.ts'
 
 /** Quante carte in una giornata, di serie; e il minimo e il massimo che si possono scegliere. */
 export const CARTE_DI_SERIE = 12
@@ -156,6 +153,11 @@ function laNotte(c: Conto, dal: string): NonNullable<Conto['notte']> {
   return c.notte?.dal === dal ? c.notte : { dal, fermata: null, buchi: [] }
 }
 
+/** Le carte fatte partire nella giornata del turno di adesso: i posti della notte le contano. */
+export function avviateOggi(adesso = new Date()): number {
+  try { return leggiConto(regole.inizioGiornata(adesso, impostazioni(cfg.leggi(), adesso).notte).toISOString()).avviate } catch { return 0 }
+}
+
 function scriviConto(c: Conto) {
   mkdirSync(cfg.cartella(), { recursive: true })
   writeFileSync(fileConto() + '.tmp', JSON.stringify(c), { mode: 0o600 })
@@ -235,15 +237,12 @@ export function contesto(adesso = new Date(), imp = impostazioni(cfg.leggi(), ad
 }
 
 /**
- * Una carta nata da un'iniziativa di Myynd la cui fonte non regge più: si ritira invece di lavorarla.
- * Anche quelle del primo giorno (F6), ma senza guardare se le proposte sono accese: il primo giorno ci sono anche spente.
+ * Una carta proposta da Myynd la cui fonte non regge più: si ritira invece di
+ * lavorarla. La regola è quella della coda dei candidati (`candidati.cartaValida`),
+ * la stessa per il candidato prima di nascere e per la carta prima di partire.
  */
 function ritirabile(c: store.Compito, adesso = new Date()): boolean {
-  if (c.origine === 'iniziativa') return !fonteValida(c.doc, adesso.getTime())
-  // una risposta guadagnata: la fonte non regge più, o la persona è stata ripresa («Take it back»)
-  if (c.origine === gradino.ORIGINE) return !gradino.rigaValida(c)
-  if (c.origine === primoGiorno.ORIGINE) return !primoGiorno.fonteValida(c, adesso.getTime())
-  return false
+  return !candidati.cartaValida(c, adesso.getTime())
 }
 
 /**
@@ -257,7 +256,8 @@ export function pronte(adesso = new Date()): store.Compito[] {
   const inPausa = cfg.autonomia() === 'chiedere'
   return store.elencoCompiti()
     .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1 && !(inPausa && diSe(c.origine)))
-    .map(c => ({ c, p: regole.punteggio(c, { adesso, progettoAlto: !!c.progetto && alti.has(c.progetto) }) }))
+    // fra le proposte di Myynd passa prima quella che la politica ha pesato di più (`candidati.ts`)
+    .map(c => ({ c, p: regole.punteggio(c, { adesso, progettoAlto: !!c.progetto && alti.has(c.progetto) }) + (c.turno?.da === 'myynd' ? Math.round(candidati.punteggioDellaCarta(c.id) * 10) : 0) }))
     .sort((a, b) => b.p - a.p || a.c.ordine.localeCompare(b.c.ordine) || a.c.id.localeCompare(b.c.id))
     .map(x => x.c)
 }
@@ -278,10 +278,14 @@ export async function giro(adesso = new Date()): Promise<string | null> {
   inGiro.add(conto)
   try {
     const imp = impostazioni(cfg.leggi(), adesso)
+    // il Mac è sveglio: la ricevuta della notte lo distingue dal Mac addormentato
+    candidati.battito(adesso)
     if (!imp.acceso || imp.pausaFino || imp.fermo) return null
     // F9 · il battito, prima di tutto il resto: una notte che non ha lavorato deve dire perché
     try { battito(adesso, imp.notte, store.elencoCompiti().some(regole.inCoda)) } catch { /* il battito è un di più */ }
     if (!ferri.motore()) return null
+    // la coda dei candidati, al più ogni quarto d'ora: i posti liberati tornano a chi aspettava
+    candidati.forseDecidi(adesso)
     const utente = chi.adesso() ?? ''
     if (ferri.occupato(utente)) return null
     const inizio = regole.inizioGiornata(adesso, imp.notte).toISOString()
@@ -312,7 +316,7 @@ export async function giro(adesso = new Date()): Promise<string | null> {
     for (const carta of candidate) {
       if (ritirabile(carta, adesso)) {
         store.cambiaStatoCompito(carta.id, 'ritirato', 'Source changed or preparation paused')
-        tracce.ricevuta(carta.id, 'saltato', 'source changed')
+        candidati.ricevutaDellaCarta(carta.id, 'saltato', 'fonte', adesso)
         compiti.annunciaCambio()
         continue
       }
