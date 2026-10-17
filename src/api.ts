@@ -623,6 +623,15 @@ export type Proposta =
   | { azione: 'nota.crea'; note: { titolo: string; testo: string; perche: string }[] }
   | { azione: 'file.crea'; file: { titolo: string; testo: string; perche: string }[] }
 
+/** Un attrezzo trattenuto dal mandato del progetto: lo fa il suo «Approva». */
+export type PropostaDelMandato = {
+  azione: 'mandato.mano'
+  mani: { nome: string; classe: string | null; titolo: string; perche: string; testo?: string; da: string; progetto: string | null }[]
+}
+
+/** Quello che una carta può offrirsi di fare con un dito. */
+export type PropostaDiCompito = Proposta | PropostaDelMandato
+
 /** Una domanda con le risposte già pronte da toccare. */
 export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
 
@@ -696,7 +705,7 @@ export type Compito = {
   revisione?: { esito: 'pass' | 'revise' | 'unavailable'; comeTe: string; comeLoro: string; per: string; problemi: string[]; verificato: string[]; giri: number } | null
   fonti: { id: string; label: string }[] | null
   /** Quello che si offre di fare, se è più di un testo da rileggere. */
-  proposta: Proposta | null
+  proposta: PropostaDiCompito | null
   /** Le domande a scelta, quando si è fermato perché gli manca qualcosa. */
   chieste: Chiesta[] | null
   /** L'email pronta da mandare, se la bozza è una email e la posta è collegata. */
@@ -1596,6 +1605,13 @@ export const api = {
   progetti: (collegato?: string) => json<{ progetti: Progetto[] }>(`/api/progetti${collegato ? `?collegato=${encodeURIComponent(collegato)}` : ''}`),
   memoriaProgetto: (id: string) => json<{ records: ProjectEvidence[] }>(`/api/progetti/${encodeURIComponent(id)}/memoria`),
   attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
+  /** Il mandato del progetto: quello scritto, o quello proposto se non c'è ancora. */
+  mandato: (id: string) => json<StatoMandato>(`/api/progetti/${encodeURIComponent(id)}/mandato`),
+  /** L'unica strada da cui il mandato cambia: la pagina del progetto. `conferma` è il bottone. */
+  salvaMandato: (id: string, m: CambioMandato) =>
+    json<StatoMandato>(`/api/progetti/${encodeURIComponent(id)}/mandato`, { method: 'PUT', body: JSON.stringify(m) }),
+  /** Il numero della settimana: quante consegne prese, e quanto è costata ognuna. */
+  settimana: () => json<SettimanaTracce>('/api/tracce/settimana'),
   /** La pagina dei Progetti: il succo di ogni progetto vivo, e le cartelle in cui lavora che non sono di nessuno. */
   vistaProgetti: () => json<VistaProgetti>('/api/progetti/quadro'),
   /** Una cartella proposta diventa progetto, col suo nome: solo se è fra le proposte di adesso. */
@@ -2366,3 +2382,55 @@ export const apiP10 = {
     json<{ ok: true }>('/api/tempi', { method: 'POST', body: JSON.stringify({ segni }) })
 }
 // — P10: fine —
+
+// — il mandato e la traccia: inizio —
+
+export type ClasseMandato =
+  | 'bozza_posta' | 'file' | 'notion' | 'nota' | 'codice_copia' | 'codice_applica'
+  | 'invio' | 'pubblica' | 'calendario' | 'paga' | 'cancella' | 'contatto_nuovo'
+export type RegolaMandato = 'auto' | 'chiedi' | 'mai'
+
+export type Mandato = {
+  progetto: string
+  esito: string
+  misura: string
+  scadenza: string | null
+  fonti: string[] | null
+  classi: Record<ClasseMandato, RegolaMandato>
+  budget: number | null
+  revisione: string | null
+  stato: 'proposto' | 'confermato'
+  origine: 'serie' | 'dedotto' | 'lei'
+  aggiornato: string | null
+  confermato: string | null
+}
+
+export type StatoMandato = {
+  mandato: Mandato
+  /** Le regole che valgono adesso (da proposto, le più strette fra le sue e quelle di serie). */
+  regole: Record<ClasseMandato, RegolaMandato>
+  classi: ClasseMandato[]
+  autonomia: 'prepara' | 'agisce'
+  /** Dollari spesi questo mese dalle carte del progetto. */
+  spesa: number
+}
+
+export type CambioMandato = Partial<Pick<Mandato, 'esito' | 'misura' | 'scadenza' | 'fonti' | 'budget' | 'revisione'>> & {
+  classi?: Partial<Record<ClasseMandato, RegolaMandato>>
+  conferma?: boolean
+}
+
+export type SettimanaTracce = {
+  dal: string
+  consegnate: number
+  accettate: number
+  modificate: number
+  scartate: number
+  scadute: number
+  inAttesa: number
+  tasso: number | null
+  costo: number
+  costoPerAccettata: number | null
+}
+
+// — il mandato e la traccia: fine —

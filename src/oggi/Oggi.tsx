@@ -689,11 +689,13 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
     }))
     : p.azione === 'nota.crea' ? p.note.map((n, i) => ({ chiave: `${i}`, titolo: n.titolo, perche: n.perche, testo: n.testo }))
     : p.azione === 'file.crea' ? p.file.map((f, i) => ({ chiave: `${i}`, titolo: f.titolo, perche: f.perche, testo: f.testo }))
+    // un attrezzo trattenuto dal mandato del progetto: lo fa questo «Approva»
+    : p.azione === 'mandato.mano' ? p.mani.map((m, i) => ({ chiave: `${i}`, titolo: m.titolo, perche: m.perche, testo: m.testo }))
     : p.voci.map(v => ({ chiave: v.doc, titolo: v.titolo, perche: v.perche }))
   const sposta = p.azione === 'posta.cestina' || p.azione === 'posta.archivia'
   const etichetta = p.azione === 'posta.cestina' ? 'Da mettere nel cestino' : p.azione === 'posta.archivia' ? 'Da archiviare'
     : p.azione === 'posta.bozza' ? 'Da mettere fra le bozze' : p.azione === 'agenda.aggiungi' ? 'Da mettere in agenda'
-    : p.azione === 'nota.crea' ? 'Da salvare in Note' : 'Da salvare come file'
+    : p.azione === 'nota.crea' ? 'Da salvare in Note' : p.azione === 'mandato.mano' ? 'Aspetta il tuo sì' : 'Da salvare come file'
 
   return (
     <div style={{

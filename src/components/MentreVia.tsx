@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom'
 import { frasi, lingua, t } from '../lingua'
 import { useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
-import { api, type AspettaMattina, type Compito, type LavoroVia, type Mattina, type RigaElencoVia } from '../api'
+import { api, type AspettaMattina, type Compito, type LavoroVia, type Mattina, type RigaElencoVia, type SettimanaTracce } from '../api'
 import type { Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { contiVia, frase, inCima, lavoriDi, qualcosa, RAGIONI, type GenereConto } from '../via'
@@ -143,6 +143,14 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
   const pezzi = frase(conti, lingua())
   const cima = inCima(m?.via, visteOra)
   const lettera = ricevuta.find(a => a.genere === 'lettera')
+  // il numero solo della settimana (`tracce.ts`): quante consegne ha preso, e quanto sono costate
+  const [settimana, setSettimana] = useState<SettimanaTracce | null>(null)
+  useEffect(() => {
+    let vivo = true
+    api.settimana().then(r => { if (vivo) setSettimana(r) }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  const prese = settimana ? settimana.accettate + settimana.modificate : 0
   if (!m || (!qualcosa(conti) && !cima.length && !lettera && !riassunto)) return null
   return (
     <section aria-labelledby="via-titolo" style={{ ...CARTA, flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
@@ -169,6 +177,7 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
           )}
         </ul>
       )}
+      {prese > 0 && settimana && <p className="via-settimana">{frasi.settimanaPrese(prese, settimana.costo)}</p>}
       {riassunto && (
         <button type="button" className="via-riassunto" onClick={riassunto.apri}>
           {t('Il punto di oggi')} <span>· {frasi.coseNelPunto(riassunto.cose)}</span>

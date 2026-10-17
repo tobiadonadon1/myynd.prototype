@@ -40,6 +40,7 @@ import { suo as diSe } from './da-se.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 import * as budgetNotte from './budget-notte.ts'
 import { conCompito } from './etichetta-uso.ts'
+import * as tracce from './tracce.ts'
 
 /** Quante carte in una giornata, di serie; e il minimo e il massimo che si possono scegliere. */
 export const CARTE_DI_SERIE = 12
@@ -302,6 +303,7 @@ export async function giro(adesso = new Date()): Promise<string | null> {
     for (const carta of candidate) {
       if (ritirabile(carta, adesso)) {
         store.cambiaStatoCompito(carta.id, 'ritirato', 'Source changed or preparation paused')
+        tracce.ricevuta(carta.id, 'saltato', 'source changed')
         compiti.annunciaCambio()
         continue
       }

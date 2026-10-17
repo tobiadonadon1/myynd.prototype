@@ -96,7 +96,7 @@ export type Provenienza = 'posta' | 'riunione' | 'tu' | 'myynd' | 'seguito' | 'f
 export function provenienza(c: Compito): Provenienza {
   if (c.origine === 'seguito') return 'seguito'
   // «auto:» sono le righe che Myynd scriveva da sé, prima
-  if (c.origine === 'iniziativa' || c.origine === 'punto' || c.origine === 'proposta' || c.origine === 'turno' || c.origine?.startsWith('auto:')) return 'myynd'
+  if (c.origine === 'iniziativa' || c.origine === 'punto' || c.origine === 'proposta' || c.origine === 'turno' || c.origine === 'mandato' || c.origine?.startsWith('auto:')) return 'myynd'
   if (c.doc?.startsWith('posta') || c.doc?.startsWith('gmail') || c.doc?.startsWith('outlook')) return 'posta'
   if (c.doc?.startsWith('granola') || c.doc?.startsWith('riunion')) return 'riunione'
   if (c.origine === 'feed' || c.voce) return 'feed'

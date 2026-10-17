@@ -37,6 +37,7 @@ import { annunciaProgetti, portaAlleAttivita, primoParagrafo, siPuoAprireLeCose,
 import type { Lista } from '../oggi/useCompiti'
 import { NomiERaggruppamento, Pallino, Scritta, Stati, useSalvataggi } from './ProgettoEditor'
 import { Casella, Salvato } from '../components/forme'
+import { MandatoProgetto } from '../components/MandatoProgetto'
 import './progetto.css'
 
 const INCHIOSTRO = 'var(--inchiostro)'
@@ -170,6 +171,9 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
 
         <div className="prog-corpo">
           <Passi p={p} aperte={aperte} lista={lista} chiudiPagina={v.chiudiProgetto} />
+
+          {/* il mandato: cosa Myynd fa da solo qui, cosa chiede, cosa mai. Un progetto chiuso non ne ha bisogno */}
+          {!chiuso && <MandatoProgetto progetto={p.id} />}
 
           {!!fatte.length && (
             <section className="prog-sezione" aria-labelledby="prog-fatto">

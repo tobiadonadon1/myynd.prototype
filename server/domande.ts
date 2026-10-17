@@ -26,6 +26,7 @@ import * as progetti from './progetti.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as riordino from './riordino.ts'
 import * as quadro from './quadro.ts'
+import * as mandatoProposta from './mandato-proposta.ts'
 
 /**
  * Quanti scarti muti sullo stesso tema prima di considerarlo un segnale.
@@ -294,6 +295,16 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
    * Il riordino dei progetti: un sì fa quello che la domanda diceva per
    * intero, qualunque altra cosa non tocca niente (`riordino.rispondi`).
    */
+  /*
+   * «È questo l'obiettivo?»: il mandato del progetto (`mandato-proposta.ts`).
+   * Un sì lo conferma; un'altra frase diventa l'esito, da confermare dopo.
+   */
+  if (questa?.tema.startsWith(mandatoProposta.TEMA)) {
+    const esito = mandatoProposta.rispondi(questa.tema, pulita)
+    store.chiudiDomanda(id, 'risposta', pulita, esito)
+    return { esito }
+  }
+
   if (questa?.tema.startsWith(riordino.TEMA)) {
     const esito = riordino.rispondi(questa.tema, pulita)
     store.chiudiDomanda(id, 'risposta', pulita, esito)

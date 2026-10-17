@@ -33,6 +33,7 @@ import * as segnali from './segnali.ts'
 import { classe, parole, ritocco } from './ritocco.ts'
 import { corpoAttuale } from './rilevanza.ts'
 import { destinatarioDi, senzaFirma, type Destinatario } from './voce.ts'
+import * as tracce from './tracce.ts'
 
 /** Oltre questa distanza, con il solo filo come prova, la mail è sua e non la bozza. */
 export const SOGLIA_PROPRIA = 0.6
@@ -131,6 +132,8 @@ export async function osservaUno(c: store.Compito): Promise<Visto> {
   }
   if (!lavoroDati.segnaMandata(c.id, { doc: inviata.id, quando, certezza, ritocco: r })) return null
   const cl = classe(r)
+  // la traccia: la bozza di Myynd è sparita dalle Bozze ed è partita, com'era o ritoccata
+  tracce.decidi(c.id, tracce.esitoDallaDistanza(r), { distanza: r })
   lavoroDati.registraInvio(c.id, { via: 'casella', inviato: quando, distanza: r, parole: parole(corpo).length, classe: cl })
   // il primo gradino: la risposta a chi aveva scritto, partita dalla sua posta, conta come una partita da «Manda»
   alGradino(c, inviata, r, quando, false)

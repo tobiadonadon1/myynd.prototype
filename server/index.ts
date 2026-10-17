@@ -151,6 +151,10 @@ import * as gradino from './gradino.ts'
 import * as memoriaNuove from './memoria-nuove.ts'
 import * as oauth from './connettori/oauth.ts'
 import * as proposte from './proposte.ts'
+import * as mandato from './mandato.ts'
+import * as mandatoProposta from './mandato-proposta.ts'
+import { leggiQuadri } from './quadro.ts'
+import * as tracce from './tracce.ts'
 import { riflua, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
 import * as diagnosi from './diagnosi.ts'
 
@@ -3664,7 +3668,27 @@ app.get('/api/mattina/elenco', (req, res) => {
 app.post('/api/lavoro/visti', (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0, 200) : null
   if (!ids) { res.status(400).json({ error: 'ids: un elenco' }); return }
-  try { res.json({ ok: true, nuovi: mentreVia.segnaVisti(ids) }) } catch (e) { errore(res, e) }
+  try {
+    // la prima volta che vede una consegna: da qui si contano i secondi della sua decisione
+    tracce.mostrata(ids.filter((x: unknown): x is string => typeof x === 'string'))
+    res.json({ ok: true, nuovi: mentreVia.segnaVisti(ids) })
+  } catch (e) { errore(res, e) }
+})
+
+/**
+ * Il numero della settimana (`tracce.ts`): quante consegne ha preso, com'erano
+ * o ritoccate, su quante decise, e quanto è costata ognuna. Con le tracce.
+ */
+app.get('/api/tracce/settimana', (_req, res) => {
+  try { res.json(tracce.settimana()) } catch (e) { errore(res, e) }
+})
+
+/** La prima volta che lei vede una consegna, detta dalla carta che si apre. */
+app.post('/api/tracce/vista', (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x: unknown): x is string => typeof x === 'string').slice(0, 200) : null
+  if (!ids) return res.status(400).json({ errore: 'ids: un elenco' })
+  tracce.mostrata(ids)
+  res.json({ ok: true })
 })
 
 app.post('/api/punto', async (req, res) => {
@@ -3726,6 +3750,41 @@ app.post('/api/progetti/suggeriti', (req, res) => {
 app.get('/api/progetti/:id/memoria', (req, res) => {
   if (!progetti.trova(req.params.id)) return res.status(404).json({errore:'Project not found.'})
   res.json({records:projectEvidence(req.params.id,{history:true})})
+})
+
+/**
+ * Il mandato del progetto (`mandato.ts`): quello scritto, o quello che Myynd
+ * propone se non c'è ancora (senza scriverlo: guardare non decide niente).
+ */
+app.get('/api/progetti/:id/mandato', (req, res) => {
+  const p = progetti.trova(req.params.id)
+  if (!p) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
+  try {
+    const m = mandato.scritto(p.id) ?? mandatoProposta.dedotto(p, { traguardo: leggiQuadri()[p.id]?.traguardo ?? null })
+    res.json({ mandato: m, regole: mandato.regole(m), classi: mandato.CLASSI, autonomia: mandato.autonomia(p.id), spesa: mandato.spesaDelMese(p.id) })
+  } catch (e) { errore(res, e) }
+})
+
+/**
+ * Le impostazioni del mandato: l'unica strada da cui il mandato cambia.
+ * Niente di quello che passa dal modello, dalle pagine o dalla posta arriva
+ * qui: la chiama solo la pagina del progetto, con il suo gesto.
+ * `conferma: true` è il bottone «Conferma».
+ */
+app.put('/api/progetti/:id/mandato', (req, res) => {
+  const p = progetti.trova(req.params.id)
+  if (!p) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
+  const b = req.body ?? {}
+  try {
+    // la prima volta si parte dalla proposta: confermare quello che si vedeva conferma quello
+    if (!mandato.scritto(p.id)) mandatoProposta.scriviProposta(p, { traguardo: leggiQuadri()[p.id]?.traguardo ?? null })
+    const m = mandato.salva(p.id, {
+      esito: b.esito, misura: b.misura, scadenza: b.scadenza, fonti: b.fonti, classi: b.classi, budget: b.budget, revisione: b.revisione
+    }, { conferma: b.conferma === true, origine: 'lei' })
+    // confermato: la domanda «È questo l'obiettivo?», se è aperta, non serve più
+    if (m.stato === 'confermato') mandatoProposta.chiudiLaDomanda(p.id)
+    res.json({ mandato: m, regole: mandato.regole(m), classi: mandato.CLASSI, autonomia: mandato.autonomia(p.id), spesa: mandato.spesaDelMese(p.id) })
+  } catch (e) { errore(res, e, 400) }
 })
 
 app.get('/api/progetti/:id/attivita', (req, res) => {
@@ -4321,6 +4380,7 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
   res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi(), ...(imparato ? { imparato } : {}) })
   compiti.annunciaCambio()
   const r = ritocco(bozza, d.m.corpo)
+  tracce.decidi(c.id, tracce.esitoDallaDistanza(r), { distanza: r })
   lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: new Date().toISOString(), distanza: r, parole: paroleDi(d.m.corpo).length, classe: classeRitocco(r) })
   // il primo gradino: una risposta a chi aveva scritto, partita com'era o quasi, è una prova di fiducia
   try { gradino.dopoManda(c, a, dest?.nome, r) } catch { /* la fiducia è un di più */ }
@@ -4349,6 +4409,7 @@ app.post('/api/compiti/:id/esegui', async (req, res) => {
   if (proposte.eQui(p)) {
     try {
       const fatto = await proposte.esegui(c, p)
+      tracce.decidi(c.id, 'accettato', { distanza: 0 })
       res.json({ ok: true, ...fatto, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
       compiti.annunciaCambio()
     } catch (e) { errore(res, e) }
@@ -4571,6 +4632,9 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
   }
   const cartella = String(req.body?.cartella ?? '').trim()
   if (!cartella) return res.status(400).json({ errore: 'Dimmi in quale cartella lavorare.' })
+  // il mandato del progetto: anche con lei presente, «mai» resta mai (`mandato.ts`)
+  if (mandato.regolaPer(c.progetto ?? null, 'codice_copia') === 'mai') return res.status(403).json({ errore: 'Il mandato di questo progetto dice di non lavorare mai sul codice.' })
+  const posaVietata = !mandato.posaPermessa(c.progetto ?? null)
 
   /*
    * Quello che gli si chiede: la riga, oppure un testo già scritto apposta.
@@ -4625,7 +4689,7 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
      * giro riuscito.
      */
     let posa: Awaited<ReturnType<typeof landReport>> | null = null
-    if (current && e.finito && e.esecuzione && e.esecuzione.changedFiles.length
+    if (current && e.finito && e.esecuzione && e.esecuzione.changedFiles.length && !posaVietata
       && (e.esecuzione.state === 'verified' || e.esecuzione.state === 'unverified')) {
       posa = await landReport(e.esecuzione).catch(g => {
         console.warn(`myynd · il lavoro su ${c.id} è fatto, ma non si è posato nel progetto:`, g instanceof Error ? g.message : g)
@@ -4756,6 +4820,10 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   const corretto = !!tenuto.trim() && tenuto.trim() !== mostrato && tenuto.trim() !== (c.risultato ?? '').trim()
   if (corretto) store.tieniLaTua(c.id, tenuto.trim())
   store.cambiaStatoCompito(c.id, stato, esito || undefined)
+  // la traccia: presa com'era, ritoccata (quanto, a parole), o lasciata
+  if (stato === 'lasciato') tracce.decidi(c.id, 'scartato')
+  else if (corretto) { const r = ritocco(mostrato, tenuto.trim()); tracce.decidi(c.id, tracce.esitoDallaDistanza(r), { distanza: r }) }
+  else tracce.decidi(c.id, 'accettato', { distanza: 0 })
   // di quale progetto è, subito e senza modello: l'avviso sotto il bottone lo dice
   const fatto: dopoFatto.Fatto = { genere: 'compito', id: c.id }
   const registrato = { progetto: stato === 'fatto' ? dopoFatto.progettoDelFatto(fatto) : null }
@@ -4816,6 +4884,7 @@ app.delete('/api/compiti/:id', (req, res) => {
   stopProjectWork(req.params.id)
   compiti.richiama(req.params.id)
   store.scordaCompito(req.params.id)
+  tracce.decidi(req.params.id, 'scartato')
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
@@ -5256,6 +5325,8 @@ app.post('/api/compiti/:id/lascia', (req, res) => {
   try {
     store.cambiaStatoCompito(c.id, stato, esito || undefined)
     store.scordaChieste(c.id)
+    // «Non mi serve», con qualunque ragione: il lavoro consegnato non è stato preso
+    tracce.decidi(c.id, 'scartato')
     abitudini.ragioneDelCompito(c.id, ragione)
     const chiavi = new Set(abitudini.chiaviDelCompito(c.id))
     imparato = abitudini.ricalcolaFiltri().find(r => chiavi.has(r.chiave))
@@ -5404,6 +5475,8 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
   const partita = !!c.mandata && !!c.chiesto && c.mandata.quando >= c.chiesto
   if (c.stato !== 'pronto' || !c.ipotesi?.length || partita) return res.status(400).json({ errore: 'Questa riga non ha niente da cambiare.' })
   const riga = c.ipotesi[0]
+  // la traccia: l'ha cambiata, quindi l'ha presa con un ritocco
+  tracce.decidi(c.id, 'modificato')
   try {
     let contata = true
     if (c.email?.casella?.stato === 'salvata' || c.consegna) {

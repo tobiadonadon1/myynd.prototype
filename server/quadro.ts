@@ -59,6 +59,7 @@ import { conGergo } from './rifinitura.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { normalizzata, stessaCosa, testoDelProgetto, PROVA_MIN, PROVA_MAX } from './priorita.ts'
 import { dayLogContext } from './project-memory.ts'
+import * as mandatoProposta from './mandato-proposta.ts'
 
 const execFileP = promisify(execFile)
 
@@ -777,6 +778,8 @@ export async function aggiorna(adesso = Date.now()): Promise<Quadro[]> {
         archivio[p.id] = { ...q, messe: archivio[p.id]?.messe }
         scriviQuadri(archivio)
         console.log(`myynd · quadro · ${p.nome}: ${q.mosse.length} mosse · traguardo «${q.traguardo.slice(0, 80)}»`)
+        // il mandato proposto parte dal traguardo, e al più una domanda per confermarlo (non lancia)
+        mandatoProposta.proponi(p, { traguardo: q.traguardo })
       } catch (e) {
         console.warn(`myynd · quadro · ${p.nome}:`, e instanceof Error ? e.message : e)
       }

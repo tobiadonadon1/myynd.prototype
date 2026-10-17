@@ -19,6 +19,7 @@ import { bloccoDalTesto, DURI, opzioniDalMateriale, type Genere } from './domand
 import { appDocumento, CREA_DOCUMENTO, validaDocumento, pagineDocumento } from './delega-documento.ts'
 import { creaDocumento, pubblicaDocumentoDesktop, apriDocumento, type DocumentoCreato } from './native-document.ts'
 import * as mani from './mani.ts'
+import * as mandato from './mandato.ts'
 import { OSPITATO } from './ospitato.ts'
 import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conEsito, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, motoreDelLavoro, parametri, puoLeggere, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
@@ -3107,7 +3108,9 @@ export async function svolgi(
     /** F9 · di notte, per una carta del turno: il lavoro sul codice resta nella copia, non si posa nel progetto. */
     soloCopia?: boolean
     /** La pagina di Notion di questo lavoro, stabile (`progetto:<id>`): senza, vale il titolo. */
-    chiaveNotion?: string },
+    chiaveNotion?: string
+    /** Il progetto il cui mandato vale per le mani di questa carta (`mandato.ts`); con `taskId` il cancello c'è sempre. */
+    mandato?: { progetto: string | null } },
   /**
    * Il materiale del progetto di cui la riga fa parte, se ne ha uno: la
    * cartella di lavoro come fonte fissa, la memoria e il riferimento nel
@@ -3435,6 +3438,15 @@ export async function svolgi(
       esecuzione?.signal.throwIfAborted()
       if (c.name === CREA_DOCUMENTO.name) {
         if (!appNativa) throw new Error('Native document creation was not authorized for this task.')
+        // il mandato del progetto, come per le mani: `mai` e `chiedi` non scrivono il documento
+        if (esecuzione?.taskId) {
+          const v = mandato.decidi(c.name, c.input, { progetto: esecuzione.mandato?.progetto ?? null, compito: esecuzione.taskId, presente: false })
+          if (v.via !== 'esegui') {
+            fatti.push({ attrezzo: 'crea_documento_app', esito: 'errore', dettaglio: 'fuori dal mandato' })
+            risultati.push({ type: 'tool_result', tool_use_id: c.id, is_error: true, content: v.testo })
+            continue
+          }
+        }
         const input = validaDocumento(c.input, appNativa)
         if (pagineRichieste > 0 && input.testo.trim().split(/\s+/).length > pagineRichieste * 320) {
           risultati.push({ type: 'tool_result', tool_use_id: c.id, is_error: true, content: `The document exceeds the requested length. Revise the complete body to at most ${pagineRichieste * 320} words, then call crea_documento_app again. No file has been created.` })
@@ -3486,7 +3498,7 @@ export async function svolgi(
         const dettaglio = (c.input as Record<string, unknown> | null)
         const detto = String(dettaglio?.url ?? dettaglio?.percorso ?? dettaglio?.query ?? dettaglio?.titolo ?? dettaglio?.richiesta ?? '').trim().slice(0, 120)
         passo(c.name === mani.CERCA_WEB.name ? { passo: 'cerco', dettaglio: detto } : c.name === mani.LEGGI_FILE.name || c.name === mani.LEGGI_PAGINA.name ? { passo: 'apro', dettaglio: detto } : { passo: 'scrivo', dettaglio: detto })
-        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito(), ...(esecuzione?.soloCopia ? { soloCopia: true } : {}), ...(esecuzione?.chiaveNotion ? { chiaveNotion: esecuzione.chiaveNotion } : {}) })
+        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito(), ...(esecuzione?.soloCopia ? { soloCopia: true } : {}), ...(esecuzione?.chiaveNotion ? { chiaveNotion: esecuzione.chiaveNotion } : {}), ...(esecuzione?.taskId ? { mandato: { progetto: esecuzione.mandato?.progetto ?? null, compito: esecuzione.taskId, presente: false } } : {}) })
         /*
          * F9 · sul diario della carta, col percorso intero: un file scritto
          * fuori dalla copia di lavoro è una cosa che «Disfa» deve poter
