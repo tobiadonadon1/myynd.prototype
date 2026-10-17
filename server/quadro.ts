@@ -58,6 +58,7 @@ import { FONTI_POSTA } from './connettori/registro.ts'
 import { conGergo } from './rifinitura.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { normalizzata, stessaCosa, testoDelProgetto, PROVA_MIN, PROVA_MAX } from './priorita.ts'
+import { dayLogContext } from './project-memory.ts'
 
 const execFileP = promisify(execFile)
 
@@ -514,6 +515,10 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
     }
   }
 
+  // il diario degli ultimi giorni: cosa ha visto sul Mac, già corto (server/diario.ts)
+  const diario = dayLogContext(p.id, adesso)
+  if (diario) blocchi.unshift({ id: 'diario', testo: `[diario] ${diario}`, fonte: diario, tipo: 'memoria' })
+
   // la memoria del progetto e quello che ha scritto lui
   const memoria = testoDelProgetto(p.id).slice(0, 3000)
   if (memoria) blocchi.unshift({ id: 'memoria', testo: `[memoria] Obiettivo e memoria del progetto\n${memoria}`, fonte: memoria, tipo: 'memoria' })
@@ -544,7 +549,9 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   }
   let testo = dentro.join('\n\n')
   if (lista) testo += `\n\n${lista}`
-  const impronta = hash(`${VERSIONE}|${p.nome}|${p.obiettivo}|${testo}`)
+  // il diario cambia ogni giorno: entra nel quadro quando il quadro si rifà, ma da solo non lo fa rifare (costa un modello grande)
+  const senzaDiario = dentro.filter(t => !t.startsWith('[diario]')).join('\n\n') + (lista ? `\n\n${lista}` : '')
+  const impronta = hash(`${VERSIONE}|${p.nome}|${p.obiettivo}|${senzaDiario}`)
   for (const f of fuori) { testo += `\n\n${f.testo}`; fonti.set(f.id, f.testo); letto.sito = (letto.sito ?? 0) + 1 }
   return { testo, fonti, impronta, ultima, recente: recente || null, indirizzi, letto, ...(fuori.length ? { fuori: hash(fuori.map(f => f.testo).join('|')) } : {}) }
 }

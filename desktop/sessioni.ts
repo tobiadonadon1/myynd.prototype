@@ -27,13 +27,28 @@ export const TITOLO_MASSIMO = 160
 export const APP_MASSIMA = 120
 /** Quante sessioni in un messaggio al server. */
 export const PER_MESSAGGIO = 200
+/** Quanti testi di finestra si tengono mentre il server non c'è; si perdono i più vecchi. */
+export const TESTI_IN_CODA = 30
+/** I caratteri di un testo: il programma ne legge al massimo otto mila. */
+export const TESTO_MASSIMO = 8000
+export const OGNI_TESTI = 20
 
 /** Quello che dice la fonte: chi c'è davanti, e da quando (`t`, epoch ms). */
 export type EventoFronte = { bundle: string; app: string; pid: number; titolo: string | null; t: number }
 /** Un evento passato dal filtro. */
 export type Finestra = { bundle: string; app: string; titolo: string | null }
 export type Sessione = { bundle: string; app: string; titolo: string | null; inizio: string; fine: string; secondi: number }
-export type StatoServer = { acceso: boolean; titoli: boolean; pausaFino: string | null }
+export type StatoServer = {
+  acceso: boolean; titoli: boolean; pausaFino: string | null
+  /** Il testo della finestra davanti, acceso a mano (17 ottobre). Manca nei server vecchi: spento. */
+  testi: boolean
+  /** Ogni quanti secondi si rilegge il testo anche senza un cambio. */
+  ogni: number
+  /** Le app escluse da lui (identificativo o nome, in minuscolo). */
+  escluse: string[]
+}
+/** Il testo della finestra davanti, come lo scrive il programma. */
+export type TestoFinestra = { bundle: string; app: string; pid: number; titolo: string | null; documento: string | null; url: string | null; testo: string; t: number }
 
 /*
  * Le app che non si guardano mai: né il nome né il tempo.
@@ -96,6 +111,24 @@ export function filtra(e: EventoFronte, o: { titoli: boolean; mioPid: number }):
     if (intero && !TITOLO_PRIVATO.test(intero) && !TITOLO_SEGRETO.test(intero)) titolo = pulisciTitolo(intero)
   }
   return { bundle: e.bundle, app, titolo }
+}
+
+/**
+ * Il filtro del testo: le stesse esclusioni delle finestre, più le sue, più
+ * le finestre private o di accesso, che col titolo perdono anche il testo.
+ * `null` vuol dire che quel testo non esce dal guscio.
+ */
+export function filtraTesto(x: TestoFinestra, o: { mioPid: number; escluse: readonly string[] }): Omit<TestoFinestra, 'pid'> | null {
+  if (!x || typeof x.bundle !== 'string' || !BUNDLE_VALIDO.test(x.bundle)) return null
+  if (ESCLUSE_SEMPRE.has(x.bundle) || x.pid === o.mioPid) return null
+  const app = taglia(pulito(x.app), APP_MASSIMA) || x.bundle
+  const esclusa = new Set(o.escluse.map(e => e.toLowerCase()))
+  if (esclusa.has(x.bundle.toLowerCase()) || esclusa.has(app.toLowerCase())) return null
+  const titolo = pulito(x.titolo)
+  if (titolo && (TITOLO_PRIVATO.test(titolo) || TITOLO_SEGRETO.test(titolo))) return null
+  const testo = taglia(pulito(x.testo), TESTO_MASSIMO)
+  if (!testo) return null
+  return { bundle: x.bundle, app, titolo: pulisciTitolo(titolo), documento: x.documento || null, url: x.url || null, testo, t: x.t }
 }
 
 /* ---------------------------------------------------------------- sessioni */
@@ -213,6 +246,10 @@ export function messaggioSessioni(s: Sessione[]): { tipo: 'osservatore'; session
   return { tipo: 'osservatore', sessioni: s }
 }
 
+export function messaggioTesti(t: Omit<TestoFinestra, 'pid'>[]): { tipo: 'osservatore-testi'; testi: Omit<TestoFinestra, 'pid'>[] } {
+  return { tipo: 'osservatore-testi', testi: t }
+}
+
 export const CHIEDI = Object.freeze({ tipo: 'osservatore-chiedi' as const })
 export const RIPRENDI = Object.freeze({ tipo: 'osservatore-riprendi' as const })
 
@@ -229,11 +266,20 @@ export function messaggioPausa(minuti: number): { tipo: 'osservatore-pausa'; min
 /** Il solo messaggio che il server manda al guscio per l'osservatore. Tutto il resto è `null`. */
 export function leggiStato(m: unknown): StatoServer | null {
   if (!m || typeof m !== 'object' || Array.isArray(m)) return null
-  const { tipo, acceso, titoli, pausaFino } = m as Record<string, unknown>
+  const { tipo, acceso, titoli, pausaFino, testi, ogni, escluse } = m as Record<string, unknown>
   if (tipo !== 'osservatore-stato') return null
   if (typeof acceso !== 'boolean' || typeof titoli !== 'boolean') return null
   if (pausaFino !== null && (typeof pausaFino !== 'string' || !Number.isFinite(Date.parse(pausaFino)))) return null
-  return { acceso, titoli, pausaFino }
+  // le tre chiavi del 17 ottobre: un server vecchio non le manda, e allora il testo resta spento
+  if (testi !== undefined && typeof testi !== 'boolean') return null
+  if (ogni !== undefined && (typeof ogni !== 'number' || !Number.isFinite(ogni))) return null
+  if (escluse !== undefined && (!Array.isArray(escluse) || escluse.some(e => typeof e !== 'string'))) return null
+  return {
+    acceso, titoli, pausaFino,
+    testi: testi === true,
+    ogni: typeof ogni === 'number' ? Math.min(600, Math.max(5, Math.round(ogni))) : OGNI_TESTI,
+    escluse: Array.isArray(escluse) ? (escluse as string[]).slice(0, 100) : []
+  }
 }
 
 /** In pausa adesso? L'istante è assoluto: ciascuno lo confronta col suo orologio. */

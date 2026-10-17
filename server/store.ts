@@ -570,7 +570,37 @@ const TABELLE = {
     );
   `,
   // P5 · le convinzioni scordate a mano: una deduzione uguale non torna
-  convinzioni_tolte: 'CREATE TABLE IF NOT EXISTS convinzioni_tolte (id TEXT PRIMARY KEY, quando TEXT NOT NULL);'
+  convinzioni_tolte: 'CREATE TABLE IF NOT EXISTS convinzioni_tolte (id TEXT PRIMARY KEY, quando TEXT NOT NULL);',
+  /*
+   * Cosa ha visto sul Mac (server/osservazioni.ts). Una riga per cosa vista:
+   * `sourceId` è da dove (l'app più il documento, l'indirizzo o il percorso),
+   * `observedAt` quando l'ha vista lui, `eventAt` quando è successa la cosa
+   * (un commit, un file usato), `contentHash` l'impronta del testo
+   * normalizzato, `text` il testo già ripulito e corto. `retention` dice per
+   * quanto si tiene: quattordici giorni, poi via. `spans` sono gli intervalli
+   * del giorno in cui una pagina è stata davanti (la cronologia, per dominio).
+   */
+  osservazioni: `
+    CREATE TABLE IF NOT EXISTS osservazioni (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, sourceId TEXT NOT NULL, app TEXT, title TEXT, text TEXT,
+      observedAt TEXT NOT NULL, eventAt TEXT, endAt TEXT, seconds INTEGER NOT NULL DEFAULT 0, day TEXT NOT NULL,
+      projectId TEXT, contentHash TEXT, retention TEXT NOT NULL DEFAULT 'grezza', spans TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_osservazioni_day ON osservazioni(day, observedAt);
+    CREATE INDEX IF NOT EXISTS idx_osservazioni_source ON osservazioni(sourceId, observedAt);
+  `,
+  // le ore che ha chiesto di dimenticare: niente di quello che cade dentro rientra, da nessuna fonte
+  osservazioni_dimenticate: `
+    CREATE TABLE IF NOT EXISTS osservazioni_dimenticate (da TEXT NOT NULL, a TEXT NOT NULL, quando TEXT NOT NULL);
+  `,
+  // il diario del giorno, per progetto: le righe scritte dal modello, ognuna con le osservazioni su cui poggia
+  diario: `
+    CREATE TABLE IF NOT EXISTS diario (
+      id TEXT PRIMARY KEY, day TEXT NOT NULL, projectId TEXT, kind TEXT NOT NULL, text TEXT NOT NULL,
+      evidence TEXT NOT NULL, createdAt TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_diario_day ON diario(day);
+  `
 } as const
 
 /**
@@ -1549,7 +1579,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     colonna(d, 'automazioni', 'riprova', 'TEXT')
     colonna(d, 'automazioni', 'ricevuta', 'TEXT')
     d.prepare('UPDATE automazioni SET vassoio = ? WHERE vassoio > ?').run(new Date().toISOString(), new Date().toISOString())
-  }
+  },
+  // 72 → 73 · cosa ha visto sul Mac: le osservazioni, le ore dimenticate, il diario del giorno
+  d => { d.exec(TABELLE.osservazioni); d.exec(TABELLE.osservazioni_dimenticate); d.exec(TABELLE.diario) }
 ]
 
 /**

@@ -501,6 +501,7 @@ export type Lavoro =
   | 'presumere'     // P3: di che genere è il dato che manca a un lavoro, e se sbagliarlo costa
   | 'rispostaBreve' // P10: una domanda secca in chat (quando, chi, dove); tutto il resto resta `risposta`
   | 'scalda'        // P10: scaldare il modello di questo Mac quando si apre la chat; non esce mai dal Mac
+  | 'diario'        // il diario del giorno: cosa si è mosso, cosa è fermo, chi aspetta, dagli episodi visti sul Mac
 
 /*
  * Tre livelli, non due.
@@ -694,7 +695,14 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * Quello che produce non esce da questa macchina e nessuno lo firma: se una
    * riga viene storta, sta in una schermata fatta apposta per correggerla.
    */
-  ritratto:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 }
+  ritratto:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 },
+  /*
+   * Il diario del giorno: da una pagina di episodi già messi in fila (ore,
+   * minuti, titoli, commit) a cinque o dieci righe per progetto. Il lavoro
+   * difficile l'ha già fatto il codice, che ha deciso cosa è di chi; qui si
+   * scrive. Una chiamata al giorno per conto, sul gradino più economico.
+   */
+  diario:     { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 }
 }
 
 type Messaggio = { role: 'user' | 'assistant'; content: string }

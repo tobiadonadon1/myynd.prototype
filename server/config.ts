@@ -984,8 +984,16 @@ export type Config = {
    * titoli delle finestre. Appartiene al conto che lo accende su questo Mac.
    * `pausaFino` è un istante ISO, o null quando non è in pausa; `escluse` sono
    * gli identificativi delle app da non guardare mai.
+   *
+   * Dal 17 ottobre è acceso se manca: `acceso: false` vuol dire che qualcuno
+   * l'ha spento. `testi` è la lettura del testo della finestra davanti
+   * (spenta se manca, chiede l'Accessibilità), `ogni` ogni quanti secondi la
+   * si rilegge anche senza un cambio, `siti` i domini da non guardare mai.
    */
-  osservatore?: { acceso: boolean; titoli?: boolean; dal?: string; pausaFino?: string | null; escluse?: string[] }
+  osservatore?: {
+    acceso: boolean; titoli?: boolean; dal?: string; pausaFino?: string | null; escluse?: string[]
+    testi?: boolean; ogni?: number; siti?: string[]
+  }
   /**
    * Il turno (F2): Myynd lavora da solo le carte in coda. Acceso se manca;
    * `carte` è quante ne può far partire in una giornata (di serie dodici),

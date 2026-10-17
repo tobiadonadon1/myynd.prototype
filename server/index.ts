@@ -144,6 +144,7 @@ import * as trasloco from './trasloco.ts'
 import * as fuso from './fuso.ts'
 import * as sveglia from './sveglia.ts'
 import * as osservatore from './osservatore.ts'
+import * as attivita from './attivita.ts'
 import * as gemello from './gemello.ts'
 import * as abitudini from './abitudini.ts'
 import * as gradino from './gradino.ts'
@@ -5294,10 +5295,32 @@ app.get('/api/osservatore', (_req, res) => {
 
 app.post('/api/osservatore', (req, res) => {
   if (!osservatore.disponibile()) return senzaOsservatore(res)
-  const v: { acceso?: boolean; titoli?: boolean } = {}
+  const v: osservatore.Impostazioni = {}
   if (typeof req.body?.acceso === 'boolean') v.acceso = req.body.acceso
   if (typeof req.body?.titoli === 'boolean') v.titoli = req.body.titoli
+  if (typeof req.body?.testi === 'boolean') v.testi = req.body.testi
+  if (typeof req.body?.ogni === 'number') v.ogni = req.body.ogni
+  if (Array.isArray(req.body?.escluse)) v.escluse = req.body.escluse
+  if (Array.isArray(req.body?.siti)) v.siti = req.body.siti
   try { res.json(osservatore.imposta(v)) } catch (e) { errore(res, e) }
+})
+
+// «Cosa ho visto oggi»: gli episodi e il diario di oggi, e i due modi di dimenticare
+app.get('/api/osservatore/oggi', (_req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  try { res.json(attivita.oggi()) } catch (e) { errore(res, e) }
+})
+
+app.delete('/api/osservatore/ora', async (req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  const quando = new Date(String(req.query.quando ?? ''))
+  if (Number.isNaN(quando.getTime()) || quando.getTime() > Date.now() + 60_000) return res.status(400).json({ errore: 'Quale ora?' })
+  try { await attivita.dimentica({ ora: quando }); res.json(attivita.oggi()) } catch (e) { errore(res, e) }
+})
+
+app.delete('/api/osservatore/oggi', async (_req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  try { await attivita.dimentica({ giorno: true }); res.json(attivita.oggi()) } catch (e) { errore(res, e) }
 })
 
 app.post('/api/osservatore/pausa', (req, res) => {
@@ -6011,6 +6034,10 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const gemelloGiro = perOgnuno('il gemello non ha finito il giro', () => runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro())))
   setTimeout(gemelloGiro, 200_000)
   setInterval(gemelloGiro, 15 * 60_000)
+  // cosa ha visto sul Mac senza permessi (file usati, cronologia, repository, editor), e il diario una volta al giorno
+  const attivitaGiro = perOgnuno('le osservazioni non hanno finito il giro', () => store.senzaToccare(() => attivita.giro()))
+  setTimeout(attivitaGiro, 240_000)
+  setInterval(attivitaGiro, 15 * 60_000)
   // il primo giorno (F6): per chi aspettava la posta, un modello, o la rilettura; fatto, non fa niente
   const primoGiornoGiro = perOgnuno('il primo giorno non ha finito il giro', () => store.senzaToccare(() => primoGiorno.forse()))
   setTimeout(primoGiornoGiro, 90_000)
