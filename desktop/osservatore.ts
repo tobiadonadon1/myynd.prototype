@@ -9,6 +9,12 @@
 // il Mac, e ogni minuto le manda al server. Finché il server appena partito
 // non ha risposto, le tiene da parte (al massimo 500).
 //
+// Il testo della finestra (`testi`, acceso a mano dal 17 ottobre) viaggia a
+// parte: la fonte lo legge solo se il server lo vuole e il permesso c'è, e
+// qui si filtra di nuovo, si tiene in una coda corta (trenta) e parte col
+// mazzo delle sessioni. Una persona via, lo schermo bloccato, il Mac che
+// dorme: il testo che arriva in quei momenti non si tiene.
+//
 // La pausa di un'ora, dal menu della barra o dal mostriciattolo, cambia
 // tutto subito — occhi, nuvoletta, menu — e torna indietro se il server non
 // la conferma entro cinque secondi: quello che si vede dev'essere vero.
@@ -18,9 +24,9 @@
 
 import type { Crea, FonteFronte } from './fronte.ts'
 import {
-  CHIEDI, INATTIVO_SECONDI, PER_MESSAGGIO, RIPRENDI, creaCoda, creaCostruttore, filtra, inPausa, leggiStato,
-  messaggioPausa, messaggioSessioni, minutiPausa, type Coda, type Costruttore, type EventoFronte, type Finestra,
-  type StatoServer
+  CHIEDI, INATTIVO_SECONDI, OGNI_TESTI, PER_MESSAGGIO, RIPRENDI, TESTI_IN_CODA, creaCoda, creaCostruttore, filtra, filtraTesto, inPausa, leggiStato,
+  messaggioPausa, messaggioSessioni, messaggioTesti, minutiPausa, type Coda, type Costruttore, type EventoFronte, type Finestra,
+  type StatoServer, type TestoFinestra
 } from './sessioni.ts'
 
 export type Dipendenze = {
@@ -47,6 +53,8 @@ export type StatoLocale = {
   /** L'ultimo stato confermato dal server. */
   acceso: boolean
   titoli: boolean
+  /** Il testo della finestra, voluto dal server (il permesso è `permesso`). */
+  testi: boolean
   /** Il valore della pausa, anche quello non ancora confermato. */
   pausaFino: string | null
   /** Acceso e non in pausa: quello che dicono gli occhi del mostriciattolo. */
@@ -68,7 +76,8 @@ const FINESTRA_RIAVVII = 10 * 60_000
 let d: Dipendenze | null = null
 let disponibile = false
 /** L'ultimo stato che il server ha detto. Nessuno stato: spento. */
-let confermato: StatoServer = { acceso: false, titoli: false, pausaFino: null }
+const SPENTO: StatoServer = { acceso: false, titoli: false, pausaFino: null, testi: false, ogni: OGNI_TESTI, escluse: [] }
+let confermato: StatoServer = { ...SPENTO }
 /** Il server di adesso ha già risposto? Fino ad allora le sessioni aspettano. */
 let risposto = false
 /** Una pausa (o una ripresa) premuta e non ancora confermata. */
@@ -76,6 +85,9 @@ let ottimista: { pausaFino: string | null; orologio: ReturnType<typeof setTimeou
 let permesso = false
 let fonte: FonteFronte | null = null
 let fonteTitoli = false
+/** Con che testo è partita la fonte: '' senza, altrimenti il ritmo e le esclusioni. */
+let fonteTesti = ''
+let codaTesti: Omit<TestoFinestra, 'pid'>[] = []
 let generazione = 0
 let ripiego = false
 let avvisatoRipiego = false
@@ -112,6 +124,7 @@ export function stato(): StatoLocale {
     disponibile,
     acceso: confermato.acceso,
     titoli: confermato.titoli,
+    testi: confermato.testi,
     pausaFino,
     guarda: d !== null && disponibile && confermato.acceso && !inPausa(pausaFino, ora()),
     permesso
@@ -144,8 +157,9 @@ function valuta() {
   if (!d) return
   const guarda = deveGuardare()
   const titoliVoluti = confermato.titoli && permesso
-  if (fonte && (!guarda || fonteTitoli !== titoliVoluti)) spegniFonte()
-  if (guarda && !fonte) accendiFonte(titoliVoluti)
+  const testiVoluti = confermato.testi && permesso ? JSON.stringify([confermato.ogni, confermato.escluse]) : ''
+  if (fonte && (!guarda || fonteTitoli !== titoliVoluti || fonteTesti !== testiVoluti)) spegniFonte()
+  if (guarda && !fonte) accendiFonte(titoliVoluti, testiVoluti)
   programmaScadenza()
   registraCambio()
   const s = stato()
@@ -156,16 +170,19 @@ function valuta() {
   }
 }
 
-function accendiFonte(titoli: boolean) {
+function accendiFonte(titoli: boolean, testi: string) {
   if (!d) return
   const mia = ++generazione
   fonteTitoli = titoli
+  fonteTesti = testi
   inattivo = false
   let creata: FonteFronte
   try {
     creata = d.creaFonte({
       titoli,
       ripiego,
+      testi: testi ? { ogni: confermato.ogni, escluse: [...confermato.escluse] } : null,
+      suTesto: t => { if (mia === generazione) suTesto(t) },
       suEvento: e => { if (mia === generazione) suEvento(e) },
       suFine: motivo => { if (mia === generazione) suFineFonte(motivo) }
     })
@@ -204,6 +221,15 @@ function suEvento(e: EventoFronte) {
     inattivo = false
   }
   costruttore.evento(f, e.t)
+}
+
+/** Un testo dalla fonte: solo con la persona davanti, filtrato di nuovo, in una coda corta. */
+function suTesto(x: TestoFinestra) {
+  if (!d || !fonteTesti || sospeso() || inattivo) return
+  const f = filtraTesto(x, { mioPid: d.mioPid, escluse: confermato.escluse })
+  if (!f) return
+  codaTesti.push(f)
+  if (codaTesti.length > TESTI_IN_CODA) codaTesti = codaTesti.slice(codaTesti.length - TESTI_IN_CODA)
 }
 
 function tornata(): boolean {
@@ -259,6 +285,13 @@ function spedisci() {
   if (!d) return
   coda.metti(costruttore.chiusi())
   if (!risposto) return
+  if (codaTesti.length) {
+    const testi = codaTesti
+    codaTesti = []
+    let andato = false
+    try { andato = d.manda(messaggioTesti(testi)) } catch { andato = false }
+    if (!andato) { codaTesti = testi.concat(codaTesti).slice(-TESTI_IN_CODA); risposto = false; return }
+  }
   while (coda.quante() > 0) {
     const pezzo = coda.prendi(PER_MESSAGGIO)
     let andato = false
@@ -288,8 +321,8 @@ function giroInattivita() {
 
 function giroInvio() {
   if (!d) return
-  // il permesso di Accessibilità serve solo ai titoli: senza, non lo si guarda
-  if (confermato.acceso && confermato.titoli) rileggiPermesso()
+  // il permesso di Accessibilità serve solo ai titoli e al testo: senza, non lo si guarda
+  if (confermato.acceso && (confermato.titoli || confermato.testi)) rileggiPermesso()
   // e la pausa finita mentre l'orologio del timer era fermo
   valuta()
   if (fonte && !inattivo && !sospeso()) costruttore.taglia(ora())
@@ -304,11 +337,13 @@ export function avvia(dip: Dipendenze): void {
   if (ottimista) clearTimeout(ottimista.orologio)
   d = dip
   disponibile = dip.piattaforma === 'darwin'
-  confermato = { acceso: false, titoli: false, pausaFino: null }
+  confermato = { ...SPENTO }
   risposto = false
   ottimista = null
   fonte = null
   fonteTitoli = false
+  fonteTesti = ''
+  codaTesti = []
   generazione++
   ripiego = false
   avvisatoRipiego = false
@@ -361,7 +396,7 @@ export function daServer(m: unknown): void {
   if (!s || !d) return
   confermato = s
   risposto = true
-  if (s.acceso && s.titoli) permesso = leggiPermesso()
+  if (s.acceso && (s.titoli || s.testi)) permesso = leggiPermesso()
   // spento dal server: una pausa in volo non ha più niente da mettere in pausa
   if (ottimista && !s.acceso) { clearTimeout(ottimista.orologio); ottimista = null }
   if (ottimista && confermaPausa(ottimista.pausaFino, s.pausaFino)) {

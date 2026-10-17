@@ -271,7 +271,7 @@ test('il proprietario cancellato: le sessioni cadono, nessuna cartella nasce, il
   mandati.length = 0
   await addio.cancella(anna)
   assert.equal(existsSync(join(CASA, 'osservatore.json')), false)
-  assert.deepEqual(mandati.at(-1), { tipo: 'osservatore-stato', acceso: false, titoli: false, pausaFino: null })
+  assert.deepEqual(mandati.at(-1), { tipo: 'osservatore-stato', acceso: false, titoli: false, pausaFino: null, testi: false, ogni: 20, escluse: [] })
   assert.equal(oss.scriviSessioni([sessione()], ADESSO), 0)
   assert.equal(existsSync(join(CASA, 'utenti', anna)), false, 'nessuna cartella per un conto che non c’è più')
 })

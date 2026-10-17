@@ -14,7 +14,14 @@
 //     lavoro (dal nome della cartella nel titolo).
 //
 // Niente di quello che passa di qui arriva mai a un modello: le righe servono
-// ad `abitudini.ts` per contare, e a nessun altro.
+// ad `abitudini.ts` per contare, e a `osservazioni.ts`, che ne fa gli episodi
+// del giorno sul Mac. Al modello va solo il diario corto (`diario.ts`).
+//
+// Dal 17 ottobre la linea delle app davanti è accesa di serie (non chiede
+// permessi al Mac): il Mac è di chi lo usa, cioè dell'unico conto o di chi
+// ha aperto la finestra per ultimo, finché qualcuno non la spegne. I titoli
+// restano legati all'Accessibilità; il testo della finestra (`testi`) si
+// accende solo a mano.
 //
 // Fuori dall'app (`!APP`) o su un server (`OSPITATO`) non esiste: le rotte
 // rispondono 404 e nessuno si mette in ascolto.
@@ -31,6 +38,9 @@ import * as fuso from './fuso.ts'
 import * as abitudini from './abitudini.ts'
 import * as segnali from './segnali.ts'
 import { progettoDelTesto } from './attenzione.ts'
+import * as davanti from './davanti.ts'
+import * as oss from './osservazioni.ts'
+import { dominioEscluso, pulisciUrl } from './connettori/cronologia-browser.ts'
 
 // — le liste, uguali carattere per carattere a desktop/sessioni.ts —
 
@@ -49,13 +59,28 @@ export const ESCLUSE_SEMPRE = new Set([
 export const TITOLO_PRIVATO = /private browsing|navigazione (privata|anonima)|in incognito|incognito|inprivate|\bprivat[ea]\b/i
 export const TITOLO_SEGRETO = /password|passcode|passkey|one.?time|\b2fa\b|two.?factor|verification code|codice di verifica|\bcodice\b|\bverifica\b|\baccedi\b|sign in|log in|\blogin\b|\botp\b/i
 
-export type StatoOsservatore = { acceso: boolean; titoli: boolean; pausaFino: string | null }
+export type StatoOsservatore = {
+  acceso: boolean; titoli: boolean; pausaFino: string | null
+  /** Il testo della finestra davanti: solo se l'ha acceso lui. */
+  testi: boolean
+  /** Ogni quanti secondi il testo si rilegge anche senza un cambio. */
+  ogni: number
+  /** Le app (identificativo o nome) e i siti da non guardare mai, scelti da lui. */
+  escluse: string[]
+  siti: string[]
+}
 export type Sessione = { bundle: string; app: string; titolo: string | null; inizio: string; fine: string; secondi: number }
 
 /** Al massimo tante sessioni per messaggio: oltre, il resto si butta. */
 export const SESSIONI_PER_MESSAGGIO = 200
 /** Una pausa dura da un minuto a otto ore. */
 export const PAUSA_MAX = 480
+/** La rilettura del testo della finestra: di serie ogni venti secondi, mai meno di cinque né più di dieci minuti. */
+export const OGNI_TESTI = 20
+export const OGNI_MIN = 5
+export const OGNI_MAX = 600
+/** Le esclusioni che tiene: oltre, non sono più esclusioni ma una lista nera di tutto. */
+export const ESCLUSE_MAX = 100
 /** Dopo tanti giorni una riga perde il titolo e diventa un totale del giorno. */
 export const GIORNI_TITOLI = 30
 /** Dopo tanti giorni le righe se ne vanno. */
@@ -104,7 +129,7 @@ function togliProprietario() {
  */
 export function proprietario(): string | null {
   const p = leggiProprietario()
-  if (!p) return null
+  if (!p) return adotta()
   if (!conti.conto(p.utente)) {
     togliProprietario()
     annuncia()
@@ -113,20 +138,43 @@ export function proprietario(): string | null {
   return p.utente
 }
 
+/**
+ * Acceso di serie: senza proprietario, il Mac è dell'unico conto, o di chi
+ * ha usato la finestra per ultimo, se non l'ha spento lui. Chi l'ha spento
+ * (`acceso: false` nella sua configurazione) resta spento. Solo dentro l'app.
+ */
+function adotta(): string | null {
+  if (!disponibile()) return null
+  const tutti = conti.tutti()
+  const d = davanti.chi()
+  const scelto = d && conti.conto(d) ? d : tutti.length === 1 ? tutti[0]! : null
+  if (!scelto) return null
+  const o = chi.dentro(scelto, () => cfg.leggi().osservatore)
+  if (o?.acceso === false) return null
+  scriviProprietario(scelto, new Date().toISOString())
+  return scelto
+}
+
 // — lo stato —
 
+/** La rilettura del testo, dentro i suoi limiti. */
+export function ogniDi(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(OGNI_MAX, Math.max(OGNI_MIN, Math.round(v))) : OGNI_TESTI
+}
+
 function statoDi(o: cfg.Config['osservatore'] | undefined, adesso: Date): StatoOsservatore {
-  const acceso = !!o?.acceso
+  // acceso se manca: spento solo quando qualcuno l'ha spento
+  const acceso = o?.acceso !== false
   const titoli = acceso && o?.titoli !== false
   let pausaFino: string | null = null
   if (acceso && o?.pausaFino) {
     const t = Date.parse(o.pausaFino)
     if (!Number.isNaN(t) && t > adesso.getTime()) pausaFino = new Date(t).toISOString()
   }
-  return { acceso, titoli, pausaFino }
+  return { acceso, titoli, pausaFino, testi: acceso && o?.testi === true, ogni: ogniDi(o?.ogni), escluse: [...(o?.escluse ?? [])], siti: [...(o?.siti ?? [])] }
 }
 
-const SPENTO: StatoOsservatore = { acceso: false, titoli: false, pausaFino: null }
+const SPENTO: StatoOsservatore = { acceso: false, titoli: false, pausaFino: null, testi: false, ogni: OGNI_TESTI, escluse: [], siti: [] }
 
 /** Lo stato del proprietario: `pausaFino` è null appena è passata. */
 export function stato(adesso = new Date()): StatoOsservatore {
@@ -141,7 +189,9 @@ export function statoPerChiChiede(adesso = new Date()): StatoOsservatore & { dis
   const p = proprietario()
   const osservate = (db.prepare('SELECT COUNT(*) AS n FROM sessioni_app').get() as { n: number }).n
   if (p && p === me) return { ...statoDi(cfg.leggi().osservatore, adesso), disponibile: disponibile(), altroConto: false, osservate }
-  return { ...SPENTO, disponibile: disponibile(), altroConto: !!p, osservate }
+  // le esclusioni sono sue anche quando il Mac lo guarda un altro conto
+  const o = cfg.leggi().osservatore
+  return { ...SPENTO, escluse: [...(o?.escluse ?? [])], siti: [...(o?.siti ?? [])], disponibile: disponibile(), altroConto: !!p, osservate }
 }
 
 /**
@@ -151,7 +201,15 @@ export function statoPerChiChiede(adesso = new Date()): StatoOsservatore & { dis
  * configurazione. Spegnere da un conto che non è il proprietario non cambia
  * niente di quello che il proprietario vede.
  */
-export function imposta(v: { acceso?: boolean; titoli?: boolean }, adesso = new Date()): ReturnType<typeof statoPerChiChiede> {
+export type Impostazioni = { acceso?: boolean; titoli?: boolean; testi?: boolean; ogni?: number; escluse?: string[]; siti?: string[] }
+
+/** Una lista di esclusioni scritta da lui: voci corte, senza doppioni, al massimo cento. */
+export function pulisciEsclusioni(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return [...new Set(v.filter((x): x is string => typeof x === 'string').map(x => x.trim().toLowerCase()).filter(x => x && x.length <= 200))].slice(0, ESCLUSE_MAX)
+}
+
+export function imposta(v: Impostazioni, adesso = new Date()): ReturnType<typeof statoPerChiChiede> {
   const me = chi.serve()
   const p = proprietario()
   const o = cfg.leggi().osservatore
@@ -160,16 +218,27 @@ export function imposta(v: { acceso?: boolean; titoli?: boolean }, adesso = new 
       chi.dentro(p, () => {
         const suo = cfg.leggi().osservatore
         cfg.aggiorna({ osservatore: { ...(suo ?? {}), acceso: false, pausaFino: null } })
+        oss.buio(adesso)
       })
     }
     if (p !== me) scriviProprietario(me, adesso.toISOString())
-    cfg.aggiorna({ osservatore: { acceso: true, titoli: v.titoli ?? o?.titoli ?? true, dal: o?.dal ?? adesso.toISOString(), pausaFino: null, ...(o?.escluse ? { escluse: o.escluse } : {}) } })
+    cfg.aggiorna({ osservatore: { ...(o ?? {}), acceso: true, titoli: v.titoli ?? o?.titoli ?? true, dal: o?.dal ?? adesso.toISOString(), pausaFino: null } })
+    oss.luce(adesso)
   } else if (v.acceso === false) {
     if (p === me) togliProprietario()
     cfg.aggiorna({ osservatore: { ...(o ?? {}), acceso: false, pausaFino: null } })
+    oss.buio(adesso)
   } else if (v.titoli !== undefined) {
-    cfg.aggiorna({ osservatore: { ...(o ?? { acceso: false }), titoli: v.titoli } })
+    cfg.aggiorna({ osservatore: { ...(o ?? { acceso: true }), titoli: v.titoli } })
   }
+  // il testo della finestra, il ritmo, le esclusioni: si cambiano insieme a tutto il resto
+  const dopo = cfg.leggi().osservatore
+  const extra: Partial<NonNullable<cfg.Config['osservatore']>> = {}
+  if (v.testi !== undefined) extra.testi = v.testi === true
+  if (v.ogni !== undefined) extra.ogni = ogniDi(v.ogni)
+  if (v.escluse !== undefined) extra.escluse = pulisciEsclusioni(v.escluse)
+  if (v.siti !== undefined) extra.siti = pulisciEsclusioni(v.siti).map(x => x.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')).filter(Boolean)
+  if (Object.keys(extra).length) cfg.aggiorna({ osservatore: { ...(dopo ?? { acceso: true }), ...extra } })
   annuncia()
   return statoPerChiChiede(adesso)
 }
@@ -180,16 +249,21 @@ export function pausa(minuti: number, adesso = new Date()): void {
   const me = chi.serve()
   if (proprietario() !== me) throw new Error('Lo usa un altro account su questo Mac.')
   const o = cfg.leggi().osservatore
-  if (!o?.acceso) return
-  cfg.aggiorna({ osservatore: { ...o, pausaFino: new Date(adesso.getTime() + minuti * 60_000).toISOString() } })
+  if (o?.acceso === false) return
+  const fino = new Date(adesso.getTime() + minuti * 60_000)
+  cfg.aggiorna({ osservatore: { ...(o ?? { acceso: true }), pausaFino: fino.toISOString() } })
+  // quello che succede in pausa non entra nemmeno dopo, dalla cronologia o da Spotlight
+  oss.luce(adesso)
+  oss.buio(adesso, fino)
 }
 
-export function riprendi(): void {
+export function riprendi(adesso = new Date()): void {
   const me = chi.serve()
   if (proprietario() !== me) return
   const o = cfg.leggi().osservatore
-  if (!o?.acceso || !o.pausaFino) return
+  if (!o || o.acceso === false || !o.pausaFino) return
   cfg.aggiorna({ osservatore: { ...o, pausaFino: null } })
+  oss.luce(adesso)
 }
 
 // — le cartelle di lavoro note, per conto: le riempie il giro notturno —
@@ -271,9 +345,9 @@ export function scriviSessioni(s: unknown[], adesso = new Date()): number {
   if (!p || !Array.isArray(s)) return 0
   return chi.dentro(p, () => store.senzaToccare(() => {
     const o = cfg.leggi().osservatore
-    if (!o?.acceso) return 0
-    const titoli = o.titoli !== false
-    const escluse = new Set(o.escluse ?? [])
+    if (o?.acceso === false) return 0
+    const titoli = o?.titoli !== false
+    const escluse = new Set(o?.escluse ?? [])
     const nomi = cartelleNote.get(p) ?? []
     const zona = fuso.fusoDi()
     const ins = db.prepare(`INSERT INTO sessioni_app (bundle, app, titolo, inizio, fine, secondi, giorno, progetto, cartella) VALUES (?,?,?,?,?,?,?,?,?)`)
@@ -283,12 +357,18 @@ export function scriviSessioni(s: unknown[], adesso = new Date()): number {
       for (const x of s.slice(0, SESSIONI_PER_MESSAGGIO)) {
         const v = valida(x, adesso)
         if (!v) continue
-        if (ESCLUSE_SEMPRE.has(v.bundle) || escluse.has(v.bundle)) continue
+        if (ESCLUSE_SEMPRE.has(v.bundle) || appEsclusa(v.bundle, v.app, escluse)) continue
         const titolo = !titoli || !v.titolo || TITOLO_PRIVATO.test(v.titolo) || TITOLO_SEGRETO.test(v.titolo) ? null : v.titolo
         const progetto = titolo ? progettoDelTesto(titolo) : null
         const cartella = cartellaNelTitolo(titolo, nomi)
         for (const r of spezzaAMezzanotte({ ...v, titolo }, zona)) {
+          // un'ora dimenticata non torna, nemmeno da una sessione rimasta in coda nel guscio
+          if (oss.dimenticata(r.inizio) || oss.dimenticata(r.fine)) continue
           ins.run(r.bundle, r.app, r.titolo, r.inizio, r.fine, r.secondi, r.giorno, progetto, cartella)
+          oss.registra({
+            kind: 'app', sourceId: `app:${r.bundle}|${r.titolo ?? ''}`, app: r.app, title: r.titolo,
+            observedAt: r.inizio, endAt: r.fine, seconds: r.secondi, projectId: progetto
+          })
           scritte++
         }
       }
@@ -314,6 +394,7 @@ export function cancellaOsservazioni(adesso = new Date()): void {
   db.exec('BEGIN')
   try {
     db.exec('DELETE FROM sessioni_app')
+    oss.dimenticaTutto(adesso)
     // una riga tolta resta: è l'unico segno che non deve rinascere (e non porta niente del sensore, solo la chiave)
     db.exec("DELETE FROM abitudini WHERE genere LIKE 'app.%' AND stato != 'tolta'")
     db.prepare("DELETE FROM previsioni WHERE giorno = ? AND genere = 'progetto.del_giorno' AND verificata IS NULL").run(oggi)
@@ -346,9 +427,102 @@ export function conserva(adesso = new Date()): { fuse: number; tolte: number } {
       ins.run(g.bundle, g.app, g.inizio, g.fine, g.secondi, g.giorno, g.progetto)
       fuse++
     }
+    oss.conserva(adesso)
     db.exec('COMMIT')
     return { fuse, tolte: Number(tolte) }
   } catch (e) { db.exec('ROLLBACK'); throw e }
+}
+
+/** Un'app esclusa da lui: per identificativo o per nome, senza badare alle maiuscole. */
+export function appEsclusa(bundle: string, app: string, escluse: Set<string> | readonly string[]): boolean {
+  const s = escluse instanceof Set ? escluse : new Set(escluse)
+  if (!s.size) return false
+  return s.has(bundle) || s.has(bundle.toLowerCase()) || s.has(app.toLowerCase())
+}
+
+// — il testo della finestra —
+
+export type TestoFinestra = { bundle: string; app: string; titolo: string | null; documento: string | null; url: string | null; testo: string; t: number }
+
+/** Al massimo tanti testi per messaggio, e tanti caratteri per testo (il programma ne legge otto mila). */
+export const TESTI_PER_MESSAGGIO = 50
+export const TESTO_LETTO_MAX = 8000
+
+function validaTesto(x: unknown, adesso: Date): TestoFinestra | null {
+  if (!x || typeof x !== 'object') return null
+  const v = x as Record<string, unknown>
+  if (typeof v.bundle !== 'string' || !BUNDLE.test(v.bundle)) return null
+  if (typeof v.app !== 'string' || !v.app) return null
+  if (typeof v.testo !== 'string') return null
+  if (typeof v.t !== 'number' || !Number.isFinite(v.t) || v.t > adesso.getTime() + 5 * 60_000) return null
+  const corto = (y: unknown, n: number) => typeof y === 'string' && y ? taglia(y, n) : null
+  return {
+    bundle: v.bundle, app: taglia(v.app, APP_MASSIMA), titolo: corto(v.titolo, TITOLO_MASSIMO),
+    documento: corto(v.documento, 1000), url: corto(v.url, 2000), testo: taglia(v.testo, TESTO_LETTO_MAX), t: v.t
+  }
+}
+
+/** Il percorso di un `file://` (quello che dà AXDocument), o null. */
+function percorsoDi(documento: string | null): string | null {
+  if (!documento) return null
+  if (documento.startsWith('/')) return documento
+  try { const u = new URL(documento); return u.protocol === 'file:' ? decodeURIComponent(u.pathname) : null } catch { return null }
+}
+
+/**
+ * Il testo delle finestre arrivato dal guscio: solo se il proprietario l'ha
+ * acceso e non è in pausa. Si filtra di nuovo tutto quello che il programma
+ * dovrebbe aver già saltato (gestori di password, app riservate, le sue
+ * esclusioni, finestre private o di accesso, siti esclusi), poi il testo si
+ * ripulisce e si scrive solo se è cambiato davvero.
+ */
+export function scriviTesti(x: unknown[], adesso = new Date()): number {
+  const p = proprietario()
+  if (!p || !Array.isArray(x)) return 0
+  return chi.dentro(p, () => store.senzaToccare(() => {
+    const s = statoDi(cfg.leggi().osservatore, adesso)
+    if (!s.acceso || !s.testi || s.pausaFino) return 0
+    const escluse = new Set(s.escluse)
+    let scritte = 0
+    for (const y of x.slice(0, TESTI_PER_MESSAGGIO)) {
+      const v = validaTesto(y, adesso)
+      if (!v || !v.testo.trim()) continue
+      if (ESCLUSE_SEMPRE.has(v.bundle) || appEsclusa(v.bundle, v.app, escluse) || oss.APP_RISERVATE.test(v.bundle) || oss.APP_RISERVATE.test(v.app)) continue
+      if (v.titolo && (TITOLO_PRIVATO.test(v.titolo) || TITOLO_SEGRETO.test(v.titolo))) continue
+      const web = v.url ? pulisciUrl(v.url) : null
+      if (web && dominioEscluso(web.dominio, s.siti)) continue
+      const percorso = percorsoDi(v.documento)
+      const dove = percorso ?? web?.documento ?? web?.url ?? v.titolo ?? ''
+      const esito = oss.registra({
+        kind: 'finestra', sourceId: `finestra:${v.bundle}|${dove}`, app: v.app, title: v.titolo,
+        text: v.testo, observedAt: new Date(v.t).toISOString(), percorso: percorso ?? (web ? `${web.dominio} ${web.url}` : null)
+      })
+      if (esito === 'nuova') scritte++
+    }
+    return scritte
+  }))
+}
+
+/**
+ * Dimentica un intervallo per chi chiede: le osservazioni, le sessioni, le
+ * righe del diario che ne venivano; poi le righe di «Come lavori» si rifanno
+ * da quello che resta, e il quadro dei progetti toccati si rifà al giro
+ * dopo. Una transazione sola, come «cancella le osservazioni».
+ */
+export async function dimenticaIntervallo(da: Date, a: Date, adesso = new Date()): Promise<oss.Dimenticato> {
+  let fatto: oss.Dimenticato
+  db.exec('BEGIN')
+  try {
+    fatto = oss.dimentica(da, a, adesso)
+    abitudini.ricalcola(adesso, { senzaPosta: segnali.postaDaRipassare() })
+    db.exec('COMMIT')
+  } catch (e) { db.exec('ROLLBACK'); throw e }
+  if (fatto.progetti.length) {
+    // il quadro letto da quelle righe non deve sopravvivere a loro
+    const quadro = await import('./quadro.ts')
+    for (const p of fatto.progetti) quadro.dimenticaQuadro(p)
+  }
+  return fatto
 }
 
 /** Il conto se n'è andato: se era il proprietario, il file va via e il guscio lo sa. */
@@ -368,17 +542,20 @@ type Filo = {
 }
 
 let porta: Filo | null = null
+let ascoltaDavanti = false
 
 function filoDiProcesso(): Filo | null {
   return (process as unknown as { parentPort?: Filo }).parentPort ?? null
 }
 
-/** Quello che il guscio riceve: esattamente queste quattro chiavi. */
+/** Quello che il guscio riceve: esattamente queste sette chiavi. */
 export function annuncia(): void {
   const f = porta ?? filoDiProcesso()
   if (!f?.postMessage) return
   const s = stato()
-  try { f.postMessage({ tipo: 'osservatore-stato', acceso: s.acceso, titoli: s.titoli, pausaFino: s.pausaFino }) } catch { /* il filo è caduto */ }
+  try {
+    f.postMessage({ tipo: 'osservatore-stato', acceso: s.acceso, titoli: s.titoli, pausaFino: s.pausaFino, testi: s.testi, ogni: s.ogni, escluse: s.escluse })
+  } catch { /* il filo è caduto */ }
 }
 
 /**
@@ -393,6 +570,11 @@ export function ascolta(filo?: Filo | null): boolean {
   const f = filo ?? filoDiProcesso()
   if (!f) return false
   porta = f
+  // acceso di serie: quando qualcuno apre la finestra e il Mac non è ancora di nessuno, diventa suo
+  if (!ascoltaDavanti) {
+    ascoltaDavanti = true
+    davanti.quandoCambia(() => { if (!leggiProprietario() && proprietario()) annuncia() })
+  }
   f.on('message', m => {
     const d = m?.data as { tipo?: unknown; sessioni?: unknown; minuti?: unknown } | undefined
     if (!d || typeof d !== 'object') return
@@ -401,6 +583,11 @@ export function ascolta(filo?: Filo | null): boolean {
         case 'osservatore':
           if (Array.isArray(d.sessioni)) scriviSessioni(d.sessioni)
           return
+        case 'osservatore-testi': {
+          const testi = (d as { testi?: unknown }).testi
+          if (Array.isArray(testi)) scriviTesti(testi)
+          return
+        }
         case 'osservatore-chiedi':
           annuncia(); return
         case 'osservatore-pausa': {

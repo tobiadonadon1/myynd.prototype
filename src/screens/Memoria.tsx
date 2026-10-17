@@ -27,6 +27,7 @@ import { desktop } from '../desktop'
 import { annunciaProgetti, ascoltaProgetti, ascoltaProgetto, dimenticaProgetto, portaAlProgetto, progettoAtteso, type Vals } from '../vals'
 import { SchedaProgetto } from './ProgettoEditor'
 import { ComeLavori } from './ComeLavori'
+import { CosaHoVisto } from './CosaHoVisto'
 import { CosaHaFatto } from './CosaHaFatto'
 import { RigaConvinzione, inAttesa } from './RigaConvinzione'
 import { Bottone, Campo, Carta, Casella } from '../components/forme'
@@ -434,7 +435,12 @@ export function Memoria({ v }: { v: Vals }) {
         </>
       )}
 
-      {sezione === 'come-lavori' && <ComeLavori />}
+      {sezione === 'come-lavori' && (
+        <>
+          <CosaHoVisto />
+          <ComeLavori />
+        </>
+      )}
 
       {sezione === 'ritratto' && <Ritratto d={d} setD={setD} carica={async () => { await carica(); await caricaSommario() }} />}
 

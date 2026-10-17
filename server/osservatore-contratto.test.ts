@@ -25,12 +25,15 @@ export const DAL_GUSCIO = [
   ] },
   { tipo: 'osservatore-chiedi' },
   { tipo: 'osservatore-pausa', minuti: 60 },
-  { tipo: 'osservatore-riprendi' }
+  { tipo: 'osservatore-riprendi' },
+  { tipo: 'osservatore-testi', testi: [
+    { bundle: 'com.apple.TextEdit', app: 'TextEdit', titolo: 'Northwind offer.rtf', documento: 'file:///Users/anna/Documents/Northwind%20offer.rtf', url: null, testo: 'Offer for Northwind, three phases', t: 1758697800000 }
+  ] }
 ]
 export const DAL_SERVER = [
-  { tipo: 'osservatore-stato', acceso: true, titoli: true, pausaFino: null },
-  { tipo: 'osservatore-stato', acceso: true, titoli: false, pausaFino: '2026-09-24T08:10:00.000Z' },
-  { tipo: 'osservatore-stato', acceso: false, titoli: false, pausaFino: null }
+  { tipo: 'osservatore-stato', acceso: true, titoli: true, pausaFino: null, testi: false, ogni: 20, escluse: [] },
+  { tipo: 'osservatore-stato', acceso: true, titoli: false, pausaFino: '2026-09-24T08:10:00.000Z', testi: false, ogni: 20, escluse: [] },
+  { tipo: 'osservatore-stato', acceso: false, titoli: false, pausaFino: null, testi: false, ogni: 20, escluse: [] }
 ]
 
 let anna = ''
@@ -60,7 +63,7 @@ test('ascolta si registra sul filo, e ogni messaggio del guscio ha la risposta d
   const righe = (chi.dentro(anna, () => store.default.prepare('SELECT bundle, titolo, secondi FROM sessioni_app ORDER BY id').all()) as { bundle: string; titolo: string | null; secondi: number }[])
     .map(r => ({ bundle: r.bundle, titolo: r.titolo, secondi: r.secondi }))
   assert.deepEqual(righe, [{ bundle: 'com.apple.Safari', titolo: 'Northwind pricing - Google Docs', secondi: 270 }, { bundle: 'com.microsoft.VSCode', titolo: null, secondi: 1530 }])
-  // 2. chiedi: uno stato, con le quattro chiavi e basta (e vede le righe appena scritte: in ordine)
+  // 2. chiedi: uno stato, con le sette chiavi e basta (e vede le righe appena scritte: in ordine)
   manda(DAL_GUSCIO[1])
   assert.equal(mandati.length, 1)
   assert.deepEqual(Object.keys(mandati[0]!).sort(), chiavi)
@@ -86,7 +89,7 @@ test('gli esempi del server sono esattamente la forma che annuncia() produce', (
   mandati.length = 0
   // la pausa è passata (è nel passato): lo stato la mostra null
   manda(DAL_GUSCIO[1])
-  assert.deepEqual(mandati[0], { tipo: 'osservatore-stato', acceso: true, titoli: false, pausaFino: null })
+  assert.deepEqual(mandati[0], { tipo: 'osservatore-stato', acceso: true, titoli: false, pausaFino: null, testi: false, ogni: 20, escluse: [] })
   for (const m of DAL_SERVER) assert.deepEqual(Object.keys(m).sort(), Object.keys(mandati[0]!).sort())
   chi.dentro(anna, () => oss.imposta({ acceso: false }))
   assert.deepEqual(mandati.at(-1), DAL_SERVER[2])

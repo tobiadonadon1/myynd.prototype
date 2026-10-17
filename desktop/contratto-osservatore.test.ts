@@ -8,7 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  CHIEDI, RIPRENDI, creaCostruttore, filtra, leggiStato, messaggioPausa, messaggioSessioni, type EventoFronte
+  CHIEDI, RIPRENDI, creaCostruttore, filtra, filtraTesto, leggiStato, messaggioPausa, messaggioSessioni, messaggioTesti, type EventoFronte
 } from './sessioni.ts'
 
 export const DAL_GUSCIO = [
@@ -18,12 +18,15 @@ export const DAL_GUSCIO = [
   ] },
   { tipo: 'osservatore-chiedi' },
   { tipo: 'osservatore-pausa', minuti: 60 },
-  { tipo: 'osservatore-riprendi' }
+  { tipo: 'osservatore-riprendi' },
+  { tipo: 'osservatore-testi', testi: [
+    { bundle: 'com.apple.TextEdit', app: 'TextEdit', titolo: 'Northwind offer.rtf', documento: 'file:///Users/anna/Documents/Northwind%20offer.rtf', url: null, testo: 'Offer for Northwind, three phases', t: 1758697800000 }
+  ] }
 ]
 export const DAL_SERVER = [
-  { tipo: 'osservatore-stato', acceso: true, titoli: true, pausaFino: null },
-  { tipo: 'osservatore-stato', acceso: true, titoli: false, pausaFino: '2026-09-24T08:10:00.000Z' },
-  { tipo: 'osservatore-stato', acceso: false, titoli: false, pausaFino: null }
+  { tipo: 'osservatore-stato', acceso: true, titoli: true, pausaFino: null, testi: false, ogni: 20, escluse: [] },
+  { tipo: 'osservatore-stato', acceso: true, titoli: false, pausaFino: '2026-09-24T08:10:00.000Z', testi: false, ogni: 20, escluse: [] },
+  { tipo: 'osservatore-stato', acceso: false, titoli: false, pausaFino: null, testi: false, ogni: 20, escluse: [] }
 ]
 
 test('dal guscio: le sessioni, fatte dagli eventi, sono il primo messaggio alla lettera', () => {
@@ -44,7 +47,12 @@ test('dal guscio: chiedi, pausa e riprendi alla lettera', () => {
   assert.deepEqual(RIPRENDI, DAL_GUSCIO[3])
   // e nessun altro `tipo` per l'osservatore
   const tipi = new Set(DAL_GUSCIO.map(m => m.tipo))
-  assert.deepEqual([...tipi].sort(), ['osservatore', 'osservatore-chiedi', 'osservatore-pausa', 'osservatore-riprendi'])
+  assert.deepEqual([...tipi].sort(), ['osservatore', 'osservatore-chiedi', 'osservatore-pausa', 'osservatore-riprendi', 'osservatore-testi'])
+})
+
+test('dal guscio: il testo della finestra, filtrato, è il quinto messaggio alla lettera', () => {
+  const t = filtraTesto({ bundle: 'com.apple.TextEdit', app: 'TextEdit', pid: 12, titolo: 'Northwind offer.rtf', documento: 'file:///Users/anna/Documents/Northwind%20offer.rtf', url: null, testo: 'Offer for Northwind, three phases', t: 1758697800000 }, { mioPid: 1, escluse: [] })
+  assert.deepEqual(messaggioTesti([t!]), DAL_GUSCIO[4])
 })
 
 test('dal server: ogni esempio passa da leggiStato così com’è', () => {

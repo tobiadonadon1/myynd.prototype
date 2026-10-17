@@ -9,15 +9,20 @@
 // e solo un `true` letterale vale sì (il guscio finto delle prove risponde
 // con un altro finto, mai con `true`).
 //
-// Il permesso di Accessibilità lo chiedono solo i due gesti che accendono i
-// titoli: è la decisione del 24 settembre, e il guscio lo chiede una volta.
+// Il permesso di Accessibilità lo chiedono solo i gesti che accendono i
+// titoli o il testo della finestra: è la decisione del 24 settembre, e il
+// guscio lo chiede una volta.
+//
+// Dal 17 ottobre la linea delle app è accesa di serie; il testo della
+// finestra si accende solo da qui. Le esclusioni (app e siti) sono due campi
+// con una voce per virgola, e una riga sola dice cosa esce dal Mac.
 
 import { useCallback, useEffect, useState } from 'react'
 import { gemelloApi, type StatoOsservatore } from '../api'
 import { t } from '../lingua'
 import { desktop } from '../desktop'
 import { BottoneSicuro } from '../ui'
-import { Bottone, Interruttore } from '../components/forme'
+import { Bottone, Campo, Interruttore } from '../components/forme'
 import { inPausaFino } from '../gemello-frasi'
 
 const vero = (x: unknown): boolean => x === true
@@ -95,6 +100,21 @@ export function PreferenzeOsservatore({ parte }: { parte: 'osservazione' | 'sche
       if (on && nuovo.titoli === true) await chiediTitoli()
     } catch (e) { setS(prima); male(e) }
   }
+  const testi = async () => {
+    const prima = s
+    const on = !s.testi
+    setS({ ...s, testi: on }); setGuaio('')
+    try {
+      const nuovo = await gemelloApi.imposta({ testi: on })
+      setS(nuovo)
+      if (on && nuovo.testi === true) await chiediTitoli()
+    } catch (e) { setS(prima); male(e) }
+  }
+  const lista = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean)
+  const esclusioni = async (chiave: 'escluse' | 'siti', v: string) => {
+    const nuovo = await gemelloApi.imposta({ [chiave]: lista(v) })
+    setS(nuovo)
+  }
   const pausa = async () => {
     const prima = s
     setS({ ...s, pausaFino: new Date(Date.now() + 3_600_000).toISOString() }); setGuaio('')
@@ -160,6 +180,35 @@ export function PreferenzeOsservatore({ parte }: { parte: 'osservazione' | 'sche
           </div>
           <Interruttore acceso={s.titoli} cambia={() => void titoli()} etichetta={t('Anche i titoli delle finestre')} />
         </div>
+      )}
+
+      {acceso && (
+        <div className="f-riga">
+          <div>
+            <div className="f-nome">{t('Leggi la finestra in cui lavoro')}</div>
+            {s.testi && permesso !== true && (
+              <div className="f-stato" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span>{t('Aspetta il permesso di Accessibilità')}</span>
+                <Bottone tipo="parola" piccolo onClick={() => { Promise.resolve(d.osservatore?.apriImpostazioniTitoli?.()).catch(() => {}) }}>{t('Apri Impostazioni')}</Bottone>
+              </div>
+            )}
+          </div>
+          <Interruttore acceso={s.testi === true} cambia={() => void testi()} etichetta={t('Leggi la finestra in cui lavoro')} />
+        </div>
+      )}
+
+      {acceso && (
+        <>
+          <div className="f-riga" style={{ display: 'block' }}>
+            <div className="f-nome" id="oss-app-escluse">{t('App da non guardare')}</div>
+            <Campo etichettaDa="oss-app-escluse" valore={(s.escluse ?? []).join(', ')} salva={v => esclusioni('escluse', v)} esempio="Slack, com.apple.Notes" limite={2000} />
+          </div>
+          <div className="f-riga" style={{ display: 'block' }}>
+            <div className="f-nome" id="oss-siti-esclusi">{t('Siti da non guardare')}</div>
+            <Campo etichettaDa="oss-siti-esclusi" valore={(s.siti ?? []).join(', ')} salva={v => esclusioni('siti', v)} esempio="mybank.com, example.org" limite={2000} />
+          </div>
+          <div className="f-stato">{t('Quello che vedo resta su questo Mac. Al modello va solo il diario corto di ogni giorno.')}</div>
+        </>
       )}
 
       {(acceso || s.osservate > 0) && (

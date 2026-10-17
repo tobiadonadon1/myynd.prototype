@@ -3727,6 +3727,22 @@ const EN: Record<string, string> = {
   'Fuori dagli obiettivi dei tuoi progetti.': 'Outside your projects’ goals.',
   'Meno urgente delle altre di oggi.': 'Less urgent than today’s others.',
   // — mentre non c'eri: fine —
+
+  // — cosa ha visto sul Mac: inizio —
+  'Leggi la finestra in cui lavoro': 'Read the window I’m working in',
+  'Aspetta il permesso di Accessibilità': 'Waiting for Accessibility permission',
+  'App da non guardare': 'Apps to never watch',
+  'Siti da non guardare': 'Sites to never watch',
+  'Quello che vedo resta su questo Mac. Al modello va solo il diario corto di ogni giorno.': 'What I see stays on this Mac. Only the short day log goes to the model, once a day.',
+  'Cosa ho visto oggi': 'What I saw today',
+  'Resta su questo Mac. Al modello va solo il diario corto.': 'Stays on this Mac. Only the short day log goes to the model.',
+  'Niente ancora oggi.': 'Nothing yet today.',
+  'Dimentica quest’ora': 'Forget this hour',
+  'Dimentica oggi': 'Forget today',
+  'Dimentica': 'Forget',
+  'Senza progetto': 'No project',
+  'Quale ora?': 'Which hour?'
+  // — cosa ha visto sul Mac: fine —
 }
 
 

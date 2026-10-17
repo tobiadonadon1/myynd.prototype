@@ -255,8 +255,13 @@ test('coda: prendi a pezzi, rimetti davanti in ordine', () => {
 /* ------------------------------------------------------------------ stato */
 
 test('leggiStato: le forme sbagliate sono null', () => {
+  // un server di prima del 17 ottobre: il testo spento, il ritmo di serie, nessuna esclusione
   assert.deepEqual(leggiStato({ tipo: 'osservatore-stato', acceso: true, titoli: false, pausaFino: null }),
-    { acceso: true, titoli: false, pausaFino: null })
+    { acceso: true, titoli: false, pausaFino: null, testi: false, ogni: 20, escluse: [] })
+  assert.deepEqual(leggiStato({ tipo: 'osservatore-stato', acceso: true, titoli: true, pausaFino: null, testi: true, ogni: 2, escluse: ['com.x'] }),
+    { acceso: true, titoli: true, pausaFino: null, testi: true, ogni: 5, escluse: ['com.x'] })
+  assert.equal(leggiStato({ tipo: 'osservatore-stato', acceso: true, titoli: true, pausaFino: null, testi: 'sì' }), null)
+  assert.equal(leggiStato({ tipo: 'osservatore-stato', acceso: true, titoli: true, pausaFino: null, escluse: [1] }), null)
   assert.equal(leggiStato({ tipo: 'osservatore', acceso: true, titoli: true, pausaFino: null }), null)
   assert.equal(leggiStato({ tipo: 'osservatore-stato', acceso: true, pausaFino: null }), null)
   assert.equal(leggiStato({ tipo: 'osservatore-stato', acceso: 'true', titoli: true, pausaFino: null }), null)

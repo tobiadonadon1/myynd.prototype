@@ -11,14 +11,19 @@
 // `npm run fronte`) o continua a cadere: `lsappinfo`, che il Mac ha di serie,
 // chiesto ogni cinque secondi. Solo l'app, mai il titolo.
 //
-// Le due letture delle righe sono pure e provate su esempi veri. Le fonti vere
+// Con `--testi` (acceso a mano, e col permesso di Accessibilità) il programma
+// scrive anche il testo della finestra davanti, in righe `{"tipo":"testo",…}`:
+// al cambio d'app o di finestra, a una pausa nella scrittura, e ogni `ogni`
+// secondi se è cambiato. Il ripiego non lo sa fare.
+//
+// Le letture delle righe sono pure e provate su esempi veri. Le fonti vere
 // non girano mai in una prova: guarderebbero la persona che sta lavorando.
 
 import { spawn, execFile } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
-import type { EventoFronte } from './sessioni.ts'
+import type { EventoFronte, TestoFinestra } from './sessioni.ts'
 
 export type FonteFronte = {
   /** Da dove arrivano gli eventi: il programma nostro, o `lsappinfo`. */
@@ -34,6 +39,9 @@ export type OpzioniFonte = {
   suFine: (motivo: string) => void
   /** Solo il ripiego, anche se il programma c'è: dopo tre cadute. */
   ripiego?: boolean
+  /** Il testo della finestra: ogni quanti secondi, e le app da saltare. Null o assente: niente testo. */
+  testi?: { ogni: number; escluse: string[] } | null
+  suTesto?: (t: TestoFinestra) => void
 }
 export type Crea = (o: OpzioniFonte) => FonteFronte
 
@@ -47,12 +55,41 @@ export function leggiRiga(riga: string): EventoFronte | null {
   let v: unknown
   try { v = JSON.parse(riga) } catch { return null }
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  // le righe col testo hanno il loro `tipo`, e la loro lettura
+  if ('tipo' in v) return null
   const { bundle, app, pid, titolo, t } = v as Record<string, unknown>
   if (typeof bundle !== 'string' || typeof app !== 'string') return null
   if (typeof pid !== 'number' || !Number.isInteger(pid)) return null
   if (titolo !== null && typeof titolo !== 'string') return null
   if (typeof t !== 'number' || !Number.isFinite(t)) return null
   return { bundle, app, pid, titolo, t }
+}
+
+/** Una riga col testo della finestra: `{"tipo":"testo", bundle, app, pid, titolo, documento, url, testo, t}`. */
+export function leggiTesto(riga: string): TestoFinestra | null {
+  let v: unknown
+  try { v = JSON.parse(riga) } catch { return null }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const { tipo, bundle, app, pid, titolo, documento, url, testo, t } = v as Record<string, unknown>
+  if (tipo !== 'testo') return null
+  if (typeof bundle !== 'string' || typeof app !== 'string' || typeof testo !== 'string') return null
+  if (typeof pid !== 'number' || !Number.isInteger(pid)) return null
+  const forse = (x: unknown) => (typeof x === 'string' && x ? x : null)
+  if (titolo !== null && titolo !== undefined && typeof titolo !== 'string') return null
+  if (typeof t !== 'number' || !Number.isFinite(t)) return null
+  return { bundle, app, pid, titolo: forse(titolo), documento: forse(documento), url: forse(url), testo, t }
+}
+
+/** Gli argomenti del programma per quello che si vuole: i titoli, e il testo con il suo ritmo e le sue esclusioni. */
+export function argomentiAiutante(o: Pick<OpzioniFonte, 'titoli' | 'testi'>): string[] {
+  const a: string[] = []
+  if (o.titoli || o.testi) a.push('--titoli')
+  if (o.testi) {
+    a.push('--testi', '--ogni', String(Math.min(600, Math.max(5, Math.round(o.testi.ogni)))))
+    const escluse = o.testi.escluse.filter(e => /^[\w. -]{1,200}$/.test(e))
+    if (escluse.length) a.push('--escludi', escluse.join(','))
+  }
+  return a
 }
 
 /** L'ASN che `lsappinfo front` scrive: `ASN:0x0-0x1d01d:`. */
@@ -101,7 +138,7 @@ export function percorsoHelper(o: { url?: URL; esiste?: (p: string) => boolean }
 /** Il programma nostro: un evento per riga, finché il suo stdin resta aperto. */
 function creaAiutante(percorso: string, o: OpzioniFonte): FonteFronte {
   let finita = false
-  const figlio = spawn(percorso, o.titoli ? ['--titoli'] : [], { stdio: ['pipe', 'pipe', 'ignore'] })
+  const figlio = spawn(percorso, argomentiAiutante(o), { stdio: ['pipe', 'pipe', 'ignore'] })
   const fine = (motivo: string) => {
     if (finita) return
     finita = true
@@ -115,6 +152,8 @@ function creaAiutante(percorso: string, o: OpzioniFonte): FonteFronte {
     const righe = createInterface({ input: figlio.stdout })
     righe.on('line', riga => {
       if (finita) return
+      const testo = o.testi ? leggiTesto(riga) : null
+      if (testo) { o.suTesto?.(testo); return }
       const e = leggiRiga(riga)
       if (e) o.suEvento(e)
     })
