@@ -46,6 +46,8 @@ const finto = (f: Parameters<typeof mani.perProva>[0]) => mani.perProva({
   // la posa finta: la vera scrive sul disco, e una prova non posa niente
   // dentro un progetto di nessuno
   posa: async r => ({ backup: `${r.reportFile}/before`, applied: r.changedFiles, skipped: [] }),
+  // il segno per «Applica le modifiche»: la prova non scrive nel registro
+  tieni: () => {},
   ...f
 })
 
@@ -287,18 +289,18 @@ test('lavora_nel_codice fa il passo che cambia i file in una copia e lo dice; se
       richieste.push({ passo: o.passo, cartella: o.cartella, richiesta: o.richiesta })
       return o.passo === 'fai'
         ? { passo: 'fai', testo: 'Ho aggiunto il test.', finito: true, cartella: '/profilo/project-work/everwave-ab12/project',
-          esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed', command: ['npm', 'test'] }, agentExitCode: 0, agentFinished: true, agentText: 'Ho aggiunto il test.', createdAt: 'x' } }
+          esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed', command: ['npm', 'test'], containment: 'sandbox' }, agentExitCode: 0, agentFinished: true, agentText: 'Ho aggiunto il test.', createdAt: 'x' } }
         : { passo: 'piano', testo: 'Aggiungerei un test.', finito: true, cartella: o.cartella }
     }
   })
-  const fatto = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test for the crash' })
+  const fatto = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test for the crash', presente: true })
   assert.equal(fatto.passo, 'fai')
   assert.equal(fatto.copia, '/profilo/project-work/everwave-ab12/project')
-  assert.equal(fatto.posato, true, 'un giro verificato si posa nel progetto vero')
+  assert.equal(fatto.posato, true, 'un giro verificato, chiesto da lui adesso, si posa nel progetto vero')
   assert.match(fatto.testo, /^Fatto nel progetto \(.*progetto\): src\/a\.test\.ts \(added\)\nCom'erano prima: \/r\/before\nFile cambiati dal lavoro: src\/a\.test\.ts \(added\)\nStato: verified · verifica «npm test»: passed\n\nHo aggiunto il test\./)
   assert.deepEqual(richieste, [{ passo: 'fai', cartella: progetto, richiesta: 'Add a test for the crash' }])
 
-  const e = await mani.esegui('lavora_nel_codice', { richiesta: 'Add a test' }, { cartella: progetto })
+  const e = await mani.esegui('lavora_nel_codice', { richiesta: 'Add a test' }, { cartella: progetto, presente: true })
   assert.deepEqual(e.fatto, { attrezzo: 'lavora', esito: 'ok', dettaglio: `posato in ${progetto}` })
   assert.equal(e.copia, '/profilo/project-work/everwave-ab12/project')
   assert.match(mani.fraseDaiFatti([e.fatto!], 'en'), new RegExp(`the changes are in ${progetto}`))
@@ -309,9 +311,9 @@ test('lavora_nel_codice fa il passo che cambia i file in una copia e lo dice; se
     installato: () => '/x/claude', runtime: async () => ({ status: 'supported' }),
     posa: async () => ({ backup: '/r/before', applied: [], skipped: [{ path: 'src/a.test.ts', reason: 'changed-meanwhile' as const }] }),
     fai: async (_d, o) => ({ passo: 'fai', testo: 'Ho aggiunto il test.', finito: true, cartella: '/profilo/project-work/everwave-ab12/project',
-      esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed' }, agentExitCode: 0, agentFinished: true, agentText: '', createdAt: 'x' } })
+      esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed', containment: 'sandbox' }, agentExitCode: 0, agentFinished: true, agentText: '', createdAt: 'x' } })
   })
-  const tuo = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test' })
+  const tuo = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test', presente: true })
   assert.equal(tuo.posato, false)
   assert.match(tuo.testo, /Lasciati stare perché li hai cambiati tu nel frattempo: src\/a\.test\.ts/)
   assert.match(tuo.testo, /Il lavoro è nella copia/)
@@ -338,6 +340,35 @@ test('lavora_nel_codice fa il passo che cambia i file in una copia e lo dice; se
   finto({ installato: () => null })
   await assert.rejects(() => mani.lavoraNelCodice({ cartella: progetto, richiesta: 'x' }), /non è installato/)
   await assert.rejects(() => mani.lavoraNelCodice({ cartella: progetto, richiesta: '  ' }), /niente da chiedergli/)
+})
+
+test('chi posa il codice: l’autorità, non l’orologio. La coda non posa mai, chi guarda solo il verificato', async () => {
+  const esecuzioneCon = (state: 'verified' | 'unverified', cartella: string) => ({ id: '1', source: cartella, workspace: '/copia', reportFile: '/r', state,
+    changedFiles: [{ path: 'src/a.ts', kind: 'modified' as const }], artifactHashes: {}, verification: { status: state === 'verified' ? 'passed' as const : 'unavailable' as const, containment: 'sandbox' as const },
+    agentExitCode: 0, agentFinished: true, agentText: '', createdAt: 'x' })
+  for (const [presente, state, siPosa] of [[false, 'verified', false], [false, 'unverified', false], [true, 'unverified', false], [true, 'verified', true]] as const) {
+    let posate = 0
+    const tenute: string[] = []
+    finto({
+      installato: () => '/x/claude', runtime: async () => ({ status: 'supported' }),
+      posa: async r => { posate++; return { backup: '/r/before', applied: r.changedFiles, skipped: [] } },
+      tieni: (r, cosa) => { tenute.push(`${r.reportFile}:${cosa}`) },
+      fai: async (_d, o) => ({ passo: 'fai', testo: 'Fatto.', finito: state === 'verified', cartella: '/copia', esecuzione: esecuzioneCon(state, o.cartella) })
+    })
+    const r = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Fix the crash', ...(presente ? { presente: true } : {}) })
+    assert.equal(posate, siPosa ? 1 : 0, `presente=${presente} ${state}`)
+    assert.equal(r.posato, siPosa)
+    assert.deepEqual(tenute, siPosa ? [] : ['/r:Fix the crash'], 'quello che resta nella copia si segna per il tocco')
+    if (!siPosa) assert.match(r.testo, /pronto nella copia \(\/copia\): si posa nel progetto con «Applica le modifiche»/)
+    if (!siPosa && state === 'unverified') assert.match(r.testo, /seconda conferma/)
+  }
+  // il contesto passa l'autorità alla mano, e senza non si posa niente
+  finto({
+    installato: () => '/x/claude', runtime: async () => ({ status: 'supported' }),
+    fai: async (_d, o) => ({ passo: 'fai', testo: 'Fatto.', finito: true, cartella: '/copia', esecuzione: esecuzioneCon('verified', o.cartella) })
+  })
+  const coda = await mani.esegui('lavora_nel_codice', { richiesta: 'Fix' }, { cartella: progetto })
+  assert.equal(coda.fatto.dettaglio, '/copia', 'senza `presente` resta nella copia')
 })
 
 // — quali mani, per quale riga —

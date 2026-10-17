@@ -49,7 +49,8 @@ import { riflua } from './testo.ts'
 import { documentoWord } from './documento.ts'
 import { IPOTESI, MANCA } from './cornice.ts'
 import * as lavoro from './lavoro.ts'
-import { landReport } from './esecuzione-isolata.ts'
+import { landReport, landsByItself, type ExecutionReport } from './esecuzione-isolata.ts'
+import * as store from './store.ts'
 import { detectRuntime } from './agent-runtime.ts'
 import { openInProva } from './senza-open.ts'
 import * as notionScrivi from './connettori/notion-scrivi.ts'
@@ -98,6 +99,8 @@ type Ferri = {
   fai: typeof lavoro.fai
   /** Posa il lavoro fatto nella copia dentro il progetto vero, tenendo da parte com'era. */
   posa: typeof landReport
+  /** Segna il lavoro rimasto nella copia, così «Apply changes» lo ritrova (e solo quello). */
+  tieni: (report: ExecutionReport, cosa: string) => void
   runtime: () => Promise<{ status: string }>
   installato: () => string | null
   casa: () => string
@@ -115,6 +118,7 @@ type Ferri = {
 const VERI: Ferri = {
   rete: (...a) => fetch(...a),
   posa: landReport,
+  tieni: (report, cosa) => { store.registraAzione({ tipo: 'lavoro.copia', verso: report.workspace, cosa: cosa.slice(0, 300), esito: 'fatta', dettaglio: JSON.stringify(report) }) },
   risolvi: host => lookup(host, { all: true }),
   osascript: (argomenti, signal) => new Promise((ok, no) => {
     execFile('/usr/bin/osascript', argomenti, { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024, signal }, (errore, stdout, stderr) => {
@@ -783,7 +787,12 @@ export function sembraLavoroDiCodice(testo: string, nota?: string | null): boole
  * recinto, si ripiega sul piano: legge e scrive cosa farebbe. Se non c'è
  * affatto, lo si dice.
  */
-export async function lavoraNelCodice(o: { cartella: string; richiesta: string; signal?: AbortSignal; soloCopia?: boolean }): Promise<{ testo: string; copia: string | null; passo: lavoro.Passo; posato?: boolean }> {
+export async function lavoraNelCodice(o: { cartella: string; richiesta: string; signal?: AbortSignal
+  /**
+   * Chi l'ha chiesto sta guardando adesso (l'ha affidato lui, a mano). Lo dice
+   * chi chiama, mai l'orologio: senza, il lavoro non si posa da sé.
+   */
+  presente?: boolean }): Promise<{ testo: string; copia: string | null; passo: lavoro.Passo; posato?: boolean }> {
   if (ferri.ospitato()) throw new Error('Su un server non posso lavorare in una cartella.')
   const richiesta = String(o.richiesta ?? '').trim()
   if (!richiesta) throw new Error('Non c’è niente da chiedergli.')
@@ -797,24 +806,27 @@ export async function lavoraNelCodice(o: { cartella: string; richiesta: string; 
     const stato = esecuzione?.state ?? (e.finito ? 'verified' : 'cancelled')
     const verifica = esecuzione?.verification
     /*
-     * F9 · di notte, per una carta del turno, non si posa niente: nessuno
-     * guarda, e il progetto vero cambiato alle tre non si disfa col Cestino.
-     * Il lavoro resta nella copia, e la carta dice dove, pronto da posare.
+     * Si posa da sé solo quello che ha chiesto lui adesso, e solo se la
+     * verifica è passata (`landsByItself`). Il lavoro partito dalla coda, a
+     * qualunque ora, resta nella copia: nessuno guarda, e il progetto vero
+     * cambiato da solo non si disfa col Cestino. Lì aspetta «Apply changes».
      */
-    const posa = !o.soloCopia && esecuzione && (stato === 'verified' || stato === 'unverified') && cambiati.length
+    const posa = esecuzione && landsByItself(esecuzione, { presente: o.presente === true })
       ? await ferri.posa(esecuzione).catch(g => {
         console.warn('myynd · il lavoro è fatto, ma non si è posato nel progetto:', g instanceof Error ? g.message : g)
         return null
       })
       : null
+    const daPosare = !posa?.applied.length && !!esecuzione && cambiati.length > 0 && (stato === 'verified' || stato === 'unverified')
+    if (daPosare) try { ferri.tieni(esecuzione, richiesta) } catch { /* segnarlo è un di più: la copia resta comunque */ }
     const lasciati = posa?.skipped.filter(s => s.reason === 'changed-meanwhile').map(s => s.path) ?? []
     return {
       passo: 'fai', copia: e.cartella, posato: !!posa?.applied.length,
       testo: [
         posa?.applied.length
           ? `Fatto nel progetto (${o.cartella}): ${posa.applied.map(f => `${f.path} (${f.kind})`).join(', ')}`
-          : o.soloCopia && cambiati.length
-            ? `Il lavoro è pronto nella copia (${e.cartella}), da posare nel progetto quando lo guardi: di notte la cartella vera non si tocca.`
+          : daPosare && !posa
+            ? `Il lavoro è pronto nella copia (${e.cartella}): si posa nel progetto con «Applica le modifiche»${stato === 'unverified' ? ', dopo una seconda conferma perché non è verificato' : ''}.`
             : `Il lavoro è nella copia (${e.cartella}) e la cartella vera non è stata toccata.`,
         posa?.applied.length ? `Com'erano prima: ${posa.backup}` : '',
         lasciati.length ? `Lasciati stare perché li hai cambiati tu nel frattempo: ${lasciati.join(', ')}` : '',
@@ -954,10 +966,10 @@ export function spiega(mani: Anthropic.Tool[]): string {
 export type Contesto = { cartella?: string | null; copia?: string | null; signal?: AbortSignal; luogo?: Luogo
   /** La chiave stabile della pagina in Notion (`progetto:<id>`): senza, vale il titolo. */
   chiaveNotion?: string | null
-  /** F9 · il lavoro sul codice resta nella copia (di notte, per una carta del turno). */
-  soloCopia?: boolean
   /** Il mandato del progetto da guardare prima di partire (`mandato.ts`). Senza, nessun cancello. */
-  mandato?: mandato.ChiLavora }
+  mandato?: mandato.ChiLavora
+  /** Chi l'ha chiesto guarda adesso: solo allora il codice verificato si posa da sé (vedi `lavoraNelCodice`). */
+  presente?: boolean }
 export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: string }
 
 /**
@@ -981,7 +993,8 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
     if (v.via !== 'esegui') {
       return { testo: v.testo, male: true, fatto: { attrezzo: attrezzoDi(nome), esito: 'errore', dettaglio: v.via === 'chiedi' ? `in attesa del suo sì${v.proposta ? ` (${v.proposta})` : ''}` : 'fuori dal mandato' } }
     }
-    if (v.soloCopia) contesto = { ...contesto, soloCopia: true }
+    // il mandato non lascia posare: il codice resta nella copia anche se lei guarda
+    if (v.soloCopia) contesto = { ...contesto, presente: false }
   }
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
   const s = (k: string) => typeof i[k] === 'string' ? i[k] as string : ''
@@ -1028,7 +1041,7 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
     }
     if (nome === LAVORA_NEL_CODICE.name) {
       if (!contesto.cartella) return guaio('lavora', '', new Error('Questa riga non ha una cartella di progetto.'))
-      const r = await lavoraNelCodice({ cartella: contesto.cartella, richiesta: s('richiesta'), signal: contesto.signal, ...(contesto.soloCopia ? { soloCopia: true } : {}) })
+      const r = await lavoraNelCodice({ cartella: contesto.cartella, richiesta: s('richiesta'), signal: contesto.signal, ...(contesto.presente ? { presente: true } : {}) })
       /*
        * Il dettaglio dice dove è finito il lavoro, e sono tre posti diversi:
        * posato nel progetto, fermo in una copia, o solo un piano. La frase di

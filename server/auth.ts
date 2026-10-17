@@ -12,6 +12,7 @@
 import type { Request, Response, NextFunction } from 'express'
 
 import { timingSafeEqual } from 'node:crypto'
+import { readFileSync, rmSync } from 'node:fs'
 import * as conti from './conti.ts'
 import * as chi from './chi.ts'
 import * as gettoni from './gettoni.ts'
@@ -336,9 +337,26 @@ export async function reimposta(gettone: string, nuova: string):
 // la pagina non lo vede mai, e una richiesta da un'altra app su questo computer
 // senza quel segreto riceve un no.
 
-/** Il segreto del guscio, letto una volta e tolto dall'ambiente: i processi figli (Claude Code, Codex) non lo ereditano. */
-const SEGRETO_GUSCIO = process.env.MYYND_GUSCIO_SEGRETO ?? ''
-delete process.env.MYYND_GUSCIO_SEGRETO
+/**
+ * Il segreto del guscio, letto una volta.
+ *
+ * Non viaggia più nell'ambiente: togliere la variabile da `process.env` non la
+ * toglie dagli argomenti del processo, e chiunque giri su questo Mac col suo
+ * utente (anche uno script di prova dentro il recinto) la legge con
+ * `sysctl kern.procargs2`. Il guscio la scrive in un file 0600 dentro la sua
+ * cartella e passa solo il percorso; il server lo legge e lo cancella subito.
+ * La variabile vecchia vale ancora per le prove, che non hanno un guscio.
+ */
+function leggiSegretoGuscio(): string {
+  const file = process.env.MYYND_GUSCIO_SEGRETO_FILE
+  delete process.env.MYYND_GUSCIO_SEGRETO_FILE
+  const vecchio = process.env.MYYND_GUSCIO_SEGRETO ?? ''
+  delete process.env.MYYND_GUSCIO_SEGRETO
+  if (!file) return vecchio
+  try { return readFileSync(file, 'utf8').trim() } catch { return '' }
+  finally { try { rmSync(file, { force: true }) } catch { /* già andato */ } }
+}
+const SEGRETO_GUSCIO = leggiSegretoGuscio()
 
 /** La richiesta porta il segreto del guscio: è il guscio che parla, dopo aver chiesto al Mac chi c'è davanti. */
 export function dalGuscio(portato: unknown): boolean {

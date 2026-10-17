@@ -3398,6 +3398,16 @@ const EN: Record<string, string> = {
   'Il mandato di questo progetto dice di non lavorare mai sul codice.': 'This project’s mandate says never to work on the code.',
   'Questa azione Myynd non la fa ancora da solo: chiedi o mai.': 'Myynd can’t do this on its own yet: ask or never.',
   // — il mandato e la traccia: fine —
+  // — recinto del codice e quota del mese: inizio —
+  'Applica le modifiche': 'Apply changes',
+  'Non è verificato. Applica comunque': 'Not verified. Apply anyway',
+  'Nel progetto.': 'In the project.',
+  'Il lavoro di fondo è fermo: la quota AI del mese è finita.': 'Background work is paused: this month’s AI allowance is used up.',
+  'trattenuto: quota del mese raggiunta': 'held back: monthly allowance reached',
+  'Quota AI del mese raggiunta: il lavoro di fondo riparte il primo del mese.': 'Monthly AI allowance reached: background work resumes on the first of the month.',
+  'La quota è in dollari al mese, o zero per nessuna.': 'The allowance is in dollars per month, or zero for none.',
+  'Con l’AI inclusa la quota si può solo abbassare.': 'With the included AI the allowance can only be lowered.',
+  // — recinto del codice e quota del mese: fine —
 }
 
 

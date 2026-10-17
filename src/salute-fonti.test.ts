@@ -378,3 +378,11 @@ test('ogni motore ha la sua frase e il suo posto: il modello sul Mac, ChatGPT, l
   // senza lineette
   for (const [g] of casi) assert.doesNotMatch(in_('en', () => sf.fraseMotore(g).frase), /—/)
 })
+
+test('la quota del mese finita: la riga fissa dice che il fondo è fermo, e porta alle Preferenze', () => {
+  const r = riga('en', () => [], { quotaFinita: true })
+  assert.equal(r?.frase, 'Background work is paused: this month’s AI allowance is used up.')
+  assert.deepEqual(r?.controllo, { tipo: 'preferenze' })
+  assert.equal(riga('it', () => [], { quotaFinita: true })?.frase, 'Il lavoro di fondo è fermo: la quota AI del mese è finita.')
+  assert.equal(riga('en', () => []), null, 'senza, niente riga')
+})

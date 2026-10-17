@@ -3105,8 +3105,8 @@ export async function svolgi(
    * `consegna` è la lingua in cui legge chi riceve.
    */
   esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en'; criterio?: string; mani?: readonly mani.ManoDelContratto[]
-    /** F9 · di notte, per una carta del turno: il lavoro sul codice resta nella copia, non si posa nel progetto. */
-    soloCopia?: boolean
+    /** Chi l'ha chiesto guarda adesso (non la coda): solo allora il codice verificato si posa da sé nel progetto. */
+    presente?: boolean
     /** La pagina di Notion di questo lavoro, stabile (`progetto:<id>`): senza, vale il titolo. */
     chiaveNotion?: string
     /** Il progetto il cui mandato vale per le mani di questa carta (`mandato.ts`); con `taskId` il cancello c'è sempre. */
@@ -3498,7 +3498,7 @@ export async function svolgi(
         const dettaglio = (c.input as Record<string, unknown> | null)
         const detto = String(dettaglio?.url ?? dettaglio?.percorso ?? dettaglio?.query ?? dettaglio?.titolo ?? dettaglio?.richiesta ?? '').trim().slice(0, 120)
         passo(c.name === mani.CERCA_WEB.name ? { passo: 'cerco', dettaglio: detto } : c.name === mani.LEGGI_FILE.name || c.name === mani.LEGGI_PAGINA.name ? { passo: 'apro', dettaglio: detto } : { passo: 'scrivo', dettaglio: detto })
-        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito(), ...(esecuzione?.soloCopia ? { soloCopia: true } : {}), ...(esecuzione?.chiaveNotion ? { chiaveNotion: esecuzione.chiaveNotion } : {}), ...(esecuzione?.taskId ? { mandato: { progetto: esecuzione.mandato?.progetto ?? null, compito: esecuzione.taskId, presente: false } } : {}) })
+        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito(), ...(esecuzione?.presente ? { presente: true } : {}), ...(esecuzione?.chiaveNotion ? { chiaveNotion: esecuzione.chiaveNotion } : {}), ...(esecuzione?.taskId ? { mandato: { progetto: esecuzione.mandato?.progetto ?? null, compito: esecuzione.taskId, presente: false } } : {}) })
         /*
          * F9 · sul diario della carta, col percorso intero: un file scritto
          * fuori dalla copia di lavoro è una cosa che «Disfa» deve poter

@@ -25,14 +25,16 @@
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { realpath, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import type { ConfigDesktop } from './config.ts'
 import { OSPITATO } from './ospitato.ts'
 import { executeInCopy, type ExecutionReport } from './esecuzione-isolata.ts'
 import { detectRuntime, runHermesPatch, type RuntimeId, type RuntimeProvenance } from './agent-runtime.ts'
 import { reviewProjectReport, type TeamEvidence } from './project-review.ts'
 import { controllaIlTetto, segnaAccount, type UsoCLI } from './tetto.ts'
+import { ambienteClaude, avvolgi, profiloClaude, sandboxDisponibile, type Contenimento } from './recinto.ts'
 
 type ProjectReport = ExecutionReport & {runtimeProvenance?:RuntimeProvenance; team?:TeamEvidence}
 async function saveOutcome(report:ProjectReport, options:{runtime?:RuntimeId; team?:boolean; acceptanceCriteria?:string; signal?:AbortSignal}):Promise<void> {
@@ -107,9 +109,9 @@ const TETTO_TESTO = 200_000
  * e virgola smette di essere testo. Qui è un argomento, e un argomento è solo
  * quello.
  *
- * L'ambiente si passa quasi intero — Claude Code ha bisogno delle sue
- * credenziali — ma senza la chiave API di Myynd: sono due conti diversi, e
- * quello che spende l'uno non deve finire sull'altro.
+ * L'ambiente è filtrato (`comandoClaude`): le sue credenziali sì, la chiave
+ * API di Myynd e gli altri segreti no. Sono due conti diversi, e quello che
+ * spende l'uno non deve finire sull'altro.
  */
 /**
  * Gli argomenti della riga di comando, staccati apposta.
@@ -223,12 +225,34 @@ export function busta(fuori: string): { result: string; errore: boolean; usage?:
   return { result: typeof b.result === 'string' ? b.result.trim() : '', errore: b.is_error === true, usage: b.usage }
 }
 
+/**
+ * Come parte Claude Code: l'ambiente filtrato, e sul Mac dentro il suo recinto.
+ *
+ * L'ambiente non si passa più quasi intero: solo quello che gli serve per
+ * entrare e girare (PATH, HOME, USER, SHELL, LANG, TERM e i suoi CLAUDE_*),
+ * senza la chiave di Myynd e senza i gettoni delle fonti. Il recinto
+ * (`recinto.profiloClaude`) gli lascia la rete, che gli serve per parlare con
+ * Anthropic, ma le scritture solo nella copia (nessuna, per il piano, che
+ * legge la cartella vera) e nel suo stato, e i segreti chiusi.
+ */
+export async function comandoClaude(exe: string, cwd: string, passo: Passo, richiesta: string, temp?: string): Promise<{ argv: string[]; env: NodeJS.ProcessEnv; contenimento: Contenimento }> {
+  const argv = [exe, ...argomentiDi(passo, richiesta)]
+  // una cartella temporanea sua, la sola scrivibile fuori dalla copia e dal suo stato
+  const env = ambienteClaude(process.env, temp)
+  if (!await sandboxDisponibile()) return { argv, env, contenimento: 'parziale' }
+  return { argv: avvolgi(argv, profiloClaude(cwd, passo === 'fai', homedir(), temp)), env, contenimento: 'sandbox' }
+}
+
 async function runClaude(exe: string, cwd: string, passo: Passo, richiesta: string, signal?: AbortSignal): Promise<{ text: string; exitCode: number | null; finished: boolean }> {
-  const args = argomentiDi(passo, richiesta)
-  const { ANTHROPIC_API_KEY: _mia, ...ambiente } = process.env
+  const temp = await mkdtemp(join(tmpdir(), 'myynd-claude-'))
+  try { return await runClaudeIn(temp, exe, cwd, passo, richiesta, signal) } finally { await rm(temp, { recursive: true, force: true }).catch(() => {}) }
+}
+
+async function runClaudeIn(temp: string, exe: string, cwd: string, passo: Passo, richiesta: string, signal?: AbortSignal): Promise<{ text: string; exitCode: number | null; finished: boolean }> {
+  const { argv, env: ambiente } = await comandoClaude(exe, cwd, passo, richiesta, temp)
   if (signal?.aborted) return { text: '', exitCode: null, finished: false }
   return await new Promise((risolvi, rifiuta) => {
-    const p = spawn(exe, args, { cwd, env: ambiente, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
+    const p = spawn(argv[0], argv.slice(1), { cwd, env: ambiente, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
     let fuori = ''
     let male = ''
     let finito = true

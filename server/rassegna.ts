@@ -24,7 +24,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cartella, leggi, lingua } from './config.ts'
 import { chiediJSON, collegato } from './modello.ts'
-import { linguaSbagliata, soloInLingua } from './testo.ts'
+import { linguaSbagliata } from './testo.ts'
 import { affinita, gusto, perIlModello, type Gusto } from './gusto.ts'
 import * as store from './store.ts'
 import * as progetti from './progetti.ts'
@@ -61,11 +61,19 @@ export const MINUTI_GIRO = 20
  *
  * I giornali si leggono ogni venti minuti, e a ogni giro con un titolo mai
  * visto partiva una chiamata: cinquanta, sessanta al giorno, per scegliere
- * otto notizie. Adesso i titoli nuovi aspettano, e ogni due ore partono tutti
- * insieme in una chiamata sola. In mezzo entrano solo i rilasci dei
+ * otto notizie. Poi ogni due ore, tutti insieme: ancora dodici al giorno, e
+ * misurate sul suo Mac erano 80 chiamate su 230 in una settimana, la voce di
+ * spesa più grande del fondo. Adesso al massimo quattro giri al giorno, a
+ * quattro ore l'uno dall'altro, e il primo è quello della mattina: prima
+ * delle sei i titoli aspettano. In mezzo entrano solo i rilasci dei
  * laboratori, che la regola riconosce gratis: la notizia che conta non aspetta.
  */
-export const ORE_MODELLO = 2
+export const ORE_MODELLO = 4
+/** Quanti giri col modello in un giorno di chi legge. */
+export const GIRI_AL_GIORNO = 4
+
+/** L'orologio della rassegna: le prove lo spostano per fare un giorno intero in un attimo. */
+export const orologio = { adesso: () => Date.now() }
 
 /** Quanto indietro si guarda per chiamarla «di adesso». */
 const ORE_FRESCHE = 36
@@ -738,29 +746,19 @@ export async function scegli(candidate: Grezza[], interessi: string, g?: Gusto, 
     messages: [{ role: 'user', content: contenuto + aggiunta }]
   })
 
-  let esito = await chiama('')
+  /*
+   * Una chiamata sola per giro, con tutti i titoli nuovi dentro.
+   *
+   * C'era una seconda chiamata per la lingua, se il modello scriveva qualcosa
+   * di suo nella lingua sbagliata. Lo schema chiede solo gli ID, quindi non
+   * partiva mai; ma una chiamata che può partire è una chiamata che si conta.
+   * La riga nella lingua sbagliata, se mai ci fosse, la scarta `ricuciScelte`.
+   */
+  const esito = await chiama('')
   if (!Array.isArray(esito?.scelte)) return null
 
-  /*
-   * La lingua, se il modello ha scritto qualcosa di suo.
-   *
-   * Oggi non scrive niente — lo schema chiede solo gli ID — quindi questa
-   * seconda chiamata non parte mai. È la rete che sta lì per il giorno in cui
-   * la rassegna tornerà a chiedergli un «perché»: una riga in italiano sotto
-   * un titolo inglese è lo stesso difetto del feed, e va chiuso nello stesso
-   * modo — una seconda chiamata con l'ordine urlato, poi si butta.
-   */
-  const l = lingua()
-  if (esito.scelte.some(s => {
-    const riga = scrittoDalModello(s)
-    return !!riga && linguaSbagliata(riga, l)
-  })) {
-    const secondo = await chiama(`\n\n${soloInLingua(l)}`)
-    if (Array.isArray(secondo?.scelte)) esito = secondo
-  }
-
   // Un ID fuori elenco è una scelta che non esiste: non si ripiega su un'altra.
-  return ricuciScelte(candidate, esito.scelte, l, tetto)
+  return ricuciScelte(candidate, esito.scelte, lingua(), tetto)
 }
 
 /**
@@ -846,7 +844,9 @@ export type Esito = { notizie: store.Notizia[]; recenti: store.Notizia[]; quando
  * lista buttava via la rassegna intera, che è l'altra ragione per cui a volte
  * restava una notizia sola.
  */
-type Edizione = { versione: 1; focus: string; quando: string; ids: string[]; controllata?: string; riprovaMinuti?: number; copertura?: 1; valutate?: string[]; modello?: string }
+type Edizione = { versione: 1; focus: string; quando: string; ids: string[]; controllata?: string; riprovaMinuti?: number; copertura?: 1; valutate?: string[]; modello?: string
+  /** Gli istanti delle chiamate al modello degli ultimi due giorni: il conto dei quattro giri al giorno. */
+  chiamate?: string[] }
 const EDIZIONE = () => join(cartella(), 'rassegna-edizione.json')
 const improntaFocus = (focus: Fuoco[]) => createHash('sha256').update(JSON.stringify([lingua(), focus, contestoOperativo()])).digest('hex')
 
@@ -858,10 +858,13 @@ function leggiEdizione(): Edizione | null {
   } catch { return null }
 }
 
-function salvaEdizione(focus: Fuoco[], ids: string[], opzioni: { quando?: string; valutate?: string[]; modello?: string } = {}): Edizione {
-  const ora = new Date().toISOString()
+function salvaEdizione(focus: Fuoco[], ids: string[], opzioni: { quando?: string; valutate?: string[]; modello?: string; chiamate?: string[] } = {}): Edizione {
+  const adesso = orologio.adesso()
+  const ora = new Date(adesso).toISOString()
+  const chiamate = (opzioni.chiamate ?? []).filter(c => adesso - Date.parse(c) < 2 * 86_400_000)
   const e: Edizione = { versione: 1, copertura: 1, focus: improntaFocus(focus), quando: opzioni.quando ?? ora, controllata: ora,
-    ids: ids.slice(0, QUANTE), valutate: (opzioni.valutate ?? []).slice(-VALUTATE), ...(opzioni.modello ? { modello: opzioni.modello } : {}) }
+    ids: ids.slice(0, QUANTE), valutate: (opzioni.valutate ?? []).slice(-VALUTATE), ...(opzioni.modello ? { modello: opzioni.modello } : {}),
+    ...(chiamate.length ? { chiamate } : {}) }
   mkdirSync(cartella(), { recursive: true, mode: 0o700 })
   const file = EDIZIONE()
   writeFileSync(`${file}.tmp`, JSON.stringify(e), { mode: 0o600 })
@@ -954,13 +957,22 @@ export function daRifare(
 }
 
 /**
- * Il modello si può chiamare adesso: l'ultima chiamata è di almeno due ore fa.
- * Vale anche per il bottone: rinfrescare la pagina legge i giornali, non
- * compra un'altra scelta.
+ * Il modello si può chiamare adesso: è mattina o dopo (le sei di chi legge),
+ * oggi ha girato meno di quattro volte, e l'ultima chiamata è di almeno
+ * quattro ore fa. Vale anche per il bottone: rinfrescare la pagina legge i
+ * giornali, non compra un'altra scelta.
+ *
+ * `chiamate` sono gli istanti delle ultime chiamate (l'edizione li tiene per
+ * due giorni); il giorno è quello dell'orologio di chi legge.
  */
-export function modelloDaChiamare(ultima: string | undefined, adesso = Date.now()): boolean {
-  const t = Date.parse(ultima ?? '')
-  return !Number.isFinite(t) || adesso - t >= ORE_MODELLO * 3_600_000
+export function modelloDaChiamare(chiamate: readonly string[], adesso = orologio.adesso(), fuso = fusoDi()): boolean {
+  const ora = new Date(adesso)
+  if (Number(oraIn(ora.toISOString(), fuso).slice(11, 13)) < ORA_MATTINA) return false
+  const oggi = giornoIn(ora, fuso)
+  const tempi = chiamate.map(c => Date.parse(c)).filter(t => Number.isFinite(t) && t <= adesso)
+  if (tempi.filter(t => giornoIn(new Date(t), fuso) === oggi).length >= GIRI_AL_GIORNO) return false
+  const ultima = Math.max(-Infinity, ...tempi)
+  return !Number.isFinite(ultima) || adesso - ultima >= ORE_MODELLO * 3_600_000
 }
 
 /** Aprire la pagina avvia il controllo senza bloccare la risposta della cache. */
@@ -981,7 +993,7 @@ export async function aggiorna(forza = false): Promise<Esito> {
   const e = leggiEdizione()
   const focus = contesto()
   const chiave = cartella()
-  const adesso = Date.now()
+  const adesso = orologio.adesso()
   if (!forza && adesso < (dopoErrore.get(chiave) ?? 0)) return risposta(focus, e)
   // che ore sono per chi legge: «stamattina» lo dice il suo orologio
   const fuso = fusoDi()
@@ -996,7 +1008,7 @@ export async function aggiorna(forza = false): Promise<Esito> {
   if (!giroInCorso) {
     giroInCorso = giro(focus).catch(e => {
       // Un server giù non deve essere richiamato da ogni GET della pagina.
-      dopoErrore.set(chiave, Date.now() + 15 * 60_000)
+      dopoErrore.set(chiave, orologio.adesso() + 15 * 60_000)
       throw e
     }).finally(() => { inCorso.delete(chiave) })
     inCorso.set(chiave, giroInCorso)
@@ -1045,7 +1057,9 @@ async function giro(focus: Fuoco[]): Promise<Esito> {
   // modello che ha già scelto nelle ultime due ore, i titoli nuovi aspettano il
   // prossimo giro buono, tutti insieme: non si segnano come guardati.
   const conModello = collegato()
-  const aspetta = conModello && candidate.length > 0 && !modelloDaChiamare(precedente?.modello)
+  // le chiamate di prima: quelle contate, e l'ultima scritta da una versione che le contava una per una
+  const chiamatePrima = precedente?.chiamate ?? (precedente?.modello ? [precedente.modello] : [])
+  const aspetta = conModello && candidate.length > 0 && !modelloDaChiamare(chiamatePrima)
   const chiamato = conModello && candidate.length > 0 && !aspetta
   const dalModello = aspetta ? [] : candidate.length ? await scegli(candidate, miei, gusto(), posti, attuali.map(n => n.titolo)) : []
   // Senza modello, il criterio resta il tema: parole in comune con il lavoro o con l'IA.
@@ -1110,7 +1124,8 @@ async function giro(focus: Fuoco[]): Promise<Esito> {
     valutate: aspetta ? [...valutate, ...selezionate.map(s => s.n.id)] : [...valutate, ...candidate.map(n => n.id)],
     // l'ora dell'ultima chiamata resta anche se questa è andata male: un
     // modello che non risponde non si richiama ogni venti minuti
-    modello: chiamato ? new Date().toISOString() : precedente?.modello
+    modello: chiamato ? new Date(orologio.adesso()).toISOString() : precedente?.modello,
+    chiamate: chiamato ? [...chiamatePrima, new Date(orologio.adesso()).toISOString()] : chiamatePrima
   })
   dopoErrore.delete(cartella())
   if (confermate.length) {

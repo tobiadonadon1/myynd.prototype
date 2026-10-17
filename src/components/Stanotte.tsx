@@ -49,6 +49,7 @@ export function rigaDellaNotte(s: StatoTurno | null | undefined, n: { fatte: Com
     else if (costo > 0) pezzi.push(frasi.dollari(costo))
     if (x.fermata === 'budget' && x.rimaste) pezzi.push(frasi.aspettanoIlBudget(x.rimaste))
     if (x.fermata === 'stop') pezzi.push(t('fermato da te'))
+    if (x.fermata === 'mese') pezzi.push(t('trattenuto: quota del mese raggiunta'))
     for (const b of (x.buchi ?? []).slice(0, 2)) pezzi.push(frasi.macAddormentato(ora(b.da), ora(b.a)))
   }
   return pezzi.join(' · ')

@@ -4,8 +4,10 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, symlink, writeFile, copyFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { cartella as profileFolder } from './config.ts'
+import { ambienteMinimo, avvolgi, profilo, sandboxDisponibile, segreti, type Contenimento } from './recinto.ts'
 
 const MAX_FILES = 100_000
 const MAX_BYTES = 2_000_000_000
@@ -13,7 +15,9 @@ const MAX_OUTPUT = 24_000
 const VERIFY_MS = 5 * 60_000
 
 export type ChangedFile = { path: string; kind: 'added' | 'modified' | 'deleted' }
-export type Verification = { status: 'passed' | 'failed' | 'unavailable' | 'cancelled'; command?: string[]; exitCode?: number | null; output?: string }
+export type Verification = { status: 'passed' | 'failed' | 'unavailable' | 'cancelled'; command?: string[]; exitCode?: number | null; output?: string
+  /** How the check was fenced: 'sandbox' (network, writes and secrets closed) or 'parziale' (minimal environment only). */
+  containment?: Contenimento }
 export type ExecutionReport = {
   id: string
   source: string
@@ -149,11 +153,31 @@ function verificationCommand(workspace: string): Promise<string[] | null> {
   }).catch(() => null)
 }
 
-/** Runs a fixed argv in the copy, with cancellation and a hard timeout. */
-export async function runCommand(argv: string[], cwd: string, signal?: AbortSignal, timeoutMs = VERIFY_MS): Promise<{ exitCode: number | null; output: string; finished: boolean }> {
-  if (signal?.aborted) return { exitCode: null, output: '', finished: false }
-  return await new Promise((resolveResult, reject) => {
-    const child = spawn(argv[0], argv.slice(1), { cwd, env: process.env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
+/**
+ * Runs a fixed argv in the copy, with cancellation and a hard timeout.
+ *
+ * The argv is fixed, but what it runs is not: `npm test` executes the
+ * project's own scripts, which the agent may just have edited. So it runs
+ * with a minimal environment (no keys, no tokens, a fresh empty HOME) and, on
+ * a Mac, inside sandbox-exec: no network beyond this computer, no writes
+ * outside the copy and its temp dir, no reads of the secrets folders. Without
+ * sandbox-exec the result says `containment: 'parziale'`.
+ */
+export async function runCommand(argv: string[], cwd: string, signal?: AbortSignal, timeoutMs = VERIFY_MS): Promise<{ exitCode: number | null; output: string; finished: boolean; containment: Contenimento }> {
+  const conSandbox = await sandboxDisponibile()
+  const containment: Contenimento = conSandbox ? 'sandbox' : 'parziale'
+  if (signal?.aborted) return { exitCode: null, output: '', finished: false, containment }
+  const casa = await mkdtemp(join(tmpdir(), 'myynd-verify-'))
+  try {
+    return await spawnFenced(conSandbox ? avvolgi(argv, profilo({ rete: 'locale', scrivibili: [cwd, casa], segreti: segreti(), soloElenco: true })) : argv, cwd, ambienteMinimo(casa), signal, timeoutMs, containment)
+  } finally {
+    await rm(casa, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+function spawnFenced(argv: string[], cwd: string, env: NodeJS.ProcessEnv, signal: AbortSignal | undefined, timeoutMs: number, containment: Contenimento): Promise<{ exitCode: number | null; output: string; finished: boolean; containment: Contenimento }> {
+  return new Promise((resolveResult, reject) => {
+    const child = spawn(argv[0], argv.slice(1), { cwd, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
     let output = ''
     let finished = true
     let done = false
@@ -171,7 +195,7 @@ export async function runCommand(argv: string[], cwd: string, signal?: AbortSign
     child.stdout.on('data', append)
     child.stderr.on('data', append)
     child.on('error', e => { if (done) return; done = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort); reject(e) })
-    child.on('close', code => { if (done) return; done = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort); resolveResult({ exitCode: code, output: output.trim(), finished }) })
+    child.on('close', code => { if (done) return; done = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort); resolveResult({ exitCode: code, output: output.trim(), finished, containment }) })
   })
 }
 
@@ -211,7 +235,7 @@ export async function executeInCopy(
         const argv = await verificationCommand(workspace)
         if (argv) {
           const result = await runCommand(argv, workspace, options.signal)
-          verification = { status: options.signal?.aborted || !result.finished ? 'cancelled' : result.exitCode === 0 ? 'passed' : 'failed', command: argv, exitCode: result.exitCode, output: result.output }
+          verification = { status: options.signal?.aborted || !result.finished ? 'cancelled' : result.exitCode === 0 ? 'passed' : 'failed', command: argv, exitCode: result.exitCode, output: result.output, containment: result.containment }
         }
       }
       state = verification.status === 'passed' ? 'verified' : verification.status === 'unavailable' ? 'unverified' : verification.status === 'cancelled' ? 'cancelled' : 'failed'
@@ -252,6 +276,38 @@ export async function executeInCopy(
 //     he edited it while the agent worked, and it is left alone and reported.
 //   · **A run that failed does not land.** Only a run that finished and whose
 //     verification did not fail gets this far.
+
+// — who may land it: authority, not the clock —
+//
+// The night used to be the rule: at night a queued card kept its work in the
+// copy, in the day everything finished landed, verified or not. The clock
+// was standing in for the real question, which is whether a person asked for
+// this right now. So the caller says it, explicitly:
+//
+//   · attended (`presente`): he asked right now. A verified result lands by
+//     itself; an unverified one waits for his tap.
+//   · unattended: anything the background queue started, at any hour. It
+//     never lands by itself; it waits in the copy for «Apply changes».
+//
+// The tap lands with the same backup and conflict checks. An unverified
+// result needs a second, explicit confirmation.
+
+/**
+ * Lands without asking: only attended work, only verified, only with changes,
+ * and only if the check ran fully fenced. A check that passed with partial
+ * containment (no sandbox-exec) proves less: it waits for the tap.
+ */
+export function landsByItself(report: Pick<ExecutionReport, 'state' | 'changedFiles' | 'verification'>, o: { presente: boolean }): boolean {
+  return o.presente === true && report.state === 'verified' && report.changedFiles.length > 0 && report.verification.containment === 'sandbox'
+}
+
+/** What the «Apply changes» tap may do: land, ask for the second confirmation, or refuse. */
+export function tapLanding(report: Pick<ExecutionReport, 'state' | 'changedFiles'>, confirmedUnverified: boolean): 'land' | 'confirm' | 'refuse' {
+  if (!report.changedFiles.length) return 'refuse'
+  if (report.state === 'verified') return 'land'
+  if (report.state === 'unverified') return confirmedUnverified ? 'land' : 'confirm'
+  return 'refuse'
+}
 
 export type Landing = {
   /** Where the previous version of every touched file was kept. */

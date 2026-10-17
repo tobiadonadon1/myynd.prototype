@@ -31,8 +31,9 @@ test('il costo: entrata, uscita, cache letta e scritta, in micro-dollari interi'
 test('il listino del 9 ottobre: Opus 5.5 4/20, Sonnet 5.5 2/10, Haiku 5.5 0,10/0,50, la cache letta a un decimo (Opus 5.5 a 0,20)', () => {
   assert.equal(costo('claude-opus-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 24_000_000)
   assert.equal(costo('claude-sonnet-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 12_000_000)
-  assert.equal(costo('claude-haiku-5-5', { entrata: 1_000_000, uscita: 1_000_000 }), 600_000)
-  assert.equal(costo('claude-haiku-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 10_000)
+  // Haiku sotto i centomila token di prompt: oltre vale la fascia lunga (prova qui sotto)
+  assert.equal(costo('claude-haiku-5-5', { entrata: 100_000, uscita: 1_000_000 }), 510_000)
+  assert.equal(costo('claude-haiku-5-5', { entrata: 0, uscita: 0, cache: 100_000 }), 1_000)
   assert.equal(costo('claude-sonnet-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 200_000)
   assert.equal(costo('claude-opus-5-5', { entrata: 0, uscita: 0, cache: 1_000_000 }), 200_000, 'il listino di Opus 5.5 dice 0,20, non un decimo')
 })
@@ -51,4 +52,16 @@ test('i dollari di Claude Code, e quali motori dicono il costo vero', () => {
   assert.equal(costoEsatto('Claude account'), true)
   assert.equal(costoEsatto('Claude account (stima)'), false)
   assert.equal(costoEsatto('ChatGPT subscription'), false)
+})
+
+test('Haiku 5.5 oltre centomila token di prompt: 0,50 e 2,50; il batch costa la metà', () => {
+  // sotto la soglia, il listino di sempre
+  assert.equal(costo('claude-haiku-5-5', { entrata: 100_000, uscita: 1000 }), 10_500)
+  // sopra: tutta la chiamata alla fascia lunga, cache compresa nel conto della soglia
+  assert.equal(costo('claude-haiku-5-5', { entrata: 100_001, uscita: 1000 }), Math.round(100_001 * 0.5 + 1000 * 2.5))
+  assert.equal(costo('claude-haiku-5-5', { entrata: 10_000, cache: 95_000, uscita: 0 }), Math.round(10_000 * 0.5 + 95_000 * 0.05))
+  // gli altri modelli non hanno una fascia lunga
+  assert.equal(costo('claude-sonnet-5-5', { entrata: 200_000, uscita: 0 }), 400_000)
+  assert.equal(costo('claude-sonnet-5-5', { entrata: 1_000_000, uscita: 1_000_000 }, { batch: true }), 6_000_000)
+  assert.equal(costo('claude-haiku-5-5', { entrata: 1_000_000, uscita: 0 }, { batch: true }), 250_000, 'il batch si applica dopo la fascia')
 })

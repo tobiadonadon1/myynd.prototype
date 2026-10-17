@@ -11,10 +11,16 @@
 // notte alla fine della dopo), la stessa del conto delle carte. La spesa è
 // quella delle carte (`store.costoDal`): la chat del pomeriggio non consuma
 // il budget del lavoro affidato.
+//
+// E il mese sopra la notte (`quota-mese.ts`): con una quota del mese il
+// budget di una notte è il più basso fra quello scelto e quello che del mese
+// restava quando la notte è cominciata. Tre dollari a notte su tre dollari al
+// mese non sono più novanta dollari.
 
 import * as store from './store.ts'
 import * as cfg from './config.ts'
 import * as regole from './turno-regole.ts'
+import * as quotaMese from './quota-mese.ts'
 
 /** Di serie tre dollari a notte: abbastanza per una dozzina di carte su Sonnet, poco per sbagliare. */
 export const BUDGET_DI_SERIE = 3
@@ -42,10 +48,12 @@ export function finestra(c: cfg.Config = cfg.leggi()): regole.Finestra {
 export type Budget = {
   /** Dollari spesi dalle carte nella giornata del turno. */
   speso: number
-  /** Il budget in dollari; zero vuol dire nessuno. */
+  /** Il budget in dollari di questa giornata, col mese già contato; zero vuol dire nessuno. */
   limite: number
   /** Non c'è più posto per un'altra carta: le altre aspettano la notte dopo. */
   finito: boolean
+  /** Il limite è quello del mese, non quello scelto per la notte. */
+  dalMese?: boolean
 }
 
 /** La mediana di un elenco di numeri, o zero. */
@@ -57,24 +65,48 @@ function mediana(xs: number[]): number {
 }
 
 /**
+ * Il budget di questa giornata del turno, in dollari: quello scelto, o quello
+ * che restava del mese quando la giornata è cominciata, se è meno. Zero:
+ * nessuno (né per la notte né per il mese). `spesoNotte` sono i dollari già
+ * spesi dalle carte in questa giornata, che il mese ha già contato.
+ */
+export function limiteEffettivo(spesoNotte: number, adesso = new Date(), c: cfg.Config = cfg.leggi()): { limite: number; dalMese: boolean } {
+  const notte = budget(c)
+  let mese = 0
+  try {
+    const q = quotaMese.stato(adesso, c)
+    // quello che restava del mese all'inizio di questa giornata: la spesa di stanotte è già dentro `speso`
+    if (q.limite) mese = Math.max(0, (q.limite - q.speso) / 1_000_000 + spesoNotte)
+    else return { limite: notte, dalMese: false }
+  } catch { return { limite: notte, dalMese: false } }
+  if (!notte || mese < notte) return { limite: mese, dalMese: true }
+  return { limite: notte, dalMese: false }
+}
+
+/**
  * Com'è il budget adesso. `finito` se la spesa l'ha raggiunto, o se quello
  * che resta non basta per una carta come le ultime dieci (la mediana, con un
  * minimo di dieci centesimi): meglio fermarsi prima che a metà di una carta.
  * Non lancia: senza indice il budget non si conta, e non ferma niente.
  */
 export function stato(adesso = new Date(), c: cfg.Config = cfg.leggi()): Budget {
-  const limite = budget(c)
   let speso = 0
-  try { speso = store.costoDal(regole.inizioGiornata(adesso, finestra(c)).toISOString()) / 1_000_000 } catch { return { speso: 0, limite, finito: false } }
-  if (!limite) return { speso, limite, finito: false }
+  try { speso = store.costoDal(regole.inizioGiornata(adesso, finestra(c)).toISOString()) / 1_000_000 } catch { return { speso: 0, limite: budget(c), finito: false } }
+  const { limite, dalMese } = limiteEffettivo(speso, adesso, c)
+  // nessun budget di notte, e nessuna quota del mese
+  if (!limite && !dalMese) return { speso, limite, finito: false }
   let unaCarta = RESTO_MINIMO
   try { unaCarta = Math.max(RESTO_MINIMO, mediana(store.costiUltimeCarte(10)) / 1_000_000) } catch { /* senza storia basta il minimo */ }
-  return { speso, limite, finito: speso >= limite || limite - speso < unaCarta }
+  return { speso, limite, finito: speso >= limite || limite - speso < unaCarta, ...(dalMese ? { dalMese } : {}) }
 }
 
 /** La spesa ha passato il budget di un quarto: una carta del turno ancora al lavoro si ferma. */
 export function sforato(adesso = new Date(), c: cfg.Config = cfg.leggi()): boolean {
-  const limite = budget(c)
-  if (!limite) return false
-  try { return store.costoDal(regole.inizioGiornata(adesso, finestra(c)).toISOString()) / 1_000_000 >= limite * SFORO } catch { return false }
+  try {
+    const speso = store.costoDal(regole.inizioGiornata(adesso, finestra(c)).toISOString()) / 1_000_000
+    const { limite, dalMese } = limiteEffettivo(speso, adesso, c)
+    if (!limite && !dalMese) return false
+    // il mese non ha il quarto in più: finito è finito
+    return speso >= (dalMese ? limite : limite * SFORO)
+  } catch { return false }
 }

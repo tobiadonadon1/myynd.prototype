@@ -201,6 +201,8 @@ export function rigaFonti(o: {
   puoRiavviare: boolean
   /** Il guscio sa aprire la schermata dell'Accessibilità (un guscio vecchio no). */
   puoAprireTitoli?: boolean
+  /** La quota AI del mese è finita: il lavoro di fondo è fermo fino al primo. */
+  quotaFinita?: boolean
   adesso?: Date
 }): { frase: string; controllo: Controllo } | null {
   const adesso = o.adesso ?? new Date()
@@ -240,6 +242,12 @@ export function rigaFonti(o: {
   if (o.titoliNegati) {
     frasi.push(t('Non vedo i titoli delle finestre: manca il permesso di Accessibilità.'))
     primo(o.puoAprire && o.puoAprireTitoli ? { tipo: 'accessibilita' } : { tipo: 'fonti', id: null })
+  }
+
+  // 4. la quota del mese: non è un guasto, ma il lavoro di fondo è fermo e deve dirlo
+  if (o.quotaFinita) {
+    frasi.push(t('Il lavoro di fondo è fermo: la quota AI del mese è finita.'))
+    primo({ tipo: 'preferenze' })
   }
 
   if (!frasi.length || !controllo) return null

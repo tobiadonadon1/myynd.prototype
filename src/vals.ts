@@ -1407,6 +1407,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      */
     mancanze: mancanzeDi(stato),
     testaGuasta: stato.testa ?? null,
+    /** La quota AI del mese è finita: la riga fissa lo dice. */
+    quotaFinita: !!stato.quotaFinita,
     osservaTitoli: !!stato.osservaTitoli,
     /** La riga ha appena detto lei «Anthropic è di nuovo collegato.»: il cambio di stato non lo ripete. */
     claudeRipresoDaQui: () => { claudeDetto.current = Date.now() },

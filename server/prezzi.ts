@@ -10,8 +10,8 @@
 // token, letti il 9 ottobre 2026: una stima del conto, non la fattura. I
 // modelli di prima restano, per le righe già scritte e per chi li ha ancora
 // nel file (`config.SUCCESSORI` li porta ai nuovi). Haiku 5.5 costa così fino
-// a centomila token di entrata; sopra ne costa cinque volte tanto, e Myynd
-// non gli manda mai tanto.
+// a centomila token di entrata; sopra ne costa cinque volte tanto
+// (`SOPRA_SOGLIA`). Il batch costa la metà.
 // La cache letta costa un decimo dell'entrata (Opus 5.5 la mette a 0,20, un
 // ventesimo), quella scritta un quarto in più. Un modello che non è qui non ha un prezzo: si contano i token e basta,
 // meglio una riga senza cifra che una cifra inventata.
@@ -42,13 +42,29 @@ export type Consumo = { entrata: number; uscita: number; cache?: number; scritti
  * Il costo in micro-dollari (un milionesimo di dollaro: un token di Sonnet in
  * entrata costa 2), intero. Null se il modello non ha un prezzo.
  */
-export function costo(modello: string | null | undefined, u: Consumo): number | null {
-  const p = modello ? PREZZI[modello] : undefined
-  if (!p) return null
+export function costo(modello: string | null | undefined, u: Consumo, o: { batch?: boolean } = {}): number | null {
+  const base = modello ? PREZZI[modello] : undefined
+  if (!base) return null
   const n = (x: number | undefined) => Number.isFinite(x) && (x as number) > 0 ? (x as number) : 0
+  // il prompt intero (entrata, letti e scritti in cache) oltre la soglia: il listino lungo, se il modello ne ha uno
+  const lungo = modello ? SOPRA_SOGLIA[modello] : undefined
+  const p = lungo && n(u.entrata) + n(u.cache) + n(u.scritti) > SOGLIA_LUNGA ? lungo : base
   // per milione di token × token = micro-dollari
-  return Math.round(n(u.entrata) * p.entrata + n(u.uscita) * p.uscita + n(u.cache) * p.cacheLettura + n(u.scritti) * p.cacheScrittura)
+  const tutto = n(u.entrata) * p.entrata + n(u.uscita) * p.uscita + n(u.cache) * p.cacheLettura + n(u.scritti) * p.cacheScrittura
+  return Math.round(o.batch ? tutto * SCONTO_BATCH : tutto)
 }
+
+/**
+ * Oltre centomila token di prompt Haiku 5.5 costa cinque volte tanto: 0,50 e
+ * 2,50. Myynd di solito non gli manda tanto, ma la quota del mese prenota a
+ * listino, e una stima che ignora la fascia lunga è una stima sbagliata.
+ */
+export const SOGLIA_LUNGA = 100_000
+export const SOPRA_SOGLIA: Record<string, Prezzo> = {
+  'claude-haiku-5-5': listino(0.5, 2.5)
+}
+/** Le chiamate in batch costano la metà. */
+export const SCONTO_BATCH = 0.5
 
 /** Da dollari (come li dice Claude Code nella busta) a micro-dollari. Null se non è un numero. */
 export function daDollari(usd: unknown): number | null {

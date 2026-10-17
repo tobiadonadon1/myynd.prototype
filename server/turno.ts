@@ -39,6 +39,7 @@ import * as gradino from './gradino.ts'
 import { suo as diSe } from './da-se.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 import * as budgetNotte from './budget-notte.ts'
+import * as quotaMese from './quota-mese.ts'
 import { conCompito } from './etichetta-uso.ts'
 import * as tracce from './tracce.ts'
 
@@ -116,7 +117,7 @@ export function imposta(p: { acceso?: unknown; pausa?: unknown; carte?: unknown;
 // — il conto della giornata: su disco, per persona —
 
 /** F9 · perché il turno si è fermato: il budget finito, o il bottone. */
-export type Fermata = { perche: 'budget' | 'stop'; quando: string }
+export type Fermata = { perche: 'budget' | 'stop' | 'mese'; quando: string }
 /** F9 · un tratto di notte in cui il turno non ha battuto: il Mac dormiva, o l'app era chiusa. */
 export type Buco = { da: string; a: string }
 /**
@@ -293,6 +294,14 @@ export async function giro(adesso = new Date()): Promise<string | null> {
      * le carte restano in coda per la notte dopo, e il conto lo scrive (una
      * volta sola: il turno guarda ogni minuto).
      */
+    // e prima ancora il mese: la quota finita ferma il turno fino al primo, e la mattina lo dice
+    if (candidate.length && quotaMese.stato(adesso).finita) {
+      if (c.fermata?.perche !== 'mese') {
+        segnaFermata('mese', adesso, imp.notte)
+        console.info(`myynd · turno · fermo: quota del mese raggiunta · ${candidate.length} in coda`)
+      }
+      return null
+    }
     if (candidate.length && budgetNotte.stato(adesso).finito) {
       if (c.fermata?.perche !== 'budget') {
         segnaFermata('budget', adesso, imp.notte)

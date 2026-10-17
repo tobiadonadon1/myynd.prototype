@@ -12,6 +12,7 @@ import * as store from './store.ts'
 import * as budgetNotte from './budget-notte.ts'
 import * as prezzi from './prezzi.ts'
 import { compitoInCorso } from './etichetta-uso.ts'
+import * as quotaMese from './quota-mese.ts'
 
 /** Da mezzanotte UTC: un giorno solare semplice, uguale per tutti i server. */
 function inizioDiOggi(): string {
@@ -85,6 +86,8 @@ export const INCLUSO_FINITO_MESE = 'Hai finito l’AI inclusa di questo mese. Si
 
 /** Gli errori del tetto: chi li prende deve sapere che non sono un guasto della strada. */
 const DEL_TETTO = new WeakSet<Error>()
+// la quota del mese finita è un tetto anche lei: niente riposo dell'account, niente chiave di riserva
+quotaMese.marchiaCon(e => { DEL_TETTO.add(e); return e })
 
 /**
  * Prima di ogni chiamata che costa: se il tetto è raggiunto non si parte.
@@ -93,6 +96,8 @@ const DEL_TETTO = new WeakSet<Error>()
  */
 export function controllaIlTetto(): void {
   controllaLaNotte()
+  // la quota del mese: ferma il lavoro di fondo, mai quello che lui chiede adesso
+  quotaMese.controlla()
   const u = usoDiOggi()
   if (!u.raggiunto) return
   // il tetto che si è toccato è quello del piano, non il suo: dirgli di alzarlo sarebbe falso
@@ -133,7 +138,8 @@ function controllaLaNotte() {
 
 /** Questo errore è il budget della notte: la carta torna in coda, non ha un guaio. */
 export function delBudget(e: unknown): boolean {
-  return e instanceof Error && (DEL_BUDGET.has(e) || e.message === BUDGET_NOTTE)
+  // anche la quota del mese finita: la carta torna in coda, e riparte quando la quota c'è
+  return e instanceof Error && (DEL_BUDGET.has(e) || e.message === BUDGET_NOTTE || quotaMese.dellaQuota(e))
 }
 
 /**

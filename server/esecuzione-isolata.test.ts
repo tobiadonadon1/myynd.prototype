@@ -3,7 +3,23 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { executeInCopy, landReport, runCommand } from './esecuzione-isolata.ts'
+import { executeInCopy, landReport, landsByItself, runCommand, tapLanding } from './esecuzione-isolata.ts'
+
+test('landing by authority: attended verified lands by itself; everything else waits for the tap', () => {
+  const r = (state: 'verified' | 'unverified' | 'failed' | 'no_changes', n = 1, containment: 'sandbox' | 'parziale' = 'sandbox') =>
+    ({ state, changedFiles: Array.from({ length: n }, (_, i) => ({ path: `f${i}`, kind: 'modified' as const })), verification: { status: 'passed' as const, containment } })
+  assert.equal(landsByItself(r('verified'), { presente: true }), true)
+  assert.equal(landsByItself(r('verified'), { presente: false }), false, 'the background queue never lands, day or night')
+  assert.equal(landsByItself(r('unverified'), { presente: true }), false)
+  assert.equal(landsByItself(r('verified', 0), { presente: true }), false)
+  assert.equal(landsByItself(r('verified', 1, 'parziale'), { presente: true }), false, 'a check without the sandbox waits for the tap')
+  assert.equal(tapLanding(r('verified', 1, 'parziale'), false), 'land')
+  assert.equal(tapLanding(r('verified'), false), 'land')
+  assert.equal(tapLanding(r('unverified'), false), 'confirm', 'unverified asks a second time')
+  assert.equal(tapLanding(r('unverified'), true), 'land')
+  assert.equal(tapLanding(r('failed'), true), 'refuse')
+  assert.equal(tapLanding(r('no_changes', 0), true), 'refuse')
+})
 
 async function project(fn: (root: string, base: string) => Promise<void>): Promise<void> {
   const base = await mkdtemp(join(tmpdir(), 'myynd-isolated-test-'))

@@ -68,6 +68,8 @@ test('the secret travels only shell to server: the preload never exposes it, the
   const preload = leggi('./preload.cjs')
   assert.match(preload, /reimpostaPassword: \(email, nuova, via\) => chiedi\('myynd:reimposta-password'/)
   assert.doesNotMatch(preload, /segreto|SEGRETO/i)
-  assert.match(leggi('./server.ts'), /MYYND_GUSCIO_SEGRETO: SEGRETO/)
+  // nell'ambiente solo il percorso di un file che il server cancella: il segreto si leggerebbe da kern.procargs2
+  assert.match(leggi('./server.ts'), /MYYND_GUSCIO_SEGRETO_FILE: fileDelSegreto\(\)/)
+  assert.doesNotMatch(leggi('./server.ts'), /MYYND_GUSCIO_SEGRETO: SEGRETO/)
   assert.match(leggi('./main.ts'), /proprietario\.chiamaServer\(server\.porta, server\.segretoGuscio\(\)\)/)
 })
