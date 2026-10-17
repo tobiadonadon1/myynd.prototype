@@ -61,7 +61,7 @@ export type VoceInPagina = Record<string, unknown> & { id: string; titolo: strin
 export function feedAttuale(adesso = Date.now()): VoceInPagina[] {
   // una carta preparata da Myynd (una proposta, o una del primo giorno) prende il posto della carta del feed sulla stessa cosa
   // e una risposta guadagnata (il primo gradino): la sua riga è già la risposta a quella mail
-  const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa' || c.origine === 'primo-giorno' || c.origine === gradino.ORIGINE).map(c => c.doc))
+  const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa' || c.origine === 'primo-giorno' || c.origine === gradino.ORIGINE || c.origine === 'pacchetto').map(c => c.doc))
   // le righe con i campi che la pagina legge sempre: l'id, il titolo, la nascita
   type Riga = Record<string, string | null> & { id: string; titolo: string; quando: string; tipo: string; offerta: string | null }
   const voci = (store.elencoFeed('aperto') as Riga[]).filter(v => !preparati.has(v.doc))

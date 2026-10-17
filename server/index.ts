@@ -102,6 +102,7 @@ import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
 import * as misuraFeed from './misura-feed.ts'
 import * as resoconto from './resoconto.ts'
 import * as daSe from './da-se.ts'
+import * as seguito from './seguito.ts'
 import * as mattina from './mattina.ts'
 import * as mentreVia from './via.ts'
 
@@ -2070,6 +2071,19 @@ app.post('/api/slack/esclusi', (req, res) => {
   res.json({ ok: true, esclusi, tolti })
 })
 
+/**
+ * Il seguito: il pacchetto di una carta (la risposta, il documento, gli
+ * impegni, le prove) e quante domande di Slack aspettano lui senza un pacchetto.
+ */
+app.get('/api/seguito', (_req, res) => {
+  res.json({ slackInAttesa: seguito.slackInAttesa() })
+})
+app.get('/api/seguito/:id', (req, res) => {
+  const p = seguito.perLaCarta(req.params.id)
+  if (!p) return res.status(404).json({ errore: 'Questo pacchetto non c’è.' })
+  res.json({ pacchetto: p })
+})
+
 /** Le domande su Slack che aspettano lui, con chi, cosa, il link e da quanto. */
 app.get('/api/slack/da-rispondere', (_req, res) => {
   res.json({ domande: slackSegnali.daRispondere(), promesse: slackSegnali.promesse(), decisioni: slackSegnali.decisioni() })
@@ -2088,9 +2102,13 @@ app.post('/api/slack/invia', async (req, res) => {
   if (!c) return res.status(400).json({ errore: 'Collega Slack e potrò mandarlo.' })
   const conversazione = String(req.body?.conversazione ?? '')
   const filo = req.body?.filo ? String(req.body.filo) : null
+  // il pacchetto del seguito da cui parte, se c'è: la sua traccia dice com'è andata
+  const compito = req.body?.compito ? String(req.body.compito) : null
   try {
-    const e = await slack.invia(c, { conversazione, testo: String(req.body?.testo ?? ''), filo })
+    const testo = String(req.body?.testo ?? '')
+    const e = await slack.invia(c, { conversazione, testo, filo })
     slackSegnali.risoltoDaQui(conversazione, filo, e.ts)
+    if (compito) { seguito.inviatoSuSlack(compito, testo, e.permalink); compiti.annunciaCambio() }
     res.json({ ok: true, permalink: e.permalink })
   } catch (e) {
     if (e instanceof GuaioFonte && e.rimedio === 'guarda') return res.status(400).json({ errore: e.message })
@@ -5401,6 +5419,8 @@ app.post('/api/compiti/:id/lascia', (req, res) => {
     store.scordaChieste(c.id)
     // «Non mi serve», con qualunque ragione: il lavoro consegnato non è stato preso
     tracce.decidi(c.id, 'scartato')
+    // un pacchetto lasciato si porta via i suoi impegni ancora aperti
+    if (stato === 'lasciato' && seguito.suo(c.origine)) seguito.lasciato(c.id)
     abitudini.ragioneDelCompito(c.id, ragione)
     const chiavi = new Set(abitudini.chiaviDelCompito(c.id))
     imparato = abitudini.ricalcolaFiltri().find(r => chiavi.has(r.chiave))
@@ -5423,6 +5443,8 @@ app.post('/api/gradino/ritira', (req, res) => {
 
 /** La preparazione discreta di ogni quarto d'ora (`iniziativa.preparazione`). */
 const preparazione = () => candidati.lotto(async () => {
+  // prima il seguito delle conversazioni con i clienti: la stessa mail non fa nascere anche una proposta dell'iniziativa
+  await seguito.giro()
   const r = await iniziativa.preparazione()
   // e il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione, le pagine di Notion.
   // Tutti propongono alla coda unica (`candidati.ts`), e la politica decide una volta, alla fine del lotto

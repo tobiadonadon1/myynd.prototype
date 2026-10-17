@@ -47,6 +47,7 @@ import * as abitudini from './abitudini.ts'
 import * as regoleTono from './regole-tono.ts'
 import * as gradino from './gradino.ts'
 import * as daSe from './da-se.ts'
+import * as seguito from './seguito.ts'
 import * as mandato from './mandato.ts'
 import * as tracce from './tracce.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
@@ -393,6 +394,8 @@ type Ferri = {
   salvaConsegna: typeof mani.salvaConsegna
   /** Il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione, la pagina di Notion. */
   daSe: typeof daSe.lavora
+  /** Il pacchetto del seguito (`seguito.ts`): la risposta, il documento, l'impegno. */
+  seguito: typeof seguito.lavora
   /** Di che genere è il dato che manca, e se sbagliarlo costa (P3): ottava, per la stessa ragione. */
   pesaLaDomanda: typeof claude.pesaLaDomanda
   /** Come scrive a chi riceve (P3): senza modello, ma legge l'indice, e le prove vogliono poterlo dire. */
@@ -418,6 +421,7 @@ const VERI: Ferri = {
   giudica: (...a) => giudica(...a),
   salvaConsegna: (...a) => mani.salvaConsegna(...a),
   daSe: (...a) => daSe.lavora(...a),
+  seguito: (...a) => seguito.lavora(...a),
   prossimoPasso: (...a) => prossimoPasso(...a),
   distilla: (...a) => memoria.distilla(...a),
   postaCollegata: () => {
@@ -550,6 +554,19 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean, pres
       if (turno && budgetNotte.sforato()) throw new Error(BUDGET_NOTTE)
       clearTimeout(scadenza)
       consegnaDaSe(c, esito)
+      return
+    }
+    /*
+     * Il seguito di una conversazione con un cliente (`seguito.ts`): un
+     * prompt suo, stretto sulle prove della conversazione, e un controllo dei
+     * fatti senza modello. Il budget, il richiamo e i guai restano quelli di qui.
+     */
+    if (seguito.suo(c.origine)) {
+      const esito = await ferri.seguito(c, { signal: controller.signal })
+      if (richiamati.has(chiave(id))) return
+      if (turno && budgetNotte.sforato()) throw new Error(BUDGET_NOTTE)
+      clearTimeout(scadenza)
+      consegnaSeguito(c, esito)
       return
     }
     console.info(`myynd · worker · entering-production · ${id} · elapsed_ms=${Date.now() - iniziato}`)
@@ -745,6 +762,33 @@ function consegnaDaSe(c: store.Compito, e: daSe.Esito) {
   if (p) store.segnaNelDiario(id, { tipo: 'prova', dettaglio: `${p.esito}: ${p.perche}` })
   console.info(`myynd · da sé · ${id} · consegnata${e.consegna ? ` · ${e.consegna.percorso}` : ''}${e.chiudi ? ' · chiusa' : ''}`)
   if (e.chiudi) { store.cambiaStatoCompito(id, 'fatto', e.chiudi); annuncia({ fase: 'richiamato', id }); annunciaCambio(); return }
+  const fatto = store.compito(id)
+  if (fatto) annuncia({ fase: 'pronto', id, compito: fatto })
+  annunciaCambio()
+}
+
+/**
+ * Il pacchetto del seguito, scritto sulla carta: la risposta (e la bozza
+ * nella casella, se c'è), il documento nuovo, la prova; poi le righe degli
+ * impegni (`seguito.posa`), solo se la carta è davvero consegnata.
+ */
+function consegnaSeguito(c: store.Compito, e: seguito.Esito) {
+  const id = c.id
+  if (e.ritira) {
+    store.cambiaStatoCompito(id, 'ritirato', e.ritira)
+    tracce.ricevuta(id, e.saltato ? 'saltato' : 'niente_da_fare', e.ritira)
+    annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
+  }
+  if (!store.risultatoCompito(id, e.testo, [], 'pronto')) return
+  if (e.consegna) store.scriviConsegnaCompito(id, e.consegna)
+  if (e.email) store.scriviEmailCompito(id, e.email)
+  seguito.posa(id, e)
+  const casella = e.email?.casella?.stato === 'salvata' ? `bozza:${e.email.casella.id ?? id}` : null
+  tracce.consegnata(id, { uscita: e.consegna?.percorso ?? casella, prove: e.prove ?? [c.doc] })
+  for (const f of e.fatti) if (f.attrezzo === 'scrivi_file' && f.esito === 'ok') store.segnaNelDiario(id, { tipo: 'file', dettaglio: f.dettaglio })
+  store.scriviProvaCompito(id, e.prova ?? null)
+  store.segnaNelDiario(id, { tipo: 'consegnato', dettaglio: e.consegna?.titolo ?? (casella ? 'casella' : undefined) })
+  if (e.prova) store.segnaNelDiario(id, { tipo: 'prova', dettaglio: `${e.prova.esito}: ${e.prova.perche}` })
   const fatto = store.compito(id)
   if (fatto) annuncia({ fase: 'pronto', id, compito: fatto })
   annunciaCambio()
