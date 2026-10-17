@@ -260,9 +260,17 @@ export function pronte(adesso = new Date()): store.Compito[] {
   return store.elencoCompiti()
     .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1 && !(inPausa && (diSe(c.origine) || seguito.suo(c.origine))))
     // fra le proposte di Myynd passa prima quella che la politica ha pesato di più (`candidati.ts`)
-    .map(c => ({ c, p: regole.punteggio(c, { adesso, progettoAlto: !!c.progetto && alti.has(c.progetto) }) + (c.turno?.da === 'myynd' ? Math.round(candidati.punteggioDellaCarta(c.id) * 10) : 0) }))
+    .map(c => ({ c, p: regole.punteggio(c, { adesso, progettoAlto: !!c.progetto && alti.has(c.progetto) }) + (c.turno?.da === 'myynd' ? bonusDellaPolitica(candidati.punteggioDellaCarta(c.id)) : 0) }))
     .sort((a, b) => b.p - a.p || a.c.ordine.localeCompare(b.c.ordine) || a.c.id.localeCompare(b.c.id))
     .map(x => x.c)
+}
+
+/**
+ * Il peso della politica nell'ordine del turno: da zero a quattro, sotto il
+ * più cinque delle carte passate da lei, così una sua carta pari passa sempre prima.
+ */
+export function bonusDellaPolitica(punteggio: number): number {
+  return Math.max(0, Math.min(4, Math.round((Number.isFinite(punteggio) ? punteggio : 0) * 4)))
 }
 
 const inGiro = new Set<string>()

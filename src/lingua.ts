@@ -3411,6 +3411,16 @@ const EN: Record<string, string> = {
   // — recinto del codice e quota del mese: fine —
   // — la coda unica: inizio —
   'Stanotte non c’era niente che valesse la pena.': 'Nothing worth doing last night.',
+  'Le proposte sono spente.': 'Proposals are off.',
+  'Myynd è in pausa: chiede prima di preparare.': 'Myynd is paused: it asks before preparing.',
+  'Nessun motore collegato.': 'No engine connected.',
+  'Il turno è spento.': 'The shift is off.',
+  'Sta già preparando qualcosa.': 'Already preparing something.',
+  'Non c’è niente da preparare adesso.': 'Nothing to prepare right now.',
+  'La preparo appena finisce il giro in corso.': 'I’ll prepare it as soon as the current round ends.',
+  'Il mandato del progetto non lo permette.': 'The project’s mandate doesn’t allow it.',
+  'La mail non chiede più niente.': 'The email no longer asks for anything.',
+  'C’è già una carta per questa cosa.': 'There’s already a card for this.',
   // — la coda unica: fine —
 
   // — il pacchetto di seguito: inizio —
@@ -4246,13 +4256,14 @@ export const frasi = {
   /** Le carte trattenute, coi perché già detti: «Held back: 3 (2 monthly allowance, 1 mandate)». */
   trattenute: (n: number, perche: string) => corrente === 'en' ? `Held back: ${n} (${perche})` : `Trattenute: ${n} (${perche})`,
   /** Un perché di una trattenuta, col suo conto. */
-  perTrattenuta: (motivo: 'mandato' | 'mese' | 'notte' | 'budget_progetto', n: number) => {
+  perTrattenuta: (motivo: 'mandato' | 'mese' | 'notte' | 'budget_progetto' | 'budget', n: number) => {
     const en = corrente === 'en'
     const parole = {
       mandato: en ? 'mandate' : 'mandato',
       budget_progetto: en ? 'project budget' : 'budget del progetto',
       mese: en ? 'monthly allowance' : 'quota del mese',
-      notte: en ? 'nightly cap' : 'tetto della notte'
+      notte: en ? 'nightly cap' : 'tetto della notte',
+      budget: en ? 'nightly budget' : 'budget della notte'
     }[motivo]
     return `${n} ${parole}`
   },
