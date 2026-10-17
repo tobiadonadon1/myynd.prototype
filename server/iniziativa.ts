@@ -207,36 +207,81 @@ export function candidatoDa(x: Candidato, o: {
  * se è nata adesso. `presto`: «Prepara ora», il turno la prende al primo giro.
  */
 export async function giro(adesso = Date.now(), o: { presto?: boolean } = {}, pronto = collegato): Promise<string | null> {
+  return (await prepara(adesso, o, pronto)).compito
+}
+
+/** Quello che «Prepara ora» risponde: la carta nata, o il perché in una frase sua. */
+export type Preparata = { compito: string | null; perche: string | null }
+
+/** I perché di «Prepara ora», per motivo della politica. Frasi del server: la pagina le traduce. */
+export const PERCHE = {
+  spente: 'Le proposte sono spente.',
+  pausa: 'Myynd è in pausa: chiede prima di preparare.',
+  motore: 'Nessun motore collegato.',
+  turno: 'Il turno è spento.',
+  occupato: 'Sta già preparando qualcosa.',
+  niente: 'Non c’è niente da preparare adesso.',
+  dopo: 'La preparo appena finisce il giro in corso.',
+  mandato: 'Il mandato del progetto non lo permette.',
+  budget: 'Il budget del mese di questo progetto è finito.',
+  fonte: 'La mail non chiede più niente.',
+  doppione: 'C’è già una carta per questa cosa.'
+} as const
+
+/**
+ * Il giro, con il suo perché. Di serie una proposta alla volta, col ritmo
+ * (la pausa, il tetto del giorno, le proposte vive). Con `presto` è lei che
+ * chiede («Prepara ora»): il ritmo non la ferma, e se non c'è una mail nuova
+ * si prende la proposta che aspettava in coda; la politica la sceglie fuori
+ * dai posti e dalla soglia, ma il mandato e la fonte valgono sempre.
+ */
+export async function prepara(adesso = Date.now(), o: { presto?: boolean } = {}, pronto = collegato): Promise<Preparata> {
+  const no = (perche: string): Preparata => ({ compito: null, perche })
   const conto = cfg.cartella()
-  if (occupati.has(conto)) return null
+  if (occupati.has(conto)) return no(PERCHE.occupato)
   occupati.add(conto)
   try {
     const s = leggi()
     // col turno spento una proposta in coda non parte mai: resterebbe una riga ferma sulla lista
-    if (!s.attiva || cfg.autonomia() === 'chiedere' || !pronto() || turnoSpento()) return null
+    if (!s.attiva) return no(PERCHE.spente)
+    if (cfg.autonomia() === 'chiedere') return no(PERCHE.pausa)
+    if (!pronto()) return no(PERCHE.motore)
+    if (turnoSpento()) return no(PERCHE.turno)
     const tentativi = s.tentativi.filter(t => t > adesso - 86400_000)
-    if (tentativi.length >= LIMITE || tentativi.some(t => t > adesso - PAUSA)) return null
+    if (!o.presto && (tentativi.length >= LIMITE || tentativi.some(t => t > adesso - PAUSA))) return no(PERCHE.niente)
     const vivi = store.elencoCompiti()
     // Nascere non occupa la coda (la fa partire il turno): conta solo quante
     // proposte aspettano già, perché una bacheca piena di cose mai chieste è rumore.
     // le carte del primo giorno (F6) contano con le proposte: sono proposte anche loro,
     // e così i candidati che aspettano la decisione della politica
-    const proposte = (o: string) => o === ORIGINE || o === 'primo-giorno'
-    if (vivi.filter(c => proposte(c.origine)).length + coda.aperti().filter(c => proposte(c.carta.origine)).length >= PROPOSTE_VIVE_MAX) return null
+    const proposte = (x: string) => x === ORIGINE || x === 'primo-giorno'
+    const inAttesa = coda.aperti().filter(c => c.carta.origine === ORIGINE)
+    if (!o.presto && vivi.filter(c => proposte(c.origine)).length + coda.aperti().filter(c => proposte(c.carta.origine)).length >= PROPOSTE_VIVE_MAX) return no(PERCHE.niente)
     // una mail che la coda conosce già (proposta, scelta o lasciata) non si ripropone
     const chosen = liberi(candidatiDettagli(store.recenti(250), adesso)).find(x => !coda.conosciuta(chiaveDoc(x.doc)))
-    if (!chosen) return null
-    const id = `iniziativa-${improntaDoc(chosen.doc)}`
-    // Reserve the daily allowance before enqueueing: a crash cannot create a
-    // retry storm; a saved failed draft can be retried explicitly by its owner.
-    scrivi({ ...s, tentativi: [...tentativi, adesso], ultimoControllo: adesso })
-    if (store.compito(id)) return null
-    const c = candidatoDa(chosen, { origine: ORIGINE, carta: id, adesso })
-    coda.proponi(c)
-    coda.decidi(new Date(adesso), o.presto ? { presto: [c.id] } : {})
-    if (!store.compito(id)) return null
+    let c: coda.Candidato | null = null
+    if (chosen) {
+      const id = `iniziativa-${improntaDoc(chosen.doc)}`
+      // Reserve the daily allowance before enqueueing: a crash cannot create a
+      // retry storm; a saved failed draft can be retried explicitly by its owner.
+      scrivi({ ...s, tentativi: [...tentativi, adesso], ultimoControllo: adesso })
+      if (store.compito(id)) return no(PERCHE.doppione)
+      c = candidatoDa(chosen, { origine: ORIGINE, carta: id, adesso })
+      coda.proponi(c)
+    } else if (o.presto && inAttesa.length) {
+      // niente di nuovo: lei chiede adesso, e passa la proposta che aspettava da più tempo
+      c = inAttesa[0]
+    }
+    if (!c) return no(PERCHE.niente)
+    const e = coda.decidi(new Date(adesso), o.presto ? { presto: [c.id] } : {})
+    const id = coda.cartaDi(c)
+    if (e.esito === 'rinviato') return no(PERCHE.dopo)
+    if (!store.compito(id) || store.compito(id)?.stato === 'ritirato') {
+      const m = coda.leggi(c.id)?.motivo
+      return no(m === 'mandato' ? PERCHE.mandato : m === 'budget_progetto' ? PERCHE.budget : m === 'fonte' ? PERCHE.fonte : m === 'doppione' ? PERCHE.doppione : PERCHE.niente)
+    }
     compiti.annunciaCambio()
-    return id
+    return { compito: id, perche: null }
   } finally { occupati.delete(conto) }
 }
 

@@ -1854,7 +1854,7 @@ export const api = {
   rimuoviRegolaMittente: (id: string) => json<{ rules: SenderRule[] }>(`/api/posta/regole/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   iniziativa: () => json<{ attiva: boolean; inPausa: boolean; oggi: number; limiteGiornaliero: number; prossima: number | null }>('/api/iniziativa'),
   impostaIniziativa: (attiva: boolean) => json<{ attiva: boolean; inPausa: boolean; oggi: number; limiteGiornaliero: number; prossima: number | null }>('/api/iniziativa', { method: 'PATCH', body: JSON.stringify({ attiva }) }),
-  preparaInAnticipo: () => json<{ compito: string | null }>('/api/iniziativa/prepara', { method: 'POST' }),
+  preparaInAnticipo: () => json<{ compito: string | null; perche: string | null }>('/api/iniziativa/prepara', { method: 'POST' }),
 
   // — la rassegna —
   //

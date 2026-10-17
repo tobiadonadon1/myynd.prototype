@@ -200,7 +200,7 @@ export const vistaDaPiegare = (c: LavoroInRiga & { id: string }, oraViste: { has
 // — la coda unica: inizio —
 
 /** Perché una cosa è stata trattenuta, nelle parole che la carta usa. */
-export type Trattenuta = 'mandato' | 'mese' | 'notte' | 'budget_progetto'
+export type Trattenuta = 'mandato' | 'mese' | 'notte' | 'budget_progetto' | 'budget'
 export type RigheNotte = {
   /** Aspettano il Mac: quante, e i tratti in cui dormiva. */
   mac: { n: number; buchi: { da: string; a: string }[]; titoli: string[] } | null
@@ -212,7 +212,7 @@ export type RigheNotte = {
   niente: boolean
 }
 
-const ORDINE_TRATTENUTE: readonly Trattenuta[] = ['mandato', 'budget_progetto', 'mese', 'notte']
+const ORDINE_TRATTENUTE: readonly Trattenuta[] = ['mandato', 'budget_progetto', 'mese', 'budget', 'notte']
 
 /**
  * Le righe di quello che non è successo, sotto la frase: al più una per

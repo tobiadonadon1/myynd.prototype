@@ -5000,8 +5000,9 @@ app.post('/api/iniziativa/prepara', async (_req, res) => {
   // «Prepara ora»: la proposta entra in coda con la precedenza di una carta
   // di oggi, e il turno la prende al primo giro (F2)
   try {
-    const compito = await iniziativa.giro(Date.now(), { presto: true })
-    res.json({ ...iniziativa.stato(), compito })
+    // lei chiede adesso: se non nasce niente, la risposta dice perché
+    const { compito, perche } = await iniziativa.prepara(Date.now(), { presto: true })
+    res.json({ ...iniziativa.stato(), compito, perche })
     if (compito) void turno.giro()
   } catch (e) { errore(res, e) }
 })

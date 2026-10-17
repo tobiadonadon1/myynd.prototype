@@ -134,23 +134,32 @@ export const COSTO_DI_SERIE: Readonly<Record<Genere, number>> = {
 }
 
 /**
- * Quello che resta del mese, in dollari; null vuol dire nessun tetto.
- * Per ora è il budget della notte (`budget-notte.ts`): lo stesso conto che
- * ferma il turno, letto prima invece che dopo.
+ * Quello che resta, in dollari, dai due tetti: il budget della notte
+ * (`budget-notte.ts`) e la quota del mese (`quota-mese.ts`, che conta in
+ * micro-dollari). Separati, perché la ricevuta dice quale dei due ha fermato
+ * il lavoro: «quota del mese» solo quando è il mese a mancare. Null: nessun tetto.
  */
-// quello che resta: la notte e il mese insieme, vince il più stretto
-export function restoDelMese(adesso = new Date()): number | null {
-  // il più stretto fra quello che resta stanotte e quello che resta del mese (`quota-mese.ts`)
-  const resti: number[] = []
+export function resti(adesso = new Date()): { notte: number | null; mese: number | null } {
+  let notte: number | null = null
+  let mese: number | null = null
   try {
+    // il budget proprio della notte: quando `budget-notte` lo abbassa al resto del mese, a mancare è il mese
     const b = budgetNotte.stato(adesso)
-    if (b.limite) resti.push(b.finito ? 0 : Math.max(0, b.limite - b.speso))
+    const proprio = budgetNotte.budget()
+    if (proprio) notte = b.finito && !b.dalMese ? 0 : Math.max(0, proprio - b.speso)
   } catch { /* senza budget di notte, conta il mese */ }
   try {
     const m = quotaMese.stato(adesso)
-    if (m.resto !== null) resti.push(m.finita ? 0 : m.resto)
+    if (m.resto !== null) mese = m.finita ? 0 : Math.max(0, m.resto / 1_000_000)
   } catch { /* senza quota, conta la notte */ }
-  return resti.length ? Math.min(...resti) : null
+  return { notte, mese }
+}
+
+/** Il più stretto dei due resti, in dollari; null vuol dire nessun tetto. */
+export function restoDelMese(adesso = new Date()): number | null {
+  const r = resti(adesso)
+  const xs = [r.notte, r.mese].filter((x): x is number => x !== null)
+  return xs.length ? Math.min(...xs) : null
 }
 
 // — le parole di un titolo, per i simili —
@@ -185,14 +194,23 @@ export type Mondo = {
   adesso: Date
   /** I posti della notte: il tetto meno le carte partite e quelle già in coda. */
   posti: number
-  /** Dollari che restano (`restoDelMese`), meno quelli già impegnati; null nessun tetto. */
-  resto: number | null
-  /** Le carte vive: per i doppioni. */
-  vive: { id: string; testo: string; doc: string | null }[]
+  /** Dollari che restano stanotte e nel mese (`resti`), meno quelli già impegnati; null nessun tetto. */
+  restoNotte: number | null
+  restoMese: number | null
+  /** Le carte vive: per i doppioni. Il titolo si confronta solo dentro lo stesso progetto. */
+  vive: { id: string; testo: string; doc: string | null; progetto?: string | null }[]
   /** I documenti con una carta viva. */
   conRiga: ReadonlySet<string>
   /** Il lavoro recente e com'è finito: per i doppioni e quello che lei ha buttato. */
-  recenti: { testo: string; scartato: boolean; quando: string }[]
+  recenti: { testo: string; scartato: boolean; quando: string; progetto?: string | null }[]
+  /**
+   * Le carte di Myynd in coda e non ancora partite, col punteggio della
+   * politica: una più utile che arriva tardi può prendersi il loro posto.
+   * Mai le carte sue, mai quelle partite, mai quelle che lei ha chiesto adesso.
+   */
+  cedibili?: { compito: string; candidato: string; punteggio: number; costo: number }[]
+  /** I candidati che lei ha chiesto adesso («Prepara ora»): niente posti né soglia, ma il mandato e la fonte sì. */
+  presto?: ReadonlySet<string>
   /** Le chiavi già scelte in passato: la stessa cosa non rinasce. */
   chiaviScelte: ReadonlySet<string>
   regola: (progetto: string | null, classe: string) => mandato.Regola | null
@@ -202,7 +220,11 @@ export type Mondo = {
   scadenza: (progetto: string | null) => string | null
 }
 
-export type Decisione = { id: string; stato: Stato; motivo: Motivo | null; punteggio: number }
+/** `cede`: la carta in coda che cede il posto a questo candidato, se ce n'è una. */
+export type Decisione = { id: string; stato: Stato; motivo: Motivo | null; punteggio: number; cede?: string }
+
+/** Di quanto un candidato deve valere di più per prendere il posto di una carta già in coda. */
+export const MARGINE_CEDERE = 0.05
 
 /** Il punteggio di un candidato: valore per certezza, meno costo e fatica, più la spinta del mandato. */
 export function punteggio(c: Candidato, m: Pick<Mondo, 'adesso' | 'confermato' | 'scadenza'>): number {
@@ -242,32 +264,50 @@ export function valuta(cs: readonly Candidato[], m: Mondo): Decisione[] {
     const suaCarta = c.carta.id ?? cartaDi(c)
     if (m.chiaviScelte.has(c.chiave)) { scarta(c, 'scartato', 'doppione', p); continue }
     if (doc && m.conRiga.has(doc)) { scarta(c, 'scartato', 'doppione', p); continue }
-    // il titolo conta solo per il lavoro senza un documento: due mail diverse con lo stesso oggetto sono due risposte
-    if (!doc && m.vive.some(v => v.id !== suaCarta && simile(v.testo, c.titolo))) { scarta(c, 'scartato', 'doppione', p); continue }
+    // il titolo conta solo per il lavoro senza un documento (due mail diverse con lo stesso oggetto sono due
+    // risposte), e solo dentro lo stesso progetto: «Video script for Alpha» e «…for Beta» sono due lavori
+    const stesso = (q: string | null | undefined) => (q ?? null) === (c.progetto ?? null)
+    if (!doc && m.vive.some(v => v.id !== suaCarta && stesso(v.progetto) && simile(v.testo, c.titolo))) { scarta(c, 'scartato', 'doppione', p); continue }
     const giorno = 86_400_000
-    if (!doc && m.recenti.some(r => r.scartato && adesso - Date.parse(r.quando) <= GIORNI_SCARTATI * giorno && simile(r.testo, c.titolo))) { scarta(c, 'scartato', 'gia_scartato', p); continue }
-    if (!doc && !RICORRENTI.includes(c.genere) && m.recenti.some(r => !r.scartato && adesso - Date.parse(r.quando) <= GIORNI_FATTI * giorno && simile(r.testo, c.titolo))) { scarta(c, 'scartato', 'doppione', p); continue }
+    if (!doc && m.recenti.some(r => r.scartato && stesso(r.progetto) && adesso - Date.parse(r.quando) <= GIORNI_SCARTATI * giorno && simile(r.testo, c.titolo))) { scarta(c, 'scartato', 'gia_scartato', p); continue }
+    if (!doc && !RICORRENTI.includes(c.genere) && m.recenti.some(r => !r.scartato && stesso(r.progetto) && adesso - Date.parse(r.quando) <= GIORNI_FATTI * giorno && simile(r.testo, c.titolo))) { scarta(c, 'scartato', 'doppione', p); continue }
     if (proveVecchie(c, m.adesso)) { scarta(c, 'scartato', 'prove_vecchie', p); continue }
     if (c.classi.some(k => m.regola(c.progetto, k) === 'mai')) { scarta(c, 'trattenuto', 'mandato', p); continue }
     if (m.budgetFinito(c.progetto)) { scarta(c, 'trattenuto', 'budget_progetto', p); continue }
     if (!m.valido(c)) { scarta(c, 'scartato', 'fonte', p); continue }
-    if (p < SOGLIA) { scarta(c, 'scartato', 'poco_valore', p); continue }
+    if (p < SOGLIA && !m.presto?.has(c.id)) { scarta(c, 'scartato', 'poco_valore', p); continue }
     inGara.push({ c, p })
   }
   // la stessa chiave due volte nello stesso giro (due produttori, lo stesso documento): resta la più forte
   inGara.sort((a, b) => b.p - a.p || a.c.id.localeCompare(b.c.id))
   const chiavi = new Set<string>()
   let posti = Math.max(0, Math.floor(m.posti))
-  let resto = m.resto
+  let notte = m.restoNotte
+  let mese = m.restoMese
+  // le carte che possono cedere il posto, dalla meno utile
+  const cedibili = [...(m.cedibili ?? [])].sort((a, b) => a.punteggio - b.punteggio || a.compito.localeCompare(b.compito))
+  // chiesto da lei adesso: prima di tutti, e fuori dai posti e dai budget (la quota non ferma mai quello che chiede lei)
+  inGara.sort((a, b) => Number(!!m.presto?.has(b.c.id)) - Number(!!m.presto?.has(a.c.id)))
   for (const { c, p } of inGara) {
     if (chiavi.has(c.chiave)) { scarta(c, 'scartato', 'doppione', p); continue }
     chiavi.add(c.chiave)
-    if (posti <= 0) { scarta(c, 'trattenuto', 'notte', p); continue }
+    if (m.presto?.has(c.id)) { fuori.push({ id: c.id, stato: 'scelto', motivo: null, punteggio: p }); continue }
     const costo = Math.max(0, Number(c.costo) || 0)
-    if (resto !== null && costo > resto) { scarta(c, 'trattenuto', 'mese', p); continue }
-    posti--
-    if (resto !== null) resto -= costo
-    fuori.push({ id: c.id, stato: 'scelto', motivo: null, punteggio: p })
+    // un posto si libera solo da una carta che vale chiaramente meno di questa
+    const i = posti > 0 ? -1 : cedibili.findIndex(x => x.punteggio <= p - MARGINE_CEDERE)
+    if (posti <= 0 && i < 0) { scarta(c, 'trattenuto', 'notte', p); continue }
+    const x = i >= 0 ? cedibili[i] : null
+    const libera = x?.costo ?? 0
+    // il mese prima: «quota del mese» solo quando è lui a mancare
+    if (mese !== null && costo > mese + libera) { scarta(c, 'trattenuto', 'mese', p); continue }
+    if (notte !== null && costo > notte + libera) { scarta(c, 'trattenuto', 'notte', p); continue }
+    if (x) {
+      cedibili.splice(i, 1)
+      fuori.push({ id: x.candidato, stato: 'trattenuto', motivo: 'notte', punteggio: x.punteggio })
+    } else posti--
+    if (notte !== null) notte += libera - costo
+    if (mese !== null) mese += libera - costo
+    fuori.push({ id: c.id, stato: 'scelto', motivo: null, punteggio: p, ...(x ? { cede: x.compito } : {}) })
   }
   return fuori
 }
@@ -407,7 +447,11 @@ export function cartaValida(c: Pick<store.Compito, 'origine' | 'doc' | 'voce' | 
 export function promuovi(c: Candidato, o: { presto?: boolean; adesso?: Date } = {}): string | null {
   const adesso = o.adesso ?? new Date()
   const id = cartaDi(c)
-  if (store.compito(id)) return null
+  const esiste = store.compito(id)
+  // una carta che ha ceduto il suo posto torna aperta: è la stessa cosa, rientrata in gara
+  if (esiste && esiste.stato === 'ritirato' && esiste.esito === CEDUTO) {
+    db.prepare(`UPDATE compiti SET stato = 'aperto', esito = NULL, chiuso = NULL, aggiornato = ?, versione = versione + 1 WHERE id = ?`).run(adesso.toISOString(), id)
+  } else if (esiste) return null
   const quando = c.carta.quando ?? 'oggi'
   const priorita = c.carta.priorita === 'alta' || c.carta.priorita === 'bassa' ? c.carta.priorita : null
   store.scriviCompito({
@@ -422,6 +466,29 @@ export function promuovi(c: Candidato, o: { presto?: boolean; adesso?: Date } = 
   tracce.inizia({ compito: id, progetto: c.progetto, genere: c.genere, prove: [...c.prove, c.carta.doc], candidato: c.id })
   try { segna(c.id, 'scelto', null, punteggio(c, mondoMandato(adesso)), id, adesso.toISOString()) } catch { /* la carta c'è: la riga del candidato è un di più */ }
   return id
+}
+
+/** L'esito di una carta che ha ceduto il posto: la stessa frase la riconosce quando rientra. */
+export const CEDUTO = 'Gave its slot to more useful work'
+
+/**
+ * Una carta di Myynd in coda, non ancora partita, cede il posto a un lavoro
+ * più utile: si ritira col perché, la sua traccia dice «trattenuto», e il suo
+ * candidato torna in gara (trattenuto, la notte) per il giro dopo.
+ */
+function cedi(compito: string, adesso: Date) {
+  const c = store.compito(compito)
+  if (!c || !cedibile(c)) return false
+  store.cambiaStatoCompito(compito, 'ritirato', CEDUTO)
+  tracce.ricevuta(compito, 'trattenuto', 'notte')
+  db.prepare(`UPDATE candidati SET stato = 'trattenuto', motivo = 'notte', deciso = ? WHERE compito = ? AND stato = 'scelto'`).run(adesso.toISOString(), compito)
+  console.info(`myynd · candidati · ${compito} cede il posto a un lavoro più utile`)
+  return true
+}
+
+/** Può cedere il posto: di Myynd, in coda, mai partita, e non chiesta da lei adesso. */
+function cedibile(c: store.Compito): boolean {
+  return regole.inCoda(c) && c.turno?.da === 'myynd' && !c.turno.tentativi && c.turno.quando !== 'presto'
 }
 
 // — il mondo vero —
@@ -464,9 +531,18 @@ function mondo(adesso: Date): Mondo {
     const scartato = t?.esito === 'scartato' || c.esito === 'lasciato' || c.stato === 'lasciato' || c.stato === 'scartato'
     // ritirata senza un suo gesto (la fonte è cambiata) non dice niente di lei
     if (c.stato === 'ritirato' && !scartato) continue
-    recenti.push({ testo: c.titolo || c.testo, scartato, quando })
+    recenti.push({ testo: c.titolo || c.testo, scartato, quando, progetto: c.progetto ?? null })
   }
-  const resto = restoDelMese(adesso)
+  const r = resti(adesso)
+  const gia = impegnati(adesso)
+  const cedibili: NonNullable<Mondo['cedibili']> = []
+  try {
+    const settimana = new Date(adesso.getTime() - 7 * 86_400_000).toISOString()
+    for (const x of db.prepare(`SELECT * FROM candidati WHERE stato = 'scelto' AND compito IS NOT NULL AND ricevuta IS NULL AND deciso >= ?`).all(settimana) as Riga[]) {
+      const k = store.compito(x.compito!)
+      if (k && cedibile(k)) cedibili.push({ compito: k.id, candidato: x.id, punteggio: x.punteggio ?? 0, costo: daRiga(x)?.costo ?? 0 })
+    }
+  } catch { /* nessuna */ }
   let chiaviScelte = new Set<string>()
   // le chiavi scelte negli ultimi due mesi: più indietro, la carta stessa (che c'è ancora) ferma il doppione
   const dueMesi = new Date(adesso.getTime() - 60 * 86_400_000).toISOString()
@@ -475,8 +551,10 @@ function mondo(adesso: Date): Mondo {
   return {
     ...mondoMandato(adesso),
     posti: postiDellaNotte(adesso),
-    resto: resto === null ? null : Math.max(0, resto - impegnati(adesso)),
-    vive: vive.map(c => ({ id: c.id, testo: c.titolo || c.testo, doc: c.doc })),
+    restoNotte: r.notte === null ? null : Math.max(0, r.notte - gia),
+    restoMese: r.mese === null ? null : Math.max(0, r.mese - gia),
+    cedibili,
+    vive: vive.map(c => ({ id: c.id, testo: c.titolo || c.testo, doc: c.doc, progetto: c.progetto ?? null })),
     conRiga: new Set(docs),
     recenti, chiaviScelte,
     regola: (p, k) => (mandato.CLASSI as readonly string[]).includes(k) ? mandato.regolaPer(p, k as mandato.Classe) : null,
@@ -489,6 +567,8 @@ function mondo(adesso: Date): Mondo {
 
 /** Per persona: i lotti aperti (i produttori del quarto d'ora che propongono insieme) e l'ultimo giro. */
 const lotti = new Map<string, number>()
+/** Per persona: i candidati chiesti da lei dentro un lotto, che la decisione alla fine deve ricordare. */
+const prestoNelLotto = new Map<string, Set<string>>()
 const ultimoGiro = new Map<string, number>()
 const conto = () => chi.adesso() ?? cfg.cartella()
 
@@ -505,7 +585,12 @@ export async function lotto<T>(f: () => Promise<T> | T, o: { adesso?: Date } = {
   try { return await f() } finally {
     const n = (lotti.get(k) ?? 1) - 1
     if (n > 0) lotti.set(k, n)
-    else { lotti.delete(k); decidi(o.adesso ?? new Date()) }
+    else {
+      lotti.delete(k)
+      const presto = [...(prestoNelLotto.get(k) ?? [])]
+      prestoNelLotto.delete(k)
+      decidi(o.adesso ?? new Date(), presto.length ? { presto } : {})
+    }
   }
 }
 
@@ -516,18 +601,24 @@ export async function lotto<T>(f: () => Promise<T> | T, o: { adesso?: Date } = {
  * «niente da fare» è un esito, non un guasto. Non lancia mai.
  */
 export function decidi(adesso = new Date(), o: { presto?: readonly string[] } = {}): Esito {
-  if (lotti.get(conto())) return { scelti: [], decisioni: [], esito: 'rinviato' }
+  if (lotti.get(conto())) {
+    // «Prepara ora» dentro un lotto: la richiesta sua si ricorda fino alla decisione
+    if (o.presto?.length) prestoNelLotto.set(conto(), new Set([...(prestoNelLotto.get(conto()) ?? []), ...o.presto]))
+    return { scelti: [], decisioni: [], esito: 'rinviato' }
+  }
   ultimoGiro.set(conto(), adesso.getTime())
   try {
     chiudiNotte(adesso)
     const cs = aperti()
     if (!cs.length) { segnaGiro(adesso, 0); return { scelti: [], decisioni: [], esito: nienteSeVuota(adesso) } }
-    const decisioni = valuta(cs, mondo(adesso))
+    const decisioni = valuta(cs, { ...mondo(adesso), presto: new Set(o.presto ?? []) })
     const perId = new Map(cs.map(c => [c.id, c]))
     const scelti: string[] = []
     const quando = adesso.toISOString()
     for (const d of decisioni) {
       const c = perId.get(d.id)
+      // la carta che cede il posto lo lascia prima che nasca quella nuova (il suo candidato lo segna `cedi`)
+      if (d.cede) cedi(d.cede, adesso)
       if (!c) continue
       if (d.stato === 'scelto') {
         const id = promuovi(c, { presto: !!o.presto?.includes(c.id), adesso })
@@ -586,9 +677,34 @@ export function battito(adesso = new Date()) {
   try {
     const f = finestraNotte(adesso)
     if (!regole.inNotte(adesso, f)) return
-    const dal = regole.inizioUltimaNotte(adesso, f).toISOString()
-    if (store.cursore(CURS_VISTA) !== dal) store.segnaCursore(CURS_VISTA, dal)
+    const dal = regole.inizioUltimaNotte(adesso, f)
+    const v = vista()
+    const quarti = v?.dal === dal.toISOString() ? v.quarti : []
+    const q = Math.floor((adesso.getTime() - dal.getTime()) / QUARTO)
+    if (quarti.includes(q)) return
+    store.segnaCursore(CURS_VISTA, JSON.stringify({ dal: dal.toISOString(), quarti: [...quarti, q].slice(-200) }))
   } catch { /* un di più */ }
+}
+
+/** Un quarto d'ora: la notte si conta a quarti, e un quarto con un battito è un quarto sveglio. */
+const QUARTO = 15 * 60_000
+/** Sotto questa parte della notte con un battito, il Mac ha dormito: un battito alle 6:55 non fa una notte sveglia. */
+export const SVEGLIO_MIN = 0.5
+
+/** I quarti d'ora svegli della notte che comincia a `dal`. */
+function vista(): { dal: string; quarti: number[] } | null {
+  try {
+    const x = JSON.parse(store.cursore(CURS_VISTA) ?? 'null')
+    return x && typeof x.dal === 'string' && Array.isArray(x.quarti) ? { dal: x.dal, quarti: x.quarti.filter((n: unknown) => typeof n === 'number') } : null
+  } catch { return null }
+}
+
+/** Quanta parte della notte da `dal` a `fine` il Mac era sveglio, da 0 a 1. */
+export function sveglio(dal: Date, fine: Date): number {
+  const v = vista()
+  const tutti = Math.max(1, Math.ceil((fine.getTime() - dal.getTime()) / QUARTO))
+  if (!v || v.dal !== dal.toISOString()) return 0
+  return Math.min(1, new Set(v.quarti.filter(q => q >= 0 && q < tutti)).size / tutti)
 }
 
 /** La ricevuta di una carta nata da un candidato: nella traccia e nella riga del candidato. */
@@ -614,13 +730,15 @@ export function chiudiNotte(adesso = new Date()) {
     store.segnaCursore(CURS_CHIUSA, dal.toISOString())
     const righe = db.prepare(`SELECT * FROM candidati WHERE stato = 'scelto' AND compito IS NOT NULL AND ricevuta IS NULL AND deciso < ?`).all(fine.toISOString()) as Riga[]
     if (!righe.length) return
-    const buchi = turno.stato(adesso).stanotte.buchi.filter(b => b.da >= dal.toISOString())
-    const vista = store.cursore(CURS_VISTA) === dal.toISOString()
+    // il turno fermato dal budget della notte: le carte rimaste sono trattenute dal budget, non saltate
+    const fermata = turno.stato(adesso).stanotte.fermata
+    const dormiva = sveglio(dal, fine) < SVEGLIO_MIN
     for (const r of righe) {
       const c = store.compito(r.compito!)
       if (!c || !regole.inCoda(c) || c.turno?.tentativi) continue
       if (c.turno?.quando === 'notte' && c.turno.dal >= fine.toISOString()) continue
-      if (buchi.length || !vista) ricevutaDellaCarta(c.id, 'in_attesa_del_mac', 'mac', adesso)
+      if (fermata === 'budget') ricevutaDellaCarta(c.id, 'trattenuto', 'budget', adesso)
+      else if (dormiva) ricevutaDellaCarta(c.id, 'in_attesa_del_mac', 'mac', adesso)
       else ricevutaDellaCarta(c.id, 'saltato', 'finestra', adesso)
     }
   } catch (e) { console.warn('myynd · la ricevuta della notte:', e instanceof Error ? e.message : e) }
@@ -648,7 +766,8 @@ export function ricevute(dal: string, adesso = new Date()): Ricevute {
     chiudiNotte(adesso)
     const riga = (r: Riga): RigaRicevuta => ({ id: r.id, compito: r.compito, titolo: r.titolo, motivo: r.motivo })
     const conRicevuta = (s: tracce.Ricevuta) => (db.prepare(`SELECT * FROM candidati WHERE ricevuta = ? AND ricevutaQuando >= ? ORDER BY ricevutaQuando DESC LIMIT ?`).all(s, dal, RICEVUTE_MAX) as Riga[]).map(riga)
-    const trattenute = (db.prepare(`SELECT * FROM candidati WHERE stato = 'trattenuto' AND deciso >= ? AND scade > ? ORDER BY punteggio DESC LIMIT ?`).all(dal, adesso.toISOString(), RICEVUTE_MAX) as Riga[]).map(riga)
+    // trattenute: dalla politica (ancora in gara), o carte rimaste in coda perché il budget della notte ha fermato il turno
+    const trattenute = (db.prepare(`SELECT * FROM candidati WHERE (stato = 'trattenuto' AND deciso >= ? AND scade > ?) OR (ricevuta = 'trattenuto' AND ricevutaQuando >= ?) ORDER BY punteggio DESC LIMIT ?`).all(dal, adesso.toISOString(), dal, RICEVUTE_MAX) as Riga[]).map(riga)
     const inAttesaDelMac = conRicevuta('in_attesa_del_mac').filter(r => { const c = r.compito ? store.compito(r.compito) : null; return !!c && regole.inCoda(c) })
     const saltate = conRicevuta('saltato')
     const scelti = Number((db.prepare(`SELECT COUNT(*) AS n FROM candidati WHERE stato = 'scelto' AND deciso >= ?`).get(dal) as { n: number }).n)

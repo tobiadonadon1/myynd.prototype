@@ -7,7 +7,7 @@
 
 import { test, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Documento } from './store.ts'
@@ -180,16 +180,28 @@ test('10 · niente che valga: non si riempie la notte, e «niente da fare» è s
   assert.equal(candidati.ricevute(dal, ORA).nienteDaFare, true)
 })
 
-test('11 · il mese finito: trattenuto con la quota del mese come perché', () => {
+test('11 · il budget della notte finito: trattenuto con la notte come perché, non il mese', () => {
   turno.imposta({ budget: 0.05 })
   const c = lavoro('caro')
   candidati.proponi(c)
   const e = candidati.decidi(ORA)
   assert.deepEqual(e.scelti, [])
-  assert.deepEqual(stato(c.id), ['trattenuto', 'mese'])
+  assert.deepEqual(stato(c.id), ['trattenuto', 'notte'])
   const r = candidati.ricevute(iso(ORA.getTime() - 60_000), ORA)
-  assert.deepEqual(r.trattenute.map(x => x.motivo), ['mese'])
+  assert.deepEqual(r.trattenute.map(x => x.motivo), ['notte'])
   assert.equal(r.nienteDaFare, false, 'trattenuto non è niente da fare')
+})
+
+test('11b · la quota del mese è il tetto che manca: allora, e solo allora, il perché è il mese', () => {
+  // venti centesimi al mese, pagati da lui: `quota-mese.ts` conta in micro-dollari, la coda in dollari
+  cfg.aggiorna({ quota: 0.2 })
+  const r = candidati.resti(ORA)
+  assert.ok(r.mese !== null && Math.abs(r.mese - 0.2) < 1e-9, `mese: ${r.mese}`)
+  assert.ok((r.notte ?? 0) > r.mese!, `la notte (tre dollari) è più larga del mese: ${JSON.stringify(r)}`)
+  const c = lavoro('mese', { costo: 0.4 })
+  candidati.proponi(c)
+  candidati.decidi(ORA)
+  assert.deepEqual(stato(c.id), ['trattenuto', 'mese'])
 })
 
 test('12 · il Mac addormentato tutta la notte: la carta scelta aspetta il Mac', () => {
@@ -213,8 +225,10 @@ test('13 · il Mac sveglio ma il turno fermo: la carta ha perso la sua finestra'
   const c = lavoro('finestra')
   candidati.proponi(c)
   const [id] = candidati.decidi(ieri).scelti
-  candidati.battito(notte)
   const inizio = new Date(ieri); inizio.setHours(22, 0, 0, 0)
+  // il turno ha battuto tutta la notte, un quarto d'ora dopo l'altro
+  for (let t = inizio.getTime(); t < inizio.getTime() + 9 * 3_600_000; t += 15 * 60_000) candidati.battito(new Date(t))
+  void notte
   const r = candidati.ricevute(inizio.toISOString(), stamattina)
   assert.deepEqual(r.saltate.map(x => [x.compito, x.motivo]), [[id, 'finestra']])
   assert.equal(r.inAttesaDelMac.length, 0)
@@ -271,7 +285,7 @@ test('17 · un candidato già deciso non torna in gara riproposto', () => {
 test('18 · la politica pura è deterministica: lo stesso mondo, lo stesso ordine, qualunque sia l’ordine d’arrivo', () => {
   const cs = [lavoro('a', { valore: 0.8, titolo: 'Alpha deliverable draft' }), lavoro('b', { valore: 0.7, titolo: 'Bravo research synthesis' }), lavoro('c', { valore: 0.75, titolo: 'Charlie pricing table' })]
   const mondo = {
-    adesso: ORA, posti: 2, resto: null, vive: [], conRiga: new Set<string>(), recenti: [], chiaviScelte: new Set<string>(),
+    adesso: ORA, posti: 2, restoNotte: null, restoMese: null, vive: [], conRiga: new Set<string>(), recenti: [], chiaviScelte: new Set<string>(),
     regola: () => 'auto' as const, budgetFinito: () => false, valido: () => true, confermato: () => false, scadenza: () => null
   }
   const uno = candidati.valuta(cs, mondo).map(d => [d.id, d.stato])
@@ -307,7 +321,7 @@ test('20 · una giornata tipica: quanti candidati, quanti scelti, perché gli al
   cs.push({ ...lavoro('mail0'), id: 'primo-giorno:mail0', genere: 'primo-giorno', valore: 0.65, titolo: 'Reply 0 about topic number 0' })
   cs.push({ ...lavoro('poco'), valore: 0.2, incertezza: 0.6, titolo: 'Tidy the downloads folder names' })
   const mondo = {
-    adesso: ORA, posti: 12, resto: 3, vive: [], conRiga: new Set<string>(), recenti: [], chiaviScelte: new Set<string>(),
+    adesso: ORA, posti: 12, restoNotte: 3, restoMese: null, vive: [], conRiga: new Set<string>(), recenti: [], chiaviScelte: new Set<string>(),
     regola: () => 'auto' as const, budgetFinito: () => false, valido: () => true, confermato: () => false, scadenza: () => null
   }
   const d = candidati.valuta(cs, mondo)
@@ -320,3 +334,148 @@ test('20 · una giornata tipica: quanti candidati, quanti scelti, perché gli al
   // restano fuori le meno utili: la ricerca più incerta e le idee per X, non la posta
   assert.deepEqual(per('trattenuto').map(x => x.id).sort(), ['lavoro:q2', 'lavoro:x'])
 })
+
+// — la revisione: inizio —
+
+test('21 · titoli fatti con lo stesso stampo, progetti diversi: due lavori, non un doppione', () => {
+  const alpha = progetti.scrivi({ nome: 'Alpha', obiettivo: 'Ship the alpha' })
+  const beta = progetti.scrivi({ nome: 'Beta', obiettivo: 'Ship the beta' })
+  store.scriviCompito({ id: 'n-alpha', testo: 'Update the Notion page for Alpha', progetto: alpha.id, ordine: 'a', origine: 'quadro' })
+  const b = lavoro('notion-beta', { progetto: beta.id, titolo: 'Update the Notion page for Beta' })
+  assert.equal(candidati.simile('Update the Notion page for Alpha', 'Update the Notion page for Beta'), true, 'lo stampo è simile')
+  candidati.proponi(b)
+  candidati.decidi(ORA)
+  assert.deepEqual(stato(b.id), ['scelto', null])
+  // e un lavoro buttato su Alpha non ferma lo stesso stampo su Beta
+  store.scriviCompito({ id: 'v-alpha', testo: 'Video script for Alpha', progetto: alpha.id, ordine: 'b', origine: 'quadro' })
+  tracce.inizia({ compito: 'v-alpha' }); tracce.consegnata('v-alpha'); tracce.decidi('v-alpha', 'scartato')
+  store.cambiaStatoCompito('v-alpha', 'fatto')
+  const v = lavoro('video-beta', { progetto: beta.id, titolo: 'Video script for Beta' })
+  candidati.proponi(v)
+  candidati.decidi(ORA)
+  assert.deepEqual(stato(v.id), ['scelto', null])
+  // dentro lo stesso progetto, invece, è un doppione
+  const a2 = lavoro('notion-alpha-2', { progetto: alpha.id, titolo: 'Update the Notion page for Alpha' })
+  candidati.proponi(a2)
+  candidati.decidi(ORA)
+  assert.deepEqual(stato(a2.id), ['scartato', 'doppione'])
+})
+
+test('22 · un lavoro più utile arrivato tardi prende il posto di uno meno utile in coda; le carte sue non si toccano', () => {
+  turno.imposta({ carte: 1 })
+  const idee = lavoro('idee', { genere: 'contenuto', valore: 0.5, incertezza: 0.35, costo: 0.3, titolo: 'Post ideas for X' })
+  candidati.proponi(idee)
+  const [prima] = candidati.decidi(ORA).scelti
+  assert.ok(prima)
+  const risposta = lavoro('risposta', { genere: 'risposta', valore: 0.7, incertezza: 0.2, costo: 0.1, titolo: 'Reply to Jane about the pilot scope', eventAt: ORA.toISOString() })
+  candidati.proponi(risposta)
+  const e = candidati.decidi(ORA)
+  assert.equal(e.scelti.length, 1)
+  assert.deepEqual(stato(risposta.id), ['scelto', null])
+  assert.equal(store.compito(prima)!.stato, 'ritirato')
+  assert.equal(store.compito(prima)!.esito, candidati.CEDUTO)
+  assert.equal(tracce.ultimaDi(prima)!.ricevuta, 'trattenuto')
+  assert.deepEqual(stato(idee.id), ['trattenuto', 'notte'], 'torna in gara')
+  // un posto in più: la carta che aveva ceduto rientra, la stessa
+  turno.imposta({ carte: 2 })
+  assert.deepEqual(candidati.decidi(ORA).scelti, [prima])
+  assert.equal(store.compito(prima)!.stato, 'aperto')
+  assert.equal(store.compito(prima)!.turno?.da, 'myynd')
+})
+
+test('22b · mai la carta sua, mai una partita: senza un posto da prendere, il candidato aspetta', () => {
+  turno.imposta({ carte: 2 })
+  store.scriviCompito({ id: 'sua', testo: 'Prepare the board deck', ordine: 'a' })
+  store.mettiCompitoInCoda('sua', 'tutto', { da: 'tu', quando: 'presto', dal: ORA.toISOString(), tentativi: 0 })
+  const debole = lavoro('debole', { valore: 0.5, incertezza: 0.4, titolo: 'Summarise the onboarding interviews' })
+  candidati.proponi(debole)
+  const [partita] = candidati.decidi(ORA).scelti
+  store.scriviTurnoCompito(partita, { da: 'myynd', quando: 'notte', dal: ORA.toISOString(), tentativi: 1 })
+  const forte = lavoro('forte', { valore: 0.95, incertezza: 0.05, titolo: 'Draft the investor update for October' })
+  candidati.proponi(forte)
+  candidati.decidi(ORA)
+  assert.deepEqual(stato(forte.id), ['trattenuto', 'notte'])
+  assert.equal(store.compito('sua')!.stato, 'aperto')
+  assert.equal(store.compito(partita)!.stato, 'aperto')
+})
+
+test('23 · «Prepara ora»: chiesto da lei passa fuori dai posti e dalla soglia, ma non contro il mandato', async () => {
+  turno.imposta({ carte: 1 })
+  store.scriviCompito({ id: 'sua', testo: 'Prepare the board deck', ordine: 'a' })
+  store.mettiCompitoInCoda('sua', 'tutto', { da: 'tu', quando: 'presto', dal: ORA.toISOString(), tentativi: 0 })
+  const poco = lavoro('chiesto', { valore: 0.2, incertezza: 0.5 })
+  candidati.proponi(poco)
+  const [id] = candidati.decidi(ORA, { presto: [poco.id] }).scelti
+  assert.ok(id, 'nessun posto e poco valore, ma l’ha chiesto lei')
+  assert.equal(store.compito(id)!.turno?.quando, 'presto')
+  const p = progetti.scrivi({ nome: 'Atlas', obiettivo: 'Launch' })
+  mandato.salva(p.id, { classi: { file: 'mai' } }, { conferma: true })
+  const vietato = lavoro('vietato', { progetto: p.id })
+  candidati.proponi(vietato)
+  assert.deepEqual(candidati.decidi(ORA, { presto: [vietato.id] }).scelti, [])
+  assert.deepEqual(stato(vietato.id), ['trattenuto', 'mandato'])
+  // dentro un lotto la richiesta si ricorda fino alla decisione
+  const tardi = lavoro('nel-lotto', { valore: 0.2, incertezza: 0.5 })
+  await candidati.lotto(async () => {
+    candidati.proponi(tardi)
+    assert.equal(candidati.decidi(ORA, { presto: [tardi.id] }).esito, 'rinviato')
+  }, { adesso: ORA })
+  assert.deepEqual(stato(tardi.id), ['scelto', null])
+  assert.equal(store.compito(candidati.cartaDi(tardi))!.turno?.quando, 'presto')
+})
+
+test('23b · «Prepara ora» dalla rotta: la carta, o il perché', async () => {
+  assert.deepEqual(await iniziativa.prepara(ORA.getTime(), { presto: true }, () => true), { compito: null, perche: iniziativa.PERCHE.niente })
+  iniziativa.imposta(false)
+  assert.equal((await iniziativa.prepara(ORA.getTime(), { presto: true }, () => true)).perche, iniziativa.PERCHE.spente)
+  iniziativa.imposta(true)
+  // anche con la bacheca piena e il ritmo appena usato, quello che chiede lei nasce
+  turno.imposta({ carte: 1 })
+  store.scriviCompito({ id: 'sua', testo: 'Prepare the board deck', ordine: 'a' })
+  store.mettiCompitoInCoda('sua', 'tutto', { da: 'tu', quando: 'presto', dal: ORA.toISOString(), tentativi: 0 })
+  store.salvaDocumenti([mail('adesso')])
+  const r = await iniziativa.prepara(ORA.getTime(), { presto: true }, () => true)
+  assert.ok(r.compito, JSON.stringify(r))
+  assert.equal(store.compito(r.compito!)!.turno?.quando, 'presto')
+})
+
+test('24 · un battito alle 6:55 non fa una notte sveglia; il budget finito dice «trattenuto: budget»', () => {
+  const ieri = new Date(ORA); ieri.setDate(ieri.getDate() - 1); ieri.setHours(15, 0, 0, 0)
+  const inizio = new Date(ieri); inizio.setHours(22, 0, 0, 0)
+  const stamattina = new Date(ORA); stamattina.setHours(8, 0, 0, 0)
+  const c = lavoro('quasi')
+  candidati.proponi(c)
+  const [id] = candidati.decidi(ieri).scelti
+  const tardi = new Date(stamattina); tardi.setHours(6, 55, 0, 0)
+  candidati.battito(tardi)
+  assert.ok(candidati.sveglio(inizio, new Date(stamattina.setHours(7, 0, 0, 0))) < candidati.SVEGLIO_MIN)
+  const r = candidati.ricevute(inizio.toISOString(), new Date(stamattina.setHours(8, 0, 0, 0)))
+  assert.deepEqual(r.inAttesaDelMac.map(x => x.compito), [id])
+  assert.equal(r.saltate.length, 0)
+})
+
+test('24b · il turno fermato dal budget della notte: la carta rimasta è trattenuta dal budget, non saltata', () => {
+  const ieri = new Date(ORA); ieri.setDate(ieri.getDate() - 1); ieri.setHours(15, 0, 0, 0)
+  const inizio = new Date(ieri); inizio.setHours(22, 0, 0, 0)
+  const stamattina = new Date(ORA); stamattina.setHours(8, 0, 0, 0)
+  const c = lavoro('budget')
+  candidati.proponi(c)
+  const [id] = candidati.decidi(ieri).scelti
+  for (let t = inizio.getTime(); t < inizio.getTime() + 9 * 3_600_000; t += 15 * 60_000) candidati.battito(new Date(t))
+  const giornata = new Date(stamattina); giornata.setHours(7, 0, 0, 0)
+  const fermata = { perche: 'budget', quando: new Date(inizio.getTime() + 3_600_000).toISOString() }
+  writeFileSync(join(cfg.cartella(), 'turno.json'), JSON.stringify({ giornata: giornata.toISOString(), avviate: 0, notte: { dal: inizio.toISOString(), fermata, buchi: [] } }))
+  const r = candidati.ricevute(inizio.toISOString(), stamattina)
+  assert.deepEqual(r.trattenute.map(x => [x.compito, x.motivo]), [[id, 'budget']])
+  assert.equal(r.saltate.length, 0)
+  assert.equal(tracce.ultimaDi(id)!.ricevuta, 'trattenuto')
+})
+
+test('25 · nell’ordine del turno la politica pesa da zero a quattro: una carta sua pari passa prima', () => {
+  assert.equal(turno.bonusDellaPolitica(0), 0)
+  assert.equal(turno.bonusDellaPolitica(0.5), 2)
+  assert.equal(turno.bonusDellaPolitica(3), 4)
+  assert.ok(turno.bonusDellaPolitica(1) < 5, 'sotto il più cinque delle carte sue')
+})
+
+// — la revisione: fine —
