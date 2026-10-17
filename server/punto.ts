@@ -445,7 +445,8 @@ export function raccogli(dal: string, primo = false, adesso = Date.now()): Mater
    * su sua richiesta. Il lavoro consegnato si vede dove si può toccare, cioè
    * nelle righe della lista (`preparate`).
    */
-  const azioni = store.azioni(200).filter(a => a.quando >= dal)
+  // le azioni «automazione» sono di prima: le automazioni non ci sono più, e non sono una novità
+  const azioni = store.azioni(200).filter(a => a.quando >= dal && a.tipo !== 'automazione')
   const vive = store.elencoCompiti()
   const data = parti(new Date())
   const oggi = `${data.anno}-${String(data.mese).padStart(2, '0')}-${String(data.giorno).padStart(2, '0')}`
