@@ -370,7 +370,9 @@ export const EPISODI: Episodio[] = [
       const b = r.bozze[0]
       if (!b?.corpo.includes('5,200 to 6,000') || /[–—]/.test(b.corpo)) g.push(`reply: ${b?.corpo}`)
       if (b && /[\r\n—]/.test(b.oggetto)) g.push(`subject: ${b.oggetto}`)
-      if (!r.file || !readFileSync(r.file, 'utf8').includes('Phase 1 — Discovery\nPhase 2 — Build\nSupport: Mon–Fri')) g.push('the document lost its dashes')
+      // le altre righe restano: il modello può scrivere il trattino come vuole, ma non perdere o cambiare la riga
+      const lineette = (x: string) => x.replace(/\s*[—–:-]\s*/g, ' - ')
+      if (!r.file || !lineette(readFileSync(r.file, 'utf8')).includes(lineette('Phase 1 — Discovery\nPhase 2 — Build\nSupport: Mon–Fri'))) g.push('the document lost its other lines')
       return g
     }
   }
