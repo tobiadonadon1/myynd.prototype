@@ -43,7 +43,6 @@ export function SenderRules() {
   if(!mostraRegoleMittenti(rules,open,error))return null
   return <details className="sender-rules" onToggle={e=>setOpen(e.currentTarget.open)}>
     <summary>{t('Mittenti che hai messo via')}{!!rules?.length && <small>{rules.length}</small>}</summary>
-    <p className="sender-rules-description">{t('La posta di questi mittenti va dritta in archivio.')}</p>
     <form onSubmit={add}>
       <label>{t('Indirizzo esatto del mittente')}<input type="email" required maxLength={254} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" value={sender} disabled={busy} onChange={e=>setSender(e.target.value)} /></label>
       <button type="submit" disabled={busy || rules===null || !sender.trim()}>{busy?t('Salvo…'):t('Archivia le prossime email')}</button>

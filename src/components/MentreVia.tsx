@@ -156,7 +156,7 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
   const notte = righeNotte(m?.via?.notte, conti)
   if (!m || (!qualcosa(conti) && !cima.length && !lettera && !riassunto && !qualcosaDellaNotte(notte))) return null
   return (
-    <section aria-labelledby="via-titolo" style={{ ...CARTA, flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
+    <section aria-labelledby="via-titolo" style={{ ...CARTA, flexDirection: 'column', flexWrap: 'nowrap', alignItems: 'stretch', gap: 0 }}>
       <h2 id="via-titolo" style={{ margin: 0, fontSize: 15, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{t('Mentre non c’eri.')}</h2>
       {pezzi.length > 0 && (
         <p className="via-frase">

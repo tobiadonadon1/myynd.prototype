@@ -3351,7 +3351,7 @@ const EN: Record<string, string> = {
   'Aspetta il permesso di Accessibilità': 'Waiting for Accessibility permission',
   'App da non guardare': 'Apps to never watch',
   'Siti da non guardare': 'Sites to never watch',
-  'Al modello vanno solo riassunti corti, coi nomi di app, documenti e siti, e il diario del giorno. Il testo delle finestre non lascia mai questo Mac.': 'Only short summaries with app, document and site names, and the day log, go to the model. Raw window text never leaves this Mac.',
+  'Al modello va il diario corto. Il testo delle finestre resta su questo Mac.': 'The model gets the short day log. Window text stays on this Mac.',
   'Cosa ho visto oggi': 'What I saw today',
   'Al modello: nomi di app, documenti e siti, e il diario. Il testo delle finestre mai.': 'To the model: app, document and site names, and the day log. Raw window text, never.',
   'La linea delle attività è accesa. Si mette in pausa dalla barra dei menu o qui nelle Preferenze.': 'The activity timeline is on. Pause it from the menu bar, or in Preferences.',

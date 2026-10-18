@@ -64,7 +64,7 @@ export function Pacchetto({ c, l }: { c: Compito; l: Lista }) {
       {r && <div style={PARTE}>
         <div style={TITOLO}>{t('La risposta')}{r.a ? ` · ${r.a}` : ''}</div>
         {slack
-          ? <Casella valore={testo} cambia={setTesto} righe={Math.min(8, testo.split('\n').length + 1)} etichetta={t('La risposta')} />
+          ? <Casella valore={testo} cambia={setTesto} righe={Math.min(8, testo.split('\n').length + 1)} aria-label={t('La risposta')} />
           : <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 280, overflowY: 'auto' }}>{r.testo}</div>}
         <div style={{ ...PICCOLO, marginTop: 6 }}>
           {r.inviata ? t('Mandata su Slack.')

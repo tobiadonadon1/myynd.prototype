@@ -33,6 +33,7 @@ import { velato } from '../colori-progetto'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
 import { CAMPO, Scatola } from '../oggi/Scatola'
 import { RigaIpotesi } from '../oggi/RigaIpotesi'
+import { Pacchetto } from '../oggi/Pacchetto'
 import { LasciaConRagione, RigaGuadagnata, RigaImparato } from '../oggi/Imparato'
 import { Testo } from '../Testo'
 import { aspettanoFuori, blocchiConViste, statoLavoro, vistaDaPiegare } from '../via'
@@ -895,7 +896,9 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   // lei, non il documento: quello sta nel file
   const intero = pronto && !c.consegna ? (c.risultato ?? '').trim() || testo : testo
   const corta = taglia(testo, 150)
-  const espandibile = !chiede && intero.length > corta.length
+  // il pacchetto di seguito non si approva alla cieca: si apre, e dentro c'è la risposta, il documento e il gesto vero
+  const pacchetto = c.origine === 'pacchetto' && (c.stato === 'pronto' || c.stato === 'chiede')
+  const espandibile = pacchetto || (!chiede && intero.length > corta.length)
   const apri = () => { if (espandibile) setAperta(x => !x) }
   const parlane = siPuoParlarne() ? () => v.discutiCompito(c) : null
   const email = pronto && c.email && azioneEmail(c).tipo === 'invia' && puoMandare(c)
@@ -914,10 +917,10 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   // pronta e non andata da nessuna parte: il suo sì è il gesto, e si vede senza passarci sopra
   const daDire = pronto && lavoro === 'te' && !c.proposta && c.prova?.esito !== 'fail' && !mandata
   // in vista sulla riga il gesto è un verbo: «Approva», non un «Va bene» da solo che non dice cosa fa
-  const etichetta = daDire && !email ? t('Approva') : pronto && !mandata ? t('Va bene') : t('Fatto')
+  const etichetta = pacchetto ? (aperta ? t('Chiudi') : t('Apri')) : daDire && !email ? t('Approva') : pronto && !mandata ? t('Va bene') : t('Fatto')
   const vaBene = (
     <Hov as="button" type="button" aria-label={`${etichetta}: ${titolo}`} title={daDire && !email ? `${etichetta}: ${titolo}` : undefined}
-      onClick={fermo(() => (mandata ? l.chiudi(c.id, t('Mandata dalla tua posta.')) : pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
+      onClick={fermo(() => (pacchetto ? apri() : mandata ? l.chiudi(c.id, t('Mandata dalla tua posta.')) : pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
       style={daDire && email ? GESTO : PILLOLA} hover={daDire && email ? { color: 'var(--rame-testo)' } : PILLOLA_SOPRA}>{etichetta}</Hov>
   )
   const manda = email && (
@@ -939,7 +942,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             {nuova && <span role="img" aria-label={t('Nuova')} title={t('Nuova')} style={{ flex: 'none', width: 6, height: 6, borderRadius: '50%', background: 'var(--rame)' }} />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
-          {testo && (aperta && pronto && !c.consegna
+          {pacchetto && aperta ? <div onClick={e => e.stopPropagation()}><Pacchetto c={c} l={l} /></div> : testo && (aperta && pronto && !c.consegna
             // aperta, il lavoro intero si legge con le fonti in apice, senza la riga dell'ipotesi che sta già sotto
             ? <div style={{ ...PERCHE, whiteSpace: 'pre-line' }}><Testo testo={testoMostrato(intero, c.ipotesi)} fonti={c.fonti ?? []} onApri={v.apriFonte} aCapo /></div>
             : <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>)}
