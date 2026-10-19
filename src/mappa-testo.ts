@@ -27,7 +27,7 @@ export function motivoMappa(motivo: string | undefined): string {
     case 'mittente_sconosciuto': return t('Il mittente non è stato identificato con certezza.')
     case 'posta_in_serie': return t('Messaggio automatico o inviato a una lista; escluso dalle attività.')
     case 'letta_senza_richiesta': return t('Già letto, senza una nuova richiesta da seguire.')
-    case 'posta_diretta_recente': return t('Messaggio diretto e recente; da valutare insieme ai tuoi impegni.')
+    case 'posta_diretta_recente': case 'messaggio_di_una_persona': return t('Messaggio diretto e recente; da valutare insieme ai tuoi impegni.')
     case 'aggiornamento_di_servizio': return t('Aggiornamento su un ordine, una consegna o un servizio.')
     case 'evento': return t('Un evento del tuo calendario.')
     case 'attivita_repository': return t('Attività recente del repository, utile per il punto.')

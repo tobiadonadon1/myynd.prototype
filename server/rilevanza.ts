@@ -54,6 +54,24 @@ const NIENTE_DA_FARE = /\b(?:no action (?:is )?(?:needed|required)|nessuna azion
 const RICHIESTA = /\b(?:can|could|would|will) you\b|\b(?:please|kindly|ti chiedo|potresti|puoi|per favore|ti va|mi serve|ci serve|mi servirebbe|ci servirebbe|mi servono|ci servono|vorrei|need your|needs your|awaiting your|waiting for your|aspetto (?:la tua|una)|attendo (?:la tua|una)|review requested|requested (?:your|a) review|assigned to you|assegnat[oa] a te|action required|richiesta (?:la tua|una)|(?:mi|ci) (?:confermi|confermate|mandi|mandate|dici|dite|fai sapere|fate sapere))\b/i
 const DOMANDA_DIRETTA = /\b(?:are you|do you|did you|have you|what (?:do you|are your)|does .{0,65} work|is .{0,65} (?:ok|okay)|sei disponibile|siete disponibili|che ne pensi|cosa ne pensi|ti (?:va|torna)|vi (?:va|torna))\b[^?]{0,200}\?/i
 
+/*
+ * Il messaggio di una persona che una piattaforma inoltra: «Kyrylo has sent
+ * you a message about their Nissan Kicks», da Turo <noreply@mail.turo.com>,
+ * con dentro le parole del proprietario dell'auto. Finiva fra la posta in
+ * serie, e Tobia (19 ott 2026): «the only thing is, it's probably the one
+ * from Turo». Stretta: il titolo comincia con un nome proprio (maiuscola, al
+ * più tre parole) e dice che quella persona ti ha scritto. «Someone sent you
+ * a message», «You have a new message from our team!», gli inviti di
+ * LinkedIn e gli annunci di lavoro non ci cadono.
+ */
+const NOME = String.raw`(?!(?:Someone|Somebody|Anyone|Qualcuno|Nessuno|You|We|Our|The|Your|A|An|Il|La|Lo|Un|Una|Team|Support)\b)\p{Lu}[\p{L}'’.-]*(?: \p{Lu}[\p{L}'’.-]*){0,2}`
+const MESSAGGIO_DI_UNA_PERSONA = new RegExp(
+  `^\\W*(?:${NOME} (?:has sent you a (?:new )?message|sent you a (?:new )?message|(?:has )?messaged you|(?:has )?replied to your message|ti ha (?:inviato|mandato|scritto) un (?:nuovo )?messaggio|ha risposto al tuo messaggio)|New message from ${NOME}(?:$|[\\s:,.!(-]))`,
+  'u'
+)
+/** Il titolo dice che una persona con un nome ti ha scritto, attraverso una piattaforma. */
+export const messaggioDiUnaPersona = (titolo: string): boolean => MESSAGGIO_DI_UNA_PERSONA.test(titolo.trim())
+
 const MARCATORE_INOLTRO = /[- ]{2,}\s*(?:Forwarded message|Messaggio inoltrato)\s*[- ]{2,}/i
 const INTESTAZIONI = /^(?:(?:From|Da|Date|Data|Sent|Inviato|Subject|Oggetto|To|A|Cc):.*\n?)+/i
 
@@ -103,9 +121,13 @@ export function classificaAttenzione(
   if (!email && (ARCHIVIO.test(d.titolo) || ARCHIVIO.test(d.percorso ?? ''))) return no('materiale_di_riferimento')
   if (email) {
     if (!indirizzoAttenzione(d.autore)) return no('mittente_sconosciuto')
+    // una persona con un nome, inoltrata da una piattaforma che scrive da noreply: è posta
+    // diretta, con le regole della posta diretta (una già letta e vecchia resta fuori, una
+    // pubblicità resta in serie). Prima dei servizi: «Your delivery is confirmed» detto da lei è suo
+    const persona = messaggioDiUnaPersona(d.titolo)
     // Service events belong in Brief even when their connector correctly
     // classified the sender as automated or bulk.
-    if (TRANSAZIONE.test(testo) && (d.massa || mittenteAutomatico(d.autore) || !contieneRichiesta(testo))) {
+    if (!persona && TRANSAZIONE.test(testo) && (d.massa || mittenteAutomatico(d.autore) || !contieneRichiesta(testo))) {
       return { destinazione: 'brief', motivo: 'aggiornamento_di_servizio' }
     }
     // un obbligo con una data, anche da un mittente automatico: le tasse, la banca,
@@ -114,9 +136,9 @@ export function classificaAttenzione(
     if (!d.massa && !PROMO.test(testo) && OBBLIGO.test(testo) && CON_SCADENZA.test(testo) && !NIENTE_DA_FARE.test(testo)) {
       return { destinazione: 'feed', motivo: 'obbligo_con_scadenza' }
     }
-    if (d.massa || mittenteAutomatico(d.autore) || PROMO.test(testo)) return no('posta_in_serie')
+    if (PROMO.test(testo) || (!persona && (d.massa || mittenteAutomatico(d.autore)))) return no('posta_in_serie')
     if (d.letto && quando < adesso - GIORNO && !contieneRichiesta(testo)) return no('letta_senza_richiesta')
-    return { destinazione: 'feed', motivo: 'posta_diretta_recente' }
+    return { destinazione: 'feed', motivo: persona ? 'messaggio_di_una_persona' : 'posta_diretta_recente' }
   }
   if (!documentoVero(d)) return no('file_tecnico')
   /*

@@ -21,18 +21,22 @@ test('i conti: bozze sono risposte e testi, i file e Notion a parte', () => {
   assert.deepEqual(c, { letti: 41, bozze: 3, file: 1, notion: 1, daParte: 29 })
   assert.deepEqual(contiVia(null), { letti: 0, bozze: 0, file: 0, notion: 0, daParte: 0 })
   assert.equal(qualcosa(contiVia(null)), false)
-  assert.equal(qualcosa(contiVia(via([], 0, 3))), true, 'anche solo messo da parte è qualcosa')
+  assert.equal(qualcosa(contiVia(via([], 10, 10))), false, 'letto e messo da parte non sono notizie: la carta non nasce')
+  assert.equal(qualcosa(contiVia(via([lavoro('a', { genere: 'bozza' })], 10, 9))), true, 'una bozza sì')
+  assert.equal(qualcosa(contiVia({ ...via([], 41, 29), conti: { bozze: 0, file: 0, notion: 1 } })), true, 'una pagina di Notion sì')
 })
 
-test('la frase: i conti a zero non si dicono, l’ultimo con «and», ogni conto un pezzo che si apre', () => {
+test('la frase: solo le cose fatte, mai letto o messo da parte; l’ultimo con «and», ogni conto un pezzo che si apre', () => {
   const testo = (p: { testo: string }[]) => p.map(x => x.testo).join('')
   const tutti = frase({ letti: 41, bozze: 2, file: 1, notion: 1, daParte: 29 }, 'en')
-  assert.equal(testo(tutti), 'I read 41 things, prepared 2 drafts, wrote 1 file, updated 1 Notion page and set aside 29.')
-  assert.deepEqual(tutti.filter(p => p.conto).map(p => p.conto), ['letti', 'bozze', 'file', 'notion', 'daParte'])
-  assert.equal(testo(frase({ letti: 1, bozze: 0, file: 0, notion: 0, daParte: 0 }, 'en')), 'I read 1 thing.')
-  assert.equal(testo(frase({ letti: 12, bozze: 0, file: 3, notion: 0, daParte: 0 }, 'en')), 'I read 12 things and wrote 3 files.')
-  assert.equal(testo(frase({ letti: 41, bozze: 1, file: 0, notion: 2, daParte: 29 }, 'it')), 'Ho letto 41 cose, preparato 1 bozza, aggiornato 2 pagine di Notion e messo da parte 29.')
+  assert.equal(testo(tutti), 'I prepared 2 drafts, wrote 1 file and updated 1 Notion page.')
+  assert.deepEqual(tutti.filter(p => p.conto).map(p => p.conto), ['bozze', 'file', 'notion'])
+  assert.equal(testo(frase({ letti: 12, bozze: 0, file: 3, notion: 0, daParte: 0 }, 'en')), 'I wrote 3 files.')
+  assert.equal(testo(frase({ letti: 41, bozze: 1, file: 0, notion: 2, daParte: 29 }, 'it')), 'Ho preparato 1 bozza e aggiornato 2 pagine di Notion.')
+  // la sera del 19 ott: «I read 10 things and set aside 10.» non si dice più
+  assert.deepEqual(frase({ letti: 10, bozze: 0, file: 0, notion: 0, daParte: 10 }, 'en'), [], 'solo letto e scartato: nessuna frase')
   assert.deepEqual(frase({ letti: 0, bozze: 0, file: 0, notion: 0, daParte: 0 }, 'en'), [], 'niente: nessuna frase, nessuna carta')
+  for (const p of tutti) assert.ok(!/read|set aside/.test(p.testo))
 })
 
 test('in cima: al più tre, solo fatte e non viste; quelle che aspettano lui stanno nei blocchi', () => {
@@ -148,6 +152,19 @@ test('«niente da fare» solo quando è la verità intera: con una cosa fatta, n
   assert.equal(righeNotte(vuota, { letti: 4, bozze: 0, file: 0, notion: 0, daParte: 4 }).niente, true)
   assert.equal(righeNotte(vuota, { letti: 4, bozze: 1, file: 0, notion: 0, daParte: 3 }).niente, false)
   assert.equal(qualcosaDellaNotte(righeNotte(null, { letti: 0, bozze: 0, file: 0, notion: 0, daParte: 0 })), false)
+})
+
+test('una notte che ha solo letto e messo da parte non fa nascere la carta; una vera notizia della notte sì', () => {
+  const vuota = { inAttesaDelMac: [], saltate: [], trattenute: [], nienteDaFare: true, buchi: [] }
+  const soloLetto = { letti: 10, bozze: 0, file: 0, notion: 0, daParte: 10 }
+  const r = righeNotte(vuota, soloLetto)
+  assert.equal(r.niente, true, 'la riga resta, se la carta c’è per altro')
+  assert.equal(qualcosaDellaNotte(r), false, '«niente che valesse la pena» da solo non è una notizia')
+  assert.equal(qualcosa(soloLetto), false)
+  const trattenuta = righeNotte({ ...vuota, nienteDaFare: false, trattenute: [{ id: 't', compito: 'c', titolo: 'T', motivo: 'mese' }] }, soloLetto)
+  assert.equal(qualcosaDellaNotte(trattenuta), true)
+  const dormiva = righeNotte({ ...vuota, nienteDaFare: false, inAttesaDelMac: [{ id: 'm', compito: 'c', titolo: 'M', motivo: 'mac' }] }, soloLetto)
+  assert.equal(qualcosaDellaNotte(dormiva), true)
 })
 
 // — la coda unica: fine —
