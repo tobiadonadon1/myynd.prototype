@@ -1725,6 +1725,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       onClick: () => { chiudiIntervista(); setThread(ch.id) },
       // chiede una volta, sul posto: il cestino della riga se ne occupa
       onDelete: async () => {
+        // una chat tolta mentre risponde: prima si ferma la risposta, che se no la salverebbe di nuovo
+        filiChat.current.get(ch.id)?.abort()
         try {
           await api.eliminaChat(ch.id)
         } catch (e) {
