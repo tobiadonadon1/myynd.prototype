@@ -554,11 +554,6 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             {lista.inAttesa > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? 'var(--avorio)' : 'var(--rame)' }} />}
             {!rail && lista.inAttesa === 0 && lista.daFare > 0 && <span style={v.badge}>{lista.daFare}</span>}
           </a>
-          {/* il succo di ogni progetto, come l'ha capito: si legge e basta */}
-          <a href="#" onClick={v.goProgetti} style={nav(v.navProgetti)} title={rail ? t('Progetti') : undefined}>
-            <IconProgetti style={{ flex: 'none' }} />
-            {!rail && <span style={{ flex: 1 }}>{t('Progetti')}</span>}
-          </a>
           <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             {/* Myynd ha scritto: il fumetto si accende di rame e il pallino salta, finché non gli rispondi */}
             {v.chatDaLeggere && !v.isChat ? <IconChatPiena style={{ flex: 'none', color: 'var(--rame)' }} /> : <IconChat style={{ flex: 'none' }} />}
@@ -615,6 +610,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
               ce le hanno anche quando la navigazione non le ha. */}
           {v.menuOpen && (
             <div ref={menuConto} role="menu" aria-label={t('Il tuo conto')} style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: 16, background: 'rgba(var(--carta-rgb),.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(var(--luce-rgb),.85)', boxShadow: '0 22px 50px rgba(var(--ombra-rgb),.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
+              {/* i progetti stavano nella colonna, fra Da fare e Chat: «when I click on my profile I want to see it there» (19 ottobre 2026) */}
+              <a href="#" role="menuitem" onClick={v.goProgetti} style={v.menuProgetti}><IconProgetti style={{ flex: 'none' }} />{t('Progetti')}</a>
               <a href="#" role="menuitem" onClick={v.goPref} style={v.menuPref}><IconIngranaggio style={{ flex: 'none' }} />{t('Preferenze')}</a>
               {/* il punto di rame: cose nuove da guardare nate dopo l'ultima visita; solo qui, mai sul bottone del conto */}
               <a href="#" role="menuitem" onClick={v.goMemoria} style={v.menuMemoria}

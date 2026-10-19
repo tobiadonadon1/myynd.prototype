@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { frasi, t } from '../lingua'
 import { api, type CartellaSuggerita, type ProgettoVisto } from '../api'
 import { Bottone, Casella } from '../components/forme'
-import { IconGiu, IconPiu } from '../icons'
+import { IconPiu } from '../icons'
+import { velato } from '../colori-progetto'
 import { daQuando, lettoInRiga } from '../progetti-vista'
 import type { Vals } from '../vals'
 import './progetti.css'
@@ -11,16 +12,22 @@ import './progetti.css'
  * I progetti, come Myynd li ha capiti.
  *
  * «I want it to have a gist of my projects.» Il quadro di ogni progetto
- * (`server/quadro.ts`) c'era, ma ne uscivano solo le carte del feed. Qui una
- * riga per progetto: il nome, il succo in una riga, quando si è mosso. Un tocco
- * apre il succo intero, il prossimo passo e cosa ha letto per arrivarci. Sotto,
- * piano, le cartelle in cui lavora che non sono ancora un progetto, con un
- * bottone solo: non ne fa mai uno da sé.
+ * (`server/quadro.ts`) c'era, ma ne uscivano solo le carte del feed.
+ *
+ * Era un elenco di righe con un filo sotto, e si leggeva come una lista
+ * scritta: «make it look less like a writing list, more aesthetic and
+ * functional» (19 ottobre 2026). Adesso è un fuoco e uno scaffale: in alto,
+ * grande, il progetto che conta adesso (l'alta priorità, se c'è, se no quello
+ * che si è mosso per ultimo) col succo intero, il prossimo passo e cosa ha
+ * letto; sotto, una tessera per ciascuno degli altri, nel suo colore. Una
+ * tessera premuta prende il posto in alto; «Apri il progetto» apre la pagina.
+ * Sotto ancora, piano, le cartelle in cui lavora che non sono ancora un
+ * progetto, con un bottone solo: non ne fa mai uno da sé.
  */
 export function Progetti({ v }: { v: Vals }) {
   const [vista, setVista] = useState<{ progetti: ProgettoVisto[]; suggeriti: CartellaSuggerita[] } | null>(null)
   const [guaio, setGuaio] = useState(false)
-  const [aperto, setAperto] = useState<string | null>(null)
+  const [scelto, setScelto] = useState<string | null>(null)
   const [aggiungo, setAggiungo] = useState<string | null>(null)
   const carica = useCallback(async () => {
     try { setVista(await api.vistaProgetti()); setGuaio(false) } catch { setGuaio(true) }
@@ -47,19 +54,29 @@ export function Progetti({ v }: { v: Vals }) {
   if (guaio && !vista) return <main className="pj"><h1>{t('Progetti')}</h1><p className="pj-vuoto">{t('Non sono riuscito a leggere i progetti.')}</p></main>
   if (!vista) return <main className="pj" aria-busy="true"><h1>{t('Progetti')}</h1></main>
 
+  const fuoco = vista.progetti.find(p => p.id === scelto) ?? inFuoco(vista.progetti)
+  const altri = vista.progetti.filter(p => p !== fuoco)
+  const scegli = (id: string) => {
+    setScelto(id)
+    document.querySelector('.pj')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <main className="pj">
       <h1>{t('Progetti')}</h1>
-      {vista.progetti.length === 0
+      {!fuoco
         ? <div className="pj-vuoto-riga"><p className="pj-vuoto">{t('Ancora nessun progetto.')}</p><NuovoProgetto v={v} etichetta={t('Aggiungi un progetto')} /></div>
         : (
           <>
-            <ul className="pj-lista">
-              {vista.progetti.map(p => (
-                <Riga key={p.id} p={p} aperta={aperto === p.id} apri={() => setAperto(a => a === p.id ? null : p.id)} vai={() => v.apriProgetto(p.id)} />
+            <Fuoco key={fuoco.id} p={fuoco} colore={v.coloreProgetto(fuoco.id)} vai={() => v.apriProgetto(fuoco.id)} />
+            <ul className="pj-scaffale" aria-label={t('Progetti')}>
+              {altri.map(p => (
+                <li key={p.id}>
+                  <Tessera p={p} colore={v.coloreProgetto(p.id)} scegli={() => scegli(p.id)} />
+                </li>
               ))}
+              <li className="pj-tessera-nuova"><NuovoProgetto v={v} etichetta={t('Nuovo progetto')} /></li>
             </ul>
-            <NuovoProgetto v={v} etichetta={t('Nuovo progetto')} />
           </>
         )}
       {vista.suggeriti.length > 0 && (
@@ -81,48 +98,53 @@ export function Progetti({ v }: { v: Vals }) {
   )
 }
 
-/** Una riga per progetto, su una linea sola; aperta, il succo intero, il prossimo passo e cosa ha letto. */
-function Riga({ p, aperta, apri, vai }: { p: ProgettoVisto; aperta: boolean; apri: () => void; vai: () => void }) {
+/** Il progetto grande in alto: il succo intero, il prossimo passo, cosa ha letto, e la porta della sua pagina. */
+function Fuoco({ p, colore, vai }: { p: ProgettoVisto; colore: string; vai: () => void }) {
   const succo = p.sintesi || ''
   const passo = p.mossa?.titolo || p.traguardo
   const quando = daQuando(p.ultima)
   return (
-    <li className={`pj-voce${aperta ? ' aperta' : ''}`}>
-      <button type="button" className="pj-riga" aria-expanded={aperta} onClick={apri}>
-        {/* la freccia della pagina di un progetto («Nomi e raggruppamento»): di lato chiusa, giù aperta */}
-        <span className="pj-nome">
-          <span className="pj-freccia" aria-hidden="true"><IconGiu size={10} stroke="currentColor" /></span>
-          <span className="pj-nome-testo">{p.nome}</span>
-        </span>
-        {/* aperta, il succo sta intero qui sotto: la riga non lo ripete */}
-        {/* senza un'attività nota la colonna della data non resta vuota: il succo si allarga fin là */}
-        <span className={`pj-succo${succo ? '' : ' muto'}`} data-solo={quando ? undefined : true} aria-hidden={aperta || undefined}>{aperta ? '' : succo || t('Non ancora letto')}</span>
+    <article className="pj-fuoco" style={{ '--pj-colore': colore, '--pj-velo': velato(colore, .10), '--pj-filo': velato(colore, .34) } as CSSProperties}>
+      <header className="pj-fuoco-testa">
+        <span className="pj-punto" aria-hidden="true" />
+        <h2 className="pj-fuoco-nome">{p.nome}</h2>
+        {p.priorita === 'alta' && <span className="pj-alta">{t('Priorità alta')}</span>}
         {quando && <span className="pj-quando">{quando}</span>}
-      </button>
-      {aperta && (
-        <div className="pj-dettaglio">
-          {succo ? <p className="pj-testo">{succo}</p> : <p className="pj-testo muto">{t('Non ancora letto')}</p>}
-          {!!passo && (
-            <div className="pj-campo">
-              <span className="pj-etichetta">{t('Prossimo passo')}</span>
-              <p className="pj-passo">{passo}</p>
-              {p.mossa?.testo && <p className="pj-perche">{p.mossa.testo}</p>}
-            </div>
-          )}
-          {p.letto.length > 0 && (
-            <div className="pj-campo">
-              <span className="pj-etichetta">{t('Cosa ha letto')}</span>
-              <p className="pj-letto">{lettoInRiga(p.letto)}</p>
-            </div>
-          )}
-          <div className="pj-piede">
-            <span>{p.capito ? frasi.lettoUltimaVolta(daQuando(p.capito)) : ''}</span>
-            <Bottone piccolo onClick={vai}>{t('Apri il progetto')}</Bottone>
-          </div>
+      </header>
+      {succo ? <p className="pj-testo">{succo}</p> : <p className="pj-testo muto">{t('Non ancora letto')}</p>}
+      {!!passo && (
+        <div className="pj-campo pj-passo-riquadro">
+          <span className="pj-etichetta">{t('Prossimo passo')}</span>
+          <p className="pj-passo">{passo}</p>
+          {p.mossa?.testo && <p className="pj-perche">{p.mossa.testo}</p>}
         </div>
       )}
-    </li>
+      <div className="pj-piede">
+        <span title={p.letto.length > 0 ? lettoInRiga(p.letto) : undefined}>
+          {[p.capito ? frasi.lettoUltimaVolta(daQuando(p.capito)) : '', p.letto.length > 0 ? lettoInRiga(p.letto) : ''].filter(Boolean).join(' · ')}
+        </span>
+        <Bottone piccolo onClick={vai}>{t('Apri il progetto')}</Bottone>
+      </div>
+    </article>
   )
+}
+
+/** Una tessera dello scaffale: il colore, il nome, quando si è mosso. Premuta, sale in alto. */
+function Tessera({ p, colore, scegli }: { p: ProgettoVisto; colore: string; scegli: () => void }) {
+  const quando = daQuando(p.ultima)
+  return (
+    <button type="button" className="pj-tessera" onClick={scegli} title={p.sintesi || p.nome}
+      style={{ '--pj-colore': colore, '--pj-velo': velato(colore, .07), '--pj-filo': velato(colore, .26) } as CSSProperties}>
+      <span className="pj-tessera-nome"><span className="pj-punto" aria-hidden="true" /><span>{p.nome}</span></span>
+      <span className="pj-quando">{quando || t('Non ancora letto')}</span>
+    </button>
+  )
+}
+
+/** Quello che conta adesso: l'alta priorità che si è mossa per ultima, se no il primo che si è mosso. */
+function inFuoco(progetti: ProgettoVisto[]): ProgettoVisto | undefined {
+  const recente = (a: ProgettoVisto, b: ProgettoVisto) => (b.ultima ?? '').localeCompare(a.ultima ?? '')
+  return [...progetti].sort((a, b) => (a.priorita === 'alta' ? 0 : 1) - (b.priorita === 'alta' ? 0 : 1) || recente(a, b))[0]
 }
 
 /** «Nuovo progetto», che diventa la casella dove si scrive: Invio e c'è, per la stessa strada della prima pagina (`RigaProgetti`). */

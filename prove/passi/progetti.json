@@ -1,13 +1,16 @@
 [
   { "aspetta": 2500 },
+  { "clicca": "Your account" },
+  { "aspetta": 400 },
+  { "scatta": "menu-conto" },
   { "clicca": "Projects" },
   { "aspetta": 2000 },
   { "scatta": "progetti" },
   { "testo": "progetti" },
-  { "js": "[...document.querySelectorAll('.pj-riga')].find(b => /Northwind/.test(b.textContent)).click(); 1" },
-  { "aspetta": 700 },
-  { "scatta": "progetti-dettaglio" },
-  { "js": "[...document.querySelectorAll('.pj-riga')].find(b => /Harbor/.test(b.textContent)).click(); 1" },
-  { "aspetta": 700 },
-  { "scatta": "progetti-dettaglio-vecchio" }
+  { "js": "[...document.querySelectorAll('.pj-tessera')].find(b => /Harbor/.test(b.textContent)).click(); 1" },
+  { "aspetta": 900 },
+  { "scatta": "progetti-harbor" },
+  { "clicca": "New project" },
+  { "aspetta": 400 },
+  { "scatta": "progetti-nuovo" }
 ]
