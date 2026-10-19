@@ -358,6 +358,21 @@ export function quandoLibero(f: (utente: string | null) => void): () => void {
 // «[Cc]i»: «Claude Code ci ha messo troppo» (l'account, F8) è lo stesso guaio passeggero di «Ci ha messo troppo»
 const PASSEGGERO = /sotto sforzo|ha un problema in questo momento|[Cc]i ha messo troppo|Non riesco a raggiungere|interrotta a metà|Non ce l’ho fatta|Non ce l'ho fatta/
 const RIPROVA_FRA = 2 * 60_000
+/*
+ * «it always takes forever to finish even one single task» (19 ott 2026): un
+ * «ci ha messo troppo» arriva dopo cinque minuti già aspettati, e i due minuti
+ * di pausa in più non danno respiro a niente: la carta «Test the waitlist
+ * signup» è caduta alle 16:16:14 ed è ripartita alle 16:18:14, e la partenza
+ * nuova ha risposto in sette secondi. Il tempo scaduto si riprova subito; la
+ * pausa resta per il modello sotto sforzo e per la rete, che hanno bisogno di
+ * tempo per passare.
+ */
+const RIPROVA_SUBITO = 5_000
+const SCADUTO = /[Cc]i ha messo troppo/
+/** Dopo quanto si riprova un guaio passeggero (esportata per le prove). */
+export function riprovaFra(guaio: string): number {
+  return SCADUTO.test(guaio) ? RIPROVA_SUBITO : RIPROVA_FRA
+}
 const ritentati = new Set<string>()
 
 /**
@@ -709,13 +724,14 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean, pres
     if (PASSEGGERO.test(guaio) && !ritentati.has(k)) {
       ritentati.add(k)
       annuncia({ fase: 'preso', id })
-      console.warn(`myynd · compito ${id}: ${guaio} — riprovo fra due minuti`)
+      const fra = riprovaFra(guaio)
+      console.warn(`myynd · compito ${id}: ${guaio} — riprovo fra ${fra < 60_000 ? `${Math.round(fra / 1000)} secondi` : 'due minuti'}`)
       const utente = chi.adesso()
       setTimeout(() => {
         const ancora = () => store.compito(id)?.stato === 'delegato'
         if (utente ? chi.dentro(utente, ancora) : ancora()) { coda.push({ utente, id, nativa, accodato: Date.now(), ...(turno ? { turno: true } : {}) }); gira() }
         else ritentati.delete(k)
-      }, RIPROVA_FRA).unref()
+      }, fra).unref()
       return
     }
     ritentati.delete(k)
