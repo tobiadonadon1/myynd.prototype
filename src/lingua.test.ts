@@ -169,6 +169,8 @@ const INTERNI = new Set([
   'manca il risultato',
   'Questa non è una conversazione su un progetto.',
   'non posso mettere niente in lista da qui',
+  // F · riscrivere o togliere una riga senza le mani della rotta: torna al modello, che lo dice nella sua lingua
+  'Da qui non posso cambiare la sua lista: la riga resta com\'è.',
   // la prova delle risposte (P7) nega ogni strumento che scrive: torna al modello, non a una persona
   'sola lettura in questa prova',
   // un'etichetta per una corsa persa contro il cronometro, presa lì accanto

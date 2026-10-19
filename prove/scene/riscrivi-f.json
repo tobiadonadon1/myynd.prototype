@@ -1,0 +1,13 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "my", "nome": "Myynd", "obiettivo": "Launch Myynd to the waitlist" }
+  ],
+  "compiti": [
+    { "id": "c-lancio", "testo": "Mandare il post di lancio su X a chi segue Myynd", "quando": "oggi", "progetto": "my" },
+    { "id": "c-lista", "testo": "Test the waitlist signup", "quando": "oggi", "progetto": "my" },
+    { "id": "c-dentista", "testo": "Book the dentist", "quando": "settimana" }
+  ]
+}
