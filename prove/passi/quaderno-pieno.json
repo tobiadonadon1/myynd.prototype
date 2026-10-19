@@ -1,0 +1,13 @@
+[
+ { "aspetta": 2500 },
+ { "clicca": "To do" },
+ { "aspetta": 4000 },
+ { "scatta": "quaderno" },
+ { "testo": "quaderno" },
+ { "js": "(document.querySelector('.quaderno-fatte-apri') || { click() {} }).click(); 1" },
+ { "aspetta": 500 },
+ { "scatta": "quaderno-fatte" },
+ { "clicca": "Expand" },
+ { "aspetta": 1200 },
+ { "scatta": "settimana" }
+]

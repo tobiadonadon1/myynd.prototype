@@ -668,9 +668,11 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
                       draggable onDragStart={ev2 => prendi(ev2, `evento:${e.id}`)}
                       onClick={ev2 => apriEvento(e, ev2.clientX, ev2.clientY)}>{e.titolo}</button>
                   ))}
+                  {/* il titolo corto del quaderno anche qui: il testo intero tagliato a dieci lettere non si leggeva
+                      («There is an issue with the formatting of the to do lists», 19 ott 2026); intero sotto la mano */}
                   {co.map(c => (
                     <span key={c.id} className="agenda-chip" title={c.testo} draggable
-                      onDragStart={ev2 => prendi(ev2, `compito:${c.id}`)}>{c.testo}</span>
+                      onDragStart={ev2 => prendi(ev2, `compito:${c.id}`)}>{c.titolo || c.testo}</span>
                   ))}
                   {inPiu > 0 && (
                     <button type="button" className="agenda-piu" onClick={() => setFasciaAperta(true)}>+{inPiu}</button>
@@ -715,7 +717,7 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
                         <span key={c.id} className="agenda-blocco compito" title={c.testo} draggable
                           style={{ top: `${posa.top * 100}%`, height: `${posa.altezza * 100}%`, ...dove }}
                           onDragStart={ev => prendi(ev, `compito:${c.id}`, DURATA_COMPITO)}>
-                          <b>{c.testo}</b>
+                          <b>{c.titolo || c.testo}</b>
                           <em>{c.ora}</em>
                         </span>
                       )
