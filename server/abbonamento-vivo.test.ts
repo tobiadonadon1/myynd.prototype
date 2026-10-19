@@ -137,3 +137,8 @@ test('i guai passeggeri: il tempo scaduto si riprova subito, lo sforzo e la rete
   assert.equal(compiti.riprovaFra('Il modello è sotto sforzo.'), 120_000)
   assert.equal(compiti.riprovaFra('Non riesco a raggiungere il fornitore.'), 120_000)
 })
+
+test('il primo segno: quindici secondi alla prima partenza, un minuto alla seconda, così un filo lento ma sano non cade due volte', () => {
+  assert.equal(abbonamento.primoSegno(), 15_000)
+  assert.equal(abbonamento.primoSegno(true), 60_000)
+})

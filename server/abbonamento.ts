@@ -552,6 +552,8 @@ type Lancio = {
   attesa: number; modello?: string; lavoro?: string; signal?: AbortSignal
   /** Il giro con gli attrezzi: in stream-json, con le due sveglie di `processoVivo`. */
   vivo?: boolean
+  /** La seconda partenza: l'attesa larga per il primo segno (vedi `PRIMO_SEGNO`). */
+  rilancio?: boolean
 }
 
 /** Una chiamata intera, con i due ritentativi di versione: le opzioni nuove (P10) e la persistenza. */
@@ -673,12 +675,21 @@ function processo(exe: string, args: string[], domanda: string, o: Lancio): Prom
  *
  * Qui lo stesso giro passa da `stream-json`, che dice quando l'API comincia a
  * rispondere (`message_start`), quando ritenta (`api_retry`) e ogni pezzo che
- * arriva. Due sveglie: il primo segno dell'API entro un minuto (normalmente
+ * arriva. Due sveglie: il primo segno dell'API entro quindici secondi (normalmente
  * arriva in pochi secondi), e dopo mai due minuti di silenzio. Una risposta
  * lunga che arriva bene non si tocca: si taglia solo un filo morto, e chi
  * chiama lo rilancia subito (`conAttrezzi`).
  */
-const PRIMO_SEGNO = 60_000
+/*
+ * Quindici secondi, non sessanta: «60, I feel, is already too much» (19
+ * ottobre 2026). Un filo vivo comincia in pochi secondi; uno lento ma sano,
+ * con una domanda lunga, può metterci di più, e per questo la partenza nuova
+ * ha l'attesa larga: un filo sano non cade due volte di fila.
+ */
+const PRIMO_SEGNO = 15_000
+const PRIMO_SEGNO_RILANCIO = 60_000
+/** Quanto si aspetta il primo segno dell'API: stretto alla prima partenza, largo alla seconda. */
+export const primoSegno = (rilancio = false) => rilancio ? PRIMO_SEGNO_RILANCIO : PRIMO_SEGNO
 const SILENZIO_GIRO = 120_000
 /** Dopo la riga `result` il processo ha finito: se qualcosa tiene aperto lo stdout, non lo si aspetta. */
 const DOPO_LA_BUSTA = 3_000
@@ -692,7 +703,7 @@ class Piantato extends Error {
 }
 
 function processoVivo(exe: string, args: string[], domanda: string, o: Lancio): Promise<Uscito> {
-  const tempi = ferri.tempi ?? { primo: PRIMO_SEGNO, silenzio: SILENZIO_GIRO }
+  const tempi = ferri.tempi ?? { primo: primoSegno(o.rilancio), silenzio: SILENZIO_GIRO }
   return new Promise<Uscito>((risolvi, rifiuta) => {
     const partito = Date.now()
     const p = spawn(exe, args, { cwd: VUOTA, env: ambiente(), detached: process.platform !== 'win32' })
@@ -1009,7 +1020,7 @@ async function conAttrezzi(p: Richiesta, attesa = ATTESA_GIRO, signal?: AbortSig
       console.warn(`myynd · account · bozza senza segni da ${Math.round(e.dopo / 1000)} s (${e.fase === 'primo' ? 'l\'API non ha cominciato' : 'silenzio'}): la rilancio subito`)
       controllaIlTetto()
       // la seconda partenza ha il tempo che resta, non altri cinque minuti: almeno uno
-      return await lanciaConRitentativi(exe, sistema, d, { ...o, attesa: Math.max(60_000, attesa - (Date.now() - via)) })
+      return await lanciaConRitentativi(exe, sistema, d, { ...o, rilancio: true, attesa: Math.max(60_000, attesa - (Date.now() - via)) })
     }
   }
   /*
