@@ -5,7 +5,7 @@ import { Marchio } from '../components/Marchio'
 import { IconCestino } from '../icons'
 import { coloreProgetto } from '../colori-progetto'
 import type { Lista } from './useCompiti'
-import { dataLocale, giornoCompito, giornoLocale, rimasteIndietro, secchioDelGiorno, spostaGiorno } from './giorni'
+import { colonneCheStanno, dataLocale, giorniMostrati, giornoCompito, giornoLocale, rimasteIndietro, secchioDelGiorno, spostaGiorno } from './giorni'
 import { leggiRiga } from './scrivi-riga'
 import { localeDelGiorno, statoRiga } from './bacheca'
 import './calendario.css'
@@ -26,7 +26,10 @@ import './quaderno.css'
  * Il sapore del calendario resta: il mese in testa, i giorni con la loro
  * data, le frecce, «Oggi», e «Espandi» che apre la settimana con le ore.
  * Quanti giorni vedere lo sceglie lui, come su TeuxDeux: 1, 3, 5 o 7; la
- * finestra stretta ne mostra quanti ci stanno.
+ * finestra stretta ne mostra meno, ma sempre una delle quattro scelte, e la
+ * scelta accesa è quella che si vede. Il 19 ottobre diceva 5 e ne mostrava
+ * quattro, in colonne così strette che ogni riga si tagliava a quindici
+ * lettere: «There is an issue with the formatting of the to do lists».
  *
  * Una riga sta su una linea sola: se il testo è lungo mostra il titolo
  * corto che gli ha scritto il modello (`server/titolo-riga.ts`), e il testo
@@ -39,8 +42,6 @@ import './quaderno.css'
 export type QuantiGiorni = 1 | 3 | 5 | 7
 const SCELTE: QuantiGiorni[] = [1, 3, 5, 7]
 const CHIAVE_QUANTI = 'myynd.giorniQuaderno'
-/** La colonna più stretta in cui una riga si legge ancora. */
-const COLONNA_MIN = 190
 
 function quantiSalvati(): QuantiGiorni {
   try {
@@ -79,7 +80,7 @@ export function Calendario({ l, oggi, inizio, setInizio, lingua, espandi, apri, 
   useEffect(() => {
     const el = contenitore.current
     if (!el) return
-    const misura = () => setStanno(Math.max(1, Math.floor((el.clientWidth - 24) / COLONNA_MIN)))
+    const misura = () => setStanno(colonneCheStanno(el.clientWidth))
     misura()
     const o = new ResizeObserver(misura)
     o.observe(el)
@@ -87,7 +88,7 @@ export function Calendario({ l, oggi, inizio, setInizio, lingua, espandi, apri, 
   }, [])
   const progetti = useProgetti()
   const locale = lingua === 'it' ? 'it-IT' : 'en-US'
-  const n = Math.min(quanti, stanno)
+  const n = giorniMostrati(SCELTE, quanti, stanno) as QuantiGiorni
   const giorni = Array.from({ length: n }, (_, i) => spostaGiorno(inizio, i))
   const nonPianificati = l.compiti.filter(c => !giornoCompito(c, oggi))
 
@@ -97,8 +98,9 @@ export function Calendario({ l, oggi, inizio, setInizio, lingua, espandi, apri, 
         <h2 className="quaderno-mese">{dataLocale(inizio).toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</h2>
         <div className="quaderno-comandi">
           <div className="quaderno-quanti" role="group" aria-label={t('Giorni da vedere')}>
-            {SCELTE.map(x => <button key={x} type="button" aria-pressed={quanti === x} onClick={() => setQuanti(x)}
-              title={frasi.giorniDaVedere(x)}>{x}</button>)}
+            {/* accesa la scelta che si vede; quelle che non ci stanno si spengono, e tornano quando la finestra si allarga */}
+            {SCELTE.map(x => <button key={x} type="button" aria-pressed={n === x} onClick={() => setQuanti(x)}
+              disabled={x > stanno} title={x > stanno ? t('Serve una finestra più larga') : frasi.giorniDaVedere(x)}>{x}</button>)}
           </div>
           <button type="button" className="quaderno-oggi" onClick={() => setInizio(oggi)} disabled={inizio === oggi}>{t('Oggi')}</button>
           <div className="quaderno-frecce">
@@ -189,8 +191,8 @@ function Pagina({ titolo, l, g, oggi, locale, progetti, righe, apri, modifica }:
 }
 
 /**
- * Le righe di una pagina: quelle scritte, quelle chiuse oggi (barrate), la
- * riga dove si scrive, e le righe vuote fino al minimo. Si trascina una riga
+ * Le righe di una pagina: quelle scritte, la riga dove si scrive, le righe
+ * vuote fino al minimo, e in fondo quelle chiuse in una riga sola che si apre. Si trascina una riga
  * da un giorno all'altro, o fra due righe per metterla lì.
  */
 function Righe({ l, g, oggi, locale, progetti, righe, fatte, minime, apri, modifica, colonne = false }: {
@@ -198,9 +200,10 @@ function Righe({ l, g, oggi, locale, progetti, righe, fatte, minime, apri, modif
   righe: Compito[]; fatte: Compito[]; minime: number; colonne?: boolean
 } & Apri) {
   const [sopra, setSopra] = useState<string | null>(null)
+  const [fatteAperte, setFatteAperte] = useState(false)
   const scrivi = useRef<HTMLInputElement>(null)
   const quando = g ? secchioDelGiorno(g, oggi) : 'poi'
-  const vuote = Math.max(0, minime - righe.length - fatte.length - 1)
+  const vuote = Math.max(0, minime - righe.length - 1 - (fatte.length ? 1 + (fatteAperte ? fatte.length : 0) : 0))
 
   const lascia = async (e: React.DragEvent, prima: string | null) => {
     e.preventDefault(); e.stopPropagation(); setSopra(null)
@@ -231,18 +234,29 @@ function Righe({ l, g, oggi, locale, progetti, righe, fatte, minime, apri, modif
           sopra={sopra === c.id} suSopra={() => setSopra(c.id)} lascia={e => { void lascia(e, c.id) }}
           apri={apri} modifica={modifica} />
       ))}
-      {fatte.map(c => (
-        <li key={c.id} className="quaderno-riga fatta">
-          <span className="quaderno-spunta fatta" aria-hidden="true">✓</span>
-          <span className="quaderno-testo" title={c.titolo ? c.testo : undefined}><span className="quaderno-parole">{c.titolo || c.testo}</span></span>
-          <button type="button" className="quaderno-riapri" onClick={() => void l.riapri(c.id)}>{t('Riaprila')}</button>
-        </li>
-      ))}
+      {/* dove si scrive viene subito dopo le righe aperte: sotto otto righe barrate non si trovava più */}
       <li className="quaderno-riga nuova">
         <NuovaRiga campo={scrivi} l={l} g={g} oggi={oggi} progetti={progetti} />
       </li>
       {Array.from({ length: vuote }, (_, i) => (
         <li key={`vuota-${i}`} className="quaderno-riga vuota" aria-hidden="true" onClick={() => scrivi.current?.focus()} />
+      ))}
+      {/* le chiuse del giorno in una riga sola, «8 done»: un clic le mostra barrate, e niente si cancella */}
+      {fatte.length > 0 && (
+        <li className="quaderno-riga quaderno-fatte">
+          <button type="button" className="quaderno-fatte-apri" aria-expanded={fatteAperte} onClick={() => setFatteAperte(a => !a)}>
+            <span className="quaderno-spunta fatta" aria-hidden="true">✓</span>
+            {frasi.fatteDelGiorno(fatte.length)}
+            <span className="quaderno-fatte-freccia" aria-hidden="true">›</span>
+          </button>
+        </li>
+      )}
+      {fatteAperte && fatte.map(c => (
+        <li key={c.id} className="quaderno-riga fatta">
+          <span className="quaderno-spunta fatta" aria-hidden="true">✓</span>
+          <span className="quaderno-testo" title={c.titolo ? c.testo : undefined}><span className="quaderno-parole">{c.titolo || c.testo}</span></span>
+          <button type="button" className="quaderno-riapri" onClick={() => void l.riapri(c.id)}>{t('Riaprila')}</button>
+        </li>
       ))}
     </ol>
   )

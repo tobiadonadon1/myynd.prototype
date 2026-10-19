@@ -15,7 +15,9 @@
 .quaderno-comandi {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .quaderno-quanti {display:inline-flex;padding:3px;background:rgba(var(--inchiostro-rgb),.05);border:1px solid rgba(var(--luce-rgb),.7);border-radius:10px;}
 .quaderno-quanti button {min-width:30px;border:0;padding:5px 9px;background:transparent;border-radius:10px;font-size:12px;font-variant-numeric:tabular-nums;color:rgba(var(--inchiostro-rgb),.55);}
-.quaderno-quanti button:hover {color:var(--rame-testo);}
+.quaderno-quanti button:hover:not(:disabled) {color:var(--rame-testo);}
+/* una scelta che non ci sta nella finestra: spenta, e torna quando la finestra si allarga */
+.quaderno-quanti button:disabled {opacity:.4;cursor:default;}
 .quaderno-quanti button[aria-pressed=true] {background:var(--carta-piena);box-shadow:0 2px 6px rgba(var(--ombra-rgb),.09);color:var(--inchiostro);}
 .quaderno-oggi,.quaderno-espandi {display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 13px;border-radius:10px;font-size:12.5px;background:transparent;border:1px solid rgba(var(--inchiostro-rgb),.14);color:rgba(var(--inchiostro-rgb),.72);}
 .quaderno-oggi:disabled {opacity:.45;cursor:default;}
@@ -66,8 +68,11 @@
 
 /* La fine della riga: nessuna parola. Il punto verde se ci lavora Myynd (che batte) o se è in coda
    per lui (fermo); sotto la mano i gesti prendono il suo posto, accanto al testo e mai sopra. */
-.quaderno-fine {flex:none;display:flex;align-items:center;justify-content:flex-end;align-self:stretch;}
-.quaderno-segno {flex:none;width:6px;height:6px;margin:0 4px;border-radius:50%;background:rgba(var(--salvia-rgb),.95);}
+/* la fine non prende lo spazio fra le cose quando è vuota (8 px tolti al titolo su ogni riga):
+   lo rimette solo ciò che ha dentro */
+.quaderno-fine {flex:none;display:flex;align-items:center;justify-content:flex-end;align-self:stretch;margin-left:-8px;}
+.quaderno-fine > * {margin-left:8px;}
+.quaderno-segno {flex:none;width:6px;height:6px;margin:0 4px 0 8px;border-radius:50%;background:rgba(var(--salvia-rgb),.95);}
 .quaderno-segno.lavora {animation:tavola-battito 1.6s ease-in-out infinite;}
 .quaderno-segno.coda {background:transparent;box-shadow:inset 0 0 0 1.5px rgba(var(--salvia-rgb),.95);}
 .quaderno-gesti {display:none;align-items:center;gap:2px;}
@@ -87,6 +92,12 @@
 .quaderno-riapri {position:absolute;right:0;border:1px solid rgba(var(--inchiostro-rgb),.16);background:var(--carta-piena);border-radius:99px;padding:3px 10px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.72);white-space:nowrap;opacity:0;pointer-events:none;}
 .quaderno-riapri:hover {border-color:var(--rame);color:var(--rame-testo);}
 .quaderno-riga.fatta:hover .quaderno-riapri,.quaderno-riapri:focus-visible {opacity:1;pointer-events:auto;}
+/* Le chiuse del giorno in una riga sola, quieta: «8 done», e un clic le apre. */
+.quaderno-fatte-apri {display:inline-flex;align-items:center;gap:8px;padding:9px 0;border:0;background:transparent;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.45);white-space:nowrap;}
+.quaderno-fatte-apri:hover {color:var(--rame-testo);}
+.quaderno-fatte-apri .quaderno-spunta {opacity:.7;}
+.quaderno-fatte-freccia {font-size:14px;line-height:1;transition:transform .14s;}
+.quaderno-fatte-apri[aria-expanded=true] .quaderno-fatte-freccia {transform:rotate(90deg);}
 
 /* Dove si scrive: una riga come le altre, con il cursore. */
 .quaderno-scrivi {flex:1;min-width:0;padding:9px 0 9px 23px;border:0;background:transparent;font-family:inherit;font-size:14px;line-height:1.38;color:var(--inchiostro);outline:none;}
@@ -116,6 +127,7 @@
 @media (prefers-reduced-motion:reduce) {
   .quaderno-segno.lavora {animation:none;}
   .quaderno-spunta {transition:none;}
+  .quaderno-fatte-freccia {transition:none;}
 }
 /* di notte niente velo: il bruno non sopporta i rialzi */
 :root[data-theme="dark"] .quaderno-righe[data-sopra] {background:transparent;}

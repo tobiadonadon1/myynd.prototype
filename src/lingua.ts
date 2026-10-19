@@ -3445,6 +3445,9 @@ const EN: Record<string, string> = {
   'La risposta non ha passato il controllo: cambiala prima di mandarla.': 'The reply did not pass the check: edit it before sending.',
   'Sta già partendo.': 'It is already on its way.',
   // — il pacchetto di seguito: fine —
+  // — il quaderno leggibile: inizio —
+  'Serve una finestra più larga': 'Needs a wider window',
+  // — il quaderno leggibile: fine —
 }
 
 
@@ -4287,6 +4290,10 @@ export const frasi = {
   /** Sotto la data della lista: «3 waiting for you on Slack». */
   /** Il documento troppo lungo, o la versione non scritta: «Changes to make in Proposal.docx». */
   daCambiareIn: (da: string) => corrente === 'en' ? `Changes to make in ${da}:` : `Da cambiare in ${da}:`,
-  slackTiAspetta: (n: number) => corrente === 'en' ? `${n} waiting for you on Slack` : `${n} ${n === 1 ? 'ti aspetta' : 'ti aspettano'} su Slack`
+  slackTiAspetta: (n: number) => corrente === 'en' ? `${n} waiting for you on Slack` : `${n} ${n === 1 ? 'ti aspetta' : 'ti aspettano'} su Slack`,
   // — il pacchetto di seguito: fine —
+  // — il quaderno leggibile: inizio —
+  /** La riga che tiene le chiuse di un giorno: «8 done». */
+  fatteDelGiorno: (n: number) => corrente === 'en' ? `${n} done` : `${n} ${n === 1 ? 'fatta' : 'fatte'}`
+  // — il quaderno leggibile: fine —
 }

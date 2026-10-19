@@ -51,6 +51,32 @@ export function quantiGiorni(larghezza: number): number {
   return larghezza >= 650 ? 3 : larghezza >= 400 ? 2 : 1
 }
 
+/**
+ * La colonna più stretta del quaderno in cui una riga si legge ancora: il
+ * cerchio, il pallino del progetto e un titolo corto di 24 lettere
+ * (`server/titolo-riga.ts`) senza puntini. Era 190, e il 19 ottobre ogni riga
+ * si tagliava a quindici lettere: «There is an issue with the formatting of
+ * the to do lists».
+ */
+export const COLONNA_MIN = 212
+/** Lo spazio fra due colonne e il bordo del quaderno, come in `quaderno.css`. */
+const FRA_COLONNE = 26
+const BORDO = 44
+
+/** Quante colonne di giorni ci stanno nel quaderno, contando lo spazio fra l'una e l'altra. */
+export function colonneCheStanno(larghezza: number): number {
+  return Math.max(1, Math.floor((larghezza - BORDO + FRA_COLONNE) / (COLONNA_MIN + FRA_COLONNE)))
+}
+
+/**
+ * Quanti giorni si vedono: la sua scelta, o la più grande delle scelte che ci
+ * sta. Sempre una delle scelte, così quella accesa dice il vero: diceva 5 e
+ * ne mostrava quattro.
+ */
+export function giorniMostrati(scelte: readonly number[], scelta: number, stanno: number): number {
+  return [...scelte].sort((a, b) => b - a).find(x => x <= scelta && x <= stanno) ?? Math.min(...scelte)
+}
+
 export function giorniVisibili(giorno: string, quanti: number): string[] {
   const primo = quanti === 7 ? inizioSettimana(giorno) : giorno
   return Array.from({ length: quanti }, (_, i) => spostaGiorno(primo, i))
