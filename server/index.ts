@@ -5318,6 +5318,25 @@ app.post('/api/chat/:id', async (req, res) => {
         compiti.annunciaCambio()
         return { id }
       },
+      // «yeah do that» sulla riga da riscrivere: la cambia Myynd, con gli
+      // stessi effetti della lista (PATCH e DELETE di /api/compiti/:id). La
+      // riga tolta va nel cestino come col gesto, e «Annulla» la rimette.
+      cambiaCompito: (id, cambio) => {
+        const c = store.compito(id)
+        if (!c || c.sparito) throw new Error('Compito non trovato.')
+        if ('togli' in cambio) {
+          stopProjectWork(id)
+          compiti.richiama(id)
+          store.scordaCompito(id)
+          tracce.decidi(id, 'scartato')
+        } else {
+          const cambiato = compiti.soloCambiati(c, { testo: cambio.testo })
+          if (cambiato.testo !== undefined && c.contratto?.scritto === 'myynd') store.scriviContrattoCompito(id, null)
+          if (compiti.cambiaIlLavoro(c, cambiato) && stopProjectWork(id)) compiti.richiama(id, 'modificata')
+          if (Object.keys(cambiato).length) store.cambiaCompito(id, cambiato)
+        }
+        compiti.annunciaCambio()
+      },
       // «leggi le mie fonti», detto in chat: è la rilettura delle sei ore,
       // avviata adesso e in sottofondo, per questo conto. Non si aspetta: la
       // chat risponde con lo stato, e quello che arriva va sulla prima pagina

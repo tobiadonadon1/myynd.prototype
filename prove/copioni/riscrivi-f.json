@@ -1,0 +1,31 @@
+{
+  "modello": "finto",
+  "risposte": [
+    {
+      "se": "Persona: yeah do that",
+      "in": "utente",
+      "json": { "azione": "riscrivi", "id": "c-lancio", "testo": "Publish the Myynd launch posts from your personal account", "giorno": "", "quando": "", "citazione": "we are posting out of my personal account" }
+    },
+    {
+      "se": "Decidi se una riga va cambiata",
+      "in": "system",
+      "json": { "azione": "nessuna", "id": "", "testo": "", "giorno": "", "quando": "", "citazione": "" }
+    },
+    {
+      "se": "Domanda: yeah do that",
+      "in": "utente",
+      "testo": "I reworded the task to «Publish the Myynd launch posts from your personal account». Test the waitlist signup before posting, because the posts send people there."
+    },
+    {
+      "se": "Domanda: Yes, we are posting",
+      "in": "utente",
+      "testo": "Then the task should be about publishing the launch posts from your personal account, with the follower framing gone."
+    },
+    {
+      "se": "Domanda: About",
+      "in": "utente",
+      "testo": "Without a Myynd profile on X there are no followers to send the post to, so the task should become publishing the launch posts from your own account."
+    }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

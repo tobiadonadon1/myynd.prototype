@@ -1481,6 +1481,13 @@ type Domanda = {
   attesa?: number
   /** Il system va in cache dal fornitore: per i lavori con un'istruzione lunga che non cambia. */
   cache?: boolean
+  /**
+   * La chat la sta aspettando (il cambio alla lista prima della risposta,
+   * `cambio-compito.decidi`): non cede il passo a chi guarda, perché chi
+   * guarda è proprio lei. Senza, sul modello di casa aspettava i quindici
+   * secondi di calma dopo la risposta di prima: undici secondi misurati.
+   */
+  subito?: boolean
 }
 
 // — quando non ha risposto —
@@ -1613,7 +1620,7 @@ async function chiediAdesso(o: Domanda): Promise<Esito> {
   // parametri restano quelli di Claude — `parametri()` sa cosa accetta il
   // modello scelto — e se dall'altra parte c'è un altro fornitore è
   // `compatibile.ts` a tradurli, non chi chiama.
-  await cediAChiGuarda(o.lavoro)
+  if (!o.subito) await cediAChiGuarda(o.lavoro)
   const m = motore()
   if (!m) {
     // Due situazioni diverse, e mandare la seconda a collegare Claude sarebbe
@@ -1664,6 +1671,8 @@ export async function chiediJSON<T>(o: {
    * scrive «tutto bene» su una casella che non ha letto.
    */
   severo?: boolean
+  /** Vedi `Domanda.subito`: la chat aspetta questa risposta. */
+  subito?: boolean
 }): Promise<T | null> {
   let r: Esito
   try {
