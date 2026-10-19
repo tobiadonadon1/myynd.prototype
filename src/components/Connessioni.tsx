@@ -322,6 +322,9 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
                   documento per Myynd invece di lasciarlo indovinare. */}
               {scelta.id === 'desktop' && !!letturaDesk?.saltatiPerTipo &&
                 <p>{t('Myynd legge i documenti: PDF, Word, Excel, PowerPoint, testo, Markdown, HTML e RTF. Immagini, video, codice e file di sistema non sono documenti.')}</p>}
+              {/* X fermo: perché, e cosa fare. Tobia il 19 ottobre: «can we give the possibility for myynd to read X?».
+                  La data sola non diceva che il motore gira ma il suo browser no, né che l'archivio è l'altra strada. */}
+              {xFermo && scelta.fermoPerche && <p>{t(scelta.fermoPerche)}</p>}
               {/* X vecchio (l'archivio passato un mese, o il motore fermo senza archivio): una riga, che apre X solo se la si preme */}
               {scelta.id === 'x' && (scelta.archivio ? scelta.archivio.vecchio : !!scelta.fermoDal) &&
                 <p><button type="button" className="connection-detail-link" onClick={scaricaArchivio}>

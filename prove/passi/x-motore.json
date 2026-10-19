@@ -1,0 +1,11 @@
+[
+  { "aspetta": 7000 },
+  { "vai": "Sources" },
+  { "aspetta": 800 },
+  { "clicca": "X" },
+  { "aspetta": 1200 },
+  { "clicca": "Read it" },
+  { "aspetta": 6000 },
+  { "scatta": "x-motore" },
+  { "testo": "x-motore" }
+]

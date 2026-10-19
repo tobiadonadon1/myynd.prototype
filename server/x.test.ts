@@ -317,4 +317,87 @@ test('un motore fermo si dice senza lanciare, e un altro guaio cancella il «fer
   const e = esitoLettura({ fase: 'x', stato: 'guaio', fermo: true, rimedio: 'guarda', frase: x.guaioFermo().message, documenti: 3 })
   assert.equal(e?.esito, 'guaio', 'la salute delle fonti lo registra come ogni guaio')
   assert.equal(e?.rimedio, 'guarda')
+  // la frase del perché si ricorda per la scheda, e un altro guaio la cancella con la data
+  assert.match(passo, /segnaCursore\(motore\.CURSORE_PERCHE, g \? g\.message : null\)/)
+  assert.match(passo, /catch \(err\) \{[^}]*segnaCursore\(motore\.CURSORE_PERCHE, null\)[^}]*throw err/)
+})
+
+/**
+ * Tobia il 19 ottobre: «can we give the possibility for myynd to read X?».
+ * Il motore tiene chi gli scrive in `data/mentions.json`, accanto al database,
+ * e i suoi giri nella tabella `runs`: il primo diventa documenti, il secondo
+ * dice perché il motore è fermo e cosa fare.
+ */
+function conGiri(cartella: string, giri: [string, string, number, string][]) {
+  mkdirSync(cartella, { recursive: true })
+  const percorso = join(cartella, 'engine.db')
+  motorePieno(percorso)
+  const db = new DatabaseSync(percorso)
+  db.exec('CREATE TABLE runs (id integer primary key autoincrement, job text not null, started_at text not null, finished_at text, ok integer, note text, items integer default 0)')
+  const giro = db.prepare('INSERT INTO runs (job, started_at, ok, note) VALUES (?,?,?,?)')
+  for (const g of giri) giro.run(...g)
+  db.close()
+  return percorso
+}
+
+const OTTOBRE = Date.parse('2026-10-15T12:00:00Z')
+
+test('le menzioni del file del motore diventano documenti; solo quelle di questi giorni sono una novità', () => {
+  const dove = join(CASA, 'menzioni')
+  const db = conGiri(dove, [])
+  writeFileSync(join(dove, 'mentions.json'), JSON.stringify({
+    observed_at: '2026-10-14T08:00:00+00:00', scope: 'visible public mentions',
+    items: [
+      { id: '2101363755636666378', handle: '@alice', text: 'Great point on agents.\nMore below.', url: 'https://x.com/alice/status/2101363755636666378', created_at: '2026-10-14T07:00:00.000Z' },
+      { id: '2101327587628691936', handle: 'bob', text: 'Old reply from September.', url: null, created_at: '2026-09-19T15:08:32.000Z' },
+      // fuori dai novanta giorni, senza testo, senza id: non entrano
+      { id: '1', handle: 'zed', text: 'Way too old.', url: null, created_at: '2026-05-01T00:00:00.000Z' },
+      { id: '2', handle: 'zed', text: '', url: null, created_at: '2026-10-14T00:00:00.000Z' },
+      { handle: 'zed', text: 'No id at all.', created_at: '2026-10-14T00:00:00.000Z' }
+    ]
+  }))
+  const e = x.leggi({ db }, OTTOBRE)
+  assert.equal(e.menzioni, 2)
+  const a = e.docs.find(d => d.id === 'x:menzione:2101363755636666378')!
+  assert.equal(a.tipo, 'menzione')
+  assert.equal(a.titolo, '@alice: Great point on agents.')
+  assert.equal(a.autore, '@alice')
+  assert.equal(a.percorso, 'https://x.com/alice/status/2101363755636666378')
+  assert.match(a.corpo, /^Great point on agents\.\nMore below\.\n\n@alice ti ha menzionato su X\.\nhttps:\/\/x\.com\/alice\/status\/2101363755636666378$/)
+  // di ieri: gli è arrivata adesso
+  assert.equal(a.inviato, false)
+  const b = e.docs.find(d => d.id === 'x:menzione:2101327587628691936')!
+  assert.equal(b.percorso, 'https://x.com/bob/status/2101327587628691936')
+  // di un mese fa: entra nell'indice, ma la prima pagina non la racconta come nuova
+  assert.equal(b.inviato, true)
+  assert.ok(!e.docs.some(d => d.id === 'x:menzione:1' || d.id === 'x:menzione:2'))
+  // un file rotto, o un motore senza file, non è un guaio
+  assert.deepEqual(x.menzioniDa('non è json'), [])
+  assert.deepEqual(x.menzioniDa('{"items": "no"}'), [])
+  assert.equal(x.leggi({ db: PIENO }, OTTOBRE).menzioni, 0)
+})
+
+test('il motore fermo dice perché: spento, o acceso con il browser che non legge più X', () => {
+  // acceso: giri ogni dieci minuti, ma il lettore fallisce da settimane
+  const acceso = conGiri(join(CASA, 'acceso'), [
+    ['feedread', '2026-09-20T01:20:53+00:00', 1, 'read 40'],
+    ['poster', '2026-10-15T11:50:00+00:00', 1, 'nothing approved'],
+    ['feedread', '2026-10-15T11:20:00+00:00', 0, 'Browser process failed (1)']
+  ])
+  const e = x.leggi({ db: acceso }, OTTOBRE)
+  assert.ok(e.fermoDal)
+  assert.equal(e.perche, 'lettore')
+  assert.match(x.guaioFermo(false, e.perche).message, /gira, ma il suo browser non legge più X\. Sistemalo in x-engine, o importa il tuo archivio di X\./)
+  // spento: l'ultimo giro è di dieci giorni fa
+  const spento = conGiri(join(CASA, 'spento'), [['poster', '2026-10-05T10:00:00+00:00', 1, 'nothing approved']])
+  const s = x.leggi({ db: spento }, OTTOBRE)
+  assert.equal(s.perche, 'spento')
+  assert.match(x.guaioFermo(false, s.perche).message, /è spento\. Riaccendilo, o importa il tuo archivio di X\./)
+  // senza la tabella dei giri non si sa: la frase di sempre
+  assert.equal(x.leggi({ db: PIENO }, OTTOBRE).perche, null)
+  assert.match(x.guaioFermo(false, null).message, /non scrive niente di nuovo/)
+  // con l'archivio è l'archivio a essere vecchio, qualunque sia il motore
+  assert.match(x.guaioFermo(true, 'lettore').message, /archivio di X ha più di un mese/)
+  // vivo, niente perché
+  assert.equal(x.leggi({ db: acceso }, Date.parse('2026-09-21T12:00:00Z')).perche, null)
 })

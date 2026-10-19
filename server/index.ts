@@ -870,12 +870,14 @@ app.get('/api/stato', async (_req, res) => {
        * quando è l'archivio e, passato un mese, di scaricarne uno nuovo.
        */
       id: 'x', nome: 'X', gruppo: 'Comunicazione', pronto: true, legge: true,
-      nota: c.x ? 'Quello che pubblichi su X, quello che ti piace e la tua timeline, dal motore di X su questo Mac.'
+      nota: c.x ? 'Quello che pubblichi su X, chi ti menziona, quello che ti piace e la tua timeline, dal motore di X su questo Mac.'
         : 'Quello che pubblichi su X e quello che ti piace, dal tuo archivio di X.',
       collegato: true,
       documenti: n.perFonte.find(f => f.fonte === 'x')?.n ?? 0,
       ...(problemaDi('x') ? { problema: problemaDi('x') } : {}),
       ...(problemaDi('x') && store.cursore('x:fermo') ? { fermoDal: store.cursore('x:fermo')! } : {}),
+      // perché è fermo e cosa fare (riaccendere il motore, o importare l'archivio): la scheda lo dice sotto la data
+      ...(problemaDi('x') && store.cursore('x:fermo') && store.cursore('x:fermo:perche') ? { fermoPerche: store.cursore('x:fermo:perche')! } : {}),
       ...(c.x ? {} : { soloArchivio: true }),
       ...(archivio ? { archivio: { data: archivioX.dataDi(archivio), post: archivio.post, vecchio: !archivioX.fresco(archivio), daDire: !archivio.detto } } : {}),
       // un archivio di un altro account fra i download: non entra da solo, la scheda chiede di sceglierlo a mano
@@ -1703,6 +1705,7 @@ function dopoArchivioX(e: archivioX.EsitoImport) {
   console.log(`myynd · archivio di X letto: ${e.stato.post} post, ${e.docs.length} documenti${e.guasti.length ? `, ${e.guasti.length} parti saltate` : ''}`)
   if (archivioX.fresco(e.stato)) {
     store.segnaCursore('x:fermo', null)
+    store.segnaCursore('x:fermo:perche', null)
     saluteFonti.dimentica('x')
   }
   // un archivio vecchio con il motore fermo: la lettura di X lo rimette fra quelle da sistemare
@@ -2651,6 +2654,7 @@ async function leggiTuttoDentro(
     catch (err) {
       // un altro guaio (il database sparito, illeggibile): non è più «fermo dal…», e la scheda non deve dirlo
       store.segnaCursore(motore.CURSORE_FERMO, null)
+      store.segnaCursore(motore.CURSORE_PERCHE, null)
       throw err
     }
     await store.salvaDocumentiAPezzi(e.docs)
@@ -2678,9 +2682,10 @@ async function leggiTuttoDentro(
       e.fermoDal = archivioX.fresco(arch) ? null : data > e.fermoDal ? data : e.fermoDal
     }
     store.segnaCursore(motore.CURSORE_FERMO, e.fermoDal)
-    const conti = { documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, mipiace: e.mipiace, timeline: e.timeline, tolti }
-    if (e.fermoDal) {
-      const g = motore.guaioFermo(!!arch)
+    const conti = { documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, mipiace: e.mipiace, timeline: e.timeline, menzioni: e.menzioni, tolti }
+    const g = e.fermoDal ? motore.guaioFermo(!!arch, e.perche) : null
+    store.segnaCursore(motore.CURSORE_PERCHE, g ? g.message : null)
+    if (g) {
       avvisa({ fase: 'x', stato: 'guaio', fermo: true, errore: g.message, rimedio: g.rimedio, frase: g.message, ...conti })
     } else avvisa({ fase: 'x', stato: 'fatto', ...conti })
     return e.docs.length

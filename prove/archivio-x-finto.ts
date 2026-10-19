@@ -104,7 +104,7 @@ export function zip(file: Record<string, string | Buffer>, o: { dichiarata?: Rec
 }
 
 /** Il database del motore di X, con lo schema che `x.ts` legge, fermo da `fermoGiorni`. */
-export function motoreFermo(percorso: string, adesso: number, fermoGiorni: number) {
+export function motoreFermo(percorso: string, adesso: number, fermoGiorni: number, o: { lettoreRotto?: boolean } = {}) {
   mkdirSync(dirname(percorso), { recursive: true })
   const db = new DatabaseSync(percorso)
   db.exec(`
@@ -118,5 +118,18 @@ export function motoreFermo(percorso: string, adesso: number, fermoGiorni: numbe
   const ms = adesso - fermoGiorni * GIORNO
   db.prepare('INSERT INTO posted (posted_at, tweet_id, url, kind, body, likes, views) VALUES (?,?,?,?,?,?,?)')
     .run(new Date(ms).toISOString(), idDel(ms, 1), `https://x.com/tobia/status/${idDel(ms, 1)}`, 'post', 'The last thing the engine posted.', 4, 300)
+  // il motore acceso, con il lettore di X che fallisce a ogni giro (com'era il 19 ottobre), e due menzioni
+  if (o.lettoreRotto) {
+    db.exec('CREATE TABLE runs (id integer primary key autoincrement, job text not null, started_at text not null, finished_at text, ok integer, note text, items integer default 0)')
+    const giro = db.prepare('INSERT INTO runs (job, started_at, ok, note) VALUES (?,?,?,?)')
+    giro.run('feedread', new Date(ms).toISOString(), 1, 'read 40')
+    giro.run('poster', new Date(adesso - 600_000).toISOString(), 1, 'nothing approved')
+    giro.run('feedread', new Date(adesso - 1_200_000).toISOString(), 0, 'Browser process failed (1)')
+    const m = (giorni: number, n: number, chi: string, testo: string) => ({ id: idDel(adesso - giorni * GIORNO, n), handle: `@${chi}`, text: testo, url: null, created_at: new Date(adesso - giorni * GIORNO).toISOString() })
+    writeFileSync(join(dirname(percorso), 'mentions.json'), JSON.stringify({ observed_at: new Date(ms).toISOString(), items: [
+      m(fermoGiorni + 1, 2, 'maria', 'Flat week here too. I lead with the numbers now.'),
+      m(fermoGiorni + 2, 3, 'sam', 'Versioned, or at least scoped. That is the whole trick.')
+    ] }))
+  }
   db.close()
 }
