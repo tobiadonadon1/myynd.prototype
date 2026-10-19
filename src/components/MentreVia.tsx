@@ -4,10 +4,14 @@
 // ricevuta, che metteva in cima le stesse righe dei blocchi sotto: la carta
 // che chiede, la bozza da approvare, la domanda di Myynd. Tre righe dette due
 // volte. Adesso in cima c'è quello che ha fatto lui, e basta: una frase con i
-// numeri («I read 41 things, prepared 2 drafts… and set aside 29.»), e al
+// numeri («I prepared 2 drafts and wrote 1 file.»), e al
 // più tre cose fatte e non ancora viste, una riga ciascuna, col pallino. Ogni
 // numero apre il suo elenco; quello che aspetta lui sta nei blocchi, con il
 // suo gesto. Senza niente da dire la carta non c'è: mai «niente da segnalare».
+// E leggere e mettere da parte non sono cose da dire (19 ott 2026: «they
+// should have just been read and set aside»): la frase dice solo quello che
+// ha fatto («I prepared 2 drafts and wrote 1 file.»), e una notte che ha solo
+// letto e scartato non fa nascere la carta.
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -165,7 +169,7 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
             : <span key={i}>{p.testo}</span>)}
         </p>
       )}
-      {qualcosaDellaNotte(notte) && (
+      {(qualcosaDellaNotte(notte) || notte.niente) && (
         <div className="via-notte">
           {notte.mac && (
             <p title={notte.mac.titoli.join('\n')}>

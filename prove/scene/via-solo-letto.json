@@ -1,0 +1,339 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "ruolo": "Founder",
+ "progetti": [
+  {
+   "chiave": "nw",
+   "nome": "Northwind",
+   "obiettivo": "Ship Northwind 1.0 on the App Store",
+   "alias": [
+    "northwind app",
+    "nw"
+   ],
+   "priorita": "alta"
+  },
+  {
+   "chiave": "hb",
+   "nome": "Harbor Labs",
+   "obiettivo": "Run a two-week AI pilot with the Harbor finance team"
+  },
+  {
+   "chiave": "ls",
+   "nome": "Lumen Studio",
+   "obiettivo": "Sell the first course on lumenstudio.example"
+  }
+ ],
+ "file": [
+  {
+   "nome": "northwind-launch-plan.md",
+   "testo": "# Northwind launch plan\n\n1. Fix the three account issues.\n2. Upload build 1.0.4.\n3. Record the review video.\n"
+  }
+ ],
+ "documenti": [
+  {
+   "id": "posta:INBOX:201",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "App Review: guideline 4.3",
+   "corpo": "Hello Alex, your submission Northwind 1.0.3 was rejected under guideline 4.3. Please reply with the differences from similar apps.",
+   "autore": "App Review <review@appstore.example>",
+   "percorso": "INBOX",
+   "gruppo": "posta",
+   "quando": "-5h",
+   "messageId": "ar201@appstore.example"
+  },
+  {
+   "id": "posta:INBOX:202",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Pilot scope for the finance team",
+   "corpo": "Hi Alex, can we agree the pilot scope by Thursday? Two engineers, supplier invoices first. Best, Nora",
+   "autore": "Nora Vance <nora@harbor.example>",
+   "percorso": "INBOX",
+   "gruppo": "posta",
+   "quando": "-3h",
+   "messageId": "nv202@harbor.example"
+  },
+  {
+   "id": "posta:Sent:31",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Re: Pilot scope for the finance team",
+   "corpo": "Hi Nora, Thursday works. I will send the outline tomorrow. Alex",
+   "autore": "Alex <alex@northwind.example>",
+   "percorso": "Sent",
+   "gruppo": "posta",
+   "quando": "-2h",
+   "inviato": true,
+   "messageId": "s31@northwind.example",
+   "risponde": "nv202@harbor.example",
+   "destinatari": "nora@harbor.example"
+  },
+  {
+   "id": "calendario:evt-9",
+   "fonte": "calendario",
+   "tipo": "evento",
+   "titolo": "Audit call with Priya",
+   "corpo": "Audit of the onboarding flow with Priya Shah.",
+   "quando": "+1d",
+   "gruppo": "agenda"
+  },
+  {
+   "id": "posta:INBOX:900",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "+500$ Welcome Bonus",
+   "corpo": "x",
+   "autore": "Promo <b.promo@bonus.example>",
+   "quando": "-1h"
+  },
+  {
+   "id": "posta:INBOX:901",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Is your compensation strategy working?",
+   "corpo": "x",
+   "autore": "TeamNet <team@comms.teamnet.example>",
+   "quando": "-2h"
+  },
+  {
+   "id": "posta:INBOX:902",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Tomorrow: real BFCM tactics",
+   "corpo": "x",
+   "autore": "The Checkout Team <marketing@checkout.example>",
+   "quando": "-3h"
+  },
+  {
+   "id": "posta:INBOX:903",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Ti ho appena chiesto di collegarci",
+   "corpo": "x",
+   "autore": "Sam Lee <invitations@linkedin.example>",
+   "quando": "-4h"
+  },
+  {
+   "id": "posta:INBOX:904",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "(OLDCO) Everyone fine for today’s call?",
+   "corpo": "x",
+   "autore": "Basecamp (OLDCO) <notifications@app.basecamp.example>",
+   "quando": "-5h"
+  },
+  {
+   "id": "posta:INBOX:905",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Basecamp (OLDCO): Here are your tasks",
+   "corpo": "x",
+   "autore": "Basecamp (OLDCO) <notifications@app.basecamp.example>",
+   "quando": "-6h"
+  },
+  {
+   "id": "posta:INBOX:906",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "New payment methods starting January 2",
+   "corpo": "x",
+   "autore": "Payments <support@payments.example>",
+   "quando": "-7h"
+  },
+  {
+   "id": "posta:INBOX:907",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Digital Product Designer, Web",
+   "corpo": "x",
+   "autore": "Jobs <donotreply@match.jobs.example>",
+   "quando": "-8h"
+  },
+  {
+   "id": "posta:INBOX:908",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Voglio collegarmi",
+   "corpo": "x",
+   "autore": "Ana Ruiz <invitations@linkedin.example>",
+   "quando": "-9h"
+  },
+  {
+   "id": "posta:INBOX:909",
+   "fonte": "email",
+   "tipo": "email",
+   "titolo": "Weekly product digest",
+   "corpo": "x",
+   "autore": "news@producthunt.example",
+   "quando": "-10h"
+  }
+ ],
+ "feed": [
+  {
+   "id": "f1",
+   "tipo": "Priorità",
+   "titolo": "Fix the three Northwind account issues and upload the build",
+   "testo": "Your partner is waiting on it to add the videos and submit.",
+   "fonte": "posta",
+   "doc": "posta:INBOX:201",
+   "progetto": "nw",
+   "quando": "-3h",
+   "peso": 2,
+   "offerta": "I can list the three fixes and the upload steps.",
+   "perche": "Unblocks the App Store submission"
+  },
+  {
+   "id": "f2",
+   "tipo": "Scadenza",
+   "titolo": "Prepare for the audit call with Priya",
+   "testo": "Tomorrow at 9:30. Priya booked it through the studio site.",
+   "urgenza": "Tomorrow 9:30",
+   "fonte": "calendario",
+   "doc": "calendario:evt-9",
+   "quando": "-2h",
+   "peso": 3,
+   "perche": "A direct prospect"
+  },
+  {
+   "id": "f3",
+   "tipo": "Da leggere",
+   "titolo": "Newsletter: App Review appeals changed",
+   "testo": "Worth ten minutes: the appeal path changed this month.",
+   "fonte": "posta",
+   "quando": "-1h",
+   "peso": 0,
+   "perche": "Touches the Northwind review"
+  },
+  {
+   "id": "f4",
+   "tipo": "Proposta",
+   "titolo": "Choose the first audience angle for Lumen Studio",
+   "testo": "Three unpublished drafts are ready to test an angle now.",
+   "fonte": "lavoro",
+   "progetto": "ls",
+   "quando": "-4h",
+   "peso": 1,
+   "offerta": "I can write the outline of the first one.",
+   "perche": "Builds the audience before selling"
+  },
+  {
+   "id": "f5",
+   "tipo": "Da decidere",
+   "titolo": "Approve the post on the founder workflow",
+   "testo": "The draft is ready. Approve it or ask for changes.",
+   "urgenza": "No rush",
+   "fonte": "x",
+   "quando": "-5h",
+   "peso": 1,
+   "perche": "Sets the public positioning"
+  }
+ ],
+ "compiti": [
+  {
+   "id": "c1",
+   "testo": "Reply to App Review about guideline 4.3",
+   "quando": "oggi",
+   "progetto": "nw",
+   "doc": "posta:INBOX:201"
+  },
+  {
+   "id": "c3",
+   "testo": "Answer the App Review team with the build notes",
+   "quando": "oggi",
+   "progetto": "nw",
+   "stato": "chiede",
+   "modo": "bozza",
+   "risultato": "I read the rejection mail and the last build notes.\nWhich build should I point them to, 1.0.3 or the one in TestFlight?",
+   "chieste": [
+    {
+     "domanda": "Which build?",
+     "opzioni": [
+      "1.0.3",
+      "TestFlight build"
+     ],
+     "multipla": false
+    }
+   ]
+  },
+  {
+   "id": "c5",
+   "testo": "Renew the domain before the 30th",
+   "quando": "settimana"
+  }
+ ],
+ "domande": [
+  {
+   "tema": "riferimento",
+   "testo": "To get my bearings: for each project, what are you working on right now? What is dead, and what is blocked?"
+  }
+ ],
+ "riferimento": "Northwind: fixing the review issues and shipping 1.0.4. Harbor Labs: pilot scope this week. Lumen Studio: course outline, not urgent.",
+ "turno": {
+  "budget": 1.5,
+  "notte": "fuori"
+ },
+ "esame": [
+  {
+   "doc": "posta:INBOX:900",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-1h"
+  },
+  {
+   "doc": "posta:INBOX:901",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-2h"
+  },
+  {
+   "doc": "posta:INBOX:902",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-3h"
+  },
+  {
+   "doc": "posta:INBOX:903",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-4h"
+  },
+  {
+   "doc": "posta:INBOX:904",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-5h"
+  },
+  {
+   "doc": "posta:INBOX:905",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-6h"
+  },
+  {
+   "doc": "posta:INBOX:906",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-7h"
+  },
+  {
+   "doc": "posta:INBOX:907",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-8h"
+  },
+  {
+   "doc": "posta:INBOX:908",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-9h"
+  },
+  {
+   "doc": "posta:INBOX:909",
+   "fase": "regole",
+   "motivo": "posta_in_serie",
+   "quando": "-10h"
+  }
+ ]
+}

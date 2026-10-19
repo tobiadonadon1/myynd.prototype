@@ -41,7 +41,17 @@ export function contiVia(v: Pick<Via, 'letti' | 'daParte' | 'lavori' | 'conti'> 
   return c
 }
 
-export const qualcosa = (c: Conti): boolean => ORDINE_CONTI.some(k => c[k] > 0)
+/**
+ * I conti che sono cose fatte: una bozza, un file, una pagina. «If he doesn't
+ * think they are relevant, why would you clutter my screen with a view of
+ * something that is irrelevant? They should have just been read and set
+ * aside» (19 ott 2026): leggere e mettere da parte non sono notizie. I due
+ * conti restano nel server e nel punto; la carta non li dice.
+ */
+export const FATTI: readonly GenereConto[] = ['bozze', 'file', 'notion']
+
+/** C'è una cosa fatta da dire: letto e messo da parte, da soli, non bastano a far nascere la carta. */
+export const qualcosa = (c: Conti): boolean => FATTI.some(k => c[k] > 0)
 
 /** Un pezzo della frase: testo semplice, o un conto che si apre. */
 export type Pezzo = { testo: string; conto?: GenereConto }
@@ -64,13 +74,14 @@ const PAROLE: Record<'it' | 'en', Record<GenereConto, (n: number) => string>> = 
 }
 
 /**
- * La frase sola, a pezzi: «I read 41 things, prepared 2 drafts, wrote 1 file
- * and set aside 29.» Ogni conto è un pezzo suo, perché si apre; i conti a
- * zero non si dicono. Senza niente, nessun pezzo: la carta non c'è.
+ * La frase sola, a pezzi: «I prepared 2 drafts and wrote 1 file.» Solo le
+ * cose fatte (`FATTI`): quante ne ha lette e messe da parte non si dice più
+ * qui. Ogni conto è un pezzo suo, perché si apre; i conti a zero non si
+ * dicono. Senza niente di fatto, nessun pezzo.
  */
 export function frase(c: Conti, l: string): Pezzo[] {
   const lingua = l === 'it' ? 'it' : 'en'
-  const conti = ORDINE_CONTI.filter(k => c[k] > 0)
+  const conti = FATTI.filter(k => c[k] > 0)
   if (!conti.length) return []
   const fuori: Pezzo[] = [{ testo: lingua === 'it' ? 'Ho ' : 'I ' }]
   conti.forEach((k, i) => {
@@ -237,7 +248,11 @@ export function righeNotte(n: NotteVia | null | undefined, c: Conti): RigheNotte
   }
 }
 
-/** C'è qualcosa da dire della notte. */
-export const qualcosaDellaNotte = (r: RigheNotte): boolean => !!(r.mac || r.saltate || r.trattenute || r.niente)
+/**
+ * C'è qualcosa da dire della notte: il Mac che dormiva, una finestra persa,
+ * una cosa trattenuta. «Niente che valesse la pena» da solo non è una
+ * notizia (19 ott 2026): si dice se la carta c'è per altro, non la fa nascere.
+ */
+export const qualcosaDellaNotte = (r: RigheNotte): boolean => !!(r.mac || r.saltate || r.trattenute)
 
 // — la coda unica: fine —

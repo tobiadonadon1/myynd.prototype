@@ -201,3 +201,37 @@ test('da un mittente automatico, «is due by 31 October» regge la carta «Pay �
   const avviso = 'Your annual summary is now available online.'
   assert.equal(validaVoceFeed({ titolo: 'Review the HMRC annual summary', testo: 'HMRC published your annual summary online for you to read.', perche: 'The summary is available online now.', prova: avviso }, mail({ titolo: 'Annual summary', corpo: avviso, autore: 'HMRC <noreply@hmrc.test>' })), false)
 })
+
+test('il messaggio di una persona inoltrato da Turo va al feed, anche da noreply e in serie', () => {
+  // il caso vero del 19 ott 2026: Kyrylo scrive dell'auto, Turo lo manda da noreply
+  const turo = mail({
+    titolo: 'Kyrylo has sent you a message about their Nissan Kicks', autore: 'Turo <noreply@mail.turo.com>', massa: true,
+    corpo: 'Kyrylo has sent you a message about their Nissan Kicks.\n\nHello Tobia!\nYour reservation is confirmed, and thank you so much for choosing my Nissan! I’ll leave the car with a lockbox and provide you with super detailed instructions for pick-up.'
+  })
+  assert.deepEqual(classificaAttenzione(turo, { adesso: ORA }), { destinazione: 'feed', motivo: 'messaggio_di_una_persona' })
+  for (const titolo of [
+    'Maria Rossi sent you a message', 'New message from Kyrylo', 'New message from Ana María: about Saturday',
+    'Luca messaged you', 'Kyrylo replied to your message', 'Giulia ti ha inviato un messaggio', 'Marco ti ha mandato un nuovo messaggio'
+  ]) assert.equal(classifica(mail({ titolo, autore: 'Piattaforma <noreply@piattaforma.test>', massa: true, corpo: 'Ciao, ci vediamo sabato.' })), 'feed', titolo)
+  // già letta da giorni e senza richiesta: come ogni posta diretta, resta fuori
+  assert.deepEqual(classificaAttenzione({ ...turo, letto: true, quando: '2026-09-12T12:00:00Z' }, { adesso: ORA }), { destinazione: 'ignora', motivo: 'letta_senza_richiesta' })
+})
+
+test('la posta in serie che parla di messaggi resta in serie: inviti, annunci, marketing', () => {
+  const bulk: [string, string][] = [
+    ['Ti ho appena chiesto di collegarci', 'Shawn Shen <invitations@linkedin.com>'],
+    ['Voglio collegarmi', 'Adarsh Garad <invitations@linkedin.com>'],
+    ['Digital Product Designer, Web - A&F Co. @ Abercrombie & Fitch Co.', 'Indeed <donotreply@match.indeed.com>'],
+    ['You have a new message from our team!', 'Shop <marketing@shop.test>'],
+    ['Someone sent you a message', 'Dating <noreply@dating.test>'],
+    ['New message from our team', 'Shop <noreply@shop.test>'],
+    ['You have 3 new messages', 'Forum <notifications@forum.test>'],
+    ['Is your compensation strategy working? Or working against you?', 'TeamTriNet <teamtrinet@comms.trinet.com>'],
+    ['(ATMO) Everyone fine for today’s call at 18:00?', 'Basecamp (ATMO) <notifications@app.basecamp.com>'],
+    ['Basecamp (ATMO): Here are your tasks', 'Basecamp (ATMO) <notifications@app.basecamp.com>'],
+    ['Action required: Submit your info', 'Turo <noreply@mail.turo.com>']
+  ]
+  for (const [titolo, autore] of bulk) {
+    assert.deepEqual(classificaAttenzione(mail({ titolo, autore, massa: true, corpo: 'Read more. Unsubscribe.' }), { adesso: ORA }), { destinazione: 'ignora', motivo: 'posta_in_serie' }, titolo)
+  }
+})
