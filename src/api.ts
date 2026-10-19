@@ -24,6 +24,8 @@ export type Connettore = {
   silenzio?: Silenzio
   /** X: il motore non scrive più niente da questo istante; la scheda lo dice al posto della parola del guaio. */
   fermoDal?: string
+  /** X fermo: perché, e cosa fare (riaccendere il motore, o importare l'archivio). La frase è italiana, si traduce con `t`. */
+  fermoPerche?: string
   /** X acceso solo dall'archivio importato: non c'è un motore da rileggere. */
   soloArchivio?: boolean
   /** X: l'archivio importato, di quando è, quanti suoi post; `vecchio` oltre un mese, `daDire` finché la riga non si è vista. */

@@ -54,7 +54,7 @@ export type P8 = {
   config?: Record<string, unknown>; togli?: string[]; claude?: 'fuori'; noteNegate?: boolean
   versioni?: Record<string, string>; indicizzati?: Record<string, string>; storia?: Storia[]; episodi?: Episodio[]
   saltaGiornaliero?: boolean
-  x?: { fermoGiorni?: number; archivi?: { nome: string; generatoGiorniFa: number }[]; altro?: string }
+  x?: { fermoGiorni?: number; lettoreRotto?: boolean; archivi?: { nome: string; generatoGiorniFa: number }[]; altro?: string }
 }
 
 /** «-26h», «-6d», «-15m»: un istante ISO. */
@@ -136,7 +136,7 @@ export function semina(p8: P8, o: { casa: string }) {
     const adesso = Date.now()
     if (p8.x.fermoGiorni) {
       const db = join(o.casa, 'x-engine', 'data', 'engine.db')
-      finto.motoreFermo(db, adesso, p8.x.fermoGiorni)
+      finto.motoreFermo(db, adesso, p8.x.fermoGiorni, { lettoreRotto: !!p8.x.lettoreRotto })
       cfg.aggiorna({ x: { db } })
     }
     if (p8.x.altro) store.segnaCursore('x:archivio:visti', JSON.stringify({ altra: { nome: `twitter-2026-10-14-${p8.x.altro}.zip`, maniglia: p8.x.altro } }))

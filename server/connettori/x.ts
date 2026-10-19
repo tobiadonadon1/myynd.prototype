@@ -22,6 +22,10 @@
 // `documentoMio`, `documentoLike` e `documentoTimeline` sono la forma che
 // tutti e due usano.
 //
+// E chi gli scrive: le menzioni pubbliche che il motore ha visto passare
+// (`x:menzione:<id del post>`), dal file `data/mentions.json` accanto al
+// database.
+//
 // **Le bozze non entrano, e i numeri entrano solo fermi.** Il primo giorno le
 // bozze in attesa erano documenti, e il conto dei documenti in prima pagina è
 // passato da settecento a quattrocentottanta in una mattina: il motore ne
@@ -43,9 +47,9 @@
 // ha scritto: un post, un mi piace, un post visto, una nota. Più di tre giorni
 // fa, e la fonte lo dice fra quelle da sistemare.
 
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import * as store from '../store.ts'
 import type { Documento } from '../store.ts'
@@ -64,6 +68,14 @@ export const GIORNI_ASSESTATO = 4
 export const GIORNI_FERMO = 3
 /** Dove si ricorda l'ultima cosa scritta dal motore, se è fermo: la scheda la dice. */
 export const CURSORE_FERMO = 'x:fermo'
+/** Dove si ricorda la frase del motore fermo (perché e cosa fare): la scheda la dice sotto la data. */
+export const CURSORE_PERCHE = 'x:fermo:perche'
+/** Il motore fa un giro ogni dieci minuti: nessun giro da un giorno, ed è spento. */
+const ORE_SPENTO = 24
+/** Le menzioni pubbliche che il motore ha visto: un file accanto al database, non una tabella. */
+const FILE_MENZIONI = 'mentions.json'
+/** Un file di menzioni più grande di così non è del motore. */
+const TETTO_FILE_MENZIONI = 4 * 1024 * 1024
 const TITOLO_MAX = 80
 /** Nessuna tabella di questo motore arriva a tanto; è un tetto contro un database che non è il suo. */
 const TETTO = 5000
@@ -347,6 +359,84 @@ export function documentoTimeline(giorno: string, visti: PostVisto[], it = lingu
   }
 }
 
+/**
+ * Una menzione: qualcuno che gli ha scritto su X, quasi sempre la risposta a
+ * un suo post. Tobia il 19 ottobre: «can we give the possibility for myynd to
+ * read X?». Fino a qui Myynd leggeva quello che faceva lui (post, mi piace,
+ * timeline) e mai chi gli rispondeva, che il motore tiene in
+ * `data/mentions.json`. È una cosa che gli è arrivata, scritta da altri:
+ * mai `inviato` (che vuol dire «l'ha scritta lui»). Che una menzione di un
+ * mese fa non sembri nuova lo decide la finestra della rilevanza
+ * (`classificaAttenzione`: fuori dai giorni, `fonte_non_recente`).
+ */
+export type Menzione = { postId: string; autore: string | null; testo: string; url: string | null; quando: string }
+
+export function documentoMenzione(m: Menzione, it = lingua() === 'it'): Documento | null {
+  const postId = idPost(m.postId)
+  const quando = istante(m.quando)
+  const testo = m.testo.trim()
+  if (!postId || !quando || !testo) return null
+  const autore = maniglia(m.autore)
+  const url = m.url || (autore ? `https://x.com/${autore}/status/${postId}` : `https://x.com/i/status/${postId}`)
+  const di = autore ? `@${autore}` : (it ? 'Qualcuno' : 'Someone')
+  return {
+    id: `x:menzione:${postId}`,
+    fonte: 'x',
+    tipo: 'menzione',
+    titolo: `${autore ? `@${autore}: ` : ''}${titoloDi(testo)}`,
+    corpo: `${testo}\n\n${it ? `${di} ti ha menzionato su X.` : `${di} mentioned you on X.`}\n${url}`,
+    autore: autore ? `@${autore}` : null,
+    percorso: url,
+    quando,
+    gruppo: 'note'
+  }
+}
+
+/**
+ * Le menzioni del file del motore (`{ observed_at, items: [{ id, handle, text, url, created_at }] }`).
+ * Un file che manca o non si legge non è un guaio: un motore più vecchio non lo scrive.
+ */
+export function menzioniDa(json: string): Menzione[] {
+  let dati: unknown
+  try { dati = JSON.parse(json) } catch { return [] }
+  const voci = (dati && typeof dati === 'object' && Array.isArray((dati as { items?: unknown }).items)) ? (dati as { items: unknown[] }).items : []
+  const fuori: Menzione[] = []
+  for (const v of voci.slice(0, TETTO)) {
+    if (!v || typeof v !== 'object') continue
+    const r = v as Record<string, unknown>
+    const postId = idPost(typeof r.id === 'number' ? String(r.id) : r.id) ?? idDaLink(r.url)
+    if (!postId || typeof r.text !== 'string' || typeof r.created_at !== 'string') continue
+    fuori.push({ postId, autore: typeof r.handle === 'string' ? r.handle : null, testo: r.text, url: typeof r.url === 'string' ? r.url : null, quando: r.created_at })
+  }
+  return fuori
+}
+
+function leggiMenzioni(db: string): Menzione[] {
+  const file = join(dirname(db), FILE_MENZIONI)
+  try {
+    const testo = readFileSync(file, 'utf8')
+    return testo.length > TETTO_FILE_MENZIONI ? [] : menzioniDa(testo)
+  } catch { return [] }
+}
+
+/**
+ * Perché il motore non scrive niente, dalla sua tabella `runs`: spento (nessun
+ * giro da un giorno), o acceso con il lettore di X che fallisce (il 19
+ * ottobre: un giro ogni dieci minuti, e `feedread` «Browser process failed»
+ * dal 20 settembre). Senza la tabella non si sa, e si dice la frase di sempre.
+ */
+export type PercheFermo = 'spento' | 'lettore' | null
+
+function percheFermo(db: DatabaseSync, ci: Set<string>, adesso: number): PercheFermo {
+  if (!ci.has('runs')) return null
+  const [ultimo] = righe<{ q: string | null }>(db, 'SELECT started_at AS q FROM runs ORDER BY started_at DESC LIMIT 1')
+  const q = istante(ultimo?.q)
+  if (!q || Date.parse(q) < adesso - ORE_SPENTO * 3_600_000) return 'spento'
+  const [lettore] = righe<{ ok: number | null }>(db, "SELECT ok FROM runs WHERE job = 'feedread' ORDER BY started_at DESC LIMIT 1")
+  // `ok` vuoto è un giro ancora in corso, non un lettore rotto
+  return lettore?.ok === 0 ? 'lettore' : null
+}
+
 function documentoBozza(b: Bozza): boolean {
   return !!(b.body ?? '').trim() && !!istante(b.created_at)
 }
@@ -429,9 +519,11 @@ function documentoSettimana(chiave: string, post: Post[], conti: Conto[], it: bo
 // — leggere —
 
 export type EsitoX = {
-  docs: Documento[]; post: number; bozze: number; note: number; settimane: number; mipiace: number; timeline: number
+  docs: Documento[]; post: number; bozze: number; note: number; settimane: number; mipiace: number; timeline: number; menzioni: number
   /** L'ultima cosa vera scritta dal motore, se è più vecchia di `GIORNI_FERMO`: il motore è fermo. */
   fermoDal: string | null
+  /** Con il motore fermo, perché: spento, o acceso con il lettore di X rotto. */
+  perche: PercheFermo
 }
 
 /** L'ultima volta che il motore ha scritto qualcosa di suo: un post, un mi piace, un post visto, una nota. */
@@ -462,7 +554,7 @@ export function leggi(cfg: ConfigX, adesso = Date.now(), giorni = GIORNI): Esito
     const conti = righe<Conto>(db, 'SELECT checked_at, followers FROM follower_log ORDER BY checked_at LIMIT ?', [TETTO])
 
     const docs: Documento[] = []
-    const esito: EsitoX = { docs, post: 0, bozze: 0, note: 0, settimane: 0, mipiace: 0, timeline: 0, fermoDal: null }
+    const esito: EsitoX = { docs, post: 0, bozze: 0, note: 0, settimane: 0, mipiace: 0, timeline: 0, menzioni: 0, fermoDal: null, perche: null }
     for (const p of post) { const d = postDelMotore(p, it, adesso); if (d) { docs.push(d); esito.post++ } }
     // le bozze si contano e basta: vedi in testa
     for (const b of bozze) { if (documentoBozza(b)) esito.bozze++ }
@@ -543,8 +635,19 @@ export function leggi(cfg: ConfigX, adesso = Date.now(), giorni = GIORNI): Esito
       if (d) { docs.push(d); esito.mipiace++ }
     }
 
+    // chi gli ha scritto: le menzioni, nella finestra dei post
+    for (const m of leggiMenzioni(cfg.db)) {
+      const q = istante(m.quando)
+      if (!q || q < da) continue
+      const d = documentoMenzione(m, it)
+      if (d) { docs.push(d); esito.menzioni++ }
+    }
+
     const ultima = ultimaScrittura(db, ci)
-    if (ultima && Date.parse(ultima) < adesso - GIORNI_FERMO * 86_400_000) esito.fermoDal = ultima
+    if (ultima && Date.parse(ultima) < adesso - GIORNI_FERMO * 86_400_000) {
+      esito.fermoDal = ultima
+      esito.perche = percheFermo(db, ci, adesso)
+    }
     return esito
   } finally {
     db.close()
@@ -560,9 +663,13 @@ export async function sincronizza(cfg: ConfigX): Promise<EsitoX> {
  * e il rimedio è guardare: non c'è niente da ricollegare in Myynd. Il
  * giorno non sta nella frase (che si traduce intera): lo porta `fermoDal`.
  */
-export function guaioFermo(archivio = false): GuaioFonte {
+export function guaioFermo(archivio = false, perche: PercheFermo = null): GuaioFonte {
   // con un archivio importato il motore fermo non conta: è l'archivio a essere vecchio (vedi `x-archivio.ts`)
-  return new GuaioFonte(archivio ? 'Il tuo archivio di X ha più di un mese.' : 'Il motore di X non scrive niente di nuovo da più di tre giorni.', 'guarda')
+  if (archivio) return new GuaioFonte('Il tuo archivio di X ha più di un mese.', 'guarda')
+  // la frase dice cosa fare, con le due strade gratis: il motore suo, o l'archivio di X
+  if (perche === 'spento') return new GuaioFonte('Il motore di X è spento. Riaccendilo, o importa il tuo archivio di X.', 'guarda')
+  if (perche === 'lettore') return new GuaioFonte('Il motore di X gira, ma il suo browser non legge più X. Sistemalo in x-engine, o importa il tuo archivio di X.', 'guarda')
+  return new GuaioFonte('Il motore di X non scrive niente di nuovo da più di tre giorni.', 'guarda')
 }
 
 // — l'indice —
@@ -574,7 +681,7 @@ const SOLO_DEL_MOTORE = ['x:nota:', 'x:settimana:', 'x:posted:', 'x:draft:']
  * non li cancella perché non li ha visti, li lascia uscire quando escono dalla
  * loro finestra.
  */
-const CON_FINESTRA: [string, number, number][] = [['x:mio:', GIORNI, Infinity], ['x:like:', GIORNI_MIPIACE, TETTO_MIPIACE], ['x:timeline:', GIORNI_TIMELINE, Infinity]]
+const CON_FINESTRA: [string, number, number][] = [['x:mio:', GIORNI, Infinity], ['x:like:', GIORNI_MIPIACE, TETTO_MIPIACE], ['x:timeline:', GIORNI_TIMELINE, Infinity], ['x:menzione:', GIORNI, Infinity]]
 
 /**
  * Toglie dall'indice quello che il motore non ha più, quello che è uscito

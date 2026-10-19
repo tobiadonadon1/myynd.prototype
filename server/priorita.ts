@@ -231,6 +231,12 @@ const RUMORE = new Set(['posta_in_serie', 'aggiornamento_di_servizio', 'istruzio
  * di «system prompt» e passa per istruzioni interne). Qui conta solo la data.
  */
 const SUE = new Set(['lavoro', 'conversazioni', 'x'])
+/**
+ * Parole sue: le fonti di `SUE`, tranne le menzioni di X, che sono di chi gli
+ * scrive. Non devono passare per sue, né mangiare il tetto di X pensato per
+ * i suoi post, né contare fra le sue conversazioni.
+ */
+const suaParola = (d: Pick<store.Documento, 'fonte' | 'id'>) => SUE.has(d.fonte) && !d.id.startsWith('x:menzione:')
 
 /**
  * I documenti che valgono come contesto: anche vecchi, anche letti.
@@ -248,7 +254,7 @@ export function documentiPerLePriorita(docs: store.Documento[], adesso = Date.no
   return docs.filter(d => {
     const quando = Date.parse(d.quando ?? '')
     if (!Number.isFinite(quando) || quando < adesso - GIORNI_QUADRO * 86_400_000 || quando > adesso + 86_400_000) return false
-    if (SUE.has(d.fonte)) {
+    if (suaParola(d)) {
       const tetto = TETTO_PER_FONTE[d.fonte]
       const visti = perFonte.get(d.fonte) ?? 0
       if (tetto && visti >= tetto) return false
@@ -355,7 +361,7 @@ function documentiScritti(docs: store.Documento[]): string {
     // serve più spazio di una mail
     // le sue fonti si leggono intere: `corpoAttuale` taglia a una riga che
     // comincia con «>» o «From:», e una chat con una citazione finiva lì
-    `titolo: ${unaRiga(d.titolo, 120)}\n${SUE.has(d.fonte) ? d.corpo.replace(/[ \t]+/g, ' ').slice(0, 1200) : unaRiga(corpoAttuale(d), 350)}`
+    `titolo: ${unaRiga(d.titolo, 120)}\n${suaParola(d) ? d.corpo.replace(/[ \t]+/g, ' ').slice(0, 1200) : unaRiga(corpoAttuale(d), 350)}`
   ).join('\n\n')
 }
 
@@ -612,7 +618,7 @@ export async function proponi(quadri: readonly quadro.Quadro[] = [], dalQuadro: 
   const gia = store.feedGiaVisto(30)
   const f = fuoco()
   const cartelle = docs.filter(d => d.fonte === 'lavoro').length
-  const conversazioni = docs.filter(d => d.fonte === 'conversazioni' || d.fonte === 'x').length
+  const conversazioni = docs.filter(d => d.fonte === 'conversazioni' || (d.fonte === 'x' && suaParola(d))).length
   const rif = riferimento.leggi()
   const morti = riferimento.progettiMorti(rif.testo, suoi)
   const bloccati = riferimento.progettiBloccati(rif.testo, suoi)
@@ -677,7 +683,7 @@ Scrivi in ${nellaLingua()}.`)
   const fonti: FontiPriorita = {
     testoDoc: id => {
       const d = docPerId.get(id)
-      return d ? { titolo: d.titolo, testo: SUE.has(d.fonte) ? d.corpo : corpoAttuale(d), quando: d.quando ?? null, autore: d.autore ?? null } : null
+      return d ? { titolo: d.titolo, testo: suaParola(d) ? d.corpo : corpoAttuale(d), quando: d.quando ?? null, autore: d.autore ?? null } : null
     },
     memoria: id => testoDelProgetto(id),
     riferimento: rif.testo,

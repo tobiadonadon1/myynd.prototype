@@ -37,6 +37,8 @@ export function motivoMappa(motivo: string | undefined): string {
     case 'feedback_fatto': return t('Hai già completato questa attività. La fonte resta consultabile.')
     case 'feedback_scartato': return t('Hai escluso questo suggerimento. La fonte resta consultabile.')
     case 'fonte_non_disponibile': return t('Non trovo più il documento.')
+    case 'menzione_con_richiesta': return t('Qualcuno ti ha scritto su X e ti chiede qualcosa.')
+    case 'menzione': return t('Qualcuno ti ha menzionato su X.')
     default: return ''
   }
 }

@@ -239,3 +239,14 @@ test('la posta in serie che parla di messaggi resta in serie: inviti, annunci, m
     assert.deepEqual(classificaAttenzione(mail({ titolo, autore, massa: true, corpo: 'Read more. Unsubscribe.' }), { adesso: ORA }), { destinazione: 'ignora', motivo: 'posta_in_serie' }, titolo)
   }
 })
+
+test('una menzione su X è di chi gli scrive: con una richiesta va nel feed, senza è una novità; i suoi post restano parole sue', () => {
+  const menzione = (corpo: string): Documento => ({
+    id: 'x:menzione:2101363755636666378', fonte: 'x', tipo: 'menzione', titolo: '@alice: hello', autore: '@alice',
+    corpo: `${corpo}\n\n@alice ti ha menzionato su X.\nhttps://x.com/alice/status/2101363755636666378`, quando: '2026-09-14T12:00:00Z', gruppo: 'note'
+  })
+  assert.deepEqual(classificaAttenzione(menzione('Could you send me the spec file before Friday?'), { adesso: ORA }), { destinazione: 'feed', motivo: 'menzione_con_richiesta' })
+  assert.deepEqual(classificaAttenzione(menzione('Great point on agents, fully agree.'), { adesso: ORA }), { destinazione: 'brief', motivo: 'menzione' })
+  const suo: Documento = { id: 'x:mio:1', fonte: 'x', tipo: 'post', titolo: 'Can you ship it?', corpo: 'Can you ship it?\n\nPost pubblicato su X.', quando: '2026-09-14T12:00:00Z', gruppo: 'note' }
+  assert.deepEqual(classificaAttenzione(suo, { adesso: ORA }), { destinazione: 'brief', motivo: 'parole_sue' })
+})
