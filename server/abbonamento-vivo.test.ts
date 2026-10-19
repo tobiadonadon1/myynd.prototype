@@ -132,7 +132,8 @@ test('«Stop now» ferma anche il giro in stream-json', async () => {
 
 test('i guai passeggeri: il tempo scaduto si riprova subito, lo sforzo e la rete fra due minuti', () => {
   assert.equal(compiti.riprovaFra('Claude Code ci ha messo troppo.'), 5_000)
-  assert.equal(compiti.riprovaFra('Ci ha messo troppo. Riprova.'), 5_000)
+  // la chiave e il locale aspettano ancora: un locale lento sotto sforzo non si martella ogni cinque secondi
+  assert.equal(compiti.riprovaFra('Ci ha messo troppo e ho lasciato perdere. Riprova.'), 120_000)
   assert.equal(compiti.riprovaFra('Il modello è sotto sforzo.'), 120_000)
   assert.equal(compiti.riprovaFra('Non riesco a raggiungere il fornitore.'), 120_000)
 })

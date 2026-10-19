@@ -703,6 +703,8 @@ function processoVivo(exe: string, args: string[], domanda: string, o: Lancio): 
 
     p.stdin.on('error', () => { /* se è morto prima, lo dice `close` */ })
     p.stdin.end(domanda)
+    // un accento a cavallo di due pezzi si ricompone invece di diventare «�»
+    p.stdout.setEncoding('utf8')
 
     let busta = ''
     let male = ''
@@ -1001,11 +1003,13 @@ async function conAttrezzi(p: Richiesta, attesa = ATTESA_GIRO, signal?: AbortSig
    * il guaio di sempre, «ci ha messo troppo», e decide chi chiama.
    */
   const lancia = async (d: string) => {
+    const via = Date.now()
     try { return await lanciaConRitentativi(exe, sistema, d, o) } catch (e) {
       if (!(e instanceof Piantato) || signal?.aborted) throw e
       console.warn(`myynd · account · bozza senza segni da ${Math.round(e.dopo / 1000)} s (${e.fase === 'primo' ? 'l\'API non ha cominciato' : 'silenzio'}): la rilancio subito`)
       controllaIlTetto()
-      return await lanciaConRitentativi(exe, sistema, d, o)
+      // la seconda partenza ha il tempo che resta, non altri cinque minuti: almeno uno
+      return await lanciaConRitentativi(exe, sistema, d, { ...o, attesa: Math.max(60_000, attesa - (Date.now() - via)) })
     }
   }
   /*

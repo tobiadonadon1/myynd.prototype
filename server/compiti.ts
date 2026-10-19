@@ -368,7 +368,8 @@ const RIPROVA_FRA = 2 * 60_000
  * tempo per passare.
  */
 const RIPROVA_SUBITO = 5_000
-const SCADUTO = /[Cc]i ha messo troppo/
+// solo il filo dell'account: «Ci ha messo troppo e ho lasciato perdere» della chiave e del locale aspetta ancora i due minuti
+const SCADUTO = /^Claude Code ci ha messo troppo/
 /** Dopo quanto si riprova un guaio passeggero (esportata per le prove). */
 export function riprovaFra(guaio: string): number {
   return SCADUTO.test(guaio) ? RIPROVA_SUBITO : RIPROVA_FRA
