@@ -66,7 +66,7 @@ const DOMANDA_DIRETTA = /\b(?:are you|do you|did you|have you|what (?:do you|are
  */
 const NOME = String.raw`(?!(?:Someone|Somebody|Anyone|Qualcuno|Nessuno|You|We|Our|The|Your|A|An|Il|La|Lo|Un|Una|Team|Support)\b)\p{Lu}[\p{L}'’.-]*(?: \p{Lu}[\p{L}'’.-]*){0,2}`
 const MESSAGGIO_DI_UNA_PERSONA = new RegExp(
-  `^\\W*(?:${NOME} (?:has sent you a (?:new )?message|sent you a (?:new )?message|(?:has )?messaged you|(?:has )?replied to your message|ti ha (?:inviato|mandato|scritto) un (?:nuovo )?messaggio)|New message from ${NOME}(?:$|[\\s:,.!(-]))`,
+  `^\\W*(?:${NOME} (?:has sent you a (?:new )?message|sent you a (?:new )?message|(?:has )?messaged you|(?:has )?replied to your message|ti ha (?:inviato|mandato|scritto) un (?:nuovo )?messaggio|ha risposto al tuo messaggio)|New message from ${NOME}(?:$|[\\s:,.!(-]))`,
   'u'
 )
 /** Il titolo dice che una persona con un nome ti ha scritto, attraverso una piattaforma. */
@@ -121,9 +121,13 @@ export function classificaAttenzione(
   if (!email && (ARCHIVIO.test(d.titolo) || ARCHIVIO.test(d.percorso ?? ''))) return no('materiale_di_riferimento')
   if (email) {
     if (!indirizzoAttenzione(d.autore)) return no('mittente_sconosciuto')
+    // una persona con un nome, inoltrata da una piattaforma che scrive da noreply: è posta
+    // diretta, con le regole della posta diretta (una già letta e vecchia resta fuori, una
+    // pubblicità resta in serie). Prima dei servizi: «Your delivery is confirmed» detto da lei è suo
+    const persona = messaggioDiUnaPersona(d.titolo)
     // Service events belong in Brief even when their connector correctly
     // classified the sender as automated or bulk.
-    if (TRANSAZIONE.test(testo) && (d.massa || mittenteAutomatico(d.autore) || !contieneRichiesta(testo))) {
+    if (!persona && TRANSAZIONE.test(testo) && (d.massa || mittenteAutomatico(d.autore) || !contieneRichiesta(testo))) {
       return { destinazione: 'brief', motivo: 'aggiornamento_di_servizio' }
     }
     // un obbligo con una data, anche da un mittente automatico: le tasse, la banca,
@@ -132,10 +136,7 @@ export function classificaAttenzione(
     if (!d.massa && !PROMO.test(testo) && OBBLIGO.test(testo) && CON_SCADENZA.test(testo) && !NIENTE_DA_FARE.test(testo)) {
       return { destinazione: 'feed', motivo: 'obbligo_con_scadenza' }
     }
-    // una persona con un nome, inoltrata da una piattaforma che scrive da noreply: è posta
-    // diretta, con le regole della posta diretta (una già letta e vecchia resta fuori)
-    const persona = messaggioDiUnaPersona(d.titolo)
-    if (!persona && (d.massa || mittenteAutomatico(d.autore) || PROMO.test(testo))) return no('posta_in_serie')
+    if (PROMO.test(testo) || (!persona && (d.massa || mittenteAutomatico(d.autore)))) return no('posta_in_serie')
     if (d.letto && quando < adesso - GIORNO && !contieneRichiesta(testo)) return no('letta_senza_richiesta')
     return { destinazione: 'feed', motivo: persona ? 'messaggio_di_una_persona' : 'posta_diretta_recente' }
   }

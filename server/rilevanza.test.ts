@@ -211,8 +211,12 @@ test('il messaggio di una persona inoltrato da Turo va al feed, anche da noreply
   assert.deepEqual(classificaAttenzione(turo, { adesso: ORA }), { destinazione: 'feed', motivo: 'messaggio_di_una_persona' })
   for (const titolo of [
     'Maria Rossi sent you a message', 'New message from Kyrylo', 'New message from Ana María: about Saturday',
-    'Luca messaged you', 'Kyrylo replied to your message', 'Giulia ti ha inviato un messaggio', 'Marco ti ha mandato un nuovo messaggio'
+    'Luca messaged you', 'Kyrylo replied to your message', 'Giulia ti ha inviato un messaggio', 'Giulia ha risposto al tuo messaggio', 'Marco ti ha mandato un nuovo messaggio'
   ]) assert.equal(classifica(mail({ titolo, autore: 'Piattaforma <noreply@piattaforma.test>', massa: true, corpo: 'Ciao, ci vediamo sabato.' })), 'feed', titolo)
+  // le parole della persona su una consegna sono sue, non un aggiornamento di servizio
+  assert.deepEqual(classificaAttenzione({ ...turo, corpo: 'Hi Tobia, your delivery is confirmed for 9am at the airport. Text me when you land.' }, { adesso: ORA }), { destinazione: 'feed', motivo: 'messaggio_di_una_persona' })
+  // ma una pubblicità col titolo di una persona resta in serie
+  assert.deepEqual(classificaAttenzione({ ...turo, corpo: 'Free offer: 20% off your next trip! Unsubscribe' }, { adesso: ORA }), { destinazione: 'ignora', motivo: 'posta_in_serie' })
   // già letta da giorni e senza richiesta: come ogni posta diretta, resta fuori
   assert.deepEqual(classificaAttenzione({ ...turo, letto: true, quando: '2026-09-12T12:00:00Z' }, { adesso: ORA }), { destinazione: 'ignora', motivo: 'letta_senza_richiesta' })
 })
