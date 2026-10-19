@@ -1,0 +1,110 @@
+[
+ {
+  "aspetta": 2500
+ },
+ {
+  "vai": "Chat"
+ },
+ {
+  "clicca": "New chat"
+ },
+ {
+  "aspetta": 800
+ },
+ {
+  "js": "(() => { const t = document.querySelector('textarea'); if (!t) return 'niente casella'; t.focus(); return 'fuoco' })()"
+ },
+ {
+  "scrivi": "What did Nora say about the Harbor kickoff?"
+ },
+ {
+  "js": "(() => { const b = document.querySelector('[aria-label=\"Send\"]'); if (!b) return 'niente bottone'; if (b.disabled) return 'bottone spento'; b.click(); return 'mandata' })()"
+ },
+ {
+  "aspetta": 1500
+ },
+ {
+  "js": "JSON.stringify({ rotella: [...document.querySelectorAll('button')].some(b => (b.textContent||'').trim() === 'Cancel'), aperta: (document.querySelector('[role=button][aria-current=true]')||{}).textContent || null, nora: document.body.innerText.includes('Nora moved'), lumen: document.body.innerText.includes('149 euros'), domandaA: document.querySelector('textarea') && [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What did Nora say about the Harbor kickoff?'), domandaB: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What is the price of the Lumen course?') })"
+ },
+ {
+  "scatta": "1-a-pensa"
+ },
+ {
+  "clicca": "New chat"
+ },
+ {
+  "aspetta": 1000
+ },
+ {
+  "js": "JSON.stringify({ rotella: [...document.querySelectorAll('button')].some(b => (b.textContent||'').trim() === 'Cancel'), aperta: (document.querySelector('[role=button][aria-current=true]')||{}).textContent || null, nora: document.body.innerText.includes('Nora moved'), lumen: document.body.innerText.includes('149 euros'), domandaA: document.querySelector('textarea') && [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What did Nora say about the Harbor kickoff?'), domandaB: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What is the price of the Lumen course?') })"
+ },
+ {
+  "scatta": "2-b-vuota"
+ },
+ {
+  "js": "(() => { const t = document.querySelector('textarea'); if (!t) return 'niente casella'; t.focus(); return 'fuoco' })()"
+ },
+ {
+  "scrivi": "What is the price of the Lumen course?"
+ },
+ {
+  "js": "(() => { const b = document.querySelector('[aria-label=\"Send\"]'); if (!b) return 'niente bottone'; if (b.disabled) return 'bottone spento'; b.click(); return 'mandata' })()"
+ },
+ {
+  "aspetta": 1000
+ },
+ {
+  "js": "JSON.stringify({ rotella: [...document.querySelectorAll('button')].some(b => (b.textContent||'').trim() === 'Cancel'), aperta: (document.querySelector('[role=button][aria-current=true]')||{}).textContent || null, nora: document.body.innerText.includes('Nora moved'), lumen: document.body.innerText.includes('149 euros'), domandaA: document.querySelector('textarea') && [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What did Nora say about the Harbor kickoff?'), domandaB: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What is the price of the Lumen course?') })"
+ },
+ {
+  "scatta": "3-b-pensa"
+ },
+ {
+  "aspetta": 4000
+ },
+ {
+  "js": "JSON.stringify({ rotella: [...document.querySelectorAll('button')].some(b => (b.textContent||'').trim() === 'Cancel'), aperta: (document.querySelector('[role=button][aria-current=true]')||{}).textContent || null, nora: document.body.innerText.includes('Nora moved'), lumen: document.body.innerText.includes('149 euros'), domandaA: document.querySelector('textarea') && [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What did Nora say about the Harbor kickoff?'), domandaB: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What is the price of the Lumen course?') })"
+ },
+ {
+  "scatta": "4-b-risposta"
+ },
+ {
+  "js": "(() => { const r = [...document.querySelectorAll('[role=button]')].find(e => (e.textContent||'').includes(\"What did Nora say\") && e.getAttribute('aria-current') === null); if (!r) return 'riga non trovata'; r.click(); return 'aperta' })()"
+ },
+ {
+  "aspetta": 1200
+ },
+ {
+  "js": "JSON.stringify({ rotella: [...document.querySelectorAll('button')].some(b => (b.textContent||'').trim() === 'Cancel'), aperta: (document.querySelector('[role=button][aria-current=true]')||{}).textContent || null, nora: document.body.innerText.includes('Nora moved'), lumen: document.body.innerText.includes('149 euros'), domandaA: document.querySelector('textarea') && [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What did Nora say about the Harbor kickoff?'), domandaB: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What is the price of the Lumen course?') })"
+ },
+ {
+  "scatta": "5-a-ancora"
+ },
+ {
+  "aspetta": 9000
+ },
+ {
+  "js": "JSON.stringify({ rotella: [...document.querySelectorAll('button')].some(b => (b.textContent||'').trim() === 'Cancel'), aperta: (document.querySelector('[role=button][aria-current=true]')||{}).textContent || null, nora: document.body.innerText.includes('Nora moved'), lumen: document.body.innerText.includes('149 euros'), domandaA: document.querySelector('textarea') && [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What did Nora say about the Harbor kickoff?'), domandaB: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What is the price of the Lumen course?') })"
+ },
+ {
+  "scatta": "6-a-fine"
+ },
+ {
+  "testo": "6-a-fine"
+ },
+ {
+  "js": "(() => { const r = [...document.querySelectorAll('[role=button]')].find(e => (e.textContent||'').includes(\"price of the Lumen\") && e.getAttribute('aria-current') === null); if (!r) return 'riga non trovata'; r.click(); return 'aperta' })()"
+ },
+ {
+  "aspetta": 1200
+ },
+ {
+  "js": "JSON.stringify({ rotella: [...document.querySelectorAll('button')].some(b => (b.textContent||'').trim() === 'Cancel'), aperta: (document.querySelector('[role=button][aria-current=true]')||{}).textContent || null, nora: document.body.innerText.includes('Nora moved'), lumen: document.body.innerText.includes('149 euros'), domandaA: document.querySelector('textarea') && [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What did Nora say about the Harbor kickoff?'), domandaB: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'What is the price of the Lumen course?') })"
+ },
+ {
+  "scatta": "7-b-dopo"
+ },
+ {
+  "testo": "7-b-dopo"
+ }
+]

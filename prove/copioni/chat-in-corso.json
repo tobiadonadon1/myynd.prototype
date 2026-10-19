@@ -1,0 +1,18 @@
+{
+  "modello": "finto",
+  "risposte": [
+    {
+      "se": "Nora say about the Harbor kickoff",
+      "in": "utente",
+      "attesa": 16000,
+      "testo": "Nora moved the Harbor kickoff to Friday at 10:00 and is waiting for your yes."
+    },
+    {
+      "se": "price of the Lumen course",
+      "in": "utente",
+      "attesa": 2500,
+      "testo": "The Lumen course is priced at 149 euros for the first cohort."
+    }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

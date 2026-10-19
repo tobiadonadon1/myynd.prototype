@@ -25,6 +25,8 @@ import { avvisiAccesi } from './desktop.ts'
 import { avvisa, dalFeed, impostaSchermo } from './avvisi.ts'
 import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
 import { segna, tempiChat } from './tempi.ts'
+import * as corsa from './chat-in-corso.ts'
+import type { Corse } from './chat-in-corso.ts'
 import { rigaImparata } from './gemello-frasi.ts'
 
 /**
@@ -454,10 +456,14 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [hoverThread, setHoverThread] = useState<string | null>(null)
   const [messaggi, setMessaggi] = useState<Messaggio[]>([])
   const [draftMsg, setDraftMsg] = useState('')
-  const [pensando, setPensando] = useState(false)
-  // «Aggiorno la memoria», «Cerco nelle tue fonti»: il passo che il server
-  // dice mentre lavora, coerente con quello che sta facendo davvero
-  const [passoChat, setPassoChat] = useState<string | null>(null)
+  // Le risposte in arrivo, una per chat: la rotella, il passo che il server
+  // dice mentre lavora («Cerco nelle tue fonti») e la risposta che cresce
+  // appartengono alla chat che le ha chieste. Vedi `chat-in-corso.ts`.
+  const [corse, setCorse] = useState<Corse>(corsa.nessunaCorsa)
+  const corsaAperta = thread ? corse.get(thread) : undefined
+  const pensando = corsa.pensaIn(corse, thread)
+  const passoChat = corsaAperta?.passo ?? null
+  const visibili: Messaggio[] = corsa.vista(messaggi, corsaAperta)
 
   const [doc, setDoc] = useState<Record<string, string> | null>(null)
   const [aprendoFonte, setAprendoFonte] = useState<string | null>(null)
@@ -745,7 +751,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * pagina — cioè perdere la chat. Chiudendo la connessione il server vede
    * `close` e ferma anche il modello.
    */
-  const filoChat = useRef<AbortController | null>(null)
+  const filiChat = useRef(new Map<string, AbortController>())
+  // la chat aperta adesso, per chi la guarda quando una risposta finisce
+  const threadAperto = useRef(thread)
+  threadAperto.current = thread
   /*
    * Il filo che `chiedi` ha appena creato.
    *
@@ -777,7 +786,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const id = requestAnimationFrame(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight })
     return () => cancelAnimationFrame(id)
   // anche l'intervista: ogni domanda nuova e la chiusura devono arrivare in vista
-  }, [messaggi.length, screen, pensando, battute.length, passo, intervistaFinita])
+  }, [visibili.length, screen, pensando, battute.length, passo, intervistaFinita])
 
   // aperta la ricerca senza scrivere niente, mostro gli ultimi documenti letti
   const genCerca = useRef(0)
@@ -856,46 +865,47 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const id = chatId ?? thread ?? `th${Date.now()}`
     // nato adesso: non c'è niente da caricare, e caricare farebbe perdere la risposta
     if (!chatId && !thread) filoNuovo.current = id
-    const mio = ++gen.current
     setScreen('chat'); setSearch(false); setMapFull(false); setMenu(false)
     setThread(id)
+    threadAperto.current = id
     const bozza = draftMsg
     setDraftMsg(''); setNodeMsg('')
     const idScritta = `tmp${Date.now()}`
-    setMessaggi(m => [...m, { id: idScritta, role: 'u', text: testo }])
-    setPensando(true)
-    // il filo di prima, se ce n'era uno appeso, non serve più a nessuno
-    filoChat.current?.abort()
+    // la domanda, la rotella e la risposta che cresce stanno sotto questa chat:
+    // aprirne un'altra non se le porta dietro (vedi `chat-in-corso.ts`)
+    setCorse(c => corsa.avvia(c, id, { id: idScritta, role: 'u', text: testo }))
+    // e la sua riga a sinistra, per tornarci mentre pensa
+    setThreads(ts => corsa.conRiga(ts, id, testo, new Date().toISOString()))
+    // il filo di prima di questa stessa chat, se ce n'era uno appeso, non serve
+    // più a nessuno; quelli delle altre chat continuano a rispondere
+    filiChat.current.get(id)?.abort()
     const filo = new AbortController()
-    filoChat.current = filo
+    filiChat.current.set(id, filo)
+    const mia = () => filiChat.current.get(id) === filo
     // P10 · quanto ci mette la prima parola
     const cronometro = tempiChat()
     try {
       // La risposta cresce sotto gli occhi invece di comparire tutta insieme:
       // un messaggio finto che si riempie a ogni frammento, sostituito da
-      // quello vero — con le fonti — solo alla fine.
-      const idVivo = idScritta + 'a'
-      let cresciuta = ''
-      setPassoChat(null)
+      // quello vero, con le fonti, solo alla fine.
       const r = await api.chiedi(id, testo, delta => {
-        if (gen.current !== mio) return
+        if (!mia()) return
         cronometro.primaParola()
-        cresciuta += delta
-        setPensando(false)
-        setPassoChat(null)
-        setMessaggi(m => {
-          const senza = m.filter(x => x.id !== idVivo)
-          return [...senza, { id: idVivo, role: 'a', text: cresciuta }]
-        })
+        setCorse(c => corsa.frammento(c, id, delta))
       }, () => {
         // il motore è cambiato a metà e la risposta riparte da capo: quello
         // che si è già letto non è un pezzo di questa, e sotto tornerebbe due volte
-        if (gen.current !== mio) return
-        cresciuta = ''
-        setPensando(true)
-        setMessaggi(m => m.filter(x => x.id !== idVivo))
-      }, filo.signal, compitoDiscussione(id), passo => { if (gen.current === mio) setPassoChat(passo) })
-      if (gen.current === mio) setMessaggi(r.messaggi)
+        if (mia()) setCorse(c => corsa.riparti(c, id))
+      }, filo.signal, compitoDiscussione(id), p => { if (mia()) setCorse(c => corsa.passo(c, id, p)) })
+      /*
+       * La risposta va nella sua chat, non in quella aperta.
+       *
+       * Se lui è altrove non si tocca niente: tornato qui, la chat si rilegge
+       * dal server e la trova salvata. Se è qui, una lettura partita mentre la
+       * risposta arrivava riporterebbe la chat di prima, senza la risposta:
+       * si invalida avanzando `gen`.
+       */
+      if (mia() && threadAperto.current === id) { ++gen.current; setMessaggi(r.messaggi); setMessaggiPronti(true) }
       cronometro.fine()
     } catch (e) {
       /*
@@ -904,31 +914,29 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
        * Chi l'ha premuto sa già cos'è successo: mostrargli un cartellino rosso
        * sarebbe dirgli che è andato storto un gesto che ha fatto lui. Si toglie
        * la domanda rimasta appesa e le si rimette in mano il testo, che è
-       * l'unica cosa che gli serve per riprovare — magari con un altro modello.
+       * l'unica cosa che gli serve per riprovare, magari con un altro modello.
        */
       const suo = filo.signal.aborted
       if (!suo) mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a rispondere.'))
-      if (gen.current === mio) {
-        setMessaggi(m => m.filter(x => !x.id.startsWith('tmp')))
-        setDraftMsg(d => d || bozza)   // il testo scritto non si perde
-      }
+      // il testo scritto non si perde, se si è ancora nella sua chat
+      if (mia() && threadAperto.current === id) setDraftMsg(d => d || bozza)
     }
-    if (filoChat.current === filo) filoChat.current = null
+    /*
+     * Sempre, non solo se è ancora la chat aperta.
+     *
+     * Aprire un'altra chat mentre la risposta non è ancora cominciata non deve
+     * lasciare la rotella accesa: con il bottone disabilitato e l'Invio
+     * guardati dalla rotella, la chat smetteva di poter mandare. Si chiude
+     * solo la corsa di questa domanda: se nella stessa chat ne è partita
+     * un'altra, quella resta.
+     */
+    setCorse(c => corsa.chiudi(c, id, idScritta))
+    if (mia()) filiChat.current.delete(id)
     // l'elenco delle chat si rinfresca fuori dal try: un elenco che non torna
     // faceva dire «non sono riuscito a rispondere» di una risposta arrivata intera
     caricaChat().catch(() => {})
     // Explicit project goals are saved before the reply; update the feed too.
     caricaFeed().catch(() => {})
-    /*
-     * Sempre, non solo se è ancora la mia generazione.
-     *
-     * Aprire un'altra chat mentre la risposta non è ancora cominciata faceva
-     * avanzare la generazione, e questa riga veniva saltata: `pensando`
-     * restava acceso per il resto della sessione. Con il bottone disabilitato
-     * e l'Invio ora guardato dallo stesso flag, la chat smetteva di poter
-     * mandare — in tutti i fili, fino a un ricaricamento.
-     */
-    setPensando(false)
   }
 
   const sincronizza = async (fonte?: string) => {
@@ -1735,15 +1743,15 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       setThread(id); setRilettura(n => n + 1); setScreen('chat'); setSearch(false); setMenu(false)
       caricaChat().catch(() => {})
     },
-    chatEmpty: messaggi.length === 0,
+    chatEmpty: visibili.length === 0,
     chatCaricata: elencoChatPronto && messaggiPronti,
     // la conversazione con Myynd ha il suo nome
     chatTitolo: passo !== null || intervistaFinita ? 'Myynd' : th?.titolo ?? 'Nuova chat',
     pensando,
     passoChat,
-    /** Taglia la risposta che sta arrivando. Vale solo mentre `pensando` è acceso. */
-    annulla: () => { filoChat.current?.abort() },
-    messages: messaggi.map(m => ({
+    /** Taglia la risposta che sta arrivando nella chat aperta, e solo quella. */
+    annulla: () => { if (thread) filiChat.current.get(thread)?.abort() },
+    messages: visibili.map(m => ({
       id: m.id, text: m.text, mio: m.role === 'u',
       hasSources: !!(m.sources && m.sources.length), sources: m.sources ?? [],
       row: m.role === 'u' ? RIGA_MIA : RIGA_SUA,
