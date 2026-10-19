@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api, type Compito, type Progetto } from '../api'
 import { frasi, t } from '../lingua'
 import { Marchio } from '../components/Marchio'
@@ -77,7 +77,8 @@ export function Calendario({ l, oggi, inizio, setInizio, lingua, espandi, apri, 
   const setQuanti = (n: QuantiGiorni) => { setQuantiStato(n); try { localStorage.setItem(CHIAVE_QUANTI, String(n)) } catch { /* senza memoria si riparte da cinque */ } }
   const contenitore = useRef<HTMLElement>(null)
   const [stanno, setStanno] = useState(5)
-  useEffect(() => {
+  // prima del disegno: misurato dopo, una finestra stretta mostrava cinque colonne per un fotogramma
+  useLayoutEffect(() => {
     const el = contenitore.current
     if (!el) return
     const misura = () => setStanno(colonneCheStanno(el.clientWidth))
