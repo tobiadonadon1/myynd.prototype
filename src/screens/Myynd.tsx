@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, loc, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconDoc, IconPiu, IconSpunta } from '../icons'
+import { IconAvanti, IconCestino, IconDoc, IconPiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
@@ -1368,6 +1368,43 @@ function MenuTesta({ v, leggendo }: { v: Vals; leggendo: boolean }) {
   )
 }
 
+/**
+ * Giorno e notte, dalla prima pagina: «add a dark to day switch on home page
+ * to the top right» (19 ottobre 2026). La stessa scelta delle Preferenze, a un
+ * tocco: mostra dove si va, la luna di giorno e il sole di notte. Partendo da
+ * «come il sistema» si passa al contrario di quello che si vede adesso.
+ */
+function GiornoNotte({ v }: { v: Vals }) {
+  const [sistemaScuro, setSistemaScuro] = useState(() => {
+    try { return matchMedia('(prefers-color-scheme: dark)').matches } catch { return false }
+  })
+  useEffect(() => {
+    let q: MediaQueryList
+    try { q = matchMedia('(prefers-color-scheme: dark)') } catch { return }
+    const f = (e: MediaQueryListEvent) => setSistemaScuro(e.matches)
+    q.addEventListener('change', f)
+    return () => q.removeEventListener('change', f)
+  }, [])
+  const scelto = v.temi.find(x => x.scelto)?.id ?? 'sistema'
+  const scuro = scelto === 'scuro' || (scelto === 'sistema' && sistemaScuro)
+  const vai = v.temi.find(x => x.id === (scuro ? 'chiaro' : 'scuro'))
+  if (!vai) return null
+  return (
+    <Hov as="button" type="button" onClick={() => vai.onClick()}
+      aria-label={vai.label} title={vai.label}
+      style={{
+        width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0, marginTop: 6,
+        borderRadius: '50%', border: '1px solid rgba(var(--inchiostro-rgb),.16)',
+        background: 'rgba(var(--luce-rgb),.7)', color: 'rgba(var(--inchiostro-rgb),.6)', cursor: 'pointer'
+      }}
+      hover={{ background: 'var(--carta-alta)', color: 'var(--rame-testo)' }}>
+      {scuro
+        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" /></svg>
+        : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M20 14.6A8.3 8.3 0 0 1 9.4 4a8.3 8.3 0 1 0 10.6 10.6Z" /></svg>}
+    </Hov>
+  )
+}
+
 export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriLavoro, mattina = null, ricevuta: dallaRicevuta }: {
   v: Vals; lista?: Lista; blocchi?: BloccoPagina[]
   /** La ricevuta in cima (`server/mattina.ts`), e quello che aspetta lui con la lettera: li tiene il guscio, che li conta nel menù. */
@@ -1449,6 +1486,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio, listaDiLato = false, apriL
           {/* le fonti e «Leggi adesso» stavano in fila accanto alle notizie, tre
               pastiglie in testa alla pagina: adesso dietro un «⋯» solo, con il
               foglio del punto che la carta in cima non apre più (15 ottobre 2026) */}
+          <GiornoNotte v={v} />
           <MenuTesta v={v} leggendo={leggendo} />
         </div>
       </div>
@@ -1583,7 +1621,16 @@ function Avviso({ v }: { v: Vals }) {
     puoAprireTitoli: !!osservatore()?.apriImpostazioniTitoli,
     quotaFinita: v.quotaFinita
   })
-  if (!riga) return null
+  /*
+   * Il cestino: «the warning of the sources… free up my view» (19 ottobre
+   * 2026). Nasconde la riga per quei guai, non per sempre: un guaio nuovo, o
+   * lo stesso con un'altra causa, la riporta. Il motore che non pensa non si
+   * nasconde: senza, non c'è niente di quello che la pagina promette.
+   */
+  const firma = firmaAvviso(v, titoliNegati)
+  const [nascosto, setNascosto] = useState(avvisoNascosto)
+  const nascondibile = !v.testaGuasta && v.claudeOn
+  if (!riga || (nascondibile && nascosto === firma)) return null
   return (
     <div role="status" style={{
       flex: 'none', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14,
@@ -1593,8 +1640,33 @@ function Avviso({ v }: { v: Vals }) {
       <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: 'var(--rame)' }} />
       <span style={{ flex: '1 1 220px', minWidth: 0, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{riga.frase}</span>
       <RimedioFonte controllo={riga.controllo} v={v} quandoImpostazioni={setDopoImpostazioni} quandoTitoli={setTitoliNegati} />
+      {nascondibile && (
+        <Hov as="button" type="button" onClick={() => { nascondiAvviso(firma); setNascosto(firma) }}
+          aria-label={t('Nascondi')} title={t('Nascondi')}
+          style={{ flex: 'none', display: 'inline-grid', placeItems: 'center', width: 24, height: 24, margin: '-4px -8px -4px -4px', padding: 0, border: 0, borderRadius: '50%', background: 'transparent', color: 'rgba(var(--rame-rgb),.55)', cursor: 'pointer' }}
+          hover={{ color: 'var(--rame-testo)' }}>
+          <IconCestino size={13} />
+        </Hov>
+      )}
     </div>
   )
+}
+
+const CHIAVE_AVVISO = 'myynd.avvisoNascosto'
+function avvisoNascosto(): string | null {
+  try { return localStorage.getItem(CHIAVE_AVVISO) } catch { return null }
+}
+function nascondiAvviso(firma: string) {
+  try { localStorage.setItem(CHIAVE_AVVISO, firma) } catch { /* senza memoria torna alla prossima apertura */ }
+}
+/** Quali guai dice la riga, e perché: non la frase, che porta le date e cambia da sola. */
+function firmaAvviso(v: Vals, titoliNegati: boolean): string {
+  return [
+    v.mancanze.map(m => `${m.id}:${m.rimedio}`).sort().join(','),
+    v.guastoLettura ?? '',
+    v.osservaTitoli && titoliNegati ? 'titoli' : '',
+    v.quotaFinita ? 'quota' : ''
+  ].join('|')
 }
 
 /**

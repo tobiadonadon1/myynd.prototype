@@ -784,6 +784,39 @@ export function useCompiti(
   }, [indietro, mostraToast, ridaiAMyynd])
 
   /**
+   * Il cestino delle righe rimaste indietro: le toglie tutte insieme.
+   *
+   * «The old to do list items… free up my view» (19 ottobre 2026). Una per
+   * una c'era già; questo è lo stesso gesto per tutte, e siccome tocca più
+   * righe di quante se ne vedano sotto il dito, «Annulla» le rimette tutte.
+   */
+  const togliTante = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return
+    const via = new Set(ids)
+    setCompiti(cs => cs.filter(x => !via.has(x.id)))
+    ids.forEach(scorda)
+    const tolte: string[] = []
+    try {
+      let r: { compiti: Compito[] } | null = null
+      for (const id of ids) { r = await api.eliminaCompito(id); tolte.push(id) }
+      if (r) setCompiti(r.compiti)
+    } catch {
+      mostraToast(t('Non sono riuscito a toglierlo.'))
+      void api.compiti().then(r => setCompiti(r.compiti)).catch(() => {})
+      return
+    }
+    mostraToast(frasi.tolteIndietro(tolte.length), () => {
+      void (async () => {
+        try {
+          let r: { compiti: Compito[] } | null = null
+          for (const id of tolte) r = await api.rimettiCompito(id)
+          if (r) setCompiti(r.compiti)
+        } catch { mostraToast(t('Non sono riuscito a rimetterla.')) }
+      })()
+    })
+  }, [mostraToast])
+
+  /**
    * Mandarla davvero.
    *
    * Non c'è un aggiornamento ottimistico qui, ed è l'unico posto in tutto
@@ -959,7 +992,7 @@ export function useCompiti(
     pronte, chiedono,
     /** Quante aspettano lui (pronte, domande, righe ferme): il punto su «Da fare», il segno nella barra dei menù e il numero sul Dock. */
     inAttesa,
-    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, fermaTurno, disfa, richiama, rispondi, lascia, togliRegola, ritiraGradino, correggi, cambia, contratto, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, affidaDaCarta, chiudi, riapri, delega, mettiInCoda, impostaTurno, fermaTurno, disfa, richiama, rispondi, lascia, togliRegola, ritiraGradino, correggi, cambia, contratto, sposta, elimina, togliTante, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

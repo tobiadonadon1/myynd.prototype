@@ -4116,6 +4116,9 @@ export const frasi = {
     const detto = Number.isNaN(d.getTime()) ? giorno : d.toLocaleDateString(corrente === 'en' ? 'en-US' : 'it-IT', { weekday: 'long', month: 'long', day: 'numeric' })
     return corrente === 'en' ? `Write a line for ${detto}` : `Scrivi una riga per ${detto}`
   },
+  /** Il cestino delle righe rimaste indietro: il nome sotto la mano, e il conto dopo. */
+  togliIndietro: (n: number) => corrente === 'en' ? (n === 1 ? 'Remove the overdue item' : `Remove the ${n} overdue items`) : (n === 1 ? 'Togli quella rimasta indietro' : `Togli le ${n} rimaste indietro`),
+  tolteIndietro: (n: number) => corrente === 'en' ? (n === 1 ? 'Removed 1 overdue item.' : `Removed ${n} overdue items.`) : (n === 1 ? 'Tolta 1 rimasta indietro.' : `Tolte ${n} rimaste indietro.`),
   /** F2 · il turno in una riga. */
   carteDelTurno: (n: number, max: number) => corrente === 'en' ? `${n} of ${max} today` : `${n} di ${max} oggi`,
   stanotteDalle: (ora: string) => corrente === 'en' ? `Tonight from ${ora}` : `Stanotte dalle ${ora}`,

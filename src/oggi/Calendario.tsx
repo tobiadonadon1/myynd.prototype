@@ -5,7 +5,7 @@ import { Marchio } from '../components/Marchio'
 import { IconCestino } from '../icons'
 import { coloreProgetto } from '../colori-progetto'
 import type { Lista } from './useCompiti'
-import { dataLocale, giornoCompito, giornoLocale, secchioDelGiorno, spostaGiorno } from './giorni'
+import { dataLocale, giornoCompito, giornoLocale, rimasteIndietro, secchioDelGiorno, spostaGiorno } from './giorni'
 import { leggiRiga } from './scrivi-riga'
 import { localeDelGiorno, statoRiga } from './bacheca'
 import './calendario.css'
@@ -156,11 +156,19 @@ export function Giorno({ l, g, oggi, locale, progetti, righe, fatte, apri, modif
   const nome = dataLocale(g).toLocaleDateString(locale, { weekday: 'long' })
   const data = dataLocale(g).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
   const classi = ['quaderno-giorno', g === oggi && 'oggi', g < oggi && 'passato', compatto && 'compatto'].filter(Boolean).join(' ')
+  const indietro = g === oggi ? rimasteIndietro(righe, oggi) : []
   return (
     <section className={classi} aria-label={dataLocale(g).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' })}>
-      <header>
+      <header data-indietro={indietro.length > 0 || undefined}>
         <span className="quaderno-data">{data}</span>
         <h3>{nome.charAt(0).toLocaleUpperCase() + nome.slice(1)}</h3>
+        {indietro.length > 0 && (
+          <button type="button" className="quaderno-icona quaderno-indietro" data-togli
+            onClick={() => void l.togliTante(indietro.map(c => c.id))}
+            aria-label={frasi.togliIndietro(indietro.length)} title={frasi.togliIndietro(indietro.length)}>
+            <IconCestino size={13} />
+          </button>
+        )}
       </header>
       <Righe l={l} g={g} oggi={oggi} locale={locale} progetti={progetti} righe={righe} fatte={fatte}
         minime={minime ?? (compatto ? 3 : 9)} apri={apri} modifica={modifica} />

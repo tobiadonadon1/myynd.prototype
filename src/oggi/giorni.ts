@@ -22,6 +22,19 @@ export function giornoCompito(c: { giorno?: string | null; quando: string }, ogg
   return c.giorno || (c.quando === 'oggi' ? oggi : null)
 }
 
+/**
+ * Le righe di un giorno passato che oggi sono ancora qui, e che il cestino in
+ * testa a oggi toglie. Solo le sue: una riga che Myynd ha in mano è lavoro in
+ * corso, e si toglie una per una, dove il gesto dice cosa ferma.
+ */
+export function rimasteIndietro<C extends { giorno?: string | null; quando: string; stato: string; modo?: string | null }>(righe: C[], oggi: string): C[] {
+  return righe.filter(c => {
+    const g = giornoCompito(c, oggi)
+    if (!g || g >= oggi) return false
+    return c.stato !== 'delegato' && !(c.stato === 'aperto' && !!c.modo && c.modo !== 'io')
+  })
+}
+
 export function secchioDelGiorno(giorno: string | null, oggi = giornoLocale()): 'oggi' | 'settimana' | 'poi' {
   return !giorno ? 'poi' : giorno <= oggi ? 'oggi' : 'settimana'
 }

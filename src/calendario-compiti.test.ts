@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   ORE_IN_VISTA, affianca, celleDelMese, colonneSettimana, giornoLocale, giornoCompito, giorniVisibili,
   inizioMese, inizioSettimana, mezzanotte, miniMese, minutiDa, posaAdesso, posaEvento, quantiGiorni,
-  righeOre, secchioDelGiorno, spostaGiorno, spostaMese
+  righeOre, rimasteIndietro, secchioDelGiorno, spostaGiorno, spostaMese
 } from './oggi/giorni.ts'
 import { secchioVivo } from './oggi/secchi.ts'
 
@@ -225,4 +225,18 @@ test('local date arithmetic stays stable across daylight saving and negative UTC
     assert.equal(spostaGiorno('2026-03-08', 1), '2026-03-09')
     assert.equal(spostaGiorno('2026-11-01', 1), '2026-11-02')
   } finally { if (precedente === undefined) delete process.env.TZ; else process.env.TZ = precedente }
+})
+
+test('the overdue bin takes his own rows from past days, not today, not undated, not what Myynd is working on', () => {
+  const oggi = '2026-10-19'
+  const righe = [
+    { id: 'a', giorno: '2026-10-15', quando: 'oggi', stato: 'aperto' },
+    { id: 'b', giorno: '2026-10-18', quando: 'oggi', stato: 'aperto', modo: 'io' },
+    { id: 'c', giorno: oggi, quando: 'oggi', stato: 'aperto' },
+    { id: 'd', giorno: null, quando: 'poi', stato: 'aperto' },
+    { id: 'e', giorno: '2026-10-16', quando: 'oggi', stato: 'delegato' },
+    { id: 'f', giorno: '2026-10-16', quando: 'oggi', stato: 'aperto', modo: 'myynd' },
+    { id: 'g', giorno: '2026-10-17', quando: 'oggi', stato: 'pronto' }
+  ]
+  assert.deepEqual(rimasteIndietro(righe, oggi).map(c => c.id), ['a', 'b', 'g'])
 })
