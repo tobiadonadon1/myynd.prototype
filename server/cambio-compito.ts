@@ -22,8 +22,13 @@ import * as progetti from './progetti.ts'
 import { senzaTrattini } from './testo.ts'
 import { lingua, nellaLingua } from './config.ts'
 
-export type Azione = 'riscrivi' | 'sposta' | 'fatto' | 'togli'
-export const AZIONI: readonly Azione[] = ['riscrivi', 'sposta', 'fatto', 'togli']
+/*
+ * Togliere una riga dalla chat non c'è: dalla chat non si vede come rimetterla,
+ * e lui ha chiesto di riscrivere, non di cancellare. Se lo chiede, si toglie
+ * col cestino sulla riga.
+ */
+export type Azione = 'riscrivi' | 'sposta' | 'fatto'
+export const AZIONI: readonly Azione[] = ['riscrivi', 'sposta', 'fatto']
 const SCAFFALI = ['oggi', 'settimana', 'poi']
 
 /** Un cambio già controllato: la riga c'è, è aperta, e le parole sono sue. */
@@ -117,37 +122,88 @@ export const NESSUNA_RIGA =
   'Non c\'è nessuna riga con quell\'id. Gli id buoni sono solo quelli fra parentesi quadre ' +
   'nella lista che hai: copiane uno alla lettera, oppure chiedile di quale riga sta parlando.'
 
+/*
+ * I verbi che chiedono davvero un cambio, uno per azione: più stretti di
+ * `VERBO_CAMBIO`, che serve solo a decidere se chiedere. Una citazione
+ * qualunque del suo messaggio non bastava: «the launch post on X for Myynd
+ * followers looks great, thanks» passava per un «riscrivi».
+ */
+const VERBO_FATTO = /\b(?:done|did it|did that|i did|i've done|finished|completed|complete|sent it|fatt[oa]|l'?ho fatt[oa]|l’ho fatt[oa]|finit[oa]|completat[oa]|mandat[oa]|chiudila|chiudi)\b/i
+const VERBO_SPOSTA = /\b(?:move|moved|push|postpone|reschedule|tomorrow|tonight|next week|later|monday|tuesday|wednesday|thursday|friday|saturday|sunday|sposta\w*|rimand\w*|domani|dopodomani|stasera|settimana prossima|luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica)\b/i
+/** «Rinominala», «call it», «should be»: la riga nuova la scrive lui. */
+const VERBO_RISCRIVI = /\b(?:reword|rename|rewrite|change it|change the task|call it|make it|should (?:be|say|read)|riscriv\w*|rinomin\w*|cambiala|cambia la riga|chiamala|scrivi invece|deve dire|diventa)\b/i
+/** Un sì, in testa al suo messaggio, a quello che Myynd ha appena proposto. */
+const ACCORDO = /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|s[iì]|va bene|perfetto|d'accordo|certo|do (?:it|that)|fallo|falla|go ahead|sounds good|let'?s do (?:it|that)|agreed|please do)\b/i
+
+/** Le parole piene in comune fra due testi. */
+const inComune = (a: string, b: string) => {
+  const pb = new Set(parolePiene(b))
+  return new Set(parolePiene(a).filter(x => pb.has(x))).size
+}
+
+/**
+ * Il messaggio parla di questa riga, e non di un'altra? Una parola piena in
+ * comune con la riga, o la riga nominata da Myynd nel turno di prima (quando
+ * lui dice «fatto» e basta). «I did book it by phone» è del dentista, non
+ * della prova della lista d'attesa.
+ */
+function parlaDi(riga: Compito, messaggio: string, prima: string): boolean {
+  return inComune(messaggio, riga.testo) >= 1 || (!!prima && (nomina(prima, riga) || inComune(prima, riga.testo) >= 2))
+}
+
 /**
  * Controlla un cambio prima di farlo. Torna il cambio pronto, o il perché no
  * (una frase per il modello, che la riferisce: mai un lancio).
  *
  * `messaggio` è il suo messaggio di adesso, `sue` i suoi messaggi recenti
- * (questo compreso). Riscrivere vuole le sue parole da uno dei suoi messaggi
- * recenti: è la conversazione che ha reso la riga sbagliata, e può averlo
- * detto due turni fa («we are posting out of my personal account») prima di
- * dire «yeah do that». Chiudere, spostare e togliere le vogliono da questo
- * messaggio: togliere una cosa che lui vede si fa solo se lo dice adesso.
+ * (questo compreso), `prima` il turno di Myynd appena prima. Le regole:
+ * · un messaggio che contiene la riga intera è una riga incollata, non un
+ *   ordine: non cambia niente;
+ * · chiudere e spostare vogliono il verbo che lo dice, in questo messaggio, e
+ *   un messaggio che parla di quella riga;
+ * · riscrivere vuole un sì in testa al messaggio a una riga nuova che Myynd
+ *   ha proposto (e la riga nuova è quella), oppure le sue parole nuove con un
+ *   verbo che lo chiede e almeno due parole piene della riga nuova.
  */
-export function valida(input: unknown, ctx: { aperte: Compito[]; messaggio: string; sue: string[] }): Cambio | string {
+export function valida(input: unknown, ctx: { aperte: Compito[]; messaggio: string; sue: string[]; prima?: string }): Cambio | string {
   const d = (input ?? {}) as Record<string, unknown>
   const s = (v: unknown) => typeof v === 'string' ? v.trim() : ''
   const azione = s(d.azione) as Azione
-  if (!AZIONI.includes(azione)) return 'L\'azione è una fra «riscrivi», «sposta», «fatto» e «togli».'
+  if (s(d.azione) === 'togli') return 'Una riga non si toglie dalla chat: digli che può toglierla col cestino sulla riga.'
+  if (!AZIONI.includes(azione)) return 'L\'azione è una fra «riscrivi», «sposta» e «fatto».'
   const riga = ctx.aperte.find(c => c.id === s(d.id))
   if (!riga) return NESSUNA_RIGA
+  const messaggio = ctx.messaggio
+  const prima = ctx.prima ?? ''
+  const pr = pulisci(riga.testo)
+  if (pr.length >= 8 && pulisci(messaggio).includes(pr)) {
+    return 'Il suo messaggio contiene la riga intera: è una riga incollata, non una richiesta. La riga resta com\'è.'
+  }
   const citazione = s(d.citazione)
   if (azione === 'riscrivi') {
     const testo = senzaTrattini(s(d.testo).replace(/\s+/g, ' ')).replace(/^["«“']+|["»”']+$/g, '').trim().slice(0, 200)
     if (testo.length < 4) return 'Manca la riga nuova: scrivila intera, corta, come la leggerebbe lui nella lista.'
-    if (pulisci(testo) === pulisci(riga.testo)) return 'La riga è già scritta così: non c\'è niente da cambiare.'
+    if (pulisci(testo) === pr) return 'La riga è già scritta così: non c\'è niente da cambiare.'
     if (!ctx.sue.some(m => dettoDaLei(citazione, m))) {
       return 'In «citazione» vanno le sue parole, copiate da un suo messaggio di questa conversazione, che rendono la riga sbagliata o vecchia. Se non ci sono, la riga resta com\'è: chiediglielo.'
     }
+    const proposta = !!prima && (pulisci(prima).includes(pulisci(testo)) || inComune(testo, prima) / Math.max(1, new Set(parolePiene(testo)).size) >= 0.8)
+    const siAllaProposta = ACCORDO.test(messaggio.trim()) && messaggio.length <= 160 && proposta
+    const sueParole = VERBO_RISCRIVI.test(messaggio) && inComune(messaggio, testo) >= 2
+    if (!siAllaProposta && !sueParole) {
+      return 'Non ti ha chiesto questa riga: serve un suo sì a una riga che gli hai proposto nel turno di prima, o la riga nuova detta da lui. La riga resta com\'è: proponigliela, e se dice di sì la riscrivi.'
+    }
     return { azione, riga, testo }
   }
-  if (!dettoDaLei(citazione, ctx.messaggio)) {
+  if (!dettoDaLei(citazione, messaggio)) {
     return 'In «citazione» vanno le sue parole di questo messaggio che lo chiedono. Se non ci sono, non l\'ha chiesto, e la riga resta com\'è.'
   }
+  if (!(azione === 'fatto' ? VERBO_FATTO : VERBO_SPOSTA).test(messaggio)) {
+    return azione === 'fatto'
+      ? 'Non ha detto che l\'ha fatta: la riga resta aperta.'
+      : 'Non ha detto di spostarla, né quando: la riga resta dov\'è.'
+  }
+  if (!parlaDi(riga, messaggio, prima)) return 'Il suo messaggio non parla di questa riga: chiedigli di quale.'
   if (azione === 'sposta') {
     const giorno = s(d.giorno)
     if (giorno && !/^\d{4}-\d{2}-\d{2}$/.test(giorno)) return 'Il giorno si scrive AAAA-MM-GG, per esempio 2026-09-14.'
@@ -155,7 +211,7 @@ export function valida(input: unknown, ctx: { aperte: Compito[]; messaggio: stri
     if (!giorno && !quando) return 'Dimmi dove: un giorno scritto AAAA-MM-GG, oppure uno scaffale fra «oggi», «settimana» e «poi».'
     return { azione, riga, ...(giorno ? { giorno } : {}), ...(quando ? { quando } : {}) }
   }
-  return { azione, riga, ...(azione === 'fatto' && s(d.nota) ? { nota: s(d.nota).slice(0, 240) } : {}) }
+  return { azione, riga, ...(s(d.nota) ? { nota: s(d.nota).slice(0, 240) } : {}) }
 }
 
 /** Dove è finita una riga spostata, detto come si legge. */
@@ -174,24 +230,26 @@ export function frase(c: Cambio): string {
   const en = lingua() === 'en'
   const prima = c.riga.testo.replace(/\s+/g, ' ').trim()
   switch (c.azione) {
-    case 'riscrivi': return en ? `I reworded the task to «${c.testo}».` : `Ho riscritto la riga così: «${c.testo}».`
+    case 'riscrivi': return en ? `I reworded «${prima}» to «${c.testo}».` : `Ho riscritto «${prima}» così: «${c.testo}».`
     case 'sposta': return en ? `I moved «${prima}» ${dove(c, en)}.` : `Ho spostato «${prima}» ${dove(c, en)}.`
     case 'fatto': return en ? `I marked «${prima}» as done.` : `Ho segnato «${prima}» come fatta.`
-    case 'togli': return en ? `I took «${prima}» off your list.` : `Ho tolto «${prima}» dalla lista.`
   }
 }
 
 /**
- * La risposta dice di aver cambiato la lista? «I reworded», «I've updated
- * your task», «è salvata», «ho spostato la riga». Larga apposta: serve solo
- * quando *niente* è cambiato davvero, e allora una frase in più che dice la
- * verità costa meno di una bugia.
+ * La risposta dice di aver cambiato la lista? Il verbo del cambio con, a
+ * quattro parole al massimo e senza punteggiatura in mezzo, la cosa cambiata:
+ * task, list, row, to-do, riga, lista, compito, attività, o una riga fra
+ * «». La prima versione suonava su risposte normali («I have updated my
+ * thinking», «I marked the risk as high», «The list is saved
+ * automatically»): dieci su undici.
  */
+const COSA = String.raw`(?:tasks?|lists?|rows?|to-?dos?|righe|riga|lista|compit[oi]|attivit[aà]|«)`
+const PAROLE = String.raw`(?:[^\s.,:;!?«]+\s+){0,4}?`
 const PROMESSA = [
-  /\bI(?:'ve| have)? (?:just )?(?:reworded|renamed|rewrote|rewritten|updated|changed|edited|moved|removed|deleted|marked|saved|applied)\b/i,
-  /\b(?:task|it|list|row)(?: is| has been|'s)? (?:now )?(?:saved|updated|reworded|renamed|changed|applied)\b/i,
-  /\b(?:ho|l'ho|l’ho) (?:riscritt|rinominat|aggiornat|cambiat|modificat|spostat|tolt|segnat|salvat)\w*/i,
-  /\b(?:è|e) (?:stata |ora )?(?:salvata|aggiornata|riscritta|cambiata|modificata)\b/i
+  new RegExp(String.raw`\b(?:I(?:'ve|’ve| have)?|we(?:'ve| have)?)\s+(?:just\s+|now\s+|already\s+)?(?:reworded|renamed|rewrote|rewritten|updated|changed|edited|moved|marked|saved|applied|closed|rescheduled)\s+${PAROLE}${COSA}`, 'iu'),
+  new RegExp(String.raw`\b(?:ho|l'ho|l’ho|abbiamo)\s+(?:già\s+|appena\s+)?(?:riscritt|rinominat|aggiornat|cambiat|modificat|spostat|segnat|salvat|chius)\w*\s+${PAROLE}${COSA}`, 'iu'),
+  new RegExp(String.raw`\b(?:task|row|to-?do|riga|compito)\s+(?:is|has been|was|è|è stata|è stato)\s+(?:now\s+|ora\s+)?(?:reworded|renamed|rewritten|updated|changed|moved|marked done|riscritt[ao]|rinominat[ao]|aggiornat[ao]|cambiat[ao]|spostat[ao])\b`, 'iu')
 ]
 export function promette(testo: string): boolean {
   return PROMESSA.some(r => r.test(testo))
@@ -247,7 +305,7 @@ export async function decidi(domanda: string, storico: { ruolo: string; testo: s
       '«riscrivi»: quello che lei ha detto rende la riga sbagliata o vecchia, e la riga giusta segue chiaramente dalle sue parole, ' +
       'oppure ha detto di sì a una riga nuova che le avevi proposto tu (allora usa quella, parola per parola). La riga nuova è corta, ' +
       'comincia con un verbo, ed è nella lingua della riga di prima se non le hai proposto tu altre parole. Niente «—».\n' +
-      '«fatto», «sposta», «togli»: solo se lo dice lei nel suo ultimo messaggio («l\'ho fatta», «spostala a venerdì», «toglila»).\n' +
+      '«fatto», «sposta»: solo se lo dice lei nel suo ultimo messaggio («l\'ho fatta», «spostala a venerdì»). Se chiede di toglierla: «nessuna», la toglie lei col cestino.\n' +
       '«chiedi»: la riga non torna più con quello che ha detto, ma come riscriverla non è ovvio.\n' +
       '«nessuna»: in tutti gli altri casi, anche quando sta solo facendo una domanda.\n' +
       'In «citazione» copia alla lettera le SUE parole che giustificano il cambio. Gli id sono solo quelli fra parentesi quadre. ' +
@@ -262,6 +320,7 @@ export async function decidi(domanda: string, storico: { ruolo: string; testo: s
     return riga ? { tipo: 'chiedi', riga } : { tipo: 'niente' }
   }
   const sue = turni.filter(t => t.ruolo === 'u').map(t => t.testo)
-  const v = valida(out, { aperte: righe, messaggio: domanda, sue })
+  const prima = [...storico].reverse().find(t => t.ruolo !== 'u')?.testo ?? ''
+  const v = valida(out, { aperte: righe, messaggio: domanda, sue, prima })
   return typeof v === 'string' ? { tipo: 'rifiuto', perche: v } : { tipo: 'cambio', cambio: v }
 }

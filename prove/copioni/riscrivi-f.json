@@ -14,12 +14,12 @@
     {
       "se": "Domanda: yeah do that",
       "in": "utente",
-      "testo": "I reworded the task to «Publish the Myynd launch posts from your personal account». Test the waitlist signup before posting, because the posts send people there."
+      "testo": "I reworded «Mandare il post di lancio su X a chi segue Myynd» to «Publish the Myynd launch posts from your personal account». Test the waitlist signup before posting, because the posts send people there."
     },
     {
       "se": "Domanda: Yes, we are posting",
       "in": "utente",
-      "testo": "Then the task should be about publishing the launch posts from your personal account, with the follower framing gone."
+      "testo": "Then reword the task to «Publish the Myynd launch posts from your personal account» and drop the follower framing."
     },
     {
       "se": "Domanda: About",

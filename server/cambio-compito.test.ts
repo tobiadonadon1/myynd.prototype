@@ -59,15 +59,14 @@ function decidera(out: Record<string, unknown> | null) {
   })
 }
 
-/** Gli attrezzi della rotta, senza la rotta: riscrivere e togliere vanno sullo store. */
+/** Gli attrezzi della rotta, senza la rotta: riscrivere va sullo store. */
 const cambiati: string[] = []
 const attrezzi = (conMani = true) => ({
   aggiungiCompito: () => ({ id: 'mai' }),
   ...(conMani ? {
-    cambiaCompito: (id: string, c: { testo: string } | { togli: true }) => {
+    cambiaCompito: (id: string, c: { testo: string }) => {
       cambiati.push(id)
-      if ('togli' in c) store.scordaCompito(id)
-      else store.cambiaCompito(id, { testo: c.testo })
+      store.cambiaCompito(id, { testo: c.testo })
     }
   } : {})
 })
@@ -80,6 +79,8 @@ const STORICO = [
   { ruolo: 'u', testo: 'Yes, we are posting out of my personal account, where i have a gooooood amount of traction.' },
   { ruolo: 'a', testo: `Then reword the task to "${NUOVA}" and drop the follower framing.` }
 ]
+/** Il turno di Myynd appena prima di «yeah do that»: la proposta. */
+const PROPOSTA = STORICO[3].testo
 
 before(() => {
   cfg.scrivi({ lingua: 'en', claudeCon: 'abbonamento', tetto: 0, onboarding: true, giro: true }, { togli: ['claude', 'motore', 'compatibile'] })
@@ -92,6 +93,7 @@ beforeEach(() => {
   store.default.exec('DELETE FROM compiti')
   store.scriviCompito({ id: 'c-lancio', testo: RIGA, ordine: 'a', quando: 'oggi' })
   store.scriviCompito({ id: 'c-dentista', testo: 'Prenotare il dentista', ordine: 'b', quando: 'settimana' })
+  store.scriviCompito({ id: 'c-attesa', testo: 'Test the waitlist signup', ordine: 'c', quando: 'oggi' })
 })
 after(() => {
   cambio.perProva(null)
@@ -115,7 +117,7 @@ test('riscrivere vuole le sue parole, anche di due turni fa; parole del material
   const aperte = store.elencoCompiti()
   const sue = [...STORICO.filter(t => t.ruolo === 'u').map(t => t.testo), 'yeah do that']
   const buono = cambio.valida({ azione: 'riscrivi', id: 'c-lancio', testo: `"${NUOVA}"`, citazione: 'we are posting out of my personal account' },
-    { aperte, messaggio: 'yeah do that', sue })
+    { aperte, messaggio: 'yeah do that', sue, prima: PROPOSTA })
   assert.ok(typeof buono !== 'string', String(buono))
   assert.equal(buono.testo, NUOVA, 'le virgolette attorno se ne vanno')
   const dalMateriale = cambio.valida({ azione: 'riscrivi', id: 'c-lancio', testo: NUOVA, citazione: 'the campaign was moved to the brand account' },
@@ -126,35 +128,55 @@ test('riscrivere vuole le sue parole, anche di due turni fa; parole del material
   assert.match(String(uguale), /già scritta così/)
 })
 
-test('togliere, chiudere e spostare vogliono le sue parole di adesso', () => {
+test('togliere dalla chat non c’è, e chiudere e spostare vogliono il verbo e la riga giusta', () => {
   const aperte = store.elencoCompiti()
-  const sue = ['toglila pure, il dentista l’ho già prenotato']
-  assert.match(String(cambio.valida({ azione: 'togli', id: 'c-dentista', citazione: 'toglila pure' }, { aperte, messaggio: 'ok', sue })), /questo messaggio/)
-  const ok = cambio.valida({ azione: 'togli', id: 'c-dentista', citazione: 'toglila pure' }, { aperte, messaggio: sue[0], sue })
-  assert.ok(typeof ok !== 'string')
-  assert.match(String(cambio.valida({ azione: 'sposta', id: 'c-dentista', giorno: 'venerdì', citazione: 'spostala' }, { aperte, messaggio: 'spostala a venerdì', sue: [] })), /AAAA-MM-GG/)
+  const togli = cambio.valida({ azione: 'togli', id: 'c-dentista', citazione: 'toglila pure' }, { aperte, messaggio: 'toglila pure', sue: ['toglila pure'] })
+  assert.match(String(togli), /cestino sulla riga/)
+  assert.match(String(cambio.valida({ azione: 'fatto', id: 'c-dentista', citazione: 'ok' }, { aperte, messaggio: 'ok', sue: [] })), /Non ha detto che l'ha fatta/)
+  // «I did book it by phone» è del dentista: per la prova della lista d'attesa no
+  const dentista = 'I did book it by phone'
+  assert.match(String(cambio.valida({ azione: 'fatto', id: 'c-attesa', citazione: dentista }, { aperte, messaggio: dentista, sue: [dentista] })), /non parla di questa riga/)
+  store.scriviCompito({ id: 'c-book', testo: 'Book the dentist', ordine: 'd', quando: 'settimana' })
+  const ok = cambio.valida({ azione: 'fatto', id: 'c-book', citazione: dentista }, { aperte: store.elencoCompiti(), messaggio: dentista, sue: [dentista] })
+  assert.ok(typeof ok !== 'string', String(ok))
+  assert.match(String(cambio.valida({ azione: 'sposta', id: 'c-dentista', quando: 'poi', citazione: 'il dentista' }, { aperte, messaggio: 'il dentista è caro', sue: [] })), /Non ha detto di spostarla/)
+  assert.match(String(cambio.valida({ azione: 'sposta', id: 'c-dentista', giorno: 'venerdì', citazione: 'spostala' }, { aperte, messaggio: 'spostala a venerdì, il dentista', sue: [] })), /AAAA-MM-GG/)
+  assert.ok(typeof cambio.valida({ azione: 'sposta', id: 'c-dentista', giorno: '2026-10-23', citazione: 'il dentista spostalo a venerdì' }, { aperte, messaggio: 'il dentista spostalo a venerdì', sue: [] }) !== 'string')
   assert.match(String(cambio.valida({ azione: 'cancella-tutto', id: 'c-dentista' }, { aperte, messaggio: 'x', sue: [] })), /L'azione è una fra/)
 })
 
-test('gli strumenti della chiave: riscrive davvero, toglie nel cestino che si annulla, e rifiuta un id inventato', () => {
-  const r = claude.cambiaDallaChat('t1', 'riscrivi_compito', { id: 'c-lancio', testo: NUOVA, citazione: 'we are posting out of my personal account' }, 'yeah do that', STORICO, attrezzi())
+test('riscrivere vuole un sì alla proposta o la riga nuova detta da lui; un complimento o una riga incollata no', () => {
+  const aperte = store.elencoCompiti()
+  const complimento = 'the launch post on X for Myynd followers looks great, thanks'
+  const v = (input: Record<string, unknown>, messaggio: string, prima = '') =>
+    cambio.valida({ azione: 'riscrivi', id: 'c-lancio', ...input }, { aperte, messaggio, sue: [messaggio], prima })
+  assert.equal(typeof v({ testo: 'Send the launch post on X to Myynd followers', citazione: complimento }, complimento), 'string', 'un complimento non riscrive')
+  assert.equal(typeof v({ testo: 'Send the launch post on X to Myynd followers', citazione: complimento }, complimento, PROPOSTA), 'string')
+  // un sì, ma a un'altra riga da quella proposta
+  assert.match(String(v({ testo: 'Delete every launch post', citazione: 'yeah do that' }, 'yeah do that', PROPOSTA)), /Non ti ha chiesto questa riga/)
+  // la riga nuova detta da lui
+  const sua = 'rename it to post the launch thread from my personal account'
+  assert.ok(typeof v({ testo: 'Post the launch thread from my personal account', citazione: sua }, sua) !== 'string')
+  // la riga incollata intera non è un ordine, nemmeno con un verbo
+  const incollata = `rename «${RIGA}» please`
+  assert.match(String(v({ testo: 'Post the launch thread', citazione: incollata }, incollata)), /incollata/)
+})
+
+test('gli strumenti della chiave: riscrive davvero, e rifiuta un id inventato', () => {
+  const r = claude.cambiaDallaChat('t1', { id: 'c-lancio', testo: NUOVA, citazione: 'we are posting out of my personal account' }, 'yeah do that', STORICO, attrezzi())
   assert.ok(!r.is_error, String(r.content))
-  assert.match(String(r.content), /I reworded the task to «Publish the Myynd launch posts/)
+  assert.match(String(r.content), /I reworded «Mandare il post di lancio su X a chi segue Myynd» to «Publish the Myynd launch posts/)
   assert.equal(store.compito('c-lancio')?.testo, NUOVA)
 
-  const t = claude.cambiaDallaChat('t2', 'togli_compito', { id: 'c-dentista', citazione: 'toglila' }, 'toglila, non serve più', [], attrezzi())
-  assert.ok(!t.is_error, String(t.content))
-  assert.ok(store.compito('c-dentista')?.sparito, 'è nel cestino')
-  store.rimettiCompitoTolto('c-dentista')
-  assert.ok(!store.compito('c-dentista')?.sparito, 'e torna in lista')
-
-  const no = claude.cambiaDallaChat('t3', 'riscrivi_compito', { id: 'c-che-non-c-e', testo: 'x y z w', citazione: 'yeah do that' }, 'yeah do that', [], attrezzi())
+  const no = claude.cambiaDallaChat('t3', { id: 'c-che-non-c-e', testo: 'x y z w', citazione: 'yeah do that' }, 'yeah do that', [], attrezzi())
   assert.equal(no.is_error, true)
   assert.match(String(no.content), /nessuna riga con quell'id/)
 
   // senza le mani della rotta lo dice, e non cambia niente
-  const senza = claude.cambiaDallaChat('t4', 'riscrivi_compito', { id: 'c-dentista', testo: 'Prenotare il dentista per giugno', citazione: 'per giugno' }, 'mettila per giugno', [], attrezzi(false))
+  const chiesta = 'rename the dentist one to dentist appointment in June'
+  const senza = claude.cambiaDallaChat('t4', { id: 'c-dentista', testo: 'Book the dentist appointment in June', citazione: chiesta }, chiesta, [], attrezzi(false))
   assert.equal(senza.is_error, true)
+  assert.match(String(senza.content), /Da qui non posso/)
   assert.equal(store.compito('c-dentista')?.testo, 'Prenotare il dentista')
 })
 
@@ -168,10 +190,27 @@ test('la conversazione nomina la riga: le righe in gioco e quando tocca decidere
   assert.match(cambio.listaCompatta(aperte), /^\[c-lancio\] Mandare il post di lancio su X a chi segue Myynd · oggi$/m)
 })
 
-test('la guardia: una risposta che promette un cambio si riconosce', () => {
-  assert.ok(cambio.promette('The reworded task is ready. I updated your task.'))
-  assert.ok(cambio.promette('Ho riscritto la riga.'))
-  assert.ok(!cambio.promette('Post 3 is written in first person as you.'))
+test('la guardia: una risposta che promette un cambio si riconosce, una normale no', () => {
+  for (const vera of [
+    'The reworded task is ready. I updated your task.',
+    'Ho riscritto la riga così: «Pubblicare i post».',
+    'I\'ve moved your dentist task to Friday.',
+    'I reworded the task to «Publish the launch posts».',
+    'The task is now reworded.'
+  ]) assert.ok(cambio.promette(vera), vera)
+  for (const normale of [
+    'Post 3 is written in first person as you.',
+    'I have updated my thinking: the launch should wait.',
+    'I marked the risk as high.',
+    'I moved on to the next point.',
+    'I removed the ambiguity: your task about the dentist is due this week.',
+    'Ho aggiornato la mia lettura.',
+    'The list is saved automatically.',
+    'It has been updated on your calendar.',
+    'I changed my mind about the pricing page.',
+    'Ho cambiato idea sul prezzo.',
+    'I saved you a seat at the demo.'
+  ]) assert.ok(!cambio.promette(normale), normale)
 })
 
 // — sull'account Claude, come il 19 ottobre —
@@ -188,7 +227,7 @@ test('«yeah do that»: sull’account la riga si riscrive davvero, e il modello
   assert.doesNotMatch(decisioni[0].system, /c-dentista/, 'e solo quelle in gioco')
   const prompt = lanci()
   assert.match(prompt, /Myynd ha appena cambiato davvero la sua lista/)
-  assert.match(prompt, /I reworded the task to «Publish the Myynd launch posts/)
+  assert.match(prompt, /I reworded «Mandare il post di lancio su X a chi segue Myynd» to «Publish the Myynd launch posts/)
   assert.doesNotMatch(prompt, /non puoi modificarle in questo passaggio/, 'la riga che faceva dire «I can’t edit your task list»')
   assert.doesNotMatch(r.testo, /has not changed/)
 })
@@ -217,7 +256,7 @@ test('un cambio che non passa il controllo: la riga resta, e la risposta che dic
 
 test('senza le mani per cambiarla, sull’account non si finge', async () => {
   decidera({ azione: 'riscrivi', id: 'c-lancio', testo: NUOVA, giorno: '', quando: '', citazione: 'we are posting out of my personal account' })
-  rispondera('Done, I reworded it.')
+  rispondera('Done, I reworded the task.')
   const r = await claude.rispondiInStreaming('yeah do that', STORICO, () => {}, attrezzi(false))
   assert.equal(store.compito('c-lancio')?.testo, RIGA)
   assert.match(r.testo, /Your task list has not changed\.$/)

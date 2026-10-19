@@ -371,9 +371,9 @@ le serve. Gli id fra parentesi quadre servono agli strumenti e non si scrivono
 mai dentro una frase: si dice «dalla riga sull'audit», non il suo id.
 
 Questa lista la puoi toccare: «chiudi_compito» chiude una riga, «sposta_compito»
-la manda a un altro momento, «riscrivi_compito» ne cambia le parole,
-«togli_compito» la toglie (nel cestino, si può rimettere). Cinque regole, e non
-hanno eccezioni.
+la manda a un altro momento, «riscrivi_compito» ne cambia le parole. Dalla
+chat una riga non si toglie: se te lo chiede, digli di usare il cestino sulla
+riga. Cinque regole, e non hanno eccezioni.
 
 Chiudi una riga solo quando te lo dice lei, adesso, in questo suo messaggio —
 «l'ho fatta», «mandata», «lascia perdere». Mai perché dal materiale sembra
@@ -424,7 +424,8 @@ Sotto ogni riga c'è da dove viene: se ti chiede di una riga, rispondi con
 quello, non con «non ne so niente». Gli id non si scrivono dentro una frase.
 
 Questa lista la puoi toccare: «chiudi_compito» chiude, «sposta_compito» sposta,
-«togli_compito» toglie, solo se te lo dice lei adesso, in questo messaggio:
+solo se te lo dice lei adesso, in questo messaggio (toglierla no: si fa col
+cestino sulla riga):
 mai perché dal materiale sembra fatta. Se quello che dice rende una riga
 sbagliata e la riga giusta è ovvia, «riscrivi_compito» subito, senza chiederle
 di farlo lei. Gli id sono quelli fra parentesi quadre
@@ -445,7 +446,8 @@ Sotto ogni riga c'è da dove viene: se ti chiede di una riga, rispondi con
 quello. Gli id non si scrivono dentro una frase. In questo passaggio non hai
 strumenti e non tocchi la lista: se Myynd ha appena cambiato una riga, lo trovi
 scritto qui sotto. Quello che non è scritto non è cambiato: non dire mai di aver
-chiuso, spostato, riscritto o salvato una riga.`
+chiuso, spostato, riscritto o salvato una riga. Una riga non si toglie dalla
+chat: se te lo chiede, digli di usare il cestino sulla riga.`
 
 /** Quante righe della lista entrano nel prompt compatto. */
 const COMPITI_COMPATTI = 8
@@ -1112,12 +1114,12 @@ export type Attrezzi = {
   /** «Leggi le mie fonti»: la rilettura di sfondo, messa in mano da chi ha la rotta. Dice se è partita o se ce n'era già una. */
   rileggiFonti?: () => Lettura
   /**
-   * Riscrivere o togliere una sua riga, con gli stessi effetti della rotta
-   * (`PATCH` e `DELETE /api/compiti/:id`): il lavoro in corso si ferma, la
-   * riga tolta va nel cestino e si può rimettere. Lo dà chi ha la rotta; senza,
-   * lo strumento risponde che da qui non si può, e il modello lo dice.
+   * Riscrivere una sua riga, con gli stessi effetti della rotta (`PATCH
+   * /api/compiti/:id`): il lavoro in corso si ferma. Lo dà chi ha la rotta;
+   * senza, lo strumento risponde che da qui non si può, e il modello lo dice.
+   * Togliere no: dalla chat non si vede come rimetterla.
    */
-  cambiaCompito?: (id: string, cambio: { testo: string } | { togli: true }) => void
+  cambiaCompito?: (id: string, cambio: { testo: string }) => void
   /**
    * Cosa sta facendo, prima di farlo: una frase di `PASSI`, in italiano, che
    * il client traduce con `t()`. Si chiama prima di ogni strumento; mentre
@@ -1160,7 +1162,7 @@ export function passoPer(strumento: string): string | null {
   switch (strumento) {
     case 'cerca': return PASSI.cerca
     case 'aggiorna_progetto': case 'ricorda_decisione_progetto': return PASSI.memoria
-    case 'aggiungi_compito': case 'chiudi_compito': case 'sposta_compito': case 'riscrivi_compito': case 'togli_compito': return PASSI.lista
+    case 'aggiungi_compito': case 'chiudi_compito': case 'sposta_compito': case 'riscrivi_compito': return PASSI.lista
     case 'concludi_progetto': return PASSI.risultato
     case 'rivedi_compito': return PASSI.revisione
     default: return null
@@ -1437,32 +1439,13 @@ const STRUMENTI: Anthropic.Tool[] = [ATTREZZO_REVISIONE, ATTREZZO_AGGIORNA_PROGE
     },
     required: ['id', 'testo', 'citazione']
   }
-}, {
-  /**
-   * Togliere una riga dalla lista, detto in chat: lo stesso cestino della
-   * lista, che si può annullare. Solo se lo dice lui adesso: ciò che toglie
-   * una cosa che lui vede si chiede prima.
-   */
-  name: 'togli_compito',
-  description:
-    'Toglie una riga dalla sua lista (finisce nel cestino, e si può rimettere). Solo se te lo dice LUI, ' +
-    'in questo suo messaggio: «toglila», «cancellala», «non serve più, levala». Se la riga è fatta usa ' +
-    '«chiudi_compito»; se è da cambiare, «riscrivi_compito».',
-  input_schema: {
-    type: 'object',
-    properties: {
-      id: { type: 'string', description: 'L\'id della riga, copiato alla lettera da fra le parentesi quadre della lista.' },
-      citazione: { type: 'string', description: 'Le SUE parole di questo messaggio che chiedono di toglierla, copiate alla lettera.' }
-    },
-    required: ['id', 'citazione']
-  }
 }]
 
 /**
  * Un cambio già controllato (`cambio-compito.valida`), fatto davvero.
  *
  * Chiudere e spostare passano dalle stesse funzioni degli strumenti di
- * sempre; riscrivere e togliere da chi ha la rotta (`attrezzi.cambiaCompito`),
+ * sempre; riscrivere da chi ha la rotta (`attrezzi.cambiaCompito`),
  * che ferma il lavoro in corso come fa la lista. Torna la frase di cosa è
  * cambiato, o il perché no: mai un lancio.
  */
@@ -1475,7 +1458,7 @@ export function faiIlCambio(c: Cambio, a?: Pick<Attrezzi, 'cambiaCompito'>): { o
       return r.is_error ? { ok: false, errore: String(r.content) } : { ok: true, frase: fraseDelCambio(c) }
     }
     if (!a?.cambiaCompito) return { ok: false, errore: 'Da qui non posso cambiare la sua lista: la riga resta com\'è.' }
-    a.cambiaCompito(c.riga.id, c.azione === 'togli' ? { togli: true } : { testo: c.testo! })
+    a.cambiaCompito(c.riga.id, { testo: c.testo! })
     return { ok: true, frase: fraseDelCambio(c) }
   } catch (e) {
     return { ok: false, errore: e instanceof Error ? e.message : 'non è riuscito' }
@@ -1486,10 +1469,11 @@ export function faiIlCambio(c: Cambio, a?: Pick<Attrezzi, 'cambiaCompito'>): { o
 const sueParole = (domanda: string, storico: Turno[]) =>
   [...storico.filter(t => t.ruolo === 'u').slice(-4).map(t => t.testo), domanda]
 
-/** Gli strumenti `riscrivi_compito` e `togli_compito`: controllo, cambio, e cosa dire. */
-export function cambiaDallaChat(tool_use_id: string, nome: 'riscrivi_compito' | 'togli_compito', input: unknown, domanda: string, storico: Turno[], a?: Pick<Attrezzi, 'cambiaCompito'>): Anthropic.ToolResultBlockParam {
-  const dati = { ...((input ?? {}) as Record<string, unknown>), azione: nome === 'riscrivi_compito' ? 'riscrivi' : 'togli' }
-  const v = validaCambio(dati, { aperte: elencoCompiti(), messaggio: domanda, sue: sueParole(domanda, storico) })
+/** Lo strumento `riscrivi_compito`: controllo, cambio, e cosa dire. */
+export function cambiaDallaChat(tool_use_id: string, input: unknown, domanda: string, storico: Turno[], a?: Pick<Attrezzi, 'cambiaCompito'>): Anthropic.ToolResultBlockParam {
+  const dati = { ...((input ?? {}) as Record<string, unknown>), azione: 'riscrivi' }
+  const prima = [...storico].reverse().find(t => t.ruolo !== 'u')?.testo ?? ''
+  const v = validaCambio(dati, { aperte: elencoCompiti(), messaggio: domanda, sue: sueParole(domanda, storico), prima })
   if (typeof v === 'string') return nonCiRiesco(tool_use_id, v)
   const fatto = faiIlCambio(v, a)
   if (!fatto.ok) return nonCiRiesco(tool_use_id, fatto.errore)
@@ -2145,7 +2129,7 @@ async function rispondiInStreamingDentro(
         }
         if (c.name === 'chiudi_compito') return chiudiDallaChat(c.id, c.input)
         if (c.name === 'sposta_compito') return spostaDallaChat(c.id, c.input)
-        if (c.name === 'riscrivi_compito' || c.name === 'togli_compito') return cambiaDallaChat(c.id, c.name, c.input, domanda, storico, attrezzi)
+        if (c.name === 'riscrivi_compito') return cambiaDallaChat(c.id, c.input, domanda, storico, attrezzi)
         if (c.name === 'aggiorna_progetto') return aggiornaDallaChat(c.id, c.input, domanda)
         const dati = c.input as { testo?: string; quando?: string; modo?: string; richiesta?: string }
         const testo = String(dati.testo ?? '').trim()
