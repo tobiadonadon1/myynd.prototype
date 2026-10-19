@@ -756,26 +756,6 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
   )
 }
 
-/**
- * La prova, sotto il lavoro (F1): controllato contro il suo «fatto», e com'è
- * andata. Una riga sola, nel verde degli stati se regge e nel rame se no;
- * niente se nessuno ha potuto controllarlo (lo dice già la bacheca).
- */
-export function RigaProva({ c }: { c: Compito }) {
-  const p = c.prova
-  if (!p || p.esito === 'unavailable' || !p.perche) return null
-  const regge = p.esito === 'pass'
-  return (
-    <div style={{
-      marginTop: 10, display: 'flex', gap: 7, alignItems: 'baseline', fontSize: '12.5px', lineHeight: 1.5,
-      color: regge ? 'var(--verde-cupo)' : 'var(--rame-testo)', overflowWrap: 'anywhere'
-    }}>
-      <span aria-hidden="true" style={{ flex: 'none', fontWeight: 600 }}>{regge ? '✓' : '!'}</span>
-      <span>{regge ? frasi.provaRegge(p.perche) : frasi.provaNonRegge(p.perche)}</span>
-    </div>
-  )
-}
-
 /** La bozza, sotto la riga che l'ha chiesta. */
 /** Il testo della bozza da mostrare e correggere: senza la riga dell'ipotesi, che sta sotto con «Cambia». */
 function Bozza({ c, l }: { c: Compito; l: Lista }) {
@@ -794,6 +774,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
    */
   const prompt = c.modo === 'prompt'
   const spezzato = prompt ? spezzaPrompt(testo) : null
+  const consegnato = !!c.consegna && !spezzato
   /**
    * Quale dei tre pannelli sotto è aperto: mandare, salvare, far lavorare.
    * Uno alla volta, e lo sa la bozza: finché uno è aperto il bottone pieno è
@@ -864,8 +845,11 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           <Testo testo={testo} fonti={c.fonti ?? []} aCapo />
         </div>
       )}
+      {/* un file già consegnato è finito: «Just tell me it's finished, and that's
+          it» (19 ott 2026). Niente prova in piccolo, niente «Va bene», «Rifallo»
+          o i tre modi di mandarlo: si apre dalla riga, si chiude col cerchio */}
+      {!consegnato && <>
       {siCambia(c) && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
-      <RigaProva c={c} />
       <RigaImparato c={c} l={l} /><RigaGuadagnata c={c} l={l} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
@@ -903,6 +887,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
       {!spezzato && <Salva c={c} l={l} testo={testo} aperto={pannello === 'salva'} apri={() => setPannello('salva')} chiudi={() => setPannello('')} />}
       <Lavora c={c} l={l} richiesta={spezzato?.prompt}
         aperto={pannello === 'lavora'} apri={() => setPannello('lavora')} chiudi={() => setPannello('')} />
+      </>}
     </div>
   )
 }

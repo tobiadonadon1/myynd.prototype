@@ -18,13 +18,12 @@ import { createPortal } from 'react-dom'
 import { frasi, lingua, t } from '../lingua'
 import { useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
-import { api, type AspettaMattina, type Compito, type LavoroVia, type Mattina, type RigaElencoVia, type SettimanaTracce } from '../api'
+import { api, type AspettaMattina, type Compito, type LavoroVia, type Mattina, type RigaElencoVia } from '../api'
 import type { Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
-import { contiVia, frase, inCima, lavoriDi, qualcosa, qualcosaDellaNotte, RAGIONI, righeNotte, type GenereConto } from '../via'
+import { contiVia, frase, inCima, lavoriDi, qualcosa, RAGIONI, type GenereConto } from '../via'
 import { segnaVisto, useVistiOra } from '../visti'
 import { CARTA, FOGLIO, VELO } from './Punto'
-import { ora } from './Stanotte'
 import './mentre-via.css'
 
 /** Dove sta una cosa fatta, in due parole accanto al titolo. */
@@ -134,12 +133,9 @@ function Elenco({ conto, m, apri, apriDoc, chiudi }: {
 /**
  * La carta. `lettera` è la riga «Myynd ti ha scritto»: sta solo qui, perché
  * la chat non ha un blocco. Le altre cose che aspettano lui stanno nei blocchi.
- * `riassunto`: il punto di oggi, finché non l'ha aperto: una riga quieta in
- * fondo, perché la carta non ha più il bottone che lo apriva.
  */
-export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
+export function MentreVia({ v, m, ricevuta, l, apri }: {
   v: Vals; m: Mattina | null; ricevuta: readonly AspettaMattina[]; l?: Lista; apri: (c: Compito) => void
-  riassunto?: { cose: number; apri: () => void } | null
 }) {
   const [aperto, setAperto] = useState<GenereConto | null>(null)
   const visteOra = useVistiOra()
@@ -148,17 +144,10 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
   const pezzi = frase(conti, lingua())
   const cima = inCima(m?.via, visteOra)
   const lettera = ricevuta.find(a => a.genere === 'lettera')
-  // il numero solo della settimana (`tracce.ts`): quante consegne ha preso, e quanto sono costate
-  const [settimana, setSettimana] = useState<SettimanaTracce | null>(null)
-  useEffect(() => {
-    let vivo = true
-    api.settimana().then(r => { if (vivo) setSettimana(r) }).catch(() => {})
-    return () => { vivo = false }
-  }, [])
-  const prese = settimana ? settimana.accettate + settimana.modificate : 0
-  // quello che non è successo (`server/candidati.ts`): il Mac che dormiva, la finestra persa, le trattenute, la notte vuota
-  const notte = righeNotte(m?.via?.notte, conti)
-  if (!m || (!qualcosa(conti) && !cima.length && !lettera && !riassunto && !qualcosaDellaNotte(notte))) return null
+  // 19 ott 2026: «All of this fine text shall be removed». Niente più righe
+  // piccole sotto la frase: la settimana coi soldi, il punto di oggi (si apre
+  // dal menù della testa), la notte che non è andata. Resta quello che ha fatto.
+  if (!m || (!qualcosa(conti) && !cima.length && !lettera)) return null
   return (
     <section aria-labelledby="via-titolo" style={{ ...CARTA, flexDirection: 'column', flexWrap: 'nowrap', alignItems: 'stretch', gap: 0 }}>
       <h2 id="via-titolo" style={{ margin: 0, fontSize: 15, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{t('Mentre non c’eri.')}</h2>
@@ -168,22 +157,6 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
             ? <button key={i} type="button" className="via-conto" onClick={() => setAperto(p.conto!)}>{p.testo}</button>
             : <span key={i}>{p.testo}</span>)}
         </p>
-      )}
-      {(qualcosaDellaNotte(notte) || notte.niente) && (
-        <div className="via-notte">
-          {notte.mac && (
-            <p title={notte.mac.titoli.join('\n')}>
-              {[frasi.aspettanoIlMac(notte.mac.n), ...notte.mac.buchi.map(b => frasi.macAddormentato(ora(b.da), ora(b.a)))].join(' · ')}
-            </p>
-          )}
-          {notte.saltate && <p title={notte.saltate.titoli.join('\n')}>{frasi.finestraPersa(notte.saltate.n)}</p>}
-          {notte.trattenute && (
-            <p title={notte.trattenute.titoli.join('\n')}>
-              {frasi.trattenute(notte.trattenute.n, notte.trattenute.perche.map(([k, n]) => frasi.perTrattenuta(k, n)).join(', '))}
-            </p>
-          )}
-          {notte.niente && <p>{t('Stanotte non c’era niente che valesse la pena.')}</p>}
-        </div>
       )}
       {(cima.length > 0 || lettera) && (
         <ul className="via-righe">
@@ -199,12 +172,6 @@ export function MentreVia({ v, m, ricevuta, l, apri, riassunto = null }: {
             </li>
           )}
         </ul>
-      )}
-      {prese > 0 && settimana && <p className="via-settimana">{frasi.settimanaPrese(prese, settimana.costo)}</p>}
-      {riassunto && (
-        <button type="button" className="via-riassunto" onClick={riassunto.apri}>
-          {t('Il punto di oggi')} <span>· {frasi.coseNelPunto(riassunto.cose)}</span>
-        </button>
       )}
       {aperto && (
         <Elenco conto={aperto} m={m} apri={x => { setAperto(null); apriLavoro(x) }}

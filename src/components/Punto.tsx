@@ -305,8 +305,6 @@ export function prossimaCosa(m: Mattina | null): string | null {
 }
 
 const APRI_IL_PUNTO = 'myynd:apri-punto'
-/** Il punto che ha aperto davvero (la sua `quando`): per la riga quieta nella carta in cima. */
-const CHIAVE_LETTO = 'myynd.punto.letto'
 /** Apre il foglio del punto da fuori (il menù della testa della prima pagina). */
 export function apriIlPunto() { window.dispatchEvent(new Event(APRI_IL_PUNTO)) }
 
@@ -348,23 +346,10 @@ export function Punto({ v, mattina: m, ricevuta, notte }: {
   const saltaOggi = p.daVedere && !aperto && !!m && !piuDellaCarta
   const nascondi = p.nascondi
   useEffect(() => { if (saltaOggi) nascondi() }, [saltaOggi, nascondi])
-  /*
-   * Il punto di oggi aperto davvero, per questa finestra: finché no, la carta
-   * in cima porta una riga quieta che lo apre. «Saltato» (`nascondi` senza che
-   * il foglio si sia mai visto) non conta come aperto.
-   */
-  const [letto, setLetto] = useState<string | null>(() => { try { return localStorage.getItem(CHIAVE_LETTO) } catch { return null } })
   const mostrato = aperto || !!(p.daVedere && m && piuDellaCarta)
-  const quando = p.punto?.quando ?? null
-  useEffect(() => {
-    if (!mostrato || !quando) return
-    try { localStorage.setItem(CHIAVE_LETTO, quando) } catch { /* resta la riga, e basta */ }
-    setLetto(quando)
-  }, [mostrato, quando])
   if (mostrato) {
     return <Finestra v={v} punto={p.punto} guaio={p.guaio} chiudi={chiudi} m={m} ricevuta={ricevuta} notte={notte} />
   }
-  const riassunto = p.punto && nelPunto > 0 && !p.vecchio && letto !== p.punto.quando ? { cose: nelPunto, apri: () => setAperto(true) } : null
   /*
    * La faccia in prima pagina è «mentre non c'eri» (15 ottobre 2026): una
    * frase con i numeri e al più tre cose fatte da aprire. Le righe che
@@ -372,6 +357,6 @@ export function Punto({ v, mattina: m, ricevuta, notte }: {
    * loro gesto, ed erano la stessa cosa detta due volte in cima alla pagina.
    * Il foglio resta, e si apre dal menù della testa («Il punto di oggi»).
    */
-  return <MentreVia v={v} m={m} ricevuta={ricevuta} l={notte?.l} apri={c => notte?.apri(c)} riassunto={riassunto} />
+  return <MentreVia v={v} m={m} ricevuta={ricevuta} l={notte?.l} apri={c => notte?.apri(c)} />
 }
 

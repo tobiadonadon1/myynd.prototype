@@ -562,7 +562,8 @@ function ConsegnaPronta({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
    * Il file che ha scritto da sé: dove sta, come si chiama, «Apri».
    *
    * «He should tell me, "Hey, I saved it to your desktop"». Il verdetto
-   * della rilettura non si ripete qui: lo dice già `Riletta`, sopra.
+   * della rilettura non si scrive più da nessuna parte (19 ott 2026: «All of
+   * this fine text shall be removed»).
    */
   /*
    * Il 9 ottobre 2026 diventa un oggetto: «The location in which a file is…
@@ -686,47 +687,6 @@ function dopoLaChiusura(c: Compito): string {
 function fraseFinita(c: Compito): string {
   const prima = (c.risultato ?? '').split('\n').map(r => r.trim()).find(Boolean) ?? ''
   return /^(fatto|done)\s*:/i.test(prima) ? prima : ''
-}
-
-/**
- * Il verdetto sulla bozza, in una riga: «riletta come te e come Rossi: regge».
- *
- * «Quando affido una cosa a Myynd devo sapere che è di qualità.» La rilettura
- * la fa il server (`revisione-lavoro.ts`); qui si dice che è stata fatta e
- * com'è andata, e se restano punti aperti si elencano, corti. Senza modello
- * non si dice niente: una riga che dice «non riletta» è una scusa.
- */
-function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
-  const r = c.revisione
-  // F1 · con una prova contro il «fatto», si dice quella: è più precisa di
-  // «riletta come te», e dice la cosa che conta, cioè se è fatta davvero
-  const p = c.prova
-  if (c.stato === 'pronto' && p && p.esito !== 'unavailable' && p.perche) {
-    const regge = p.esito === 'pass'
-    /*
-     * «There's red writing that I'm never going to read» (9 ottobre 2026).
-     * Che non è finita lo dice già la pastiglia; quando sotto c'è la domanda
-     * per finirla, il perché è la domanda stessa, e qui non si scrive niente.
-     * Senza domanda resta una riga, spenta come il resto del corpo.
-     */
-    if (!regge && c.chieste?.length) return null
-    return (
-      <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? (regge ? 'var(--verde-cupo)' : 'rgba(var(--inchiostro-rgb),.58)') : 'rgba(var(--avorio-rgb),.72)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-        {regge ? `✓ ${frasi.provaRegge(p.perche)}` : frasi.provaNonRegge(p.perche)}
-      </div>
-    )
-  }
-  if (c.stato !== 'pronto' || !r || r.esito === 'unavailable') return null
-  return (
-    <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? 'rgba(var(--inchiostro-rgb),.58)' : 'rgba(var(--avorio-rgb),.72)', textWrap: 'pretty' }}>
-      {frasi.riletta(r.per || t('chi la riceve'), r.esito, r.giri)}
-      {r.esito === 'revise' && r.problemi.length > 0 && (
-        <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-          {r.problemi.slice(0, 3).map((p, i) => <li key={i}>{p}</li>)}
-        </ul>
-      )}
-    </div>
-  )
 }
 
 /** Quello che aspetta te, detto in una parola. */
@@ -948,7 +908,6 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             : <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>)}
           {siCambia(c) && <RigaIpotesi c={c} titolo={titolo} correggi={l.correggi} />}
           {bloccata && <Bloccata v={v} />}
-          <Riletta c={c} chiaro />
           {attivo && <PassoAttivo passo={l.passi[c.id]} />}
           <ConsegnaPronta c={c} l={l} v={v} /><BozzaInPosta c={c} /><DaAllegare c={c} v={v} />
           {/* quello che ha imparato e che questa bozza segue, e il gradino guadagnato: una riga quieta ciascuno */}
@@ -979,7 +938,8 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
               {/* il gesto che sta già in vista sulla riga non si ripete qui */}
               {!(daDire && !email) && vaBene}
               {!daDire && manda}
-              {pronto && (
+              {/* un file consegnato è finito: niente «Rifallo» (19 ott 2026) */}
+              {pronto && !c.consegna && (
                 <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, c.modo))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Rifallo')}</Hov>
               )}
               {/* Un modo solo di affidarla, ed è questo.
