@@ -191,6 +191,9 @@ function Pagina({ titolo, l, g, oggi, locale, progetti, righe, apri, modifica }:
   )
 }
 
+/** Quante righe aperte si vedono in un giorno prima di piegare le altre. */
+const IN_VISTA = 6
+
 /**
  * Le righe di una pagina: quelle scritte, la riga dove si scrive, le righe
  * vuote fino al minimo, e in fondo quelle chiuse in una riga sola che si apre. Si trascina una riga
@@ -202,9 +205,14 @@ function Righe({ l, g, oggi, locale, progetti, righe, fatte, minime, apri, modif
 } & Apri) {
   const [sopra, setSopra] = useState<string | null>(null)
   const [fatteAperte, setFatteAperte] = useState(false)
+  const [tutte, setTutte] = useState(false)
   const scrivi = useRef<HTMLInputElement>(null)
   const quando = g ? secchioDelGiorno(g, oggi) : 'poi'
-  const vuote = Math.max(0, minime - righe.length - 1 - (fatte.length ? 1 + (fatteAperte ? fatte.length : 0) : 0))
+  // «after a certain row make it collapsed» (19 ott 2026): oltre le prime, le
+  // altre in una riga «3 more ›»; una sola in più non si piega, si mostra
+  const piegate = righe.length > IN_VISTA + 1 ? righe.length - IN_VISTA : 0
+  const mostrate = piegate && !tutte ? righe.slice(0, IN_VISTA) : righe
+  const vuote = Math.max(0, minime - mostrate.length - (piegate ? 1 : 0) - 1 - (fatte.length ? 1 + (fatteAperte ? fatte.length : 0) : 0))
 
   const lascia = async (e: React.DragEvent, prima: string | null) => {
     e.preventDefault(); e.stopPropagation(); setSopra(null)
@@ -229,12 +237,20 @@ function Righe({ l, g, oggi, locale, progetti, righe, fatte, minime, apri, modif
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (sopra === null) setSopra('') }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSopra(null) }}
       onDrop={e => { void lascia(e, null) }}>
-      {righe.map(c => (
+      {mostrate.map(c => (
         <RigaQuaderno key={c.id} c={c} oggi={oggi} locale={locale} l={l}
           progetto={progetti.find(p => p.id === c.progetto) ?? null} progetti={progetti}
           sopra={sopra === c.id} suSopra={() => setSopra(c.id)} lascia={e => { void lascia(e, c.id) }}
           apri={apri} modifica={modifica} />
       ))}
+      {piegate > 0 && (
+        <li className="quaderno-riga quaderno-fatte">
+          <button type="button" className="quaderno-fatte-apri" aria-expanded={tutte} onClick={() => setTutte(a => !a)}>
+            {frasi.altreDelGiorno(piegate)}
+            <span className="quaderno-fatte-freccia" aria-hidden="true">›</span>
+          </button>
+        </li>
+      )}
       {/* dove si scrive viene subito dopo le righe aperte: sotto otto righe barrate non si trovava più */}
       <li className="quaderno-riga nuova">
         <NuovaRiga campo={scrivi} l={l} g={g} oggi={oggi} progetti={progetti} />

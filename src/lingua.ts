@@ -4300,6 +4300,8 @@ export const frasi = {
   // — il pacchetto di seguito: fine —
   // — il quaderno leggibile: inizio —
   /** La riga che tiene le chiuse di un giorno: «8 done». */
-  fatteDelGiorno: (n: number) => corrente === 'en' ? `${n} done` : `${n} ${n === 1 ? 'fatta' : 'fatte'}`
+  fatteDelGiorno: (n: number) => corrente === 'en' ? `${n} done` : `${n} ${n === 1 ? 'fatta' : 'fatte'}`,
+  /** Le righe aperte oltre le prime, piegate in una: «3 more». */
+  altreDelGiorno: (n: number) => corrente === 'en' ? `${n} more` : `altre ${n}`
   // — il quaderno leggibile: fine —
 }

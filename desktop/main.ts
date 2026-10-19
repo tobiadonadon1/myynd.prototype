@@ -87,10 +87,6 @@ if (!app.requestSingleInstanceLock()) {
 let staUscendo = false
 let serverFermato = false
 let dialogoAperto = false
-/** F9 · il server dice che stanotte c'è da lavorare: uscire la salterebbe, e prima lo si chiede. */
-let notteInAttesa = false
-/** F9 · lei ha già detto «Quit anyway», o il Mac si sta spegnendo: non si chiede più. */
-let uscitaDecisa = false
 const workLease = workPowerLease(powerSaveBlocker)
 let workLeaseTimer: ReturnType<typeof setInterval> | undefined
 
@@ -196,8 +192,6 @@ async function avvio() {
   }
   powerMonitor.on('on-battery', () => presenza())
   powerMonitor.on('on-ac', () => presenza())
-  // il Mac si spegne: nessuna domanda prima di uscire, la risposta non arriverebbe
-  powerMonitor.on('shutdown', () => { uscitaDecisa = true })
   setInterval(() => presenza(), 60_000).unref?.()
   powerMonitor.on('lock-screen', () => presenza(24 * 3600))
   powerMonitor.on('unlock-screen', () => presenza(0))
@@ -236,7 +230,6 @@ async function avvio() {
     suOsservatore: osservatore.daServer,
     suTurno: m => {
       const s = m as { inAttesa?: unknown; lavora?: unknown; fermo?: unknown }
-      notteInAttesa = s.inAttesa === true || s.lavora === true
       tray.turno({ lavora: s.lavora === true, inAttesa: s.inAttesa === true, fermo: s.fermo === true })
     }
   }
@@ -252,39 +245,15 @@ async function avvio() {
   app.on('activate', () => finestra.mostra())
   // con un segno nella barra l'app vive anche senza finestre: è il punto
   app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !tray.attiva()) app.quit() })
+  // uscire esce, sempre: niente «Quit anyway» se stanotte c'era da lavorare
+  // (19 ott 2026: «it shouldn't for any user»). Il turno riparte alla prossima apertura
   app.on('before-quit', e => {
-    // F9 · una notte in attesa: uscire vuol dire che stanotte non lavora nessuno. Lo si chiede, una volta
-    if (!serverFermato && notteInAttesa && !uscitaDecisa) {
-      e.preventDefault()
-      void chiediPrimaDiUscire()
-      return
-    }
     staUscendo = true
     finestra.lasciaChiudere()
     if (serverFermato) return
     e.preventDefault()
     void spegni()
   })
-}
-
-/**
- * F9 · «Quit anyway» o «Keep Myynd open». Senza Myynd aperto il turno non
- * parte, e la mattina non c'è niente: meglio saperlo adesso che scoprirlo
- * domani. Una domanda sola; chi dice di uscire esce.
- */
-async function chiediPrimaDiUscire() {
-  if (dialogoAperto) return
-  dialogoAperto = true
-  try {
-    const r = await dialog.showMessageBox({
-      type: 'question',
-      message: t('Stanotte Myynd ha delle carte da lavorare.'),
-      detail: t('Se esci, stanotte non lavora.'),
-      buttons: [t('Tieni aperto Myynd'), t('Esci comunque')],
-      defaultId: 0, cancelId: 0
-    })
-    if (r.response === 1) { uscitaDecisa = true; app.quit() }
-  } finally { dialogoAperto = false }
 }
 
 async function spegniSenzaUscire() {
