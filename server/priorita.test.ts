@@ -451,3 +451,13 @@ test('un giro in cui il modello non risponde non si segna come fatto: si riprova
   priorita.dimentica()
   priorita.perProva(null)
 })
+
+test('le menzioni di X non passano per parole sue: non mangiano il tetto dei suoi post e non si leggono intere', () => {
+  const ora = new Date().toISOString()
+  const post = Array.from({ length: 8 }, (_, i) => ({ id: `x:mio:${900 + i}`, fonte: 'x', tipo: 'post', titolo: `My post ${i}`, corpo: `My post ${i} about agents.\n\nPost published on X.`, quando: ora, gruppo: 'note', inviato: true }))
+  const menzione = { id: 'x:menzione:777', fonte: 'x', tipo: 'menzione', titolo: '@alice: could you share the spec?', autore: '@alice', corpo: 'Could you share the spec file?\n\n@alice mentioned you on X.\nhttps://x.com/alice/status/777', quando: ora, gruppo: 'note' }
+  // la menzione prima dei post: se contasse come sua, uno degli otto post resterebbe fuori dal tetto
+  const ids = priorita.documentiPerLePriorita([menzione, ...post] as never).map(d => d.id)
+  assert.ok(ids.includes('x:menzione:777'), 'chi gli scrive conta, per la sua strada')
+  for (const p of post) assert.ok(ids.includes(p.id), `${p.id}: il tetto di X è per i suoi post`)
+})

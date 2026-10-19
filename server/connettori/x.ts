@@ -364,13 +364,14 @@ export function documentoTimeline(giorno: string, visti: PostVisto[], it = lingu
  * un suo post. Tobia il 19 ottobre: «can we give the possibility for myynd to
  * read X?». Fino a qui Myynd leggeva quello che faceva lui (post, mi piace,
  * timeline) e mai chi gli rispondeva, che il motore tiene in
- * `data/mentions.json`. È una cosa che gli è arrivata, quindi non `inviato`;
- * ma solo se è di questi giorni: una menzione di un mese fa, letta oggi per
- * la prima volta, non è una novità da mettere in prima pagina.
+ * `data/mentions.json`. È una cosa che gli è arrivata, scritta da altri:
+ * mai `inviato` (che vuol dire «l'ha scritta lui»). Che una menzione di un
+ * mese fa non sembri nuova lo decide la finestra della rilevanza
+ * (`classificaAttenzione`: fuori dai giorni, `fonte_non_recente`).
  */
 export type Menzione = { postId: string; autore: string | null; testo: string; url: string | null; quando: string }
 
-export function documentoMenzione(m: Menzione, adesso = Date.now(), it = lingua() === 'it'): Documento | null {
+export function documentoMenzione(m: Menzione, it = lingua() === 'it'): Documento | null {
   const postId = idPost(m.postId)
   const quando = istante(m.quando)
   const testo = m.testo.trim()
@@ -387,8 +388,7 @@ export function documentoMenzione(m: Menzione, adesso = Date.now(), it = lingua(
     autore: autore ? `@${autore}` : null,
     percorso: url,
     quando,
-    gruppo: 'note',
-    inviato: Date.parse(quando) < adesso - GIORNI_FERMO * 86_400_000
+    gruppo: 'note'
   }
 }
 
@@ -433,7 +433,8 @@ function percheFermo(db: DatabaseSync, ci: Set<string>, adesso: number): PercheF
   const q = istante(ultimo?.q)
   if (!q || Date.parse(q) < adesso - ORE_SPENTO * 3_600_000) return 'spento'
   const [lettore] = righe<{ ok: number | null }>(db, "SELECT ok FROM runs WHERE job = 'feedread' ORDER BY started_at DESC LIMIT 1")
-  return lettore && !lettore.ok ? 'lettore' : null
+  // `ok` vuoto è un giro ancora in corso, non un lettore rotto
+  return lettore?.ok === 0 ? 'lettore' : null
 }
 
 function documentoBozza(b: Bozza): boolean {
@@ -638,7 +639,7 @@ export function leggi(cfg: ConfigX, adesso = Date.now(), giorni = GIORNI): Esito
     for (const m of leggiMenzioni(cfg.db)) {
       const q = istante(m.quando)
       if (!q || q < da) continue
-      const d = documentoMenzione(m, adesso, it)
+      const d = documentoMenzione(m, it)
       if (d) { docs.push(d); esito.menzioni++ }
     }
 

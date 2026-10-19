@@ -127,6 +127,14 @@ export function classificaAttenzione(
    * modello. Al massimo sono novità per il punto; le priorità le leggono per
    * conto loro.
    */
+  /*
+   * Una menzione su X non è una parola sua: è qualcuno che gli scrive (vedi
+   * `documentoMenzione` in connettori/x.ts). Se chiede qualcosa va nel feed,
+   * come una mail diretta; se no è una novità per il punto.
+   */
+  if (d.fonte === 'x' && d.id.startsWith('x:menzione:')) {
+    return contieneRichiesta(testo) ? { destinazione: 'feed', motivo: 'menzione_con_richiesta' } : { destinazione: 'brief', motivo: 'menzione' }
+  }
   if (d.fonte === 'conversazioni' || d.fonte === 'x' || d.fonte === 'lavoro') return { destinazione: 'brief', motivo: 'parole_sue' }
   if (d.fonte === 'calendario' || d.tipo === 'evento') return { destinazione: 'brief', motivo: 'evento' }
   if (d.fonte === 'github' && !opzioni.progettoAttivo) return { destinazione: 'brief', motivo: 'attivita_repository' }

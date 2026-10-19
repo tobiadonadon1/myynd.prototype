@@ -3449,6 +3449,8 @@ const EN: Record<string, string> = {
   'Quello che pubblichi su X, chi ti menziona, quello che ti piace e la tua timeline, dal motore di X su questo Mac.': 'What you post on X, who mentions you, what you like and your timeline, from the X engine on this Mac.',
   'Il motore di X è spento. Riaccendilo, o importa il tuo archivio di X.': 'The X engine is off. Start it again, or import your X archive.',
   'Il motore di X gira, ma il suo browser non legge più X. Sistemalo in x-engine, o importa il tuo archivio di X.': 'The X engine is running, but its browser no longer reads X. Fix it in x-engine, or import your X archive.',
+  'Qualcuno ti ha scritto su X e ti chiede qualcosa.': 'Someone wrote to you on X and is asking for something.',
+  'Qualcuno ti ha menzionato su X.': 'Someone mentioned you on X.',
 }
 
 

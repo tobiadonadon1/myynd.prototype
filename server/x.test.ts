@@ -342,7 +342,7 @@ function conGiri(cartella: string, giri: [string, string, number, string][]) {
 
 const OTTOBRE = Date.parse('2026-10-15T12:00:00Z')
 
-test('le menzioni del file del motore diventano documenti; solo quelle di questi giorni sono una novità', () => {
+test('le menzioni del file del motore diventano documenti di altri, mai «inviato», e vecchie non sono una novità', async () => {
   const dove = join(CASA, 'menzioni')
   const db = conGiri(dove, [])
   writeFileSync(join(dove, 'mentions.json'), JSON.stringify({
@@ -364,12 +364,15 @@ test('le menzioni del file del motore diventano documenti; solo quelle di questi
   assert.equal(a.autore, '@alice')
   assert.equal(a.percorso, 'https://x.com/alice/status/2101363755636666378')
   assert.match(a.corpo, /^Great point on agents\.\nMore below\.\n\n@alice ti ha menzionato su X\.\nhttps:\/\/x\.com\/alice\/status\/2101363755636666378$/)
-  // di ieri: gli è arrivata adesso
-  assert.equal(a.inviato, false)
+  // scritta da altri: niente la marca come sua
+  assert.ok(!a.inviato)
   const b = e.docs.find(d => d.id === 'x:menzione:2101327587628691936')!
   assert.equal(b.percorso, 'https://x.com/bob/status/2101327587628691936')
-  // di un mese fa: entra nell'indice, ma la prima pagina non la racconta come nuova
-  assert.equal(b.inviato, true)
+  assert.ok(!b.inviato)
+  // di un mese fa: entra nell'indice, ma la rilevanza la tiene fuori per data, non per «inviato»
+  const { classificaAttenzione } = await import('./rilevanza.ts')
+  assert.equal(classificaAttenzione(b, { adesso: OTTOBRE }).motivo, 'fonte_non_recente')
+  assert.equal(classificaAttenzione(a, { adesso: OTTOBRE }).destinazione, 'brief')
   assert.ok(!e.docs.some(d => d.id === 'x:menzione:1' || d.id === 'x:menzione:2'))
   // un file rotto, o un motore senza file, non è un guaio
   assert.deepEqual(x.menzioniDa('non è json'), [])
@@ -400,4 +403,10 @@ test('il motore fermo dice perché: spento, o acceso con il browser che non legg
   assert.match(x.guaioFermo(true, 'lettore').message, /archivio di X ha più di un mese/)
   // vivo, niente perché
   assert.equal(x.leggi({ db: acceso }, Date.parse('2026-09-21T12:00:00Z')).perche, null)
+  // un giro del lettore ancora in corso (`ok` vuoto) non è un lettore rotto
+  const inCorso = conGiri(join(CASA, 'in-corso'), [
+    ['poster', '2026-10-15T11:50:00+00:00', 1, 'nothing approved'],
+    ['feedread', '2026-10-15T11:55:00+00:00', null as unknown as number, '']
+  ])
+  assert.equal(x.leggi({ db: inCorso }, OTTOBRE).perche, null)
 })
