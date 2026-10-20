@@ -283,8 +283,7 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
    */
   const questa = store.domanda(id)
   if (questa?.tema === riferimento.TEMA) {
-    riferimento.scrivi(pulita)
-    const esito = riferimento.esitoDelRiferimento()
+    const esito = riferimento.rispondi(questa, pulita)
     store.chiudiDomanda(id, 'risposta', pulita, esito)
     return { esito }
   }

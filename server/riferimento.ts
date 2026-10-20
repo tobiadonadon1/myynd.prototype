@@ -6,20 +6,28 @@
 // abbandonato ieri a voce, e uno fermo da un mese può essere bloccato da una
 // firma che aspetta. Chi lo sa è lui, e finora non gli si chiedeva.
 //
-// Qui gli si chiede, una volta ogni due settimane: su cosa sta lavorando
-// adesso per ogni progetto, cosa è morto, cosa è bloccato. La risposta è un
-// blocco della memoria, con le sue parole, e vale più dei file: un progetto
-// che ha detto morto non si propone, uno bloccato riceve il passo che lo
-// sblocca. Ed è anche il metro con cui si misurano le priorità
-// (`valuta-feed.ts`): quante sono attuali, quante parlano di roba finita.
+// Qui gli si chiede, un progetto alla volta: su cosa lavora adesso. La
+// risposta è una riga del blocco della memoria, «Nome: le sue parole», e vale
+// più dei file: un progetto che ha detto morto o in pausa non si propone, uno
+// bloccato riceve il passo che lo sblocca. Ed è anche il metro con cui si
+// misurano le priorità (`valuta-feed.ts`).
+//
+// Si chiedeva tutto insieme: «For each project: what are you working on now,
+// what have you dropped, and what is blocked? The projects I know: …» con
+// sette nomi in fila, uno lungo una frase. Le sue parole, il 20 ottobre: «this
+// is not a question, this is just a blob of text… like 25 in one». Adesso è
+// una domanda corta su un progetto solo, il primo di cui non ha detto niente
+// da due settimane; il giorno dopo la risposta tocca al prossimo.
 //
 // La domanda passa dal meccanismo delle domande (`domande.ts`), con un tema
-// solo che si riapre: sulla prima pagina compare come le altre, e la risposta
-// arriva da lì.
+// solo che si riapre: sulla prima pagina compare nel blocco del suo progetto,
+// e la risposta arriva da lì.
 
 import * as store from './store.ts'
 import * as progetti from './progetti.ts'
-import { lingua } from './config.ts'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { cartella, lingua } from './config.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 
 /** L'etichetta del blocco dove vive: uno solo, si riscrive. */
@@ -28,8 +36,11 @@ export const ETICHETTA = 'riferimento'
 export const TEMA = 'riferimento'
 /** Dopo tanti giorni il riferimento è vecchio e si richiede. */
 export const GIORNI_VALIDO = 14
-/** Se l'ha lasciata cadere (o risposta) da meno di tanti giorni, non si insiste. */
+/** Se l'ha lasciata cadere da meno di tanti giorni, non si insiste. */
 export const GIORNI_SILENZIO = 7
+/** Dopo una risposta, il progetto dopo si chiede il giorno dopo: uno al giorno, non sette in fila. */
+export const GIORNI_DOPO_RISPOSTA = 1
+const GIORNO = 86_400_000
 const TETTO = 1500
 
 export type Riferimento = { testo: string; aggiornato: string | null }
@@ -141,78 +152,113 @@ export function registraProgettiNominati(testo: string): string[] {
   return creati
 }
 
-/** Vero se c'è un riferimento e non ha ancora l'età per essere richiesto. */
-export function fresco(adesso = Date.now()): boolean {
-  const r = leggi()
-  if (!r.testo || !r.aggiornato) return false
-  return adesso - Date.parse(r.aggiornato) < GIORNI_VALIDO * 86_400_000
+// — quando ha detto l'ultima volta di ogni progetto —
+//
+// Nel blocco le righe non hanno data. La data di ognuna sta qui, per chi
+// chiede: id del progetto → ISO.
+const fileDate = () => join(cartella(), 'riferimento-date.json')
+function date(): Record<string, string> {
+  try { return existsSync(fileDate()) ? JSON.parse(readFileSync(fileDate(), 'utf8')) as Record<string, string> : {} } catch { return {} }
+}
+function segnaData(id: string, quando = new Date().toISOString()) {
+  writeFileSync(fileDate(), JSON.stringify({ ...date(), [id]: quando }))
+}
+
+/** Il nome che si legge in una domanda: «H-Farm: I want to help to solidify…» è un nome lungo una frase. */
+export function nomeBreve(nome: string): string {
+  return nome.split(/[:(]/)[0].trim() || nome.trim()
+}
+
+/** La riga del blocco che parla di questo progetto, se c'è. */
+function rigaDi(testo: string, nome: string): string | null {
+  return testo.split('\n').find(r => nominaAmbito(r, nome)) ?? null
 }
 
 /**
- * La domanda, nella lingua dell'app, con i nomi dei suoi progetti dentro.
- *
- * Cominciava con «Per orientarmi» («To get my bearings»), e la prima tester
- * non l'ha capita: una metafora in testa a una domanda che si legge di
- * passaggio. Adesso chiede le tre cose e basta, con le parole che la lettura
- * qui sotto riconosce nella risposta: «abbandonato» e «bloccato», «dropped»
- * e «blocked».
+ * Il progetto da chiedere adesso: il primo vivo, quelli ad alta priorità in
+ * testa, di cui non ha detto niente da due settimane. Una riga del blocco
+ * scritta prima di queste date conta dal giorno del blocco.
  */
-export function domandaDiRiferimento(): string {
-  const nomi = progetti.vivi().map(p => p.nome)
-  if (lingua() === 'en') {
-    return 'For each project: what are you working on now, what have you dropped, and what is blocked?' +
-      (nomi.length ? ` The projects I know: ${nomi.join(', ')}.` : '')
-  }
-  return 'Per ogni progetto: su cosa lavori adesso, cosa hai abbandonato e cosa è bloccato?' +
-    (nomi.length ? ` I progetti che conosco: ${nomi.join(', ')}.` : '')
+export function daChiedere(adesso = Date.now()): progetti.Progetto | null {
+  const d = date()
+  const r = leggi()
+  const vivi = [...progetti.vivi()].sort((a, b) => Number(b.priorita === 'alta') - Number(a.priorita === 'alta'))
+  return vivi.find(p => {
+    const quando = d[p.id] ?? (r.aggiornato && rigaDi(r.testo, p.nome) ? r.aggiornato : null)
+    const q = Date.parse(quando ?? '')
+    return !Number.isFinite(q) || adesso - q >= GIORNI_VALIDO * GIORNO
+  }) ?? null
+}
+
+/** La domanda, nella lingua dell'app: una, corta, su un progetto. */
+export function domandaDiRiferimento(p: { nome: string }): string {
+  const n = nomeBreve(p.nome)
+  return lingua() === 'en' ? `What are you working on in ${n} right now?` : `Su cosa lavori adesso in ${n}?`
 }
 
 /**
- * Chiede il riferimento, se è il momento. Torna vero se ha aperto la domanda.
+ * Chiede il riferimento di un progetto, se è il momento. Torna vero se ha aperto la domanda.
  *
- * Il momento: nessun riferimento, o uno più vecchio di due settimane; e
- * nessuna domanda sul tema già aperta, né lasciata cadere (o risposta) da
- * meno di una settimana. Chi non risponde ha detto qualcosa anche lui, e non
- * gli si rifà la stessa domanda il giorno dopo.
+ * Il momento: nessuna domanda sul tema già aperta; dopo una risposta, un
+ * giorno; lasciata cadere, una settimana. Chi non risponde ha detto qualcosa
+ * anche lui. E un progetto di cui non ha detto niente da due settimane.
  */
 export function chiediRiferimento(adesso = Date.now()): boolean {
-  if (fresco(adesso)) return false
   const gia = store.domandaPerTema(TEMA)
   if (gia) {
     if (gia.stato === 'aperta') return false
     const chiusa = Date.parse(gia.chiusa ?? '')
-    if (Number.isFinite(chiusa) && adesso - chiusa < GIORNI_SILENZIO * 86_400_000) return false
+    const silenzio = gia.stato === 'risposta' ? GIORNI_DOPO_RISPOSTA : GIORNI_SILENZIO
+    if (Number.isFinite(chiusa) && adesso - chiusa < silenzio * GIORNO) return false
   }
-  const testo = domandaDiRiferimento()
-  const spunto = progetti.vivi().map(p => p.nome)
-  if (gia) store.riapriDomanda(gia.id, testo, spunto)
-  else if (!store.apriDomanda({ tema: TEMA, testo, spunto })) return false
+  const p = daChiedere(adesso)
+  if (!p) return false
+  const testo = domandaDiRiferimento(p)
+  if (gia) store.riapriDomanda(gia.id, testo, [p.nome], p.id)
+  else if (!store.apriDomanda({ tema: TEMA, testo, spunto: [p.nome], progetto: p.id })) return false
   return true
 }
 
 /**
  * La domanda sui progetti, com'è adesso.
  *
- * Il testo si scriveva una volta, quando si apriva la domanda: «I progetti
- * che conosco: Sito Northwind», e restava così anche con tre progetti vivi,
- * o con uno chiuso nel frattempo. Chi serve la domanda aperta la fa passare
- * di qui, e se è questa si riscrive con i progetti di adesso: la stessa
- * domanda, non una nuova, e senza toccare quando è stata aperta.
+ * Chi serve la domanda aperta la fa passare di qui. Se il progetto ha
+ * cambiato nome si riscrive; se è quella di prima, su tutti i progetti
+ * insieme, diventa la domanda corta su uno solo: la stessa riga, senza
+ * toccare quando è stata aperta. Se non c'è più niente da chiedere si chiude.
  */
-export function aggiornata<D extends { id: string; tema: string; testo: string; spunto: string[] }>(d: D | null): D | null {
+export function aggiornata<D extends { id: string; tema: string; testo: string; spunto: string[]; progetto?: string | null }>(d: D | null): D | null {
   if (!d || d.tema !== TEMA) return d
-  const testo = domandaDiRiferimento()
-  const spunto = progetti.vivi().map(p => p.nome)
-  if (testo === d.testo && JSON.stringify(spunto) === JSON.stringify(d.spunto)) return d
-  store.aggiornaDomanda(d.id, testo, spunto)
-  return { ...d, testo, spunto }
+  const suo = d.progetto ? progetti.vivi().find(p => p.id === d.progetto) ?? null : null
+  const p = suo ?? daChiedere()
+  if (!p) { store.chiudiDomanda(d.id, 'ignorata'); return null }
+  const testo = domandaDiRiferimento(p)
+  if (testo === d.testo && d.progetto === p.id) return d
+  store.aggiornaDomanda(d.id, testo, [p.nome], p.id)
+  return { ...d, testo, spunto: [p.nome], progetto: p.id }
+}
+
+/**
+ * La risposta: la riga del progetto nel blocco, con le sue parole, al posto
+ * di quella di prima. Torna l'esito, corto. Una domanda di prima, senza
+ * progetto, scrive il blocco intero com'era.
+ */
+export function rispondi(d: { progetto?: string | null }, risposta: string): string {
+  const p = d.progetto ? progetti.trova(d.progetto) : null
+  if (!p) { scrivi(risposta); return esitoDelRiferimento() }
+  const n = nomeBreve(p.nome)
+  const riga = `${n}: ${risposta.replace(/\s*\n+\s*/g, ' ').trim()}`
+  // via la riga che comincia col suo nome, solo quella: «Nextas, H-Brain: …» parla anche d'altro
+  const suaRiga = (r: string) => { const testa = r.split(':')[0]; return testa.split(',').map(x => x.trim()).some(x => x === n || x === p.nome.trim()) }
+  const prima = leggi().testo.split('\n').filter(r => r.trim() && !suaRiga(r))
+  scrivi([...prima, riga].join('\n'), { registra: false })
+  segnaData(p.id)
+  return esitoDelRiferimento()
 }
 
 /** Quello che gli si dice quando ha risposto: cosa cambia da adesso. */
 export function esitoDelRiferimento(): string {
-  return lingua() === 'en'
-    ? 'Noted. From now on the priorities start from what you wrote: dropped projects will not come back, and for the blocked ones I look for the step that unblocks them.'
-    : 'Segnato. Da adesso le priorità partono da quello che hai scritto: i progetti abbandonati non te li ripropongo, e su quelli bloccati cerco il passo che li sblocca.'
+  return lingua() === 'en' ? 'Noted.' : 'Segnato.'
 }
 
 // — leggere il riferimento —
@@ -225,7 +271,7 @@ export function esitoDelRiferimento(): string {
 
 // I plurali contano quanto i singolari: «Sito e Ceru: abbandonati» è una
 // risposta normale a una domanda che chiede «per ogni progetto».
-const MORTO = /\b(?:mort[oaie]|abbandonat[oaie]|chius[oaie]|finit[oaie]|archiviat[oaie]|dead|abandoned|killed|dropped|shelved|closed|finished|done|over|scrapped)\b/gi
+const MORTO = /\b(?:mort[oaie]|abbandonat[oaie]|chius[oaie]|finit[oaie]|archiviat[oaie]|in pausa|sospes[oaie]|dead|abandoned|killed|dropped|shelved|closed|finished|done|over|scrapped|paused|on pause)\b/gi
 const BLOCCATO = /\b(?:bloccat[oaie]|ferm[oaie]|in attesa|aspett[oaie]|blocked|stuck|waiting|on hold|stalled)\b/gi
 /*
  * «Niente di abbandonato», «nothing dropped», «nessun blocco».

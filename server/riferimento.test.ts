@@ -23,48 +23,50 @@ const GIORNO = 86_400_000
 const evermute = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Ship Evermute 1.0' })
 const sito = progetti.scrivi({ nome: 'Sito', obiettivo: 'Three offers online' })
 const ceru = progetti.scrivi({ nome: 'Ceru', obiettivo: 'Move in' })
+// le alte si chiedono per prime
+progetti.cambia(evermute.id, { priorita: 'alta' })
 
-test('la domanda nasce una volta, nella lingua dell’app, con i nomi dei progetti', () => {
+test('la domanda è una, corta, su un progetto solo, nella lingua dell’app', () => {
   assert.equal(riferimento.leggi().testo, '')
   assert.equal(riferimento.chiediRiferimento(), true)
   const d = store.domandaAperta()
   assert.ok(d && d.tema === riferimento.TEMA)
-  // senza metafore in testa, e con le parole che la lettura riconosce nella risposta
-  assert.match(d.testo, /^For each project: /)
-  assert.doesNotMatch(d.testo, /bearings/i)
-  assert.match(d.testo, /\bdropped\b/)
-  assert.match(d.testo, /\bblocked\b/)
-  const suoi = [evermute, sito, ceru]
-  assert.deepEqual([...riferimento.progettiMorti('Sito: dropped.', suoi)], [sito.id])
-  assert.deepEqual([...riferimento.progettiBloccati('Ceru: blocked.', suoi)], [ceru.id])
-  for (const n of ['Evermute', 'Sito', 'Ceru']) assert.ok(d.testo.includes(n), `la domanda nomina ${n}`)
+  // il 20 ottobre era «For each project: … The projects I know: …» con sette nomi
+  assert.equal(d.testo, 'What are you working on in Evermute right now?')
+  assert.equal(d.progetto, evermute.id)
+  assert.doesNotMatch(d.testo, /Sito|Ceru/)
   // già aperta: non se ne apre un'altra
   assert.equal(riferimento.chiediRiferimento(), false)
   assert.equal(store.domandeConTema('riferimento').length, 1)
 })
 
-test('la risposta diventa il blocco, parola per parola, senza passare dal modello', async () => {
+test('la risposta è la riga del progetto, parola per parola; il progetto dopo si chiede il giorno dopo', async () => {
   let chiamate = 0
   domande.perProva({ chiediJSON: (async () => { chiamate++; return null }) as never })
+  riferimento.scrivi('Sito: dead, I dropped it.\nEvermute: old line', { registra: false })
   const d = store.domandaAperta()!
-  const testo = 'Evermute: shipping 1.0, waiting on Apple. Sito: dead, I dropped it. Ceru: blocked on the contract with Marta.'
-  const { esito } = await domande.rispondiADomanda(d.id, testo)
+  const { esito } = await domande.rispondiADomanda(d.id, 'shipping 1.0, waiting on Apple.')
   assert.equal(chiamate, 0, 'il riferimento non passa dal modello')
-  assert.match(esito, /^Noted\./)
-  assert.equal(riferimento.leggi().testo, testo)
-  assert.ok(riferimento.leggi().aggiornato)
+  assert.equal(esito, 'Noted.')
+  assert.equal(riferimento.leggi().testo, 'Sito: dead, I dropped it.\nEvermute: shipping 1.0, waiting on Apple.')
   assert.equal(store.domandaAperta(), null)
   assert.equal(store.domanda(d.id)?.stato, 'risposta')
-  assert.equal(riferimento.fresco(), true)
-  // fresco: non si richiede
+  // lo stesso giorno non si chiede altro
   assert.equal(riferimento.chiediRiferimento(), false)
+  // il giorno dopo: Evermute è detto, Sito è nel blocco scritto adesso, tocca a Ceru
+  assert.equal(riferimento.chiediRiferimento(Date.now() + 1.1 * GIORNO), true)
+  const dopo = store.domandaAperta()!
+  assert.equal(dopo.id, d.id, 'la stessa riga, riaperta')
+  assert.equal(dopo.testo, 'What are you working on in Ceru right now?')
+  assert.equal(dopo.progetto, ceru.id)
 })
 
 test('la lettura del codice: morti e bloccati per nome, e la negazione spegne la parola', () => {
   const suoi = [evermute, sito, ceru]
-  const morti = riferimento.progettiMorti(riferimento.leggi().testo, suoi)
+  const testo = 'Evermute: shipping 1.0, waiting on Apple. Sito: dead, I dropped it. Ceru: blocked on the contract with Marta.'
+  const morti = riferimento.progettiMorti(testo, suoi)
   assert.deepEqual([...morti], [sito.id])
-  const bloccati = riferimento.progettiBloccati(riferimento.leggi().testo, suoi)
+  const bloccati = riferimento.progettiBloccati(testo, suoi)
   assert.ok(bloccati.has(ceru.id))
   assert.ok(bloccati.has(evermute.id), '«waiting on Apple» è un blocco')
   assert.ok(!bloccati.has(sito.id))
@@ -95,27 +97,31 @@ test('«niente di abbandonato» non uccide un progetto, e «dropped the port» n
   assert.deepEqual(morti('Evermute is not dead, just slow.'), [])
 })
 
-test('dopo due settimane si richiede, riaprendo la stessa riga', () => {
-  const fra15 = Date.now() + 15 * GIORNO
-  assert.equal(riferimento.fresco(fra15), false)
-  assert.equal(riferimento.chiediRiferimento(fra15), true)
-  const d = store.domandaAperta()
-  assert.ok(d && d.tema === riferimento.TEMA)
-  assert.equal(d.stato, 'aperta')
-  assert.equal(d.risposta, null)
-  assert.equal(store.domandeConTema('riferimento').length, 1, 'la riga è la stessa, riaperta')
-})
-
-test('lasciata cadere, tace per una settimana', () => {
+test('lasciata cadere, tace per una settimana; e quando di tutti ha detto da poco, non chiede', async () => {
   const d = store.domandaAperta()!
   domande.ignora(d.id)
   assert.equal(store.domandaAperta(), null)
-  // senza riferimento l'unico cancello che resta è il silenzio dopo l'ignorata
-  store.scordaBlocco(riferimento.ETICHETTA)
-  assert.equal(riferimento.chiediRiferimento(Date.now() + GIORNO), false)
+  assert.equal(riferimento.chiediRiferimento(Date.now() + 2 * GIORNO), false)
   assert.equal(riferimento.chiediRiferimento(Date.now() + 8 * GIORNO), true)
-  assert.equal(store.domandaAperta()?.tema, riferimento.TEMA)
-  domande.ignora(store.domandaAperta()!.id)
+  const di = store.domandaAperta()!
+  assert.equal(di.progetto, ceru.id)
+  await domande.rispondiADomanda(di.id, 'Blocked on the contract with Marta')
+  assert.ok(riferimento.progettiBloccati(riferimento.leggi().testo, [evermute, sito, ceru]).has(ceru.id))
+  // tutti detti da meno di due settimane: niente da chiedere
+  assert.equal(riferimento.daChiedere(Date.now() + 2 * GIORNO), null)
+  assert.equal(riferimento.chiediRiferimento(Date.now() + 2 * GIORNO), false)
+  // dopo due settimane si ricomincia
+  assert.ok(riferimento.daChiedere(Date.now() + 15 * GIORNO))
+})
+
+test('«paused» e «in pausa» fermano le proposte come «dropped»', () => {
+  assert.deepEqual([...riferimento.progettiMorti('Ceru: paused until January', [evermute, sito, ceru])], [ceru.id])
+  assert.deepEqual([...riferimento.progettiMorti('Ceru: in pausa fino a gennaio', [evermute, sito, ceru])], [ceru.id])
+})
+
+test('un nome lungo una frase si accorcia nella domanda', () => {
+  assert.equal(riferimento.nomeBreve('H-Farm: I want to help to solidify AI Systems to Streamline company efforts.'), 'H-Farm')
+  assert.equal(riferimento.domandaDiRiferimento({ nome: 'H-Farm: I want to help to solidify AI Systems.' }), 'What are you working on in H-Farm right now?')
 })
 
 test('scrivi: vuoto non si accetta, e il tetto vale', () => {
@@ -160,17 +166,19 @@ test('«Evermute (everwave)» nel riferimento fa di everwave un altro nome di Ev
  * «I progetti che conosco: Sito Northwind». Si riscrive servendola: la stessa
  * domanda, con lo stesso orario, non una nuova.
  */
-test('la domanda aperta si riscrive con i progetti di adesso, senza diventarne un’altra', () => {
+test('la domanda di prima, su tutti i progetti insieme, diventa quella corta su uno solo', () => {
   const gia = store.domandaPerTema(riferimento.TEMA)!
-  store.riapriDomanda(gia.id, 'For each project: what are you working on now, what have you dropped, and what is blocked? The projects I know: Evermute.', ['Evermute'])
+  store.riapriDomanda(gia.id, 'For each project: what are you working on now, what have you dropped, and what is blocked? The projects I know: Evermute.', ['Evermute'], null)
   const prima = store.domandaAperta()!
-  progetti.scrivi({ nome: 'Northwind', obiettivo: 'Launch the new site' })
+  assert.equal(prima.progetto ?? null, null)
+  const nw = progetti.scrivi({ nome: 'Northwind', obiettivo: 'Launch the new site' })
   const d = riferimento.aggiornata(store.domandaAperta())!
   assert.equal(d.id, prima.id)
-  for (const p of progetti.vivi()) assert.ok(d.testo.includes(p.nome), `the question names ${p.nome}: ${d.testo}`)
-  assert.deepEqual(d.spunto, progetti.vivi().map(p => p.nome))
+  assert.equal(d.testo, 'What are you working on in Northwind right now?')
+  assert.equal(d.progetto, nw.id)
   const salvata = store.domandaAperta()!
   assert.equal(salvata.testo, d.testo, 'what the page shows is what is stored')
+  assert.equal(salvata.progetto, nw.id)
   assert.equal(salvata.creata, prima.creata, 'it is the same question, asked at the same time')
   assert.equal(store.domandeConTema(riferimento.TEMA).length, 1)
   // una domanda d'altro tema non si tocca

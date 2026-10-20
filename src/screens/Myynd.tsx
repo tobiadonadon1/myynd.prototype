@@ -1664,7 +1664,7 @@ type Domanda = {
 
 function CartaDomande({ v }: { v: Vals }) {
   const domande: Domanda[] = [
-    ...(v.domanda ? [{ id: v.domanda.id, testo: v.domanda.testo, genere: 'sua' as const, lunga: v.domanda.tema === 'riferimento', spunto: v.domanda.tema === 'riferimento' ? [] : v.domanda.spunto }] : []),
+    ...(v.domanda ? [{ id: v.domanda.id, testo: v.domanda.testo, genere: 'sua' as const, lunga: false, spunto: v.domanda.tema === 'riferimento' ? [] : v.domanda.spunto }] : []),
     ...v.iniziative.map(i => ({
       id: i.id, testo: i.question ?? i.title, genere: 'progetto' as const,
       progetto: i.projectId, nomeProgetto: i.projectName, lunga: false, spunto: [] as string[], originale: i

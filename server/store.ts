@@ -4797,14 +4797,16 @@ export function domandeConTema(prefisso: string): Domanda[] {
  * invecchia, e dopo due settimane si richiede: si riapre la riga di allora
  * invece di inventare un tema nuovo per ogni giro.
  */
-export function riapriDomanda(id: string, testo: string, spunto: string[]) {
+export function riapriDomanda(id: string, testo: string, spunto: string[], progetto?: string | null) {
   db.prepare(`UPDATE domande SET testo = ?, spunto = ?, stato = 'aperta', risposta = NULL, esito = NULL, chiusa = NULL, creata = ? WHERE id = ?`)
     .run(testo, JSON.stringify(spunto), new Date().toISOString(), id)
+  if (progetto !== undefined) db.prepare('UPDATE domande SET progetto = ? WHERE id = ?').run(progetto, id)
 }
 
 /** Lo stesso testo detto meglio, a domanda ancora aperta: niente riapertura, niente orario nuovo. */
-export function aggiornaDomanda(id: string, testo: string, spunto: string[]) {
+export function aggiornaDomanda(id: string, testo: string, spunto: string[], progetto?: string | null) {
   db.prepare(`UPDATE domande SET testo = ?, spunto = ? WHERE id = ? AND stato = 'aperta'`).run(testo, JSON.stringify(spunto), id)
+  if (progetto !== undefined) db.prepare(`UPDATE domande SET progetto = ? WHERE id = ? AND stato = 'aperta'`).run(progetto, id)
 }
 
 export function chiudiDomanda(id: string, stato: 'risposta' | 'ignorata', risposta?: string, esito?: string) {
