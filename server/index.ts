@@ -103,6 +103,9 @@ import * as misuraFeed from './misura-feed.ts'
 import * as resoconto from './resoconto.ts'
 import * as daSe from './da-se.ts'
 import * as seguito from './seguito.ts'
+import * as latoLavoro from './lato-lavoro.ts'
+import * as latoNota from './lato-nota.ts'
+import * as lati from './lato-lati.ts'
 import * as mattina from './mattina.ts'
 import * as mentreVia from './via.ts'
 
@@ -5447,7 +5450,7 @@ app.post('/api/compiti/:id/lascia', (req, res) => {
     // «Non mi serve», con qualunque ragione: il lavoro consegnato non è stato preso
     tracce.decidi(c.id, 'scartato')
     // un pacchetto lasciato si porta via i suoi impegni ancora aperti
-    if (stato === 'lasciato' && seguito.suo(c.origine)) seguito.lasciato(c.id)
+    if (stato === 'lasciato' && (seguito.suo(c.origine) || (lati.suo(c.origine) && seguito.pacchettoDi(c.id)))) seguito.lasciato(c.id)
     abitudini.ragioneDelCompito(c.id, ragione)
     const chiavi = new Set(abitudini.chiaviDelCompito(c.id))
     imparato = abitudini.ricalcolaFiltri().find(r => chiavi.has(r.chiave))
@@ -5472,10 +5475,15 @@ app.post('/api/gradino/ritira', (req, res) => {
 const preparazione = () => candidati.lotto(async () => {
   // prima il seguito delle conversazioni con i clienti: la stessa mail non fa nascere anche una proposta dell'iniziativa
   await seguito.giro()
+  // il lato che ha scelto (`lato-lavoro.ts`): dopo il seguito, che non lo raddoppi, e prima di
+  // iniziativa e da sé, così le sue chiavi vincono. Senza un lato scelto non propone niente
+  await latoLavoro.giro(Date.now())
   const r = await iniziativa.preparazione()
   // e il lavoro suo fatto da sé (`da-se.ts`): le idee per X, il copione, le pagine di Notion.
   // Tutti propongono alla coda unica (`candidati.ts`), e la politica decide una volta, alla fine del lotto
   await daSe.giro()
+  // una volta al giorno, di giorno, finché non ha risposto: il lato che potrebbe prendere in mano (`lato-nota.ts`)
+  await latoNota.forseNota()
   return r
 }).finally(() => compiti.annunciaCambio())
 // — D: rotte, fine —

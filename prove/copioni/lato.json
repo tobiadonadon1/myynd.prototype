@@ -48,14 +48,12 @@
         "lavori": [
           {
             "doc": "D1",
-            "genere": "fattura",
-            "titolo": "Reminder to Studio Nord for invoice 1042",
+            "genere": "risposta",
             "perche": "Invoice 1042 is overdue and they asked for the IBAN."
           },
           {
             "doc": "D2",
-            "genere": "fattura",
-            "titolo": "Reply to Mara about invoice 1038",
+            "genere": "risposta",
             "perche": "She promised payment next week; confirm the amount."
           }
         ]
@@ -69,13 +67,11 @@
           {
             "doc": "D1",
             "genere": "risposta",
-            "titolo": "Send Nina the updated deck and cap table",
             "perche": "She asked for both before Friday."
           },
           {
             "doc": "D2",
             "genere": "risposta",
-            "titolo": "Answer Tom on whether the round is open",
             "perche": "He wants a second look at the deck."
           }
         ]
@@ -89,6 +85,36 @@
         "esito": ""
       },
       "attesa": 2000
+    },
+    {
+      "se": "will review and send themselves[\\s\\S]*\\b(invoice|fattur)",
+      "in": "tutto",
+      "json": {
+        "risposta": "Hi, a quick reminder about the invoice below, which is now past due. The IBAN is in the original email. Could you let me know when the payment goes out? Thanks.",
+        "oggetto": "Re: invoice reminder",
+        "cambia_documento": false,
+        "documento": {
+          "testo": "",
+          "cambiamenti": []
+        },
+        "impegni": [],
+        "perche": "They have not paid yet and asked nothing new."
+      }
+    },
+    {
+      "se": "will review and send themselves",
+      "in": "tutto",
+      "json": {
+        "risposta": "Thanks for the note. I am attaching the updated deck. Happy to walk you through the numbers this week if useful.",
+        "oggetto": "Re: following up",
+        "cambia_documento": false,
+        "documento": {
+          "testo": "",
+          "cambiamenti": []
+        },
+        "impegni": [],
+        "perche": "They asked for the latest deck."
+      }
     }
   ],
   "predefinita": "Done. This answer comes from the fake model used in the tests."

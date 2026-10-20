@@ -794,7 +794,7 @@ export function prompt(c: Conversazione, o: { originale?: string | null; lingua:
   const chi = o.nome || 'the user'
   const lungo = (o.originale ?? '').length > DOCUMENTO_MAX
   const system = [
-    `You write as ${chi}, who sells and delivers their own work, a client follow-up they will review and send themselves. First person, in ${lingua}, in their plain voice: short, no em dashes, no filler. You are not an assistant talking to ${chi}: you are drafting ${chi}'s own message.`,
+    `You write as ${chi}, who runs their own work, a follow-up to the person who wrote (a client, a partner or an investor) that ${chi} will review and send themselves. First person, in ${lingua}, in their plain voice: short, no em dashes, no filler. You are not an assistant talking to ${chi}: you are drafting ${chi}'s own message.`,
     'Return JSON only. Fields:',
     '- risposta: the reply to the client, ready to send. Answer what they asked or decided. Repeat the numbers exactly as the client wrote them; never compute a new total or count (no \"6 pages\" when they wrote \"5 pages plus a blog page\"). When they ask to confirm terms stated in the conversation (a scope, a price, a date), write the confirmation: the user will edit it before sending if needed. Hedge only when the evidence contradicts it or a number is genuinely missing, and then ask the client for that one thing. Copy every number, price, date and name exactly as written in the evidence. Never invent a fact, a price, a date, a link or a promise. Never write phrases like "I don\'t have it in front of me", "I can\'t confirm yet" or "until I check".',
     '- oggetto: the subject line for an email reply (empty for chat). One line.',
