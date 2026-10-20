@@ -534,3 +534,13 @@ test('il messaggio di serie è di due frasi e la domanda, trenta parole al massi
     'Potrei prendere in mano i follow-up con gli investitori: 4 investitori aspettano una tua risposta. Da solo preparo ogni risposta nelle tue bozze e chiedo sempre prima di mandare. Lo faccio?')
   assert.match(nota.percheDiSerie({ id: 'clienti', ...base, corrispondenti: 1 }, 'en'), /^1 client is waiting for your reply$/)
 })
+
+test('«No, handle my invoices»: il no vale per il lato proposto, e il lato nominato dopo si prende', async () => {
+  const p = await persona('nohandle@esempio.it', fondatrice())
+  await dentro(p, async () => {
+    const d = (await nota.forseNota(mezzogiorno()))!
+    await domande.rispondiADomanda(d.id, 'No, handle my invoices')
+    assert.equal(lati.leggi().scelto?.id, 'fatture')
+    assert.equal(lati.leggi().rifiutato, undefined)
+  })
+})

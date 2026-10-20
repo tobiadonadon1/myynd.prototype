@@ -433,7 +433,9 @@ export async function rispondi(d: Pick<Domanda, 'id' | 'spunto'>, testo: string)
   if (sue) inChat(nuovoId(), 'u', sue)
   const dici = (riga: string, chiusa = true): Esito => { inChat(nuovoId(), 'a', riga); return { riga, chiusa } }
 
-  if (NO.test(sue) && !MA.test(sue)) {
+  // «No, handle my invoices»: il no è per il lato proposto, non per tutto. Se dopo nomina un altro lato, vale quello
+  const altroLato = LATI.some(d => !!d.parole && d.parole.test(sue.replace(NO, '')))
+  if (NO.test(sue) && !MA.test(sue) && !altroLato) {
     aggiorna(st => { st.rifiutato = new Date().toISOString() })
     console.log('myynd · lato · rifiutato')
     return dici(en ? 'Okay, I’ll leave it.' : 'Va bene, lascio stare.')
