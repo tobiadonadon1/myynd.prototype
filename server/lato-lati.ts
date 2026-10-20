@@ -178,12 +178,23 @@ export function aggiorna(f: (s: StatoLato) => void): StatoLato { const s = leggi
 // — chi scrive, e quando una mail parla di un lato —
 
 /** Chi non legge le risposte: rispondere a un noreply è lavoro buttato. */
-export const AUTOMATICO = /^(?:no-?reply|do-?not-?reply|notifications?|notify|mailer-daemon|postmaster|bounce[s]?|billing|receipts?|alerts?|news(?:letter)?)\b/i
+export const AUTOMATICO = /^(?:no[-.]?reply|do[-.]?not[-.]?reply|notifications?|notify|mailer-daemon|postmaster|bounce[s]?|billing|receipts?|alerts?|news(?:letter)?)\b/i
+/**
+ * Un dominio di programma: un pezzo del dominio che è un allarme o una
+ * notifica. «chase@fraudalert.chase.com» ha un nome di persona davanti, e il
+ * 20 ottobre Myynd gli aveva preparato una risposta.
+ */
+const DOMINIO_AUTOMATICO = /^(?:alerts?|fraud-?alerts?|notifications?|notify|no-?reply|bounces?|mailer)$/i
 /** L'indirizzo dentro un «Nome <indirizzo>», in minuscolo, o null. */
 export const indirizzoDi = (autore: string | null | undefined): string | null =>
   (autore?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '').toLowerCase() || null
 /** Una mail di un programma: noreply, notifiche, rimbalzi. */
-export const automatica = (autore: string | null | undefined): boolean => { const a = indirizzoDi(autore); return !!a && AUTOMATICO.test(a) }
+export const automatica = (autore: string | null | undefined): boolean => {
+  const a = indirizzoDi(autore)
+  if (!a) return false
+  const [locale, dominio = ''] = a.split('@')
+  return AUTOMATICO.test(locale) || dominio.split('.').slice(0, -2).some(p => DOMINIO_AUTOMATICO.test(p))
+}
 
 /**
  * Una mail parla di un lato se lo dicono l'oggetto o il mittente, oppure se il

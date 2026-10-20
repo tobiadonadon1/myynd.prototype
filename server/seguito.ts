@@ -36,6 +36,7 @@ import * as mandato from './mandato.ts'
 import * as tracce from './tracce.ts'
 import * as candidati from './candidati.ts'
 import * as segnali from './segnali.ts'
+import * as lati from './lato-lati.ts'
 import * as slackSegnali from './slack-segnali.ts'
 import { cercatoreDiProgetti } from './attenzione.ts'
 import { candidatiDettagli, rispostoNelFilo, turnoSpento } from './iniziativa.ts'
@@ -299,7 +300,8 @@ export function conversazioniDallaPosta(docs: store.Documento[], adesso = Date.n
   }
   const out: Conversazione[] = []
   for (const [k, { d, chiede }] of perFilo) {
-    if (rispostoNelFilo(d)) continue
+    // un allarme della banca non è una persona: la risposta non la legge nessuno
+    if (rispostoNelFilo(d) || lati.automatica(d.autore)) continue
     const indirizzo = indirizzoDi(d.autore)
     const corpo = corpoAttuale(d)
     const testo = `${d.titolo}\n${corpo}`
