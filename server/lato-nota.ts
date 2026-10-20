@@ -348,17 +348,36 @@ export async function forseNota(adesso: number = Date.now()): Promise<Domanda | 
 
 // — la risposta —
 
-// la fine della parola a mano: con «sì» \b non vede il confine dopo la «ì»
-const SI = /^\s*(?:s[iì]|yes|yep|yeah|ok(?:ay)?|sure|certo|va bene|go ahead|do it|fallo|vai|d'accordo|perfetto|volentieri)(?=$|[\s,.!;:])/i
-/**
- * Un no, o un «non adesso»: una risposta che comincia così rifiuta, qualunque
- * cosa segua («No, thanks», «Not interested», «No grazie, non ora», «later»,
- * «maybe later»). Prima contava solo la risposta intera, e «No, thanks»
- * faceva nascere un progetto «No, thanks» col mandato confermato. «No
- * problem» è un sì, non un no.
+/*
+ * Leggere la risposta. Le parole fisse reggevano male: «Not interested in
+ * invoices» faceva nascere le fatture, «Don't worry, go ahead» era un no,
+ * «Sì, però solo fatture» prendeva gli investitori. Adesso si legge da qui solo
+ * una risposta fatta tutta di parole di sì (o tutta di no), con le parole di
+ * cortesia intorno: «Yes», «Sì grazie», «No, thanks», «Not now». Tutto il resto
+ * lo legge il modello (sì, no, un altro lato); senza modello, un lato nominato
+ * vale solo se nella frase non c'è una negazione, e se no si chiede di nuovo.
  */
-const NO = /^\s*(?:no(?!\s+(?:problem|worries|worry|doubt|prob)\b)|nope|nah|nay|non ora|non adesso|non mi interessa|non voglio|non serve|non ho bisogno|non ne ho bisogno|not now|not yet|not interested|not today|not really|maybe later|later|forse dopo|magari dopo|più tardi|dopo|un'altra volta|lascia stare|lascia perdere|leave it|never ?mind|skip|passo|grazie,? no|thanks,? no|thank you,? no|i'?m good|i am good|don'?t|do not|stop)(?=$|[\s,.!;:?'’])/i
-const MA = /\b(?:ma|but|però|instead|invece|actually|piuttosto)\b/i
+const FRASI_SI = ['yes please', 'yes', 'yep', 'yeah', 'okay', 'ok', 'sure', 'go ahead', 'do it', 'sounds good', 'please do', 'sì', 'si', 'certo', 'va bene', 'fallo', 'vai', "d'accordo", 'daccordo', 'perfetto', 'volentieri', 'ottimo']
+const FRASI_NO = ['no thank you', 'no thanks', 'not interested', 'not now', 'not yet', 'not today', 'maybe later', 'never mind', 'nevermind', 'leave it', 'no', 'nope', 'nah', 'later', 'skip', 'non mi interessa', 'non ora', 'non adesso', 'non serve', 'magari dopo', 'forse dopo', 'più tardi', 'lascia stare', 'lascia perdere', 'no grazie', 'dopo', 'passo']
+const CORTESIA = ['thank you', 'thanks', 'please', 'for now', 'grazie', 'per ora', 'per adesso', 'per favore', 'for me', 'really', 'davvero', 'mille']
+const NEGA = /(?:^|[^\p{L}])(?:no|not|non|don'?t|do not|never|mai|niente|nessun[oa]?|nope|nah)(?=$|[^\p{L}])/iu
+
+/** La risposta ridotta alle sue parole: minuscole, senza punteggiatura, spazi semplici. */
+const nuda = (t: string) => ` ${t.toLowerCase().replace(/[’]/g, "'").replace(/[^\p{L}\s']/gu, ' ').replace(/\s+/g, ' ').trim()} `
+
+/** Tutta fatta di queste frasi (e di cortesia), con almeno una delle frasi. */
+function soloFrasi(t: string, frasi: readonly string[]): boolean {
+  let r = nuda(t)
+  let trovata = false
+  for (const f of frasi) {
+    const k = ` ${f} `
+    while (r.includes(k)) { r = r.replace(k, ' '); trovata = true }
+  }
+  for (const f of CORTESIA) { const k = ` ${f} `; while (r.includes(k)) r = r.replace(k, ' ') }
+  return trovata && !r.trim()
+}
+export const eUnSi = (t: string) => !t.includes('?') && soloFrasi(t, FRASI_SI)
+export const eUnNo = (t: string) => soloFrasi(t, FRASI_NO)
 
 /** Il nome corto del progetto che nasce dal sì, nella sua lingua. */
 const NOMI: Record<Exclude<LatoId, 'libero'>, { it: string; en: string }> = {
@@ -388,30 +407,49 @@ export function nomeLibero(esito: string): string {
  * poi il modello, che per un lato libero deve confermare che è una parte
  * concreta del suo lavoro con un esito. Altrimenti null: niente da creare.
  */
-export async function latoDalleParole(testo: string, l: 'it' | 'en' = lingua()): Promise<{ id: LatoId; esito: string } | null> {
+export type Lettura = { decisione: 'si' } | { decisione: 'no' } | { decisione: 'altro'; id: LatoId; esito: string } | { decisione: 'non_chiaro' }
+
+/**
+ * Cosa vuol dire una risposta che non è un sì o un no secco. Il modello sceglie
+ * fra sì al lato proposto, no, o un altro lato con l'esito che vuole; se non
+ * risponde, un lato nominato vale solo senza negazioni nella frase.
+ */
+export async function leggiRisposta(testo: string, proposto: DefLato | null, l: 'it' | 'en' = lingua()): Promise<Lettura> {
   const def = LATI.find(d => d.parole?.test(testo))
-  let modello: { id: LatoId; esito: string } | null = null
   try {
-    const e = await ferri.chiediJSON<{ lato: string; esito: string; concreto: boolean }>({
+    const e = await ferri.chiediJSON<{ decisione: string; lato: string; esito: string }>({
       lavoro: 'giudizio', max_tokens: 200,
       system: `${SEGNO_RISPOSTA}.
-Myynd offered to take over one side of this person's work, and they answered with other words.
-Pick the side they mean from the list (libero if none fits) and write the outcome they want as one short line in ${nellaLingua()}, no dashes, at most 120 characters.
-concreto: true only if their words name a concrete part of their work that someone could take over and finish, false for a question, a refusal, thanks or anything vague.
+Myynd offered to take over ${proposto ? proposto.nome.en : 'one side of their work'} for this person, and they answered.
+decisione: "si" if they accept that offer as it is; "no" if they decline or postpone it, even politely, even if they mention a topic only to refuse it; "altro" if they want Myynd to take over a different, concrete part of their work instead (or a narrower part); "non_chiaro" for a question, thanks, or anything vague.
+lato: for "altro", the side from the list (libero if none fits); otherwise the offered one.
+esito: for "altro", the outcome they want as one short line in ${nellaLingua()}, no dashes, at most 120 characters; otherwise empty.
 Sides: ${LATI.map(d => `${d.id} (${d.nome.en})`).join(', ')}.`,
       formato: {
         type: 'object',
-        properties: { lato: { type: 'string', enum: LATI.map(d => d.id) }, esito: { type: 'string' }, concreto: { type: 'boolean' } },
-        required: ['lato', 'esito', 'concreto'], additionalProperties: false
+        properties: {
+          decisione: { type: 'string', enum: ['si', 'no', 'altro', 'non_chiaro'] },
+          lato: { type: 'string', enum: LATI.map(d => d.id) },
+          esito: { type: 'string' }
+        },
+        required: ['decisione', 'lato', 'esito'], additionalProperties: false
       },
       messages: [{ role: 'user', content: testo }]
     })
-    const m = e ? lato(e.lato) : null
-    if (m && e!.concreto === true && parteBuona(e!.esito, 140) && !linguaSbagliata(e!.esito, l)) modello = { id: m.id, esito: pulita(e!.esito, 140) }
+    if (e?.decisione === 'si' && proposto) return { decisione: 'si' }
+    if (e?.decisione === 'no') return { decisione: 'no' }
+    if (e?.decisione === 'non_chiaro') return { decisione: 'non_chiaro' }
+    if (e?.decisione === 'altro') {
+      const m = lato(e.lato)
+      // la parola nominata batte un «libero» del modello: «handle my invoices» sono le fatture
+      if (def && (!m || m.id === 'libero')) return { decisione: 'altro', id: def.id, esito: def.esito[l] }
+      if (m && m.id !== 'libero') return { decisione: 'altro', id: m.id, esito: m.esito[l] }
+      if (m && parteBuona(e.esito, 140) && !linguaSbagliata(e.esito, l)) return { decisione: 'altro', id: 'libero', esito: pulita(e.esito, 140) }
+      return { decisione: 'non_chiaro' }
+    }
   } catch { /* si va a parole */ }
-  if (def && !(modello && modello.id !== 'libero')) return { id: def.id, esito: def.esito[l] }
-  if (modello && modello.id !== 'libero') return { id: modello.id, esito: lato(modello.id)!.esito[l] || modello.esito }
-  return modello
+  if (def && !NEGA.test(testo)) return { decisione: 'altro', id: def.id, esito: def.esito[l] }
+  return { decisione: 'non_chiaro' }
 }
 
 /** La risposta del lato: la riga di Myynd, e se la domanda si chiude con questa. */
@@ -433,26 +471,20 @@ export async function rispondi(d: Pick<Domanda, 'id' | 'spunto'>, testo: string)
   if (sue) inChat(nuovoId(), 'u', sue)
   const dici = (riga: string, chiusa = true): Esito => { inChat(nuovoId(), 'a', riga); return { riga, chiusa } }
 
-  // «No, handle my invoices»: il no è per il lato proposto, non per tutto. Se dopo nomina un altro lato, vale quello
-  const altroLato = LATI.some(d => !!d.parole && d.parole.test(sue.replace(NO, '')))
-  if (NO.test(sue) && !MA.test(sue) && !altroLato) {
+  const notato = lato(s.notato?.id) ?? lato(d.spunto?.[0])
+  const ancora = () => dici(en ? 'Yes, no, or which part? A few words are enough.' : 'Sì, no, o quale parte? Bastano poche parole.', false)
+  const r: Lettura = eUnNo(sue) ? { decisione: 'no' } : eUnSi(sue) && notato ? { decisione: 'si' } : await leggiRisposta(sue, notato, l)
+  if (r.decisione === 'no') {
     aggiorna(st => { st.rifiutato = new Date().toISOString() })
     console.log('myynd · lato · rifiutato')
     return dici(en ? 'Okay, I’ll leave it.' : 'Va bene, lascio stare.')
   }
-
-  const notato = lato(s.notato?.id) ?? lato(d.spunto?.[0])
+  if (r.decisione === 'non_chiaro' || (r.decisione === 'si' && !notato)) return ancora()
   let id: LatoId, esito: string, parole: string | undefined
-  // una domanda non è un sì: «yes? what would you do» chiede, non risponde
-  if (SI.test(sue) && !MA.test(sue) && !sue.includes('?') && notato) {
-    id = notato.id; esito = notato.esito[l]
-  } else {
-    const r = await latoDalleParole(sue, l)
-    if (!r) return dici(en ? 'Which part? A few words are enough.' : 'Quale parte? Bastano poche parole.', false)
-    id = r.id; esito = r.esito; parole = sue
-  }
+  if (r.decisione === 'si') { id = notato!.id; esito = notato!.esito[l] }
+  else { id = r.id; esito = r.esito; parole = sue }
   const def = lato(id)!
-  if (!esito) return dici(en ? 'Which part? A few words are enough.' : 'Quale parte? Bastano poche parole.', false)
+  if (!esito) return ancora()
 
   const nome = id === 'libero' ? nomeLibero(esito) : NOMI[id][l]
   const { progetto, esisteva } = progetti.crea({ nome, obiettivo: esito, origine: 'conversazione' })

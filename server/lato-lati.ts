@@ -178,7 +178,7 @@ export function aggiorna(f: (s: StatoLato) => void): StatoLato { const s = leggi
 // — chi scrive, e quando una mail parla di un lato —
 
 /** Chi non legge le risposte: rispondere a un noreply è lavoro buttato. */
-export const AUTOMATICO = /^(?:no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounce[s]?)\b/i
+export const AUTOMATICO = /^(?:no-?reply|do-?not-?reply|notifications?|notify|mailer-daemon|postmaster|bounce[s]?|billing|receipts?|alerts?|news(?:letter)?)\b/i
 /** L'indirizzo dentro un «Nome <indirizzo>», in minuscolo, o null. */
 export const indirizzoDi = (autore: string | null | undefined): string | null =>
   (autore?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '').toLowerCase() || null

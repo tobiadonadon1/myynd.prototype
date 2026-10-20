@@ -396,7 +396,7 @@ test('parole vaghe non fanno nascere niente: la domanda resta aperta e Myynd chi
   await dentro(p, async () => {
     const d = (await nota.forseNota(mezzogiorno()))!
     const r = await domande.rispondiADomanda(d.id, 'hmm what would you do exactly')
-    assert.equal(r.esito, 'Which part? A few words are enough.')
+    assert.equal(r.esito, 'Yes, no, or which part? A few words are enough.')
     assert.equal(store.domanda(d.id)?.stato, 'aperta')
     assert.equal(store.domandaAperta()?.id, d.id)
     assert.equal(progetti.elenco().length, 0)
@@ -414,12 +414,12 @@ test('un lato libero solo se il modello conferma una parte concreta: il nome non
   const p = await persona('libero@esempio.it', fondatrice())
   await dentro(p, async () => {
     // il modello dice libero ma non concreto: niente
-    nota.perProva({ chiediJSON: async () => ({ lato: 'libero', esito: 'Handle it', concreto: false }) as never })
+    nota.perProva({ chiediJSON: async () => ({ decisione: 'non_chiaro', lato: 'libero', esito: '' }) as never })
     const vago = await nota.rispondi(SENZA_PAROLE, 'please take over my supplier stuff')
     assert.equal(vago.chiusa, false)
     assert.equal(progetti.elenco().length, 0)
     // concreto: nasce, e il nome non è «Take over my supplier calls»
-    nota.perProva({ chiediJSON: async () => ({ lato: 'libero', esito: 'Take over my supplier calls', concreto: true }) as never })
+    nota.perProva({ chiediJSON: async () => ({ decisione: 'altro', lato: 'libero', esito: 'Take over my supplier calls' }) as never })
     const r = await nota.rispondi(SENZA_PAROLE, 'please take over my supplier calls')
     assert.equal(r.chiusa, true)
     assert.equal(progetti.elenco().map(x => x.nome).join(), 'Supplier calls')
@@ -435,7 +435,7 @@ test('un lato libero solo se il modello conferma una parte concreta: il nome non
 test('«handle my invoices» dà il nome del lato (fatture), anche se il modello dice libero', async () => {
   const p = await persona('fattureparole@esempio.it', fondatrice())
   await dentro(p, async () => {
-    nota.perProva({ chiediJSON: async () => ({ lato: 'libero', esito: 'Handle my invoices', concreto: true }) as never })
+    nota.perProva({ chiediJSON: async () => ({ decisione: 'altro', lato: 'libero', esito: 'Handle my invoices' }) as never })
     const r = await nota.rispondi(SENZA_PAROLE, 'handle my invoices')
     assert.equal(lati.leggi().scelto?.id, 'fatture')
     assert.deepEqual(progetti.elenco().map(x => x.nome), ['Invoices to chase'])
@@ -539,8 +539,31 @@ test('«No, handle my invoices»: il no vale per il lato proposto, e il lato nom
   const p = await persona('nohandle@esempio.it', fondatrice())
   await dentro(p, async () => {
     const d = (await nota.forseNota(mezzogiorno()))!
+    nota.perProva({ chiediJSON: async () => ({ decisione: 'altro', lato: 'fatture', esito: '' }) as never })
     await domande.rispondiADomanda(d.id, 'No, handle my invoices')
+    nota.perProva({ chiediJSON: async () => null })
     assert.equal(lati.leggi().scelto?.id, 'fatture')
     assert.equal(lati.leggi().rifiutato, undefined)
+  })
+})
+
+test('le risposte che le parole fisse leggevano male: solo i sì e i no secchi si leggono da qui', () => {
+  for (const t of ['Yes', 'yes please', 'Sì grazie', 'ok', 'Sure!', 'Go ahead.', 'va bene']) assert.equal(nota.eUnSi(t), true, t)
+  for (const t of ['ok?', "Don't worry, go ahead", 'Sì, però solo fatture', 'Sure, invoices first', 'No problem']) assert.equal(nota.eUnSi(t), false, t)
+  for (const t of ['No', 'No, thanks', 'No grazie, non ora', 'Not interested', 'maybe later', 'not now, thanks', 'Lascia stare']) assert.equal(nota.eUnNo(t), true, t)
+  for (const t of ['Not interested in invoices', 'No, handle my invoices', "I'm good with that, go ahead", "Don't ask, just do it"]) assert.equal(nota.eUnNo(t), false, t)
+})
+
+test('senza modello un lato nominato vale solo senza negazioni: «Not interested in invoices» non fa nascere le fatture', async () => {
+  const p = await persona('negazione@esempio.it', fondatrice())
+  await dentro(p, async () => {
+    const d = (await nota.forseNota(mezzogiorno()))!
+    const r = await domande.rispondiADomanda(d.id, 'Not interested in invoices')
+    assert.equal(progetti.elenco().length, 0)
+    assert.equal(lati.leggi().scelto, undefined)
+    assert.equal(store.domanda(d.id)?.stato, 'aperta')
+    assert.match(r.esito, /which part/)
+    const s = await domande.rispondiADomanda(d.id, 'Sì, però solo fatture')
+    assert.equal(lati.leggi().scelto?.id, 'fatture', s.esito)
   })
 })
