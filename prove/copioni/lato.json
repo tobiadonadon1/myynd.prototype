@@ -7,8 +7,14 @@
       "json": {
         "lato": "investitori",
         "perche": "6 investors wrote this month and 4 are still waiting for your reply.",
-        "fa": ["draft each follow-up in your Drafts", "keep a note of where each one stands"],
-        "chiede": ["before sending", "before writing to someone new"]
+        "fa": [
+          "draft each follow-up in your Drafts",
+          "keep a note of where each one stands"
+        ],
+        "chiede": [
+          "before sending",
+          "before writing to someone new"
+        ]
       }
     },
     {
@@ -17,22 +23,41 @@
       "json": {
         "lato": "fatture",
         "perche": "Five invoices are overdue or unanswered, and two reminders have sat on your list for days.",
-        "fa": ["draft the reminders in your Drafts", "keep the list of who still owes you"],
-        "chiede": ["before sending", "before anything about money"]
+        "fa": [
+          "draft the reminders in your Drafts",
+          "keep the list of who still owes you"
+        ],
+        "chiede": [
+          "before sending",
+          "before anything about money"
+        ]
       }
     },
     {
       "se": "SIDE CHOSEN IN HIS WORDS",
       "in": "system",
-      "json": { "lato": "fatture", "esito": "Every invoice gets paid" }
+      "json": {
+        "lato": "fatture",
+        "esito": "Every invoice gets paid"
+      }
     },
     {
       "se": "SIDE NIGHT JOBS[\\s\\S]*\\b(invoice|fattur)",
       "in": "tutto",
       "json": {
         "lavori": [
-          { "doc": "D1", "genere": "fattura", "titolo": "Reminder to Studio Nord for invoice 1042", "perche": "Invoice 1042 is overdue and they asked for the IBAN." },
-          { "doc": "D2", "genere": "fattura", "titolo": "Reply to Mara about invoice 1038", "perche": "She promised payment next week; confirm the amount." }
+          {
+            "doc": "D1",
+            "genere": "fattura",
+            "titolo": "Reminder to Studio Nord for invoice 1042",
+            "perche": "Invoice 1042 is overdue and they asked for the IBAN."
+          },
+          {
+            "doc": "D2",
+            "genere": "fattura",
+            "titolo": "Reply to Mara about invoice 1038",
+            "perche": "She promised payment next week; confirm the amount."
+          }
         ]
       }
     },
@@ -41,10 +66,29 @@
       "in": "tutto",
       "json": {
         "lavori": [
-          { "doc": "D1", "genere": "risposta", "titolo": "Send Nina the updated deck and cap table", "perche": "She asked for both before Friday." },
-          { "doc": "D2", "genere": "risposta", "titolo": "Answer Tom on whether the round is open", "perche": "He wants a second look at the deck." }
+          {
+            "doc": "D1",
+            "genere": "risposta",
+            "titolo": "Send Nina the updated deck and cap table",
+            "perche": "She asked for both before Friday."
+          },
+          {
+            "doc": "D2",
+            "genere": "risposta",
+            "titolo": "Answer Tom on whether the round is open",
+            "perche": "He wants a second look at the deck."
+          }
         ]
       }
+    },
+    {
+      "se": "Domanda: I could take over investor follow-ups",
+      "in": "utente",
+      "json": {
+        "convinzione": "",
+        "esito": ""
+      },
+      "attesa": 2000
     }
   ],
   "predefinita": "Done. This answer comes from the fake model used in the tests."

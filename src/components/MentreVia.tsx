@@ -163,7 +163,7 @@ export function MentreVia({ v, m, ricevuta, l, apri }: {
           {cima.map(x => <li key={x.id}><RigaLavoro x={x} nuova apri={apriLavoro} /></li>)}
           {lettera && (
             <li>
-              <button type="button" className="via-riga" onClick={() => v.goChat()}>
+              <button type="button" className="via-riga" onClick={() => v.apriLettera()}>
                 <span className="via-punto" aria-hidden="true" />
                 <span className="via-titolo">{lettera.titolo}</span>
                 <span className="via-dove" />

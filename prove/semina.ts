@@ -45,7 +45,8 @@ type Scena = {
   documenti?: (Record<string, unknown> & { id: string; fonte: string; tipo: string; titolo: string; corpo: string; quando?: string })[]
   feed?: (Record<string, unknown> & { id: string; titolo: string })[]
   compiti?: (Record<string, unknown> & { id: string; testo: string })[]
-  domande?: { tema: string; testo: string; progetto?: string }[]
+  /** `chat`: il messaggio di Myynd nella chat 'myynd' che porta la domanda (il lato, 20 ott), con l'id che la UI cerca. */
+  domande?: { tema: string; testo: string; progetto?: string; chat?: boolean }[]
   riferimento?: string
   /** P7: l'insieme delle domande della prova, copiato nel conto; `attiva` accende la prova settimanale. */
   risposte?: { insieme?: string; attiva?: boolean }
@@ -279,7 +280,12 @@ chi.dentro(conto.id, () => {
     writeFileSync(join(cfg.cartella(), 'turno.json'), JSON.stringify({ giornata: regoleTurno.inizioGiornata(adesso, finestra).toISOString(), avviate: (scena as { turnoAvviate?: number }).turnoAvviate ?? 0, ...(notte ? { notte } : {}) }))
   }
   for (const d of scena.domande ?? []) {
-    store.apriDomanda({ tema: d.tema, testo: d.testo, spunto: [], progetto: progetto(d.progetto) })
+    const aperta = store.apriDomanda({ tema: d.tema, testo: d.testo, spunto: [], progetto: progetto(d.progetto) })
+    if (d.chat && aperta) {
+      if (!store.esisteChat('myynd')) store.creaChat('myynd', 'Myynd')
+      // lo stesso id di `idMessaggio` in server/lato-lati.ts
+      store.salvaMessaggio({ id: `lato-${aperta.id}`, chat: 'myynd', ruolo: 'a', testo: d.testo })
+    }
   }
   if (scena.riferimento) riferimento.scrivi(scena.riferimento)
 

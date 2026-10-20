@@ -1,0 +1,62 @@
+[
+ {
+  "aspetta": 2500
+ },
+ {
+  "js": "JSON.stringify({ riga: [...document.querySelectorAll('button')].some(b => (b.textContent||'').includes('Myynd has written to you.')), latoInCasa: document.body.innerText.includes('investor follow-ups'), pastiglie: [...document.querySelectorAll('button')].filter(b => ['Yes','Something else'].includes((b.textContent||'').trim())).length })"
+ },
+ {
+  "scatta": "1-casa"
+ },
+ {
+  "testo": "1-casa"
+ },
+ {
+  "clicca": "Myynd has written to you."
+ },
+ {
+  "aspetta": 1500
+ },
+ {
+  "js": "JSON.stringify({ chat: document.body.innerText.includes('investor follow-ups'), pastiglie: [...document.querySelectorAll('button')].filter(b => ['Yes','Something else'].includes((b.textContent||'').trim())).map(b => b.textContent.trim()), lineette: document.body.innerText.includes('—'), sfora: [...document.querySelectorAll('button')].filter(b => b.scrollWidth > b.clientWidth + 1).map(b => (b.textContent||'').slice(0,30)) })"
+ },
+ {
+  "scatta": "2-chat"
+ },
+ {
+  "testo": "2-chat"
+ },
+ {
+  "clicca": "Something else"
+ },
+ {
+  "aspetta": 600
+ },
+ {
+  "js": "JSON.stringify({ fuoco: document.activeElement && document.activeElement.tagName, segnaposto: document.activeElement && document.activeElement.getAttribute('placeholder') })"
+ },
+ {
+  "scatta": "3-altro"
+ },
+ {
+  "clicca": "Yes"
+ },
+ {
+  "aspetta": 150
+ },
+ {
+  "js": "JSON.stringify({ subito: [...document.querySelectorAll('button')].filter(b => ['Yes','Something else'].includes((b.textContent||'').trim())).length, bolla: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'Yes') })"
+ },
+ {
+  "aspetta": 3500
+ },
+ {
+  "js": "JSON.stringify({ pastiglie: [...document.querySelectorAll('button')].filter(b => ['Yes','Something else'].includes((b.textContent||'').trim())).length, riga: [...document.querySelectorAll('button')].some(b => (b.textContent||'').includes('Myynd has written to you.')) })"
+ },
+ {
+  "scatta": "4-dopo-si"
+ },
+ {
+  "testo": "4-dopo-si"
+ }
+]

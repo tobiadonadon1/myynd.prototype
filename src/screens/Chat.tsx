@@ -104,7 +104,8 @@ function Annulla({ su }: { su: () => void }) {
 /** La chat sul tuo materiale: bolle, fonti citate sotto ogni risposta. */
 export function Chat({ v }: { v: Vals }) {
   // mentre Myynd fa le sue domande si risponde a lui, anche senza un motore collegato
-  const rispondendo = !!v.intervista?.domanda
+  // e mentre gli si dice quale altro lato, dopo «Something else»
+  const rispondendo = !!v.intervista?.domanda || !!v.lato?.scrivendo
   const scrivibile = v.claudeOn || rispondendo
   // il bottone si accende quando c'è qualcosa da mandare: pieno di rame su un
   // campo vuoto sembrava pronto a mandare il niente
@@ -145,7 +146,8 @@ export function Chat({ v }: { v: Vals }) {
         <Intervista v={v} />
 
         {!v.intervista && v.messages.map(m => (
-          <div key={m.id} style={m.row}>
+          <div key={m.id} style={{ display: 'contents' }}>
+          <div style={m.row}>
             {!m.mio && <Mascotte size={LATO_MASCOTTE} style={AVATAR} />}
             <div style={m.bubble}>
               {/* Le domande restano testo semplice: le hai scritte tu, non
@@ -156,6 +158,18 @@ export function Chat({ v }: { v: Vals }) {
               {/* le lineette non compaiono mai, nemmeno mentre la risposta arriva: il salvato le ha già tolte, il vivo passa di qui; dentro il codice restano */}
               {m.mio ? m.text : <Testo testo={tradotta(m.text) ? t(m.text) : senzaTrattiniFuoriCodice(m.text)} fonti={m.sources} onApri={v.apriFonte} />}
             </div>
+          </div>
+          {/* Il lato che Myynd propone: due risposte sotto il suo messaggio, e
+              basta. «We need to keep the UI and UX simpler, less clutter.» Le
+              stesse pastiglie dell'intervista, rientrate quanto la bolla. */}
+          {v.lato && m.id === v.lato.idMessaggio && !v.pensando && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: `0 2px 0 ${LATO_MASCOTTE + 8}px`, marginTop: -6 }}>
+              <Hov as="button" onClick={v.lato.si} style={PASTIGLIA}
+                hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>{t('Sì')}</Hov>
+              <Hov as="button" onClick={v.lato.altro} style={v.lato.scrivendo ? { ...PASTIGLIA, borderColor: 'var(--rame)' } : PASTIGLIA}
+                hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>{t('Qualcos\'altro')}</Hov>
+            </div>
+          )}
           </div>
         ))}
 
@@ -224,7 +238,8 @@ function Campo({ v, rispondendo }: { v: Vals; rispondendo: boolean }) {
     <textarea ref={el} rows={1} value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey} autoFocus={rispondendo}
       // P10 · il modello di questo Mac si sveglia mentre si scrive, non dopo l'invio
       onFocus={() => apiP10.scaldaIlModello()}
-      placeholder={rispondendo ? t('Rispondi qui…') : t('Chiedi qualcosa al tuo materiale…')}
+      data-campo-chat
+      placeholder={v.lato?.scrivendo ? t('Cosa preferisci che prenda io?') : rispondendo ? t('Rispondi qui…') : t('Chiedi qualcosa al tuo materiale…')}
       style={{
         /*
           Sette sopra e sotto: una riga sola è alta 36, quanto il bottone

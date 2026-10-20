@@ -1174,6 +1174,43 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     try { await api.ignoraDomanda(id) } catch { /* al prossimo avvio non c'è più */ }
   }
 
+  /*
+   * Il lato che Myynd propone di prendere in mano (20 ottobre 2026).
+   *
+   * «We need to keep the UI and UX simpler, less clutter»: la domanda non ha
+   * una carta in prima pagina. È un messaggio suo nella chat 'myynd', con
+   * sotto due risposte e basta. Il tema e l'id del messaggio sono quelli di
+   * `server/lato-lati.ts` (TEMA, idMessaggio), riscritti qui perché quel file
+   * legge il disco e nella pagina non entra.
+   */
+  const latoAperta = domanda?.tema?.startsWith('lato:') ? domanda : null
+  // «Something else»: il prossimo invio dalla barra è la sua risposta, non un turno di chat
+  const [latoAltro, setLatoAltro] = useState<string | null>(null)
+  useEffect(() => { if (!latoAperta || latoAperta.id !== latoAltro) setLatoAltro(null) }, [latoAperta?.id])
+  const CHAT_MYYND = 'myynd'
+  /** `detta` è la bolla che si vede subito; per «Yes» il server riceve `yes`. */
+  const rispondiLato = async (testo: string, detta = testo) => {
+    if (!latoAperta || !testo.trim()) return
+    const id = latoAperta.id
+    const idScritta = `tmp${Date.now()}`
+    // il gesto si vede subito: la sua bolla e la rotella, e le due risposte vanno via
+    setCorse(c => corsa.avvia(c, CHAT_MYYND, { id: idScritta, role: 'u', text: detta }))
+    setLatoAltro(null); setDraftMsg('')
+    try {
+      await rispondiADomanda(id, testo)
+      // le due bolle le scrive il server: la chat si rilegge da lì
+      if (threadAperto.current === CHAT_MYYND) {
+        const m = await api.messaggi(CHAT_MYYND).catch(() => null)
+        if (m && threadAperto.current === CHAT_MYYND) { ++gen.current; setMessaggi(m) }
+      }
+    } catch {
+      // la domanda torna (ci pensa `rispondiADomanda`), e le sue parole nel campo
+      if (testo !== 'yes') { setLatoAltro(id); setDraftMsg(d => d || testo) }
+    }
+    setCorse(c => corsa.chiudi(c, CHAT_MYYND, idScritta))
+    caricaChat().catch(() => {})
+  }
+
   /**
    * La risposta alla domanda di un progetto, dalla prima pagina.
    *
@@ -1506,7 +1543,24 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     viaDalFeed: (id: string) => setAperti(a => a.filter(x => x.id !== id)),
 
     // — le domande che fa lui: la sua, e quelle sui progetti, in una carta sola —
-    domanda,
+    // quella del lato no: sta solo in chat, sotto il suo messaggio
+    domanda: latoAperta ? null : domanda,
+    /** La domanda del lato aperta: l'id del messaggio che la porta, e le due risposte. */
+    lato: latoAperta ? {
+      idMessaggio: `lato-${latoAperta.id}`,
+      scrivendo: latoAltro === latoAperta.id && thread === CHAT_MYYND,
+      si: () => { void rispondiLato('yes', t('Sì')) },
+      altro: () => {
+        setLatoAltro(latoAperta.id)
+        requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-campo-chat]')?.focus())
+      }
+    } : null,
+    /** «Myynd ti ha scritto.»: con la domanda del lato aperta, la chat dove l'ha scritta. */
+    apriLettera: () => {
+      if (!latoAperta) { setScreen('chat'); setSearch(false); setMenu(false); return }
+      setThread(CHAT_MYYND); setRilettura(n => n + 1); setScreen('chat'); setSearch(false); setMenu(false)
+      caricaChat().catch(() => {})
+    },
     rispondiADomanda,
     lasciaCadere,
     rispondiIniziativa,
@@ -1771,7 +1825,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     } : null,
     avviaIntervista: () => avviaIntervista(true),
     /** Myynd ha scritto e aspetta: il pallino sulla chat e la carta in cima alla prima pagina. */
-    chatDaLeggere: passo !== null,
+    chatDaLeggere: passo !== null || !!latoAperta,
     senzaProgetto: progetti !== null && progetti.length === 0,
     avviaOnboarding,
     prompts: [
@@ -1796,10 +1850,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // il campo è un textarea: Invio manda, e non va a capo
       e.preventDefault()
       if (passo !== null) { if (draftMsg.trim()) { void rispondiIntervista(draftMsg.trim()); setDraftMsg('') } return }
+      if (latoAperta && latoAltro === latoAperta.id && thread === CHAT_MYYND) { if (draftMsg.trim()) void rispondiLato(draftMsg.trim()); return }
       if (!pensando && draftMsg.trim()) chiedi(draftMsg.trim())
     },
     send: () => {
       if (passo !== null) { if (draftMsg.trim()) { void rispondiIntervista(draftMsg.trim()); setDraftMsg('') } return }
+      if (latoAperta && latoAltro === latoAperta.id && thread === CHAT_MYYND) { if (draftMsg.trim()) void rispondiLato(draftMsg.trim()); return }
       if (!pensando && draftMsg.trim()) chiedi(draftMsg.trim())
     },
 
