@@ -1,0 +1,7 @@
+{
+  "modello": "finto",
+  "risposte": [
+    { "se": "Domanda: I could take over investor follow-ups", "in": "utente", "json": { "convinzione": "", "esito": "" }, "attesa": 2000 }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

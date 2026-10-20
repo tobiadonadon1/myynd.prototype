@@ -1,0 +1,41 @@
+[
+ {
+  "aspetta": 2500
+ },
+ {
+  "clicca": "Myynd has written to you."
+ },
+ {
+  "aspetta": 1500
+ },
+ {
+  "clicca": "Something else"
+ },
+ {
+  "aspetta": 500
+ },
+ {
+  "scrivi": "Take the client replies instead"
+ },
+ {
+  "premi": "Enter"
+ },
+ {
+  "aspetta": 150
+ },
+ {
+  "js": "JSON.stringify({ pastiglie: [...document.querySelectorAll('button')].filter(b => ['Yes','Something else'].includes((b.textContent||'').trim())).length, bolla: [...document.querySelectorAll('div')].some(d => d.childElementCount === 0 && (d.textContent||'').trim() === 'Take the client replies instead'), campo: document.querySelector('textarea') && document.querySelector('textarea').value })"
+ },
+ {
+  "scatta": "5-scritta-subito"
+ },
+ {
+  "aspetta": 3500
+ },
+ {
+  "js": "JSON.stringify({ pastiglie: [...document.querySelectorAll('button')].filter(b => ['Yes','Something else'].includes((b.textContent||'').trim())).length, segnaposto: document.querySelector('textarea') && document.querySelector('textarea').getAttribute('placeholder') })"
+ },
+ {
+  "scatta": "6-scritta-dopo"
+ }
+]

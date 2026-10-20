@@ -3454,6 +3454,10 @@ const EN: Record<string, string> = {
   'Il motore di X gira, ma il suo browser non legge più X. Sistemalo in x-engine, o importa il tuo archivio di X.': 'The X engine is running, but its browser no longer reads X. Fix it in x-engine, or import your X archive.',
   'Qualcuno ti ha scritto su X e ti chiede qualcosa.': 'Someone wrote to you on X and is asking for something.',
   'Qualcuno ti ha menzionato su X.': 'Someone mentioned you on X.',
+  // — il lato che Myynd prende in mano: le due risposte in chat (20 ott) —
+  'Sì': 'Yes',
+  'Qualcos\'altro': 'Something else',
+  'Cosa preferisci che prenda io?': 'What would you rather I take on?',
 }
 
 
