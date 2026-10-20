@@ -886,7 +886,9 @@ export function regge(c: Conversazione, adesso = Date.now()): boolean {
 
 /** Le prime parole della risposta, per la sottoriga della carta: senza saluto vuoto, tagliate su una parola. */
 export function anteprima(risposta: string, max = 90): string {
-  const t = unaRiga(risposta, 400)
+  // il saluto non dice niente sotto il titolo: «Hi Marco, Thanks for…» comincia da «Thanks»
+  const senza = risposta.replace(/^\s*(?:hi|hello|hey|dear|ciao|salve|buongiorno|buonasera|gentile|caro|cara)\b[^,\n!]{0,40}[,!]?\s*/i, '')
+  const t = unaRiga(senza.trim() || risposta, 400).replace(/^./, c => c.toUpperCase())
   if (t.length <= max) return t
   const taglio = t.slice(0, max).replace(/\s+\S*$/, '').replace(/[,;:\s]+$/, '')
   return `${taglio}…`

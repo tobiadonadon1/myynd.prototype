@@ -339,7 +339,7 @@ test('Anna e Bruno ricevono lati diversi, e la risposta di Anna non tocca Bruno'
   assert.ok(da && db)
   assert.equal(dentro(anna, () => lati.leggi().notato?.id), 'investitori')
   assert.equal(dentro(bruno, () => lati.leggi().notato?.id), 'fatture')
-  assert.match(dentro(bruno, () => store.messaggi('myynd')[0].text), /^I could take over invoices and payments to chase: 5 people are waiting for your reply on invoices and payments\./)
+  assert.match(dentro(bruno, () => store.messaggi('myynd')[0].text), /^I could take over invoices and payments to chase: 5 people are waiting for your reply\./)
 
   const primaDiBruno = dentro(bruno, () => JSON.stringify(lati.leggi()))
   await dentro(anna, () => domande.rispondiADomanda(da!.id, 'yes'))

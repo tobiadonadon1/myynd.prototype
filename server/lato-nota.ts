@@ -140,8 +140,8 @@ export function percheDiSerie(s: Segnale, l: 'it' | 'en' = lingua()): string {
   const n = Math.max(1, s.corrispondenti || s.aspettano)
   const [uno, molti] = ATTESA[s.id][l]
   const chi = `${n} ${n === 1 ? uno : molti}`
-  if (l === 'en') return `${chi} for your reply${s.id === 'fatture' ? ' on invoices and payments' : ''}`
-  return `${chi} una tua risposta${s.id === 'fatture' ? ' su fatture e pagamenti' : ''}`
+  if (l === 'en') return `${chi} for your reply`
+  return `${chi} una tua risposta`
 }
 
 /** Le parti di serie: il perché coi numeri, e le righe di `LATI`. */
