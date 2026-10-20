@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { congedoAParte, firmaSotto, ipotesiNellaLingua, riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
+import { congedoAParte, firmaSotto, ipotesiNellaLingua, riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, rigaInItaliano, rigaInLinguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -287,4 +287,17 @@ test('il congedo senza nome prende il nome di chi scrive; con il nome resta com\
   const firmata = 'Hi,\n\nOk.\n\nCheers,\nAlex\n\nFrom [1].'
   assert.equal(firmaSotto(firmata, 'Alex'), firmata)
   assert.equal(firmaSotto('Hi,\n\nCheers,\n\nx', ''), 'Hi,\n\nCheers,\n\nx')
+})
+
+test('una riga di lista corta nata in italiano si riconosce dal verbo in testa più una parola di servizio', () => {
+  // le due righe che il quaderno inglese apriva in italiano il 20 ottobre
+  assert.equal(rigaInItaliano('Mandare il post di lancio su X a chi segue Myynd'), true)
+  assert.equal(rigaInItaliano('Pubblicare i post su X che annunciano Myynd venerdì'), true)
+  assert.equal(rigaInLinguaSbagliata('Pubblicare i post su X che annunciano Myynd venerdì', 'en'), true)
+  assert.equal(rigaInLinguaSbagliata('Pubblicare i post su X che annunciano Myynd venerdì', 'it'), false)
+  // le inglesi, anche quelle col verbo che finisce come un infinito
+  for (const r of ['Prepare the deck for Rossi', 'Compare the two offers from Seaboard', 'Explore the H Farm pilot', 'Run the waitlist signup checklist on the live page', 'Choose the H Farm pilot participants and fill in their names', 'Square up with Nextas'])
+    assert.equal(rigaInItaliano(r), false, r)
+  // un infinito senza parole di servizio non basta: potrebbe essere un nome
+  assert.equal(rigaInItaliano('Mandare Nextas'), false)
 })

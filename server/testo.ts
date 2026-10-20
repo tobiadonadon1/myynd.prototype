@@ -395,6 +395,43 @@ export function linguaSbagliata(testo: string, lingua: 'it' | 'en'): boolean {
   return lingua === 'en' ? sembraItaliano(testo) : sembraInglese(testo)
 }
 
+/*
+ * — una riga di lista nata in italiano —
+ *
+ * `linguaSbagliata` sotto le sei parole tace, e una riga di lista ne ha spesso
+ * sei o sette: «Pubblicare i post su X che annunciano Myynd venerdì» le passava
+ * sotto, e nel quaderno inglese si apriva in italiano. Ma una riga ha una forma
+ * che un testo qualunque non ha: comincia con un verbo. In italiano quel verbo
+ * è un infinito, e un infinito più una parola di servizio italiana bastano.
+ * Le due cose insieme, perché ognuna da sola sbaglia: «Prepare» finisce come
+ * un infinito, e «che» o «su» possono stare in un nome.
+ */
+const INFINITO = /^\p{L}{3,}(?:are|ere|ire)$/u
+/** I verbi inglesi che finiscono come un infinito italiano. */
+const INFINITI_INGLESI = new Set([
+  'prepare', 'compare', 'declare', 'square', 'ensnare', 'beware', 'acquire', 'require', 'inquire',
+  'inspire', 'aspire', 'conspire', 'expire', 'admire', 'desire', 'retire', 'rewire', 'transpire',
+  'perspire', 'adhere', 'interfere', 'persevere', 'revere', 'explore', 'restore', 'ignore', 'implore'
+])
+/** Le parole di servizio di una riga corta: più di quelle di `ITALIANE`, perché la riga ne ha poche. */
+const ITALIANE_CORTE = [
+  ...ITALIANE, ' gli ', ' le ', ' lo ', ' del ', ' dei ', ' delle ', ' al ', ' alla ', ' ai ', ' alle ',
+  ' nel ', ' nella ', ' su ', ' sul ', ' sulla ', ' dal ', ' dalla ', ' chi ', ' cosa '
+]
+
+/** Questa riga di lista è nata in italiano: il verbo in testa è un infinito, e c'è almeno una parola di servizio. */
+export function rigaInItaliano(riga: string): boolean {
+  if (sembraItaliano(riga)) return true
+  const t = spianato(riga)
+  const primo = t.trim().split(' ')[0] ?? ''
+  return INFINITO.test(primo) && !INFINITI_INGLESI.has(primo) && quanti(t, ITALIANE_CORTE) >= 1
+}
+
+/** Una riga di lista nella lingua sbagliata per un'app in questa lingua. */
+export function rigaInLinguaSbagliata(riga: string, lingua: 'it' | 'en'): boolean {
+  return lingua === 'en' ? rigaInItaliano(riga) : sembraInglese(riga)
+}
+
 /** L'ordine da attaccare al messaggio quando si riprova, nella sua lingua. */
 export function soloInLingua(lingua: 'it' | 'en'): string {
   return lingua === 'en' ? 'IN ENGLISH ONLY' : 'SOLO IN ITALIANO'

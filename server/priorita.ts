@@ -36,10 +36,10 @@ import * as store from './store.ts'
 import * as progetti from './progetti.ts'
 import * as desktop from './connettori/desktop.ts'
 import * as riferimento from './riferimento.ts'
-import { cartella, nellaLingua } from './config.ts'
+import { cartella, lingua, nellaLingua } from './config.ts'
 import { fuoco } from './timone.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
-import { senzaTrattini } from './testo.ts'
+import { rigaInLinguaSbagliata, senzaTrattini } from './testo.ts'
 import { classificaAttenzione, corpoAttuale } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
 import { conGergo, rifinisci } from './rifinitura.ts'
@@ -874,7 +874,9 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   for (const v of store.feedAperto(40)) {
     if (eProposta(v) && quadro.FACCENDA.test(v.titolo)) store.cambiaStatoFeed(v.id, 'scaduto', 'faccenda di codice, non per il feed', 'superata')
   }
-  const quadri = await quadro.aggiorna()
+  // una mossa nata nella lingua sbagliata non arriva in lista: si aprirebbe così nel dettaglio
+  const l = lingua()
+  const quadri = (await quadro.aggiorna()).map(q => ({ ...q, mosse: q.mosse.filter(m => !rigaInLinguaSbagliata(m.titolo, l)) }))
   if (!quadri.length) return { quadri, titoli: [], salvate: 0 }
   const gia = [
     ...store.elencoCompiti().map(c => c.testo),
