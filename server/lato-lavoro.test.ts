@@ -160,7 +160,8 @@ test('investitori: fino a tre candidati del lato, col progetto, il messaggio arr
     assert.equal(c.stato, 'scelto')
   }
   assert.deepEqual(new Set(ids.map(id => candidati.leggi(id)!.carta.doc)), new Set(attese.slice(1)), 'i tre che il modello ha messo per primi')
-  assert.ok(lati.leggi().ultimoGiro)
+  assert.equal(lati.leggi().notte?.proposti, 3, 'la notte ricorda quanti lavori ha proposto')
+  assert.equal(lati.leggi().notte?.chiamate, 1)
 
   // le idee per X: lui ci conta, e nascono anche loro; nella coda vengono dopo
   ciConta(daSe.ORIGINE_X)
@@ -362,4 +363,95 @@ test('due persone: il lato dell\'una non si vede nell\'altra, e chi non ha scelt
     assert.equal(lati.leggi().scelto?.id, 'investitori')
     assert.equal(store.elencoCompiti().filter(c => lati.suo(c.origine)).length, 3)
   })
+})
+
+// — la notte si ricorda —
+
+test('la stessa notte il modello non rilegge i fili già visti, e il tetto di tre vale per notte', async () => {
+  scegli('investitori')
+  investitori()
+  let chiamate = 0
+  lavoro.perProva({ chiedi: (async () => { chiamate++; return tre() }) as never })
+  assert.equal((await lavoro.giro(ORA, { pronto: SI })).length, 3)
+  assert.equal(chiamate, 1)
+  // un quarto d'ora dopo: il quarto filo l'ha già visto, e i tre sono già in coda
+  assert.deepEqual(await lavoro.giro(ORA + 15 * 60_000, { pronto: SI }), [])
+  assert.equal(chiamate, 1, 'niente di nuovo, niente da chiedere al modello')
+  // arriva un filo nuovo: i tre lavori di stanotte sono finiti, non si chiede
+  mail({ titolo: 'Seed round: one more question', corpo: 'Another question on the round.', da: 'Eva Lin <eva@seed.example>', ore: 0.2, filo: 'f-eva' })
+  assert.deepEqual(await lavoro.giro(ORA + 30 * 60_000, { pronto: SI }), [])
+  assert.equal(chiamate, 1, 'il tetto di tre lavori è per notte, non per giro')
+  assert.equal(lati.leggi().notte?.proposti, 3)
+  // la notte dopo si ricomincia
+  const prima = lati.leggi().notte!.chiave
+  await lavoro.giro(ORA + 25 * 3_600_000, { pronto: SI })
+  assert.equal(chiamate, 2, 'una notte nuova ha un registro nuovo')
+  assert.notEqual(lati.leggi().notte!.chiave, prima)
+  assert.equal(lati.leggi().notte?.docs.length, 2, 'il quarto filo di ieri e quello nuovo, visti stanotte')
+})
+
+test('al più tre domande al modello per notte, anche se i fili sono sempre nuovi', async () => {
+  scegli('investitori')
+  let chiamate = 0
+  lavoro.perProva({ chiedi: (async () => { chiamate++; return { lavori: [] } }) as never })
+  for (let i = 0; i < 5; i++) {
+    mail({ titolo: `Seed round question ${i}`, corpo: 'A question on the round.', da: `Inv ${i} <inv${i}@seed.example>`, ore: 1 + i / 10, filo: `f-inv-${i}` })
+    await lavoro.giro(ORA + i * 15 * 60_000, { pronto: SI })
+  }
+  assert.equal(chiamate, lavoro.CHIAMATE_MAX)
+  assert.equal(lati.leggi().notte?.chiamate, lavoro.CHIAMATE_MAX)
+})
+
+// — il fallimento chiaro —
+
+test('una risposta del lato senza il suo pacchetto si ferma col suo guaio, non passa dalla stesura di sempre', async () => {
+  const progetto = scegli('investitori')
+  const doc = mail({ titolo: 'Seed round deck', corpo: 'Could you send the deck?', da: 'Nora Vance <nora@fund.example>', ore: 3, filo: 'f-nora' })
+  store.scriviCompito({
+    id: 'lato-risposta-senzapacchetto', testo: 'Reply to Nora', nota: 'SIDE REPLY. A reply.', quando: 'oggi', doc, modo: 'bozza',
+    origine: lati.ORIGINE, progetto, ordine: 'a0'
+  } as never)
+  const fasi: string[] = []
+  const smetti = compiti.ascolta(e => { if ('id' in e && e.id === 'lato-risposta-senzapacchetto') fasi.push(e.fase) }, null)
+  compiti.affida('lato-risposta-senzapacchetto', 'bozza', false)
+  for (let i = 0; i < 1500 && !fasi.some(f => f === 'pronto' || f === 'richiamato' || f === 'guaio'); i++) await new Promise(r => setTimeout(r, 20))
+  smetti()
+  assert.ok(fasi.includes('guaio'), fasi.join(', '))
+  assert.ok(!fasi.includes('pronto'))
+  assert.match(store.compito('lato-risposta-senzapacchetto')!.guaio ?? '', /conversation for this reply is missing/)
+})
+
+// — la prima riga della carta —
+
+test('la prima riga di una risposta tenuta sulla carta sono le sue prime parole, non una spiegazione', async () => {
+  const progetto = scegli('investitori')
+  mandato.salva(progetto, { classi: { bozza_posta: 'chiedi' } }, { origine: 'lei' })
+  const suo = mail({ titolo: 'Seed round deck', corpo: 'Could you send the cap table?', da: 'Nora Vance <nora@fund.example>', ore: 6, filo: 'f-nora' })
+  lavoro.perProva({ chiedi: (async () => null) as never })
+  const [id] = await lavoro.giro(ORA, { pronto: SI })
+  const carta = store.compito(candidati.leggi(id!)!.compito!)!
+  assert.equal(carta.doc, suo)
+  seguito.perProva({
+    chiedi: (async () => ({ risposta: 'Thanks Nora, I will send the cap table tomorrow morning together with the updated deck and the numbers for the last quarter.', oggetto: '', cambia_documento: false, documento: { testo: '', cambiamenti: [] }, impegni: [], perche: 'She asked.' })) as never,
+    salvaBozza: async () => { throw new Error('la bozza non deve partire') },
+    postaCollegata: () => true,
+    voce: () => null
+  })
+  const fasi: string[] = []
+  const smetti = compiti.ascolta(e => { if ('id' in e && e.id === carta.id) fasi.push(e.fase) }, null)
+  compiti.affida(carta.id, 'bozza', false)
+  for (let i = 0; i < 1500 && !fasi.some(f => f === 'pronto' || f === 'richiamato' || f === 'guaio'); i++) await new Promise(r => setTimeout(r, 20))
+  smetti()
+  assert.ok(fasi.includes('pronto'), fasi.join(', '))
+  const riga = (store.compito(carta.id)!.risultato ?? '').split('\n')[0]
+  assert.match(riga, /^Thanks Nora, I will send the cap table tomorrow morning/)
+  assert.ok(riga.length <= 91, riga)
+  assert.ok(!/rules keep|project/i.test(riga), riga)
+})
+
+test('anteprima: la risposta intera se è corta, tagliata su una parola e con i puntini se è lunga', () => {
+  assert.equal(seguito.anteprima('Thanks, done.'), 'Thanks, done.')
+  const lunga = seguito.anteprima('Hello Nora, '.repeat(20), 40)
+  assert.ok(lunga.endsWith('…') && lunga.length <= 41, lunga)
+  assert.ok(!lunga.includes('—'))
 })

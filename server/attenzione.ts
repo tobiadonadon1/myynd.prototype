@@ -60,8 +60,9 @@ export type VoceInPagina = Record<string, unknown> & { id: string; titolo: strin
  * Keep the stored evidence and feedback intact; this is only a view. */
 export function feedAttuale(adesso = Date.now()): VoceInPagina[] {
   // una carta preparata da Myynd (una proposta, o una del primo giorno) prende il posto della carta del feed sulla stessa cosa
-  // e una risposta guadagnata (il primo gradino): la sua riga è già la risposta a quella mail
-  const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa' || c.origine === 'primo-giorno' || c.origine === gradino.ORIGINE || c.origine === 'pacchetto').map(c => c.doc))
+  // e una risposta guadagnata (il primo gradino): la sua riga è già la risposta a quella mail;
+  // lo stesso per quella del lato che Myynd ha preso in mano (`lato`)
+  const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa' || c.origine === 'primo-giorno' || c.origine === gradino.ORIGINE || c.origine === 'pacchetto' || c.origine === 'lato').map(c => c.doc))
   // le righe con i campi che la pagina legge sempre: l'id, il titolo, la nascita
   type Riga = Record<string, string | null> & { id: string; titolo: string; quando: string; tipo: string; offerta: string | null }
   const voci = (store.elencoFeed('aperto') as Riga[]).filter(v => !preparati.has(v.doc))

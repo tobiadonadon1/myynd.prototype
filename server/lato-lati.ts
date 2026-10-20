@@ -47,7 +47,7 @@ export const LATI: readonly DefLato[] = [
     nome: { it: 'i follow-up con gli investitori', en: 'investor follow-ups' },
     esito: { it: 'Nessun investitore resta senza risposta', en: 'No investor is left waiting for a reply' },
     misura: { it: 'Ogni filo con un investitore ha una risposta entro due giorni', en: 'Every investor thread gets a reply within two days' },
-    parole: /\b(investor[ei]?|investitor[ei]|vc|fund(raising)?|round|seed|pre-?seed|term ?sheet|due diligence|cap table|angel|lp|pitch|deck)\b/i,
+    parole: /\b(investor[sei]?|investitor[ei]|vc|fund(raising)?|seed|pre-?seed|term ?sheet|due diligence|cap table|angel|lp|pitch)\b/i,
     genere: 'risposta',
     classi: { bozza_posta: 'auto', nota: 'auto', file: 'auto', invio: 'chiedi', contatto_nuovo: 'chiedi', calendario: 'chiedi', ...MAI_SOLDI },
     fa: { it: ['preparo ogni risposta nelle tue bozze', 'tengo una nota di dove sta ognuno'], en: ['draft each follow-up in your Drafts', 'keep a note of where each one stands'] },
@@ -58,7 +58,7 @@ export const LATI: readonly DefLato[] = [
     nome: { it: 'le fatture e i pagamenti da incassare', en: 'invoices and payments to chase' },
     esito: { it: 'Ogni fattura viene pagata', en: 'Every invoice gets paid' },
     misura: { it: 'Nessuna fattura scaduta senza un sollecito', en: 'No overdue invoice without a reminder' },
-    parole: /\b(invoice[sd]?|fattur[ae]|payment|pagament[oi]|overdue|scadut[ao]|reminder|sollecito|receipt|ricevuta|bonifico|wire|unpaid|non pagat[ao]|iban)\b/i,
+    parole: /\b(invoice[sd]?|fattur[ae]|payment|pagament[oi]|overdue|scadut[ao]|sollecito|receipt|ricevuta|bonifico|wire|unpaid|non pagat[ao]|iban)\b/i,
     genere: 'fattura',
     classi: { bozza_posta: 'auto', nota: 'auto', file: 'auto', invio: 'chiedi', contatto_nuovo: 'chiedi', ...MAI_SOLDI },
     fa: { it: ['preparo i solleciti nelle tue bozze', 'tengo l\'elenco di chi deve pagare'], en: ['draft the reminders in your Drafts', 'keep the list of who still owes you'] },
@@ -80,7 +80,7 @@ export const LATI: readonly DefLato[] = [
     nome: { it: 'le risposte ai clienti', en: 'client replies' },
     esito: { it: 'Ogni cliente ha una risposta', en: 'Every client gets an answer' },
     misura: { it: 'Nessun filo con un cliente aspetta più di un giorno', en: 'No client thread waits more than a day' },
-    parole: /\b(client[ei]?|customer[s]?|quote|preventiv[oi]|proposal|proposta|order|ordine|brief|deadline|consegna|revision[ei]?|feedback)\b/i,
+    parole: /\b(client[sei]?|customer[s]?|quote|preventiv[oi]|proposal|proposta|ordine|revision[ei]?)\b/i,
     genere: 'risposta',
     classi: { bozza_posta: 'auto', nota: 'auto', file: 'auto', invio: 'chiedi', contatto_nuovo: 'chiedi', calendario: 'chiedi', ...MAI_SOLDI },
     fa: { it: ['preparo le risposte nelle tue bozze', 'tengo traccia di cosa aspetta ognuno'], en: ['draft the replies in your Drafts', 'keep track of what each one is waiting for'] },
@@ -91,6 +91,7 @@ export const LATI: readonly DefLato[] = [
     nome: { it: 'la tua presenza su X', en: 'your X presence' },
     esito: { it: 'Su X esce qualcosa di vero ogni settimana', en: 'Something real goes out on X every week' },
     misura: { it: 'Post pronti ogni mattina, scritti come scrivi tu', en: 'Posts ready every morning, written the way you write' },
+    // il lato X si nota dai suoi post (`segnali`), mai da queste parole: servono solo a capire cosa dice lui
     parole: /\b(x\.com|twitter|tweet[s]?|post[s]?|thread|follower[s]?|impressions?)\b/i,
     genere: 'contenuto',
     classi: { file: 'auto', nota: 'auto', pubblica: 'chiedi', ...MAI_SOLDI },
@@ -146,8 +147,14 @@ export type StatoLato = {
   rifiutato?: string
   /** L'ultimo tentativo di notare (riuscito o no): una volta al giorno. */
   tentato?: string
-  /** L'ultimo giro di notte sul lato. */
-  ultimoGiro?: string
+  /**
+   * La notte di lavoro in corso: quali documenti il modello ha già visto, quanti
+   * lavori del lato sono già stati proposti e quante volte è stato chiesto.
+   * «The night model is re-asked every 15 min about the same threads»: così
+   * la stessa notte non si rilegge due volte e il tetto di tre vale per notte,
+   * non per giro. Aggiunto in fondo: i `lato.json` vecchi non lo hanno.
+   */
+  notte?: { chiave: string; docs: string[]; proposti: number; chiamate: number }
 }
 
 const file = () => join(cfg.cartella(), 'lato.json')
@@ -167,6 +174,32 @@ function scrivi(s: StatoLato) {
 }
 
 export function aggiorna(f: (s: StatoLato) => void): StatoLato { const s = leggi(); f(s); scrivi(s); return s }
+
+// — chi scrive, e quando una mail parla di un lato —
+
+/** Chi non legge le risposte: rispondere a un noreply è lavoro buttato. */
+export const AUTOMATICO = /^(?:no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounce[s]?)\b/i
+/** L'indirizzo dentro un «Nome <indirizzo>», in minuscolo, o null. */
+export const indirizzoDi = (autore: string | null | undefined): string | null =>
+  (autore?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '').toLowerCase() || null
+/** Una mail di un programma: noreply, notifiche, rimbalzi. */
+export const automatica = (autore: string | null | undefined): boolean => { const a = indirizzoDi(autore); return !!a && AUTOMATICO.test(a) }
+
+/**
+ * Una mail parla di un lato se lo dicono l'oggetto o il mittente, oppure se il
+ * corpo (le prime 800 lettere) ha almeno due parole diverse del lato: una
+ * parola sola in fondo a una newsletter non fa un investitore.
+ */
+export function combacia(re: RegExp, d: { titolo?: string | null; autore?: string | null; corpo?: string | null }): boolean {
+  if (re.test(`${d.titolo ?? ''} ${d.autore ?? ''}`)) return true
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`)
+  const viste = new Set<string>()
+  for (const m of (d.corpo ?? '').slice(0, 800).matchAll(g)) {
+    viste.add(m[0].toLowerCase())
+    if (viste.size >= 2) return true
+  }
+  return false
+}
 
 /** Il lato scelto, se c'è. */
 export function scelto(): (NonNullable<StatoLato['scelto']> & { def: DefLato }) | null {

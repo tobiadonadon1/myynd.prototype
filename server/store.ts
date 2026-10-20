@@ -4729,8 +4729,19 @@ function daRiga(r: Record<string, unknown> | undefined): Domanda | null {
   return { ...r, spunto: r.spunto ? JSON.parse(r.spunto as string) : [] } as unknown as Domanda
 }
 
-/** Ce n'è al massimo una aperta per volta: è metà del motivo per cui non pesa. */
+/** Il tema delle domande del lato (`lato-lati.ts`, `TEMA`): qui è scritto a mano perché lo store non importa il lato. */
+const TEMA_LATO = 'lato:%'
+
+/**
+ * Quella che si mostra: ce n'è una per volta. La domanda del lato passa
+ * davanti alle altre. Gli altri produttori (`dopo-fatto`, il riferimento)
+ * aprono senza guardare cosa c'è, e una domanda più nuova nascondeva quella
+ * del lato, che dopo sette giorni valeva un no senza che lui l'avesse mai vista.
+ */
 export function domandaAperta(): Domanda | null {
+  const lato = daRiga(db.prepare("SELECT * FROM domande WHERE stato = 'aperta' AND tema LIKE ? ORDER BY creata DESC, rowid DESC LIMIT 1")
+    .get(TEMA_LATO) as Record<string, unknown> | undefined)
+  if (lato) return lato
   // `creata` da sola non basta: due righe scritte nello stesso millisecondo
   // hanno lo stesso valore e l'ordine diventa arbitrario. Il rowid è l'ordine
   // di inserimento, che qui è proprio quello che «più recente» vuol dire.
@@ -4758,7 +4769,8 @@ export function apriDomanda(d: { tema: string; testo: string; spunto: string[]; 
   } catch {
     return null   // il tema era già stato chiesto: l'UNIQUE ha fatto il suo lavoro
   }
-  return domandaAperta()
+  // quella appena scritta, non «la più recente»: con la domanda del lato in testa non sono la stessa
+  return domanda(id)
 }
 
 /** Una domanda precisa, in qualunque stato sia. */

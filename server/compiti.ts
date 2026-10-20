@@ -581,7 +581,15 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean, pres
      * passa di qui: il destinatario è chi ha scritto, mai lui, e la stesura di
      * sempre non lo garantisce (vedi `claude.preparaEmail`).
      */
-    if (seguito.suo(c.origine) || (lati.suo(c.origine) && !!seguito.pacchettoDi(c.id))) {
+    /*
+     * Una risposta del lato senza il suo pacchetto non passa per la stesura di
+     * sempre: lì il destinatario lo sceglie il modello, e potrebbe essere lui.
+     * Il pacchetto si cerca anche dal segno nella nota (`SEGUITO-ID`), come fa
+     * il seguito; se manca, la carta si ferma col suo guaio.
+     */
+    const rispostaDelLato = lati.suo(c.origine) && (/^lato-risposta-/.test(c.id) || /SEGUITO-ID: \S+/.test(c.nota ?? ''))
+    if (rispostaDelLato && !seguito.pacchettoDellaCarta(c)) throw new Error('The saved conversation for this reply is missing, so nothing was written.')
+    if (seguito.suo(c.origine) || (lati.suo(c.origine) && !!seguito.pacchettoDellaCarta(c))) {
       const esito = await ferri.seguito(c, { signal: controller.signal })
       if (richiamati.has(chiave(id))) return
       if (turno && budgetNotte.sforato()) throw new Error(BUDGET_NOTTE)

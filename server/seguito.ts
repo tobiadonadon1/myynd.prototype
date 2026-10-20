@@ -859,7 +859,7 @@ let ferri: Ferri = VERI
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
 
 /** Il pacchetto della carta: dall'id, o dal segno nella nota (la coda unica può dare un altro id alla carta). */
-function pacchettoDellaCarta(c: store.Compito): Pacchetto | null {
+export function pacchettoDellaCarta(c: store.Compito): Pacchetto | null {
   const st = leggiStato()
   if (st.pacchetti[c.id]) return st.pacchetti[c.id]!
   const segno = c.nota?.match(/SEGUITO-ID: (\S+)/)?.[1]
@@ -882,6 +882,14 @@ export function regge(c: Conversazione, adesso = Date.now()): boolean {
     }
     return true
   } catch { return true }
+}
+
+/** Le prime parole della risposta, per la sottoriga della carta: senza saluto vuoto, tagliate su una parola. */
+export function anteprima(risposta: string, max = 90): string {
+  const t = unaRiga(risposta, 400)
+  if (t.length <= max) return t
+  const taglio = t.slice(0, max).replace(/\s+\S*$/, '').replace(/[,;:\s]+$/, '')
+  return `${taglio}…`
 }
 
 const versione = (titolo: string) => {
@@ -960,7 +968,9 @@ export async function lavora(c: store.Compito, o: { signal?: AbortSignal; adesso
       } else {
         casella = 'trattenuta'
         if (via.via === 'esegui' && regola !== 'auto') tracce.ricevuta(c.id, 'trattenuto', `${regola}:${conosciuto ? 'bozza_posta' : 'contatto_nuovo'}`)
-        righe.push(e ? 'Reply ready on the card: this project\'s rules keep mail drafts for you.' : 'Risposta pronta sulla carta: le regole di questo progetto tengono le bozze per te.')
+        // la prima riga è la sottoriga grigia della carta in prima pagina: non una spiegazione
+        // del programma ma le prime parole della risposta, che sono quello che si vuole sapere
+        righe.push(anteprima(bozza.risposta))
       }
     } else righe.push(e ? `Reply to ${conv.cliente.nome} ready on the card.` : `Risposta a ${conv.cliente.nome} pronta sulla carta.`)
     risposta = { canale: 'posta', a, oggetto, testo: bozza.risposta, casella, url: email.casella?.url ?? null }

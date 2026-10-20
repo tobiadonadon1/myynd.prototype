@@ -1198,6 +1198,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     setLatoAltro(null); setDraftMsg('')
     try {
       await rispondiADomanda(id, testo)
+      // parole vaghe non la chiudono: Myynd chiede quale parte e la domanda resta, col campo pronto
+      const ancora = await api.domanda().then(r => r.domanda).catch(() => null)
+      if (ancora?.tema?.startsWith('lato:')) { setDomanda(ancora); setLatoAltro(ancora.id) }
       // le due bolle le scrive il server: la chat si rilegge da lì
       if (threadAperto.current === CHAT_MYYND) {
         const m = await api.messaggi(CHAT_MYYND).catch(() => null)

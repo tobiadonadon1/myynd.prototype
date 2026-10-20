@@ -63,6 +63,8 @@ export const GIORNI = 14
 export const LAVORI_MAX = 3
 /** I documenti che il modello vede. */
 export const DOCUMENTI_MAX = 12
+/** Quante volte, in una notte, si chiede al modello. Gli stessi fili non si rileggono ogni quarto d'ora. */
+export const CHIAMATE_MAX = 3
 /** Gli scarti di un genere, ieri, che lo tolgono stanotte. */
 export const SCARTI_MAX = 2
 /** Le carte di un modello fisso prese (com'erano o ritoccate) che dicono «ci conta». */
@@ -79,9 +81,7 @@ export const GENERI: readonly Genere[] = ['risposta', 'nota']
 const en = () => cfg.lingua() === 'en'
 const breve = (s: string, n: number) => s.replace(/\s+/g, ' ').trim().slice(0, n)
 const hash = (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 16)
-const indirizzoDi = (autore: string | null | undefined) => (autore?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '').toLowerCase() || null
-/** Chi non legge le risposte: rispondere a un noreply è lavoro buttato. */
-const AUTOMATICO = /^(?:no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounce[s]?)\b/i
+const { indirizzoDi, AUTOMATICO } = lati
 const oggettoPulito = (t: string) => t.replace(/^\s*(?:(?:re|r|fw|fwd|i|inoltro)\s*:\s*)+/i, '').trim() || t.trim()
 
 // — il ferro, per le prove —
@@ -141,9 +141,10 @@ export type Filo = { d: store.Documento; indirizzo: string; nome: string; oggett
 /**
  * I fili del lato che aspettano lui, dal più nuovo: uno per filo, liberi
  * (senza una carta loro o del filo, `seguito.libere`), e senza un candidato
- * di un altro produttore ancora in gara sullo stesso messaggio.
+ * di un altro produttore ancora in gara sullo stesso messaggio. `salta`: i
+ * messaggi che il modello ha già visto stanotte.
  */
-export function fili(adesso = Date.now()): Filo[] {
+export function fili(adesso = Date.now(), salta: readonly string[] = []): Filo[] {
   const s = lati.scelto()
   const re = s ? paroleDi(s) : null
   if (!s || !re || s.def.genere === 'contenuto') return []
@@ -159,7 +160,7 @@ export function fili(adesso = Date.now()): Filo[] {
   }
   const presi = new Set(coda.aperti().filter(c => !lati.suo(c.carta.origine)).map(c => c.carta.doc).filter((x): x is string => !!x))
   return seguito.libere([...perFilo.values()])
-    .filter(d => !presi.has(d.id))
+    .filter(d => !presi.has(d.id) && !salta.includes(d.id))
     .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? ''))
     .slice(0, DOCUMENTI_MAX)
     .map(d => {
@@ -379,6 +380,19 @@ export function candidatoDi(l: Lavoro, s: NonNullable<ReturnType<typeof lati.sce
 
 // — il giro —
 
+/**
+ * Il registro della notte in corso, in `lato.json`: la chiave è l'inizio
+ * dell'ultima notte, così cambia quando comincia la prossima. Di giorno vale
+ * ancora quello dell'ultima notte: il tetto di tre lavori non si rinnova ogni
+ * quarto d'ora, ma ogni notte.
+ */
+export function registroDellaNotte(adesso = Date.now()): NonNullable<lati.StatoLato['notte']> {
+  const ora = new Date(adesso)
+  const chiave = regole.inizioUltimaNotte(ora, turno.impostazioni(cfg.leggi(), ora).notte).toISOString()
+  const r = lati.leggi().notte
+  return r && r.chiave === chiave ? { ...r, docs: [...r.docs] } : { chiave, docs: [], proposti: 0, chiamate: 0 }
+}
+
 const occupati = new Set<string>()
 
 /**
@@ -395,24 +409,30 @@ export async function giro(adesso = Date.now(), o: { pronto?: () => boolean } = 
     const s = lati.scelto()
     if (!s || !permesso(o.pronto ?? ferri.pronto)) return []
     if (!progetti.trova(s.progetto) || progetti.trova(s.progetto)?.stato !== 'attivo') return []
-    lati.aggiorna(st => { st.ultimoGiro = new Date(adesso).toISOString() })
-    const fs = fili(adesso)
     const i = ieri(s.progetto, adesso)
     const m = misura(i)
-    if (!fs.length || !m.tetto) return []
+    // la notte in corso: i fili già visti dal modello non si rileggono, e il tetto vale per notte
+    const reg = registroDellaNotte(adesso)
+    const tetto = Math.min(m.tetto, LAVORI_MAX - reg.proposti)
+    if (tetto <= 0 || reg.chiamate >= CHIAMATE_MAX) return []
+    const fs = fili(adesso, reg.docs)
+    if (!fs.length) return []
+    const dentro = { ...m, tetto }
+    lati.aggiorna(st => { st.notte = { ...reg, docs: [...reg.docs, ...fs.map(f => f.d.id)].slice(-200), chiamate: reg.chiamate + 1 } })
     let lavori: Lavoro[] | null = null
     try {
-      const p = prompt(s, fs, i, m, adesso)
+      const p = prompt(s, fs, i, dentro, adesso)
       const r = await ferri.chiedi<unknown>({ lavoro: 'cernita', max_tokens: 800, system: p.system, messages: [{ role: 'user', content: p.utente }], formato: FORMA })
-      lavori = leggiScelta(r, fs, m)
+      lavori = leggiScelta(r, fs, dentro)
     } catch (e) { console.warn('myynd · lato · il modello non ha scelto:', e instanceof Error ? e.message : e) }
-    if (!lavori) lavori = ripiego(fs, m)
+    if (!lavori) lavori = ripiego(fs, dentro)
     for (const l of lavori) {
       const c = candidatoDi(l, s, fs, adesso)
       if (!c || store.compito(c.carta.id!) || coda.leggi(c.id)) continue
       coda.proponi(c)
       if (coda.leggi(c.id)) proposti.push(c.id)
     }
+    if (proposti.length) lati.aggiorna(st => { if (st.notte) st.notte.proposti += proposti.length })
     console.info(`myynd · lato · proposte alla coda: ${proposti.length}`)
     if (proposti.length) coda.decidi(new Date(adesso))
   } catch (e) {

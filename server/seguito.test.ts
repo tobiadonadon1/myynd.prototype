@@ -117,7 +117,11 @@ test('9 · filo del mese scorso aperto oggi: nessun candidato', async () => {
 
 test('10 · mandato bozza_posta mai: la risposta resta sulla carta', async () => {
   const r = await corri('mandate bozza_posta')
-  assert.ok(r.carta?.risultato?.includes('keep mail drafts for you'))
+  // la prima riga è la sottoriga grigia della carta: le prime parole della risposta, non una spiegazione
+  const prima = (r.carta?.risultato ?? '').split('\n')[0]
+  assert.ok(prima && !/rules keep|project/i.test(prima), prima)
+  assert.equal(prima, seguito.anteprima(r.pacchetto?.risposta?.testo ?? ''))
+  assert.equal(r.pacchetto?.risposta?.casella, 'trattenuta')
 })
 
 test('11 · un numero inventato fa cadere la verifica', async () => { await corri('a reply with an invented number') })

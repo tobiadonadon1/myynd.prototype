@@ -6,7 +6,7 @@
       "in": "utente",
       "json": {
         "lato": "investitori",
-        "perche": "6 investors wrote this month and 4 are still waiting for your reply.",
+        "perche": "4 investors are still waiting for your reply",
         "fa": [
           "draft each follow-up in your Drafts",
           "keep a note of where each one stands"
@@ -22,7 +22,7 @@
       "in": "utente",
       "json": {
         "lato": "fatture",
-        "perche": "Five invoices are overdue or unanswered, and two reminders have sat on your list for days.",
+        "perche": "5 invoices are overdue and 2 reminders are late",
         "fa": [
           "draft the reminders in your Drafts",
           "keep the list of who still owes you"
@@ -38,7 +38,8 @@
       "in": "system",
       "json": {
         "lato": "fatture",
-        "esito": "Every invoice gets paid"
+        "esito": "Every invoice gets paid",
+        "concreto": true
       }
     },
     {

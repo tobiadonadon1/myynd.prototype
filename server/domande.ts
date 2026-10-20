@@ -269,7 +269,9 @@ export async function forseChiedi(): Promise<Proposta> {
  * risponderai mai più — e avresti ragione.
  */
 export async function rispondiADomanda(id: string, risposta: string): Promise<{ esito: string }> {
-  const aperta = store.domandaAperta()
+  // la domanda a cui si risponde, non «la più recente»: con quella del lato in testa non sono la stessa
+  const questa_ = store.domanda(id)
+  const aperta = questa_?.stato === 'aperta' ? questa_ : store.domandaAperta()
   const pulita = risposta.trim()
   if (!pulita) throw new Error('Scrivi qualcosa.')
 
@@ -307,9 +309,10 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
    * progetto col mandato confermato; altre parole scelgono un altro lato.
    */
   if (suaDomanda(questa?.tema)) {
-    const esito = await latoNota.rispondi(questa!, pulita)
-    store.chiudiDomanda(id, 'risposta', pulita, esito)
-    return { esito }
+    // parole che non dicono quale parte restano senza chiudere: Myynd chiede quale, e la domanda è ancora lì
+    const r = await latoNota.rispondi(questa!, pulita)
+    if (r.chiusa) store.chiudiDomanda(id, 'risposta', pulita, r.riga)
+    return { esito: r.riga }
   }
 
   if (questa?.tema.startsWith(mandatoProposta.TEMA)) {
