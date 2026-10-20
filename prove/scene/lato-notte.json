@@ -1,0 +1,16 @@
+{
+  "lingua": "en",
+  "nome": "Tobia",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "inv", "nome": "Investor follow-ups", "obiettivo": "No investor is left waiting for a reply" }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:31", "fonte": "posta", "tipo": "email", "titolo": "Seed round: next steps", "corpo": "Hi Tobia, could you send the updated deck before our partner meeting? Nora", "autore": "Nora Vance <nora@fund.test>", "quando": "-30h", "gruppo": "posta", "filo": "f-nora@fund.test", "messageId": "m31@fund.test" },
+    { "id": "posta:INBOX:32", "fonte": "posta", "tipo": "email", "titolo": "Re: pre-seed intro", "corpo": "Thanks for the pitch. Can you share the cap table? Leo", "autore": "Leo Marsh <leo@angel.test>", "quando": "-20h", "gruppo": "posta", "filo": "f-leo@angel.test", "messageId": "m32@angel.test" },
+    { "id": "posta:INBOX:33", "fonte": "posta", "tipo": "email", "titolo": "Due diligence questions", "corpo": "Our fund has three due diligence questions for you. Can we talk this week? Ada", "autore": "Ada Kim <ada@vc.test>", "quando": "-10h", "gruppo": "posta", "filo": "f-ada@vc.test", "messageId": "m33@vc.test" },
+    { "id": "posta:INBOX:34", "fonte": "posta", "tipo": "email", "titolo": "Fundraising follow-up", "corpo": "Hi Ben, any news on the round?", "autore": "Tobia <sviluppo@myynd.local>", "quando": "-5h", "gruppo": "posta", "filo": "f-ben@capital.test", "messageId": "s34@myynd.local", "inviato": true },
+    { "id": "posta:INBOX:35", "fonte": "posta", "tipo": "email", "titolo": "Dinner on Friday?", "corpo": "Are you free for dinner on Friday?", "autore": "Zoe <zoe@amici.test>", "quando": "-3h", "gruppo": "posta", "filo": "f-zoe@amici.test", "messageId": "m35@amici.test" }
+  ],
+  "turno": { "notte": "dentro" }
+}

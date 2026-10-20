@@ -36,6 +36,7 @@ import * as regole from './turno-regole.ts'
 import { suo as diSe } from './da-se.ts'
 import * as candidati from './candidati.ts'
 import * as seguito from './seguito.ts'
+import * as lati from './lato-lati.ts'
 import { puoLavorare, rifiutata, testaAlLavoro } from './modello.ts'
 import * as budgetNotte from './budget-notte.ts'
 import * as quotaMese from './quota-mese.ts'
@@ -255,10 +256,10 @@ function ritirabile(c: store.Compito, adesso = new Date()): boolean {
 export function pronte(adesso = new Date()): store.Compito[] {
   const ctx = contesto(adesso)
   const alti = new Set(progetti.elenco('attivo').filter(p => p.priorita === 'alta').map(p => p.id))
-  // il lavoro che Myynd fa da sé (`da-se.ts`) aspetta in coda mentre lui ha chiesto la pausa
+  // il lavoro che Myynd fa da sé (`da-se.ts`), il seguito e il lato (`lato-lavoro.ts`) aspettano in coda mentre lui ha chiesto la pausa
   const inPausa = cfg.autonomia() === 'chiedere'
   return store.elencoCompiti()
-    .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1 && !(inPausa && (diSe(c.origine) || seguito.suo(c.origine))))
+    .filter(c => regole.pronta(c, ctx) && (c.turno?.tentativi ?? 0) < TENTATIVI_MAX + 1 && !(inPausa && (diSe(c.origine) || seguito.suo(c.origine) || lati.suo(c.origine))))
     // fra le proposte di Myynd passa prima quella che la politica ha pesato di più (`candidati.ts`)
     .map(c => ({ c, p: regole.punteggio(c, { adesso, progettoAlto: !!c.progetto && alti.has(c.progetto) }) + (c.turno?.da === 'myynd' ? bonusDellaPolitica(candidati.punteggioDellaCarta(c.id)) : 0) }))
     .sort((a, b) => b.p - a.p || a.c.ordine.localeCompare(b.c.ordine) || a.c.id.localeCompare(b.c.id))

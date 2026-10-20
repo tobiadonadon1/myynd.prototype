@@ -48,6 +48,7 @@ import * as regoleTono from './regole-tono.ts'
 import * as gradino from './gradino.ts'
 import * as daSe from './da-se.ts'
 import * as seguito from './seguito.ts'
+import * as lati from './lato-lati.ts'
 import * as mandato from './mandato.ts'
 import * as tracce from './tracce.ts'
 import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
@@ -576,8 +577,11 @@ async function svolgiUnoDentro(id: string, nativa: boolean, turno: boolean, pres
      * Il seguito di una conversazione con un cliente (`seguito.ts`): un
      * prompt suo, stretto sulle prove della conversazione, e un controllo dei
      * fatti senza modello. Il budget, il richiamo e i guai restano quelli di qui.
+     * Anche la risposta del lato che Myynd prende in mano (`lato-lavoro.ts`)
+     * passa di qui: il destinatario è chi ha scritto, mai lui, e la stesura di
+     * sempre non lo garantisce (vedi `claude.preparaEmail`).
      */
-    if (seguito.suo(c.origine)) {
+    if (seguito.suo(c.origine) || (lati.suo(c.origine) && !!seguito.pacchettoDi(c.id))) {
       const esito = await ferri.seguito(c, { signal: controller.signal })
       if (richiamati.has(chiave(id))) return
       if (turno && budgetNotte.sforato()) throw new Error(BUDGET_NOTTE)
