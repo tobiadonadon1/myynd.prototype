@@ -9,22 +9,24 @@
 // Finora «Fatto» cambiava uno stato e basta. La riga spariva dalla lista, la
 // voce dal feed, e di quello che aveva ottenuto non restava niente da
 // nessuna parte: il giro dopo poteva riproporgli la stessa cosa con una
-// parola cambiata, e nessuno guardava cosa venisse dopo. Qui si fanno le tre
-// cose che mancavano, in quest'ordine e dopo che la rotta ha già risposto:
+// parola cambiata. Qui si segna il traguardo nella memoria del progetto,
+// come un fatto suo che non invecchia con la riga (`recordDoneByUser`), dopo
+// che la rotta ha già risposto.
 //
-//   1. si segna il traguardo nella memoria del progetto, come un fatto suo
-//      che non invecchia con la riga (`recordDoneByUser`);
-//   2. si chiede al modello, in una riga sola, qual è il passo dopo dentro
-//      quel progetto, e se lo sa si scrive in lista come figlia della cosa
-//      appena chiusa, senza affidarla a nessuno: è una cosa sua, proposta;
-//   3. se non lo sa, lo si chiede a lui, con una domanda sola per progetto
-//      e con un po' di silenzio dopo che ha risposto o l'ha lasciata cadere.
+// Il passo dopo non si indovina più qui. Lo si chiedeva al modello col solo
+// titolo della cosa chiusa, e il 19 ottobre quattro spunte in quattro secondi
+// hanno messo in lista quattro righe inventate: «Archive Myynd and upload a
+// signed build to TestFlight» dopo il certificato Apple, «Update the new
+// Resend key» dopo averla appena ruotata, il post di lancio dopo averlo
+// appena mandato. Le sue parole: «stuff that has nothing to do with what
+// actually has to be done». La mossa dopo la propone chi legge il progetto
+// vero (`quadro.ts`, che legge anche questi traguardi), non chi ha in mano
+// una riga sola. E non si chiede nemmeno: una domanda dopo ogni spunta è
+// rumore. Le domande «qual è il passo dopo?» già aperte si leggono ancora
+// (`rispostaSulPasso`).
 //
-// Quello che non si fa conta quanto quello che si fa: una cosa lasciata
-// perdere o scartata non è un traguardo; una cosa senza progetto non ha un
-// «passo dopo del progetto»; senza un modello si segna e basta; e una riga
-// simile già in lista non si raddoppia. E non fallisce mai verso la rotta:
-// chiudere una riga funziona anche se tutto questo va storto.
+// Una cosa lasciata perdere o scartata non è un traguardo; una cosa senza
+// progetto non ha dove segnarsi. E non fallisce mai verso la rotta.
 
 import * as store from './store.ts'
 import * as progetti from './progetti.ts'
@@ -36,7 +38,7 @@ import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { senzaTrattini } from './testo.ts'
 import { recordCurrentWork, recordDoneByUser, recordNextResult } from './project-memory.ts'
-import { prossimoPasso, simili } from './revisione-lavoro.ts'
+import { simili } from './revisione-lavoro.ts'
 
 /** Cosa ha chiuso: una riga della lista o una voce del feed. */
 export type Fatto = { genere: 'compito' | 'voce'; id: string }
@@ -47,26 +49,16 @@ export type Registrato = { progetto: string | null; prossimo: 'passo' | 'domanda
 /** Il prefisso del tema della domanda: uno per progetto, si riapre. */
 export const TEMA = 'fatto:'
 
-/** Dopo una risposta, o una domanda lasciata cadere, sullo stesso progetto non si richiede per tanti giorni. */
-const GIORNI_SILENZIO = 7
-
 /**
- * Le mani, sostituibili solo nelle prove.
- *
- * Stesso motivo di `compiti.ts`: la cosa da provare è quello che sta attorno
- * alla chiamata, e una prova che chiama un modello non è una prova. Il
- * «collegato» sta qui e non dentro `prossimoPasso` perché le due cose si
- * distinguono: senza modello si segna e basta, con un modello che non sa si
- * chiede a lui.
+ * Le mani, sostituibili solo nelle prove: la cosa da provare è quello che sta
+ * attorno alla chiamata, e una prova che chiama un modello non è una prova.
  */
 type Ferri = {
-  prossimoPasso: typeof prossimoPasso
   collegato: () => boolean
   /** La sua risposta a «qual è il passo dopo?»: un passo, uno stato, o altro. */
   classificaPasso: typeof classificaPasso
 }
 const VERI: Ferri = {
-  prossimoPasso: (...a) => prossimoPasso(...a),
   collegato: () => collegato(),
   classificaPasso: (...a) => classificaPasso(...a)
 }
@@ -126,11 +118,6 @@ function leggi(f: Fatto): Cosa | null {
   }
 }
 
-/** È ancora fatta? Mentre il modello pensava può averla riaperta. */
-function ancoraFatta(f: Fatto): boolean {
-  return (f.genere === 'compito' ? store.compito(f.id)?.stato : store.voceFeed(f.id)?.stato) === 'fatto'
-}
-
 /**
  * Il nome del progetto, subito e senza modello: è quello che la rotta mette
  * nella risposta, così l'avviso sotto il bottone può dirlo.
@@ -154,93 +141,27 @@ function scriviPasso(testo: string, progetto: string, madre: string | null, voce
   return id
 }
 
-/** La domanda, nella lingua dell'app. */
-function testoDomanda(progetto: string, cosa: string): string {
-  const c = senzaTrattini(cosa).trim().slice(0, 120)
-  return lingua() === 'en'
-    ? `You closed «${c}» for ${progetto}. What is the next step there?`
-    : `Hai chiuso «${c}» di ${progetto}. Qual è il passo dopo?`
-}
-
 /**
- * Chiede a lui il passo dopo, se è il momento. Torna vero se ha aperto la domanda.
+ * Registra una cosa fatta, nella memoria del suo progetto.
  *
- * Non è il momento se su quel progetto c'è già una domanda aperta, se è
- * aperta quella del riferimento (che chiede la stessa cosa su tutti i
- * progetti insieme), o se su questo tema ha risposto o lasciato cadere da
- * meno di una settimana: chi non risponde ha detto qualcosa anche lui.
- */
-function chiedi(p: progetti.Progetto, cosa: string): boolean {
-  const aperta = store.domandaAperta()
-  if (aperta && (aperta.progetto === p.id || aperta.tema === riferimento.TEMA)) return false
-  if (store.domandaPerTema(riferimento.TEMA)?.stato === 'aperta') return false
-  const tema = `${TEMA}${p.id}`
-  const gia = store.domandaPerTema(tema)
-  if (gia) {
-    if (gia.stato === 'aperta') return false
-    const chiusa = Date.parse(gia.chiusa ?? '')
-    if (Number.isFinite(chiusa) && Date.now() - chiusa < GIORNI_SILENZIO * 86_400_000) return false
-  }
-  const testo = testoDomanda(p.nome, cosa)
-  if (gia) store.riapriDomanda(gia.id, testo, [cosa])
-  else if (!store.apriDomanda({ tema, testo, spunto: [cosa], progetto: p.id })) return false
-  return true
-}
-
-/**
- * Registra una cosa fatta: la memoria, il passo dopo o la domanda.
- *
- * Si chiama *dopo* che la rotta ha risposto, mai prima: segnare una cosa
- * fatta non deve aspettare che Myynd rifletta. E non lancia mai: al peggio
- * scrive una riga nel registro e torna «niente».
+ * Si chiama *dopo* che la rotta ha risposto, mai prima. E non lancia mai: al
+ * peggio scrive una riga nel registro e torna «niente».
  */
 export async function registraFatto(f: Fatto): Promise<Registrato> {
-  const dire = (progetto: string | null, prossimo: Registrato['prossimo'], perche = '') => {
-    console.info(`myynd · fatto · ${f.id} · ${progetto ?? 'senza progetto'} · ${prossimo}${perche ? ` · ${perche}` : ''}`)
-    return { progetto, prossimo }
+  const dire = (progetto: string | null, perche = '') => {
+    console.info(`myynd · fatto · ${f.id} · ${progetto ?? 'senza progetto'}${perche ? ` · ${perche}` : ''}`)
+    return { progetto, prossimo: 'niente' as const }
   }
   try {
     const cosa = leggi(f)
     // una cosa lasciata perdere o scartata non è un traguardo: qui non c'è niente
-    if (!cosa || cosa.stato !== 'fatto') return dire(cosa?.progetto?.nome ?? null, 'niente', cosa ? cosa.stato : 'sparita')
+    if (!cosa || cosa.stato !== 'fatto') return dire(cosa?.progetto?.nome ?? null, cosa ? cosa.stato : 'sparita')
     const p = cosa.progetto
-    if (!p) return dire(null, 'niente')
-
-    // 1 · il traguardo, nella memoria del progetto
+    if (!p) return dire(null)
     recordDoneByUser(p.id, cosa.testo, f.id)
-
-    // il seguito di un seguito: se la madre ha già un'altra figlia in lista,
-    // la catena è già andata avanti da un'altra parte, e non si raddoppia
-    if (cosa.origine === 'seguito' && cosa.madre && store.elencoCompiti().some(v => v.madre === cosa.madre && v.id !== f.id)) {
-      return dire(p.nome, 'niente', 'la madre ha già un seguito')
-    }
-    // senza modello si segna e basta: non c'è nessuno a cui chiedere il passo
-    if (!ferri.collegato()) return dire(p.nome, 'niente', 'senza modello')
-
-    // 2 · il passo dopo, in una riga
-    const vivi = store.elencoCompiti().filter(v => v.id !== f.id)
-    const passo = await ferri.prossimoPasso({
-      compito: { testo: cosa.testo },
-      risultato: `Fatto: ${cosa.testo}`,
-      progetto: p,
-      inLista: vivi.filter(v => v.progetto === p.id).map(v => v.testo)
-    })
-    if (passo) {
-      if (vivi.some(v => simili(v.testo, passo))) return dire(p.nome, 'niente', `già in lista: «${passo.slice(0, 80)}»`)
-      if (!ancoraFatta(f)) return dire(p.nome, 'niente', 'riaperta nel frattempo')
-      const id = scriviPasso(passo, p.id, f.genere === 'compito' ? f.id : null, f.genere === 'voce' ? f.id : null)
-      compiti.annunciaCambio()
-      return dire(p.nome, 'passo', `→ ${id}`)
-    }
-
-    // 3 · non lo sa: lo chiede a lui
-    if (!ancoraFatta(f)) return dire(p.nome, 'niente', 'riaperta nel frattempo')
-    if (!chiedi(p, cosa.testo)) return dire(p.nome, 'niente', 'sta già chiedendo')
-    // la domanda compare sulla prima pagina, che si rilegge con il feed
-    compiti.annunciaFeed()
-    return dire(p.nome, 'domanda')
+    return dire(p.nome, 'segnato')
   } catch (e) {
-    console.warn(`myynd · fatto · ${f.id}: segnata, ma il passo dopo no:`, e instanceof Error ? e.message : e)
+    console.warn(`myynd · fatto · ${f.id}: segnata, ma non in memoria:`, e instanceof Error ? e.message : e)
     return { progetto: null, prossimo: 'niente' }
   }
 }

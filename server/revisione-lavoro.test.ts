@@ -142,22 +142,6 @@ test('il feedback per chi riscrive comincia con «Rivedi:» e ha un problema per
   assert.match(f, /\n- il prezzo dice 890, il listino dice 980\n- manca l'oggetto$/)
 })
 
-test('la cosa dopo è una riga che comincia con un verbo; vuota, o il compito ridetto, è niente', async () => {
-  const ricevute = modelloJSON({ prossimo: '«Fissare la chiamata con Rossi sul preventivo.»' })
-  const passo = await revisione.prossimoPasso({ compito: { testo: 'Mandare il preventivo a Rossi' }, risultato: 'Gentile Rossi, ecco.', progetto: null, inLista: ['Pagare la fattura 123'] })
-  assert.equal(passo, 'Fissare la chiamata con Rossi sul preventivo')
-  assert.match(ricevute[0].user, /Già in lista:\n- Pagare la fattura 123/)
-
-  modelloJSON({ prossimo: '' })
-  assert.equal(await revisione.prossimoPasso({ compito: { testo: 'Riassumere la settimana' }, risultato: 'Lunedì riunione.', inLista: [] }), null)
-
-  modelloJSON({ prossimo: 'Manda il preventivo a Rossi' })
-  assert.equal(await revisione.prossimoPasso({ compito: { testo: 'Mandare il preventivo a Rossi' }, risultato: 'Ecco.', inLista: [] }), null, 'il compito stesso, detto in altre parole, non è la cosa dopo')
-
-  revisione.perProva({ collegato: () => false, chiediJSON: async () => { throw new Error('non doveva chiamare nessuno') } })
-  assert.equal(await revisione.prossimoPasso({ compito: { testo: 'Una cosa' }, risultato: 'Fatta.', inLista: [] }), null)
-})
-
 test('due righe che dicono la stessa cosa si riconoscono, in tutte e due le lingue', () => {
   assert.ok(revisione.simili('Mandare il preventivo a Rossi', 'Manda a Rossi il preventivo'))
   assert.ok(revisione.simili('Define the next steps for the audit', 'Define next step for audit'))

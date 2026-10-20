@@ -55,7 +55,7 @@ const salvaInCasa: Ferri['salvaConsegna'] = o => {
 const nonDisponibile: Ferri['giudica'] = async () => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
 const nonChiede: Ferri['chiedeAiuto'] = async () => ({ chiede: false, manca: [], domanda: '' })
 function prova(f: Ferri) {
-  compiti.perProva({ giudica: nonDisponibile, prossimoPasso: async () => null, salvaConsegna: salvaInCasa, chiedeAiuto: nonChiede,
+  compiti.perProva({ giudica: nonDisponibile, salvaConsegna: salvaInCasa, chiedeAiuto: nonChiede,
     domandeDaFare: async () => [], postaCollegata: () => false, ...f })
 }
 

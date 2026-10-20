@@ -32,7 +32,6 @@ test('l’autorità è di serie no; solo chi la passa la dà; la carta nata in c
   const visti: { presente: boolean; guarda: boolean }[] = []
   compiti.perProva({
     giudica: async () => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] }),
-    prossimoPasso: async () => null,
     chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }),
     domandeDaFare: async () => [],
     svolgi: async (_c, _n, _m, _a, _cart, _passo, _doc, esecuzione) => {

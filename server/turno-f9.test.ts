@@ -156,7 +156,7 @@ function lavoroCheAspetta(o: { fatto?: (id: string) => void } = {}) {
         esecuzione.signal.addEventListener('abort', () => rifiuta(new Error('fermato')), { once: true })
       })
     },
-    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], prossimoPasso: async () => null,
+    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [],
     giudica: async () => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
   })
   return { chiamate: () => chiamate }
@@ -204,7 +204,7 @@ test('il budget sforato a metà: la carta del turno si ferma e torna in coda, se
       tetto.controllaIlTetto()
       return { testo: 'Done: the note is below.\n\nA short note with the three points, ready to read on its own.', fonti: [] }
     },
-    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], prossimoPasso: async () => null,
+    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [],
     giudica: async () => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
   })
   const id = carta('Prepare the renewal email')
@@ -306,7 +306,7 @@ test('una risposta sola che passa il budget: la carta non si consegna oltre il t
       store.segnaUso({ lavoro: 'bozza', motore: 'claude-sonnet-5', entrata: 0, cache: 0, uscita: 0, costo: 1_800_000 })
       return { testo: 'Done: the note is below.\n\nA short note with the three points, ready to read on its own.', fonti: [] }
     },
-    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], prossimoPasso: async () => null,
+    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [],
     giudica: async () => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
   })
   const id = carta('Write the long market overview')

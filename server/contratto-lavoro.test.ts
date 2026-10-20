@@ -81,7 +81,6 @@ test('il criterio arriva a chi scrive e a chi rilegge; la prova si scrive e il d
     },
     chiedeAiuto: nonChiede,
     domandeDaFare: async () => [],
-    prossimoPasso: async () => null,
     salvaConsegna: salvaInCasa,
     giudica: async o => {
       criterioRiletto = (o as { criterio?: string | null }).criterio
@@ -110,7 +109,7 @@ test('un «fatto» che non regge nemmeno dopo la riscrittura: consegnata, con la
   compiti.perProva({
     contratto: id => { const k = CONTRATTO(); store.scriviContrattoCompito(id, k); return k },
     svolgi: async () => ({ testo: OUTLINE, fonti: [] }),
-    chiedeAiuto: nonChiede, domandeDaFare: async () => [], prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
+    chiedeAiuto: nonChiede, domandeDaFare: async () => [], salvaConsegna: salvaInCasa,
     giudica: async () => {
       giri++
       return { esito: 'revise', per: 'the reader', comeTe: '', comeLoro: '', problemi: ['Module 3 has no exercise.'], verificato: [], criterio: { esito: 'not_met', perche: 'Module 3 has no exercise.' } } as Giudizio
@@ -132,7 +131,7 @@ test('un posto vuoto nel lavoro: la prova non regge, e dice cosa manca', async (
   compiti.perProva({
     contratto: id => { const k = { ...CONTRATTO(), criterio: 'A reminder to Sam with the invoice number and amount.', mani: [] }; store.scriviContrattoCompito(id, k); return k },
     svolgi: async () => ({ testo: 'Done: the reminder is below.\n\nHi Sam, a quick reminder about invoice [to fill: invoice number], for [to fill: amount].\n\nMissing: the invoice number and the amount.', fonti: [] }),
-    chiedeAiuto: nonChiede, domandeDaFare: async () => [], prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
+    chiedeAiuto: nonChiede, domandeDaFare: async () => [], salvaConsegna: salvaInCasa,
     giudica: async () => ({ esito: 'pass', per: 'Sam', comeTe: '', comeLoro: '', problemi: [], verificato: [] }) as Giudizio
   })
   const id = riga('Chase the unpaid invoice with Sam')
@@ -152,7 +151,7 @@ test('il budget di tempo: una carta che non torna si ferma, con la frase fissa, 
     svolgi: (_t, _n, _m, _a, _c, _p, _d, esecuzione) => new Promise((_r, rifiuta) => {
       esecuzione?.signal.addEventListener('abort', () => { fermata = true; rifiuta(new Error('La richiesta è stata interrotta a metà.')) })
     }),
-    chiedeAiuto: nonChiede, domandeDaFare: async () => [], prossimoPasso: async () => null, salvaConsegna: salvaInCasa
+    chiedeAiuto: nonChiede, domandeDaFare: async () => [], salvaConsegna: salvaInCasa
   })
   const id = riga('A card that never comes back')
   const o = orecchio(id)
@@ -185,7 +184,7 @@ test('F3 · le mani del contratto arrivano a chi scrive, anche per una carta nat
   compiti.perProva({
     contratto: id => { const k = { ...CONTRATTO(), mani: ['file' as const, 'nota' as const] }; store.scriviContrattoCompito(id, k); return k },
     svolgi: async (_t, _n, _m, _a, _c, _p, _d, esecuzione) => { ricevute = esecuzione?.mani; return { testo: OUTLINE, fonti: [] } },
-    chiedeAiuto: nonChiede, domandeDaFare: async () => [], prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
+    chiedeAiuto: nonChiede, domandeDaFare: async () => [], salvaConsegna: salvaInCasa,
     giudica: async () => ({ esito: 'pass', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] }) as Giudizio
   })
   const id = `cl-myynd-${Date.now()}`
@@ -203,7 +202,7 @@ test('F4 · non regge nemmeno dopo la riscrittura: resta consegnata, con una dom
   compiti.perProva({
     contratto: id => { const k = CONTRATTO(); store.scriviContrattoCompito(id, k); return k },
     svolgi: async () => ({ testo: OUTLINE, fonti: [] }),
-    chiedeAiuto: nonChiede, prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
+    chiedeAiuto: nonChiede, salvaConsegna: salvaInCasa,
     domandeDaFare: async (_c, testo) => { chiesteA++; assert.match(testo, /Module 3 has no exercise/); return [{ domanda: 'What exercise goes in module 3?', opzioni: ['A pricing quiz', 'A landing page draft'], multipla: false }] },
     giudica: async () => ({ esito: 'revise', per: '', comeTe: '', comeLoro: '', problemi: ['Module 3 has no exercise.'], verificato: [], criterio: { esito: 'not_met', perche: 'Module 3 has no exercise.' } }) as Giudizio
   })

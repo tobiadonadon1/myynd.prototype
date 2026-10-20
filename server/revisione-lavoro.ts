@@ -15,11 +15,6 @@
 // passano, mai. Quello che torna è un verdetto che si può leggere («l'ho
 // riletta come te e come Rossi: passa») e, se non passa, i problemi scritti
 // in modo che chi riscrive possa correggerli uno per uno.
-//
-// E in fondo la seconda metà della promessa: «torna con il risultato e con la
-// cosa dopo». `prossimoPasso` chiede al modello, in una riga sola, cosa viene
-// dopo questo lavoro dentro il suo progetto. Chi crea la riga è `compiti.ts`,
-// che sa anche quando non crearla.
 
 import * as store from './store.ts'
 import * as memoria from './memoria.ts'
@@ -464,71 +459,6 @@ export async function giudica(o: {
 export function feedbackPer(problemi: string[]): string {
   return 'Rivedi: la prima stesura non ha passato la rilettura. Correggi tutti questi punti, ' +
     'senza perdere quello che andava bene:\n' + problemi.map(p => `- ${p}`).join('\n')
-}
-
-const SCHEMA_PASSO = {
-  type: 'object',
-  properties: {
-    prossimo: {
-      type: 'string',
-      description:
-        'La cosa da fare subito dopo questo lavoro, in una riga sola che comincia con un ' +
-        'verbo: «Mandare il preventivo firmato a Rossi», «Fissare la chiamata con Bianchi». ' +
-        'Sotto le dodici parole, concreta, una sola. VUOTA se il passo naturale è soltanto ' +
-        'rileggere o mandare quello che è stato appena preparato, se dipende da una risposta ' +
-        'che non è ancora arrivata, se è già in lista, o se non c\'è niente che segua.'
-    }
-  },
-  required: ['prossimo'],
-  additionalProperties: false
-} as const
-
-/**
- * La cosa dopo, in una riga.
- *
- * Torna `null` più spesso che una frase, ed è giusto così: la maggior parte dei
- * lavori finisce con «mandala», che è già il bottone sotto la riga. Si chiede
- * al modello piccolo, con davanti il compito, il risultato, il progetto e la
- * lista com'è, e si tiene solo una riga che cominci con un verbo e non sia il
- * compito stesso detto in altre parole.
- */
-export async function prossimoPasso(o: {
-  compito: { testo: string }
-  risultato: string
-  progetto?: Progetto | null
-  /** Le righe già in lista: quello che è già lì non si ripropone. */
-  inLista: string[]
-}): Promise<string | null> {
-  if (!ferri.collegato()) return null
-  const out = await ferri.chiediJSON<{ prossimo: string }>({
-    lavoro: 'estrazione',
-    max_tokens: 200,
-    system: conLaLingua(
-      'Un assistente ha appena finito un lavoro per una persona. Di\' qual è la cosa da fare ' +
-      'subito dopo, dentro il suo progetto, in una riga sola che comincia con un verbo. ' +
-      'Una cosa che dipende da questo lavoro e che lei farebbe davvero, non un consiglio ' +
-      'generico. Se il passo naturale è solo rileggere o mandare quello che è stato preparato, ' +
-      'se è già in lista, o se non c\'è niente che segua, lascia la riga vuota: una riga in ' +
-      'più che non serve costa più di nessuna riga.'
-    ),
-    formato: SCHEMA_PASSO,
-    messages: [{
-      role: 'user',
-      content: [
-        `Il compito appena finito: ${o.compito.testo}`,
-        o.progetto ? `Progetto: ${o.progetto.nome}. Obiettivo: ${o.progetto.obiettivo || 'non registrato'}.` : '',
-        o.inLista.length ? `Già in lista:\n${o.inLista.slice(0, 20).map(t => `- ${t}`).join('\n')}` : '',
-        '',
-        'Il risultato:',
-        o.risultato.slice(0, 2500)
-      ].filter((r, i, tutte) => r !== '' || tutte[i - 1] !== '').join('\n')
-    }]
-  })
-  const passo = riga(out?.prossimo, 160).replace(/^["'«]+|["'»]+$/g, '').replace(/[.]+$/, '').trim()
-  if (!passo || passo.split(/\s+/).length < 2) return null
-  // il compito stesso, detto in altre parole, non è la cosa dopo
-  if (simili(passo, o.compito.testo)) return null
-  return passo
 }
 
 /**

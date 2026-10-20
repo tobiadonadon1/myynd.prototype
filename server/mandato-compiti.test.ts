@@ -41,7 +41,7 @@ const salvaInCasa: Ferri['salvaConsegna'] = o => {
 }
 const nonDisponibile = async (): Promise<Giudizio> => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
 const prova = (f: Ferri) => compiti.perProva({
-  giudica: nonDisponibile, prossimoPasso: async () => null, salvaConsegna: salvaInCasa,
+  giudica: nonDisponibile, salvaConsegna: salvaInCasa,
   chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], ...f
 })
 

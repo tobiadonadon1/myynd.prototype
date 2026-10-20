@@ -87,7 +87,7 @@ const salvaInCasa: Ferri['salvaConsegna'] = o => {
   return { percorso, nome, luogo: o.luogo }
 }
 function prova(f: Ferri) {
-  compiti.perProva({ giudica: nonDisponibile, prossimoPasso: async () => null, salvaConsegna: salvaInCasa, ...f })
+  compiti.perProva({ giudica: nonDisponibile, salvaConsegna: salvaInCasa, ...f })
 }
 
 test('la delega riceve il progetto attuale per ID e conserva le note della riga', async () => {
@@ -900,88 +900,27 @@ test('un risultato pronto comincia con «Done:» composto dai fatti, o con quell
 })
 
 /*
- * La cosa dopo.
+ * La cosa dopo non si indovina.
  *
- * «Torna con il risultato e con la cosa dopo.» Si prova che la riga nasca una
- * volta, figlia della riga finita e nel suo progetto, e soprattutto quando
- * NON nasce: da una riga nata così, da una madre che ha già figli, quando una
- * simile è già in lista, quando il modello non ha niente da proporre.
+ * Un lavoro pronto non mette in lista una riga in più: il 20 ottobre «Read a
+ * one-page plan for a Myynd trial at H Farm», non ancora letto, aveva già
+ * sotto «Choose the H Farm pilot participants». La mossa dopo la propone chi
+ * legge il progetto vero (`quadro.ts`).
  */
-test('a lavoro pronto la cosa dopo entra in lista una volta sola, figlia della riga e nel suo progetto', async () => {
+test('a lavoro pronto non nasce nessuna riga figlia', async () => {
   const progetti = await import('./progetti.ts')
   const p = progetti.scrivi({ nome: 'Preventivi', obiettivo: 'Chiudere Rossi entro il mese' })
-  let proposte = 0
-  prova({
-    svolgi: async () => ({ testo: 'Gentile Rossi, ecco il preventivo.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda,
-    prossimoPasso: async ({ compito, progetto, inLista }) => {
-      proposte++
-      assert.equal(compito.testo, 'Mandare il preventivo a Rossi')
-      assert.equal(progetto?.id, p.id)
-      assert.ok(!inLista.includes('Mandare il preventivo a Rossi'), 'la riga stessa sta fra quelle «già in lista»')
-      return 'Fissare la chiamata con Rossi sul preventivo'
-    }
-  })
+  prova({ svolgi: async () => ({ testo: 'Gentile Rossi, ecco il preventivo.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const prima = store.elencoCompiti().length
   const id = riga('Mandare il preventivo a Rossi')
   store.cambiaCompito(id, { progetto: p.id })
   const o = orecchio(id)
   compiti.affida(id, 'bozza')
   await o.aspetta('pronto')
   await pausa(60)
-
-  const figlie = store.elencoCompiti().filter(c => c.madre === id)
-  assert.equal(figlie.length, 1)
-  const f = figlie[0]
-  assert.equal(f.testo, 'Fissare la chiamata con Rossi sul preventivo')
-  assert.equal(f.origine, 'seguito')
-  assert.equal(f.progetto, p.id)
-  assert.equal(f.quando, 'oggi')
-  assert.equal(f.modo, 'io')
-  assert.equal(f.stato, 'aperto')
+  assert.equal(store.elencoCompiti().filter(c => c.madre === id).length, 0)
+  assert.equal(store.elencoCompiti().length, prima + 1)
   o.smetti()
-
-  // «rifallo»: la madre ha già una figlia, non se ne fa un'altra e non si chiede nemmeno
-  const o2 = orecchio(id)
-  compiti.affida(id, 'tutto')
-  await o2.aspetta('pronto')
-  await pausa(60)
-  assert.equal(proposte, 1)
-  assert.equal(store.elencoCompiti().filter(c => c.madre === id).length, 1)
-  o2.smetti()
-})
-
-test('la cosa dopo non nasce da una riga nata così, né se una simile è già in lista, né dal niente', async () => {
-  let proposte = 0
-  prova({ svolgi: async () => ({ testo: 'Fatto.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, prossimoPasso: async () => { proposte++; return 'Mandare il contratto firmato a Rossi' } })
-
-  store.scriviCompito({ id: 'seguito-1', testo: 'Fissare la chiamata con Rossi', origine: 'seguito', madre: 'qualcuno', ordine: 'seg-1' })
-  const o1 = orecchio('seguito-1')
-  compiti.affida('seguito-1', 'bozza')
-  await o1.aspetta('pronto')
-  await pausa(40)
-  assert.equal(proposte, 0, 'ha proposto un seguito a un seguito')
-  assert.equal(store.elencoCompiti().filter(c => c.madre === 'seguito-1').length, 0)
-  o1.smetti()
-
-  const prima = store.elencoCompiti().length
-  store.scriviCompito({ id: 'gia-in-lista', testo: 'Manda a Rossi il contratto firmato', ordine: 'gia-1' })
-  const id = riga('Preparare il contratto per Rossi')
-  const o2 = orecchio(id)
-  compiti.affida(id, 'bozza')
-  await o2.aspetta('pronto')
-  await pausa(40)
-  assert.equal(proposte, 1)
-  assert.equal(store.elencoCompiti().filter(c => c.madre === id).length, 0, 'ha messo in lista una riga che c\'era già, detta in altre parole')
-  assert.equal(store.elencoCompiti().length, prima + 2)
-  o2.smetti()
-
-  prova({ svolgi: async () => ({ testo: 'Fatto.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, prossimoPasso: async () => null })
-  const niente = riga('Riassumere la settimana')
-  const o3 = orecchio(niente)
-  compiti.affida(niente, 'bozza')
-  await o3.aspetta('pronto')
-  await pausa(40)
-  assert.equal(store.elencoCompiti().filter(c => c.madre === niente).length, 0)
-  o3.smetti()
 })
 
 /*
@@ -1088,12 +1027,10 @@ test('una pagina scritta si salva come file nel luogo delle consegne, e sulla ri
   const corpo = '# Introducing Myynd to H-Farm\n\n' + 'Myynd is a personal digital twin that reads what you already have. '.repeat(20).trim() + '\n\n## Why now\n\nBecause.'
   const pagina = corpo + '\n\nI assumed the audience is the leadership team; tell me if it is the students.'
   let riletto = ''
-  let seguito = ''
   prova({
     svolgi: async () => ({ testo: pagina, fonti: [], fatti: [] }),
     chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda,
-    giudica: async o => { riletto = o.risultato; return passa() },
-    prossimoPasso: async o => { seguito = o.risultato; return null }
+    giudica: async o => { riletto = o.risultato; return passa() }
   })
   const id = riga('Introduce Myynd to H-Farm')
   const o = orecchio(id)
@@ -1107,7 +1044,6 @@ test('una pagina scritta si salva come file nel luogo delle consegne, e sulla ri
   assert.equal(c.risultato, 'Done: «Introduce Myynd to H-Farm.md» is on your Desktop.\n\nI assumed the audience is the leadership team; tell me if it is the students.')
   assert.equal(c.consegna?.revisione?.esito, 'pass')
   assert.ok(riletto.includes('## Why now'), 'il revisore rilegge il documento intero')
-  assert.ok(seguito.includes('## Why now'), 'la cosa dopo si cerca dal lavoro intero')
   assert.equal(e.fase === 'pronto' && e.compito.consegna?.app, 'File')
   o.smetti()
 })

@@ -42,7 +42,7 @@ after(() => {
 const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
 const nonDisponibile = async (): Promise<Giudizio> => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
 function prova(f: Ferri) {
-  compiti.perProva({ giudica: nonDisponibile, prossimoPasso: async () => null, chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], ...f })
+  compiti.perProva({ giudica: nonDisponibile, chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], ...f })
 }
 
 function ascolta(id: string) {

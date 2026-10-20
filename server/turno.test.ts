@@ -205,7 +205,7 @@ test('la catena: quando una carta finisce, il turno fa partire la prossima da so
   turno.perProva({ motore: () => true, assente: () => false, contratto: async () => null })
   compiti.perProva({
     svolgi: async () => ({ testo: 'Done: the note is below.\n\nA short note with the three points, ready to read on its own.', fonti: [] }),
-    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [], prossimoPasso: async () => null,
+    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }), domandeDaFare: async () => [],
     giudica: async () => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
   })
   turno.avvia()

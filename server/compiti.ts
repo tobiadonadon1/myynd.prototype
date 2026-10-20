@@ -37,7 +37,7 @@ import * as candidati from './candidati.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import * as mailDelMac from './bozza-mail-mac.ts'
 import { senzaTrattini, tutteLeDomande } from './testo.ts'
-import { giudica, prossimoPasso, simili } from './revisione-lavoro.ts'
+import { giudica, simili } from './revisione-lavoro.ts'
 import * as mani from './mani.ts'
 import * as contratto from './contratto.ts'
 import * as ordine from './ordine.ts'
@@ -404,7 +404,6 @@ type Ferri = {
   /** La rilettura del lavoro, come lei e come chi lo riceve: quinta chiamata, stesso motivo. */
   giudica: typeof giudica
   /** La cosa dopo, in una riga: sesta, e l'ultima. */
-  prossimoPasso: typeof prossimoPasso
   /** Quello che si impara chiudendo una riga: settima, per poter guardare cosa impara. */
   distilla: typeof memoria.distilla
   /** Il lavoro finito scritto come file nel luogo scelto: le prove lo fanno in una cartella loro. */
@@ -439,7 +438,6 @@ const VERI: Ferri = {
   salvaConsegna: (...a) => mani.salvaConsegna(...a),
   daSe: (...a) => daSe.lavora(...a),
   seguito: (...a) => seguito.lavora(...a),
-  prossimoPasso: (...a) => prossimoPasso(...a),
   distilla: (...a) => memoria.distilla(...a),
   postaCollegata: () => {
     const c = cfg.leggi()
@@ -1119,9 +1117,6 @@ async function dopoLaStesura(
 
   const fatto = store.compito(id)
   if (fatto) annuncia({ fase: fatto.stato === 'chiede' ? 'chiede' : 'pronto', id, compito: fatto })
-  // e la cosa dopo: si cerca *dopo* aver annunciato, perché il risultato
-  // non deve aspettare una riga in più che quasi sempre non c'è
-  if (fatto?.stato === 'pronto') await proponiIlSeguito(c, lavoroIntero, progetto)
 }
 
 /**
@@ -1278,55 +1273,6 @@ function rigaDellaMancanza(testo: string): string {
 const RILETTI = new Set(['bozza', 'tutto'])
 /** Un compito che è scrivere *a qualcuno*: la cosa resta sulla riga, da dove si manda. */
 const EPISTOLARE = /\b(?:mail|e-?mail|reply|repl\w*|respond\w*|answer\w*|send|sending|forward|message|messages|write\s+(?:back\s+)?to\b|rispond\w*|risposta|mand\w*|invi\w*|inoltr\w*|messagg\w*|scriv\w*\s+(?:a|al|alla|allo|ai|agli|alle)\b)/i
-
-/**
- * La cosa dopo, in lista.
- *
- * «Torna con il risultato e con la cosa dopo»: l'ultima delle sue tre
- * richieste. Quando un lavoro è pronto si chiede in una riga cosa viene dopo
- * dentro quel progetto, e la si scrive in lista come figlia della riga
- * finita — con `madre`, così «Da …» porta lì — senza affidarla a nessuno:
- * è una cosa da fare sua, proposta, non un lavoro che parte da solo.
- *
- * Quando non si scrive, ed è la parte che conta di più:
- *   · una riga nata così non ne genera un'altra — niente catene di catene,
- *     che è il modo in cui una lista si riempie di cose che nessuno ha
- *     chiesto;
- *   · una madre che ha già figli non ne fa altri: «rifallo» sulla stessa riga
- *     non deve raddoppiare il seguito (`madriUsate`, la stessa rete del punto);
- *   · una riga simile è già in lista, in qualunque stato vivo;
- *   · un prompt non ha un dopo che non sia «incollalo», e non vale una riga.
- * E non fallisce mai: la riga pronta resta pronta anche se il modello che
- * propone è giù.
- */
-async function proponiIlSeguito(c: store.Compito, risultato: string, progetto: progetti.Progetto | null) {
-  try {
-    if (c.origine === 'seguito' || c.modo === 'prompt' || !risultato.trim()) return
-    if (store.madriUsate().has(c.id)) return
-    const vivi = store.elencoCompiti().filter(v => v.id !== c.id)
-    const passo = await ferri.prossimoPasso({
-      compito: c, risultato,
-      progetto: progetto && progetto.stato !== 'chiuso' ? progetto : null,
-      inLista: vivi.filter(v => !c.progetto || v.progetto === c.progetto).map(v => v.testo)
-    })
-    if (!passo) { console.info(`myynd · seguito · ${c.id} · niente da proporre`); return }
-    if (richiamati.has(chiave(c.id))) return
-    if (vivi.some(v => simili(v.testo, passo))) { console.info(`myynd · seguito · ${c.id} · già in lista: «${passo.slice(0, 80)}»`); return }
-    // la riga può essere stata chiusa o richiamata mentre il modello pensava
-    if (store.compito(c.id)?.stato !== 'pronto') return
-    // l'id come quello della rotta: l'ora in base trentasei e un pizzico di caso
-    const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-    store.scriviCompito({
-      id, testo: passo, quando: 'oggi', origine: 'seguito', madre: c.id,
-      progetto: c.progetto ?? null,
-      ordine: ordine.dopo(store.ultimoOrdine('oggi'))
-    })
-    console.info(`myynd · seguito · ${c.id} → ${id}`)
-    annunciaCambio()
-  } catch (e) {
-    console.warn(`myynd · compito ${c.id}: il risultato è pronto, la cosa dopo no —`, e instanceof Error ? e.message : e)
-  }
-}
 
 /**
  * L'email già smontata, scritta accanto alla bozza.
