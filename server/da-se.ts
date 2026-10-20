@@ -67,6 +67,7 @@ import { linguaDi } from './domande-prova.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as mandato from './mandato.ts'
 import * as coda from './candidati.ts'
+import * as latoLavoro from './lato-lavoro.ts'
 
 export const ORIGINE_X = 'idee-x'
 export const ORIGINE_VIDEO = 'copione-video'
@@ -1108,11 +1109,13 @@ export async function giro(adesso = Date.now(), o: { pronto?: () => boolean; pag
     ]
     const posto = () => vive().length < VIVE_MAX
     // senza una Scrivania (su un server) i file non si scrivono: solo Notion
+    // le idee per X e il copione sono modelli fissi: nascono solo se lui ci conta (`lato-lavoro.tieneRicorrente`).
+    // «it is something that myynd should text you because it changes based per user»: col lato scelto, la notte lavora su quello
     if (!OSPITATO) {
-      const sx = posto() ? sceltaX(vive(), adesso) : null
+      const sx = posto() && latoLavoro.tieneRicorrente('x', adesso) ? sceltaX(vive(), adesso) : null
       if (sx) { const id = crea(sx, adesso); if (id) nate.push(id) }
       const sv = sceltaVideo(vive(), adesso)
-      if (sv && posto()) { const id = crea(sv, adesso); if (id) nate.push(id) }
+      if (sv && posto() && latoLavoro.tieneRicorrente('video', adesso)) { const id = crea(sv, adesso); if (id) nate.push(id) }
     }
     for (const sn of scelteNotion(vive(), adesso, o.pagina).slice(0, NOTION_AL_GIRO)) {
       if (!posto()) break

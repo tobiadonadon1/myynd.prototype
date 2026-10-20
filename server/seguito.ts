@@ -156,6 +156,18 @@ export function pacchettoDi(id: string): Pacchetto | null {
   return leggiStato().pacchetti[id] ?? null
 }
 
+/**
+ * Un pacchetto che nasce da un altro produttore: il lato che Myynd prende in
+ * mano (`lato-lavoro.ts`). La carta resta sua, ma la risposta la scrive questa
+ * macchina, col destinatario che non sceglie il modello (`lavora`). Uno che
+ * c'è già non si tocca.
+ */
+export function registra(id: string, conv: Conversazione, perche: string, adesso = Date.now()): void {
+  if (leggiStato().pacchetti[id]) return
+  const ora = new Date(adesso).toISOString()
+  aggiorna(s => { s.pacchetti[id] = { id, conversazione: conv, stato: 'in_coda', perche, risposta: null, consegna: null, impegni: [], problemi: [], quando: ora } })
+}
+
 // — i segnali, senza modello —
 
 const SOLDI = /[$€£]\s?\d|\d[\d.,]*\s?(?:€|eur|euro|usd|gbp|k)\b|\b(?:price|pricing|quote|quotation|estimate|budget|fee|fees|rate|invoice|cost|deposit|prezzo|preventivo|offerta|costo|compenso|tariffa|acconto|fattura)\b/i

@@ -52,6 +52,8 @@ import * as iniziativa from './iniziativa.ts'
 import * as gradino from './gradino.ts'
 import * as primoGiorno from './primo-giorno.ts'
 import * as daSe from './da-se.ts'
+import * as lati from './lato-lati.ts'
+import * as latoLavoro from './lato-lavoro.ts'
 import { fra } from './ordine.ts'
 
 export type Genere = 'seguito' | 'risposta' | 'passo' | 'lavoro' | 'contenuto' | 'notion' | 'primo-giorno' | 'guadagnata' | 'fattura' | 'modulo'
@@ -417,6 +419,8 @@ function regge(o: { genere: Genere | null; origine: string; doc: string | null; 
   if (o.origine === gradino.ORIGINE) return gradino.rigaValida({ doc: o.doc })
   if (o.origine === primoGiorno.ORIGINE) return primoGiorno.fonteValida({ doc: o.doc, voce: o.voce }, adesso)
   if (daSe.suo(o.origine)) return daSe.permesso(() => true) && vivo(o.progetto)
+  // il lato (`lato-lavoro.ts`): la risposta finché il filo aspetta lui, la nota finché il progetto è vivo
+  if (lati.suo(o.origine)) return vivo(o.progetto) && (o.doc ? latoLavoro.fonteValida(o.doc, adesso) : !!lati.scelto())
   if (o.genere === 'lavoro' || o.origine === 'quadro') return vivo(o.progetto)
   if (o.doc) return !!store.documento(o.doc)
   return true
@@ -432,7 +436,7 @@ export function valido(c: Candidato, adesso = Date.now()): boolean {
  * partire, e per la coda prima di consegnarla. Le carte scritte da lei reggono sempre.
  */
 export function cartaValida(c: Pick<store.Compito, 'origine' | 'doc' | 'voce' | 'progetto'>, adesso = Date.now()): boolean {
-  const proposte = ['iniziativa', gradino.ORIGINE, primoGiorno.ORIGINE]
+  const proposte = ['iniziativa', gradino.ORIGINE, primoGiorno.ORIGINE, lati.ORIGINE]
   if (!proposte.includes(c.origine)) return true
   try { return regge({ genere: null, origine: c.origine, doc: c.doc ?? null, voce: c.voce ?? null, progetto: c.progetto ?? null }, adesso) } catch { return false }
 }
