@@ -41,7 +41,7 @@ import { righeDelPunto } from '../collegamenti'
 import type { AspettaMattina, Compito, Mattina, Punto as PuntoDelGiorno, RigaPunto } from '../api'
 import type { Lista } from '../oggi/useCompiti'
 import { RIGHE_IN_CARTA } from '../mattina'
-import { laNotte, ora, rigaDellaNotte, RigheAspettano, RigheFatte } from './Stanotte'
+import { ora, RigheAspettano, RigheFatte } from './Stanotte'
 import { MentreVia } from './MentreVia'
 
 /**
@@ -83,7 +83,7 @@ export const LINEA: CSSProperties = {
 export const TESTO: CSSProperties = { flex: 1, minWidth: 0, overflowWrap: 'anywhere', textWrap: 'pretty' }
 
 /** Quello che sta accanto alla frase e non è la frase: il perché, il dove sei. */
-export const SPENTO: CSSProperties = { color: 'rgba(var(--inchiostro-rgb),.55)' }
+export const SPENTO: CSSProperties = { color: 'rgba(var(--inchiostro-rgb),.74)' }
 
 /**
  * La riga intera è il bersaglio.
@@ -119,10 +119,17 @@ export const SOTTO: CSSProperties = {
 const SPIEGA: CSSProperties = { ...SOTTO, color: 'rgba(var(--inchiostro-rgb),.5)' }
 
 
+/**
+ * Il titolo di una sezione del foglio: «Why are we using this low contrast and
+ * small writing on the first card that you see» (20 ott 2026). Era l'etichetta
+ * maiuscola grigia da 11 px; adesso è un titolo, nero, da leggere.
+ */
+const TITOLO_SEZIONE: CSSProperties = { margin: 0, fontSize: 17, fontWeight: 600, lineHeight: 1.3, color: 'var(--inchiostro)' }
+
 export function Sezione({ etichetta, children }: { etichetta: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginTop: 26, minWidth: 0 }}>
-      <div style={ETICHETTA}>{etichetta}</div>
+    <div style={{ marginTop: 28, minWidth: 0 }}>
+      <h2 style={TITOLO_SEZIONE}>{etichetta}</h2>
       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</div>
     </div>
   )
@@ -203,10 +210,9 @@ function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
   const righe = (xs: RigaPunto[]) => xs.map((r, i) =>
     <Voce key={i} testo={r.testo} doc={r.doc} apriDoc={apriDoc} />)
 
+  // 20 ott 2026: niente più «Last night: 3 done · $0.68 of $3 · Mac asleep…»
+  // né la riga della settimana: «it's not primary information». Le righe bastano
   const fatte = m?.done ?? []
-  const settimana = m && m.week.mandate > 0 ? frasi.bozzePartite(m.week.mandate, m.week.comeEra, m.week.ritoccate) : null
-  // F9 · la mattina, la riga della notte: quanto è costata, cosa l'ha fermata, quando il Mac dormiva
-  const n = m?.mattina && notte ? laNotte(notte.l) : null
   const data = new Date(punto?.quando ?? Date.now()).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
   /*
    * La data e il conto. Quanto sei stato via, no.
@@ -235,17 +241,15 @@ function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
         <h1 id="punto-titolo" style={{ margin: 0, fontSize: 28, lineHeight: 1.2, paddingRight: 34, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
           {titoloRicevuta(m)}
         </h1>
-        <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.5)', overflowWrap: 'anywhere' }}>
+        <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.7)', overflowWrap: 'anywhere' }}>
           {sotto}
         </div>
         {/* P10 · se l'ultimo punto non è arrivato, si dice perché, in una riga */}
         {guaio && <div style={SPIEGA}>{spiegaGuaio(guaio)}</div>}
 
-        {(fatte.length > 0 || n) && (
+        {fatte.length > 0 && (
           <Sezione etichetta={t('Fatto')}>
-            {/* sotto «Fatto» la notte conta le fatte: quelle che aspettano lui hanno la loro sezione, col loro numero */}
-            {n && notte && <p className="stanotte-conto">{rigaDellaNotte(notte.l.turno, { ...n, attende: [] })}</p>}
-            {fatte.length > 0 && <RigheFatte xs={fatte} l={notte?.l} apri={apriCarta} disfa />}
+            <RigheFatte xs={fatte} l={notte?.l} apri={apriCarta} disfa />
           </Sezione>
         )}
         {ricevuta.length > 0 && (
@@ -254,13 +258,8 @@ function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
               apriChat={() => { chiudi(); v.goChat() }} apriDomande={() => { chiudi(); vaiAlleDomande() }} />
           </Sezione>
         )}
-        {settimana && (
-          <Sezione etichetta={t('Questa settimana')}>
-            <div style={LINEA}><span style={TESTO}>{settimana}</span></div>
-          </Sezione>
-        )}
 
-        {fatte.length + ricevuta.length + (punto ? righeDelPunto(punto) : 0) === 0 && !n && (
+        {fatte.length + ricevuta.length + (punto ? righeDelPunto(punto) : 0) === 0 && (
           <div style={{ ...LINEA, marginTop: 26 }}>
             <span style={TESTO}>{prossimaCosa(m) ?? t('Niente di nuovo da quando ci siamo visti.')}</span>
           </div>
