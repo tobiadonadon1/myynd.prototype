@@ -71,10 +71,20 @@ export function imparatoDellaBozza(c: Pick<Compito, 'stato' | 'voceScritta'>, fr
 
 /**
  * Le righe che Myynd si è preparato da solo (le proposte, il primo giorno, le
- * risposte guadagnate): la nota è il compito per chi lavora, in inglese e in
- * maiuscolo («PROACTIVE PREPARATION TYPE…»), non una riga per lei.
+ * risposte guadagnate, le idee per X, il copione, la pagina Notion, il
+ * pacchetto di seguito, il lato): la nota è il compito per chi lavora, in
+ * inglese e in maiuscolo («AUTONOMOUS WORK…», «CLIENT FOLLOW-UP PACKAGE…»),
+ * non una riga per lei. Il 20 ottobre le note delle idee per X si leggevano
+ * così nel dettaglio.
  */
-const DA_SOLO = new Set(['iniziativa', 'primo-giorno', 'guadagnata'])
+const DA_SOLO = new Set(['iniziativa', 'primo-giorno', 'guadagnata', 'idee-x', 'copione-video', 'pagina-notion', 'pacchetto', 'lato'])
+/**
+ * Le righe del quadro: la prima parte è per lei (cosa e perché), il resto è
+ * per chi lavora («Cosa consegno: …», le regole) o un'offerta in italiano
+ * anche nell'app inglese («Se me la passi: …»). A lei si mostra la prima.
+ */
+const CODA_QUADRO = /\n(?:Cosa consegno|Se me la passi):/
+const delQuadro = (c: Pick<Compito, 'origine'>) => c.origine === 'quadro'
 /**
  * Su quelle righe una nota sua va in coda al compito, dopo questa riga: chi
  * lavora la legge, e il dettaglio mostra solo lei. Scriverla al posto del
@@ -90,6 +100,11 @@ const SUA = '\n\nNOTE FROM THE USER:\n'
 const DA_GUARDARE = '\n\nDa guardare:\n'
 const dellOrdine = (c: Pick<Compito, 'origine'>) => !!c.origine?.startsWith('auto:')
 export function notaPerLei(c: Pick<Compito, 'origine' | 'nota'>): string {
+  if (delQuadro(c)) {
+    const n = c.nota ?? ''
+    const m = CODA_QUADRO.exec(n)
+    return m ? n.slice(0, m.index) : n
+  }
   if (dellOrdine(c)) {
     const n = c.nota ?? ''
     const i = n.indexOf(DA_GUARDARE)
@@ -102,6 +117,11 @@ export function notaPerLei(c: Pick<Compito, 'origine' | 'nota'>): string {
 }
 /** La nota da salvare: su una riga che Myynd si è preparato, il compito resta e la sua nota va in coda. */
 export function notaDaSalvare(c: Pick<Compito, 'origine' | 'nota'>, sua: string): string | null {
+  if (delQuadro(c)) {
+    const n = c.nota ?? ''
+    const m = CODA_QUADRO.exec(n)
+    return `${sua}${m ? n.slice(m.index) : ''}` || null
+  }
   if (dellOrdine(c)) {
     const n = c.nota ?? ''
     const i = n.indexOf(DA_GUARDARE)

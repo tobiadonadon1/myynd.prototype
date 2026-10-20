@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { api, type Compito, type ManoCompito, type Priorita, type Progetto, type VoceDiario } from '../api'
-import { frasi, t } from '../lingua'
+import { api, type Compito, type Priorita, type Progetto } from '../api'
+import { t } from '../lingua'
 import { Cestino } from '../ui'
-import { Casella } from '../components/forme'
 import type { Lista } from './useCompiti'
 import { giornoCompito, giornoLocale, spostaGiorno } from './giorni'
 import { oraDi } from '../agenda-ore'
@@ -23,12 +22,6 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
   /** L'ora dentro quel giorno: vuota vuol dire senza ora, cioè vale tutto il giorno. */
   const [ora, setOra] = useState(oraDi(c) ?? '')
   const [priorita, setPriorita] = useState<Priorita | null>(c.priorita ?? null)
-  /** F1 · il «fatto»: si mostra per le carte di Myynd, o per quelle che ne hanno già uno. */
-  const conFatto = (!!c.modo && c.modo !== 'io') || !!c.contratto
-  const [criterio, setCriterio] = useState(c.contratto?.criterio ?? '')
-  const [riscrivo, setRiscrivo] = useState(false)
-  // il criterio può arrivare mentre il dettaglio è aperto (il modello lo scrive dietro)
-  useEffect(() => { setCriterio(k => (k.trim() ? k : c.contratto?.criterio ?? '')) }, [c.contratto?.criterio])
   const [salvando, setSalvando] = useState(false)
   const [errore, setErrore] = useState(false)
   useEffect(() => {
@@ -47,12 +40,8 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
   const salva = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!testo.trim() || salvando) return
-    const criterioCambiato = conFatto && criterio.trim() !== (c.contratto?.criterio ?? '').trim()
     // solo quello che ha toccato (`cambi-dettaglio.ts`): niente di cambiato, niente da mandare
-    const cambi = {
-      ...cambiDelDettaglio(c, { testo, nota, giorno, ora, progetto, priorita }, oggi),
-      ...(criterioCambiato ? { criterio: criterio.trim() || null } : {})
-    }
+    const cambi = cambiDelDettaglio(c, { testo, nota, giorno, ora, progetto, priorita }, oggi)
     if (!Object.keys(cambi).length) { chiudi(); return }
     setSalvando(true); setErrore(false)
     const fatto = await l.cambia(c.id, cambi)
@@ -92,29 +81,6 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
             {progetto && !progetti.some(p => p.id === progetto) && <option value={progetto}>{t('Progetto collegato')}</option>}
             {progetti.filter(p => p.stato !== 'chiuso' || p.id === progetto).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select></>}
-        {conFatto && <div className="task-detail-fatto">
-          <div className="task-detail-fatto-testa">
-            <label className="task-detail-label" htmlFor="task-detail-done">{t('Fatto vuol dire')}</label>
-            {c.contratto?.scritto === 'tu' ? <span className="task-detail-suo">{t('tuo')}</span>
-              : <button type="button" className="task-detail-riscrivi" disabled={riscrivo}
-                onClick={async () => { setRiscrivo(true); const ok = await l.contratto(c.id, true); setRiscrivo(false); if (ok) setCriterio('') }}>
-                {riscrivo ? t('Lo scrivo…') : c.contratto ? t('Riscrivilo') : t('Scrivilo')}</button>}
-          </div>
-          <Casella id="task-detail-done" valore={criterio} cambia={setCriterio} righe={2} esempio={t('Com’è la cosa finita, e dove arriva')} />
-          {!!c.contratto && <div className="task-detail-mani">
-            {c.contratto.mani.map(m => <span key={m}>{t(NOME_MANO[m])}</span>)}
-            <span className="task-detail-budget">{frasi.finoAMinuti(c.contratto.budget.minuti)}</span>
-          </div>}
-        </div>}
-        {c.prova && <div className={`task-detail-prova ${c.prova.esito}`}>
-          <span className="task-detail-label">{t('La prova')}</span>
-          <p>{c.prova.esito === 'pass' ? '✓ ' : ''}{c.prova.perche}</p>
-          {c.prova.controlli.length > 0 && <ul>{c.prova.controlli.map((x, i) => <li key={i}>{x}</li>)}</ul>}
-        </div>}
-        {!!c.diario?.length && <details className="task-detail-diario">
-          <summary>{[t('Cosa ha fatto'), ...pezziDelCosto(c)].join(' · ')}</summary>
-          <ol>{c.diario.slice(-24).map((v, i) => <li key={i}><time>{oraDellaVoce(v.t)}</time><span>{fraseDiario(v)}</span></li>)}</ol>
-        </details>}
         {errore && <p role="alert" className="task-detail-error">{t('Non sono riuscito a salvarlo.')}</p>}
       </div>
       <footer><div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>{!salvando && <Cestino fai={() => { l.elimina(c.id); chiudi() }} titolo={t('Toglila')} visibile dim={32} icona={14} subito />}
@@ -122,15 +88,6 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
         {!salvando && puoDisfare(c) && <button type="button" data-disfa onClick={() => { void l.disfa(c.id); chiudi() }}>{t('Disfa')}</button>}</div><button type="button" disabled={salvando} onClick={chiudi}>{t('Annulla')}</button><button type="submit" className="task-detail-save" disabled={!testo.trim() || salvando}>{salvando ? t('Salvo…') : t('Salva')}</button></footer>
     </form>
   </dialog>, document.body)
-}
-
-const NOME_MANO: Record<ManoCompito, string> = {
-  posta: 'Bozza nella casella',
-  file: 'File sul disco',
-  nota: 'Nota',
-  web: 'Web',
-  codice: 'Codice, in una copia',
-  notion: 'Pagina in Notion'
 }
 
 /** F9 · per quanti giorni dopo la chiusura il lavoro di Myynd si disfa ancora: la stessa regola di `server/disfa.ts`. */
@@ -145,45 +102,3 @@ export function puoDisfare(c: Compito, adesso = Date.now()): boolean {
   return Number.isFinite(chiuso) && adesso - chiuso <= GIORNI_PER_DISFARE * 86_400_000
 }
 
-/** F9 · il conto della carta accanto a «Cosa ha fatto»: «$0.12 · 9 calls», con la tilde se è una stima. */
-function pezziDelCosto(c: Compito): string[] {
-  const k = c.costo
-  if (!k?.chiamate) return []
-  return [...(k.costo !== null ? [`${k.stimato ? '~' : ''}${frasi.dollari(k.costo / 1_000_000)}`] : []), frasi.chiamate(k.chiamate)]
-}
-
-/** L'ora di una voce del diario, «HH:MM». */
-function oraDellaVoce(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-/** Una voce del diario, detta nella lingua di chi legge: il server manda il tipo, la frase si compone qui. */
-export function fraseDiario(v: VoceDiario): string {
-  const d = v.dettaglio ?? ''
-  switch (v.tipo) {
-    case 'preso': return t('Presa in mano')
-    case 'contratto': return frasi.fattoFissato(d)
-    case 'cerco': return frasi.passoCerco(d)
-    case 'apro': return frasi.passoApro(d)
-    case 'scrivo': return t('Scritta la prima stesura')
-    case 'rileggo': return t('Riletta contro il suo «fatto»')
-    case 'riscrivo': return d ? frasi.riscrittaPerche(d) : t('Riscritta dopo la rilettura')
-    case 'presumo': return t('Andata avanti con un’ipotesi')
-    case 'consegnato': return d ? frasi.consegnataCome(d === 'casella' ? t('bozza nella casella') : d) : t('Consegnata')
-    case 'domanda': return d ? frasi.chiestoATe(d) : t('Ti ha chiesto una cosa')
-    case 'guaio': return d ? `${t('Fermata')}: ${t(d)}` : t('Fermata')
-    case 'prova': return d.startsWith('pass') ? t('Controllata: regge') : d.startsWith('fail') ? t('Controllata: non regge ancora') : t('Nessuno ha potuto controllarla')
-    case 'scaduto': return t('Finito il tempo che aveva')
-    case 'fermato': return d === 'stop' ? t('Fermata con «Ferma adesso»: torna in coda')
-      : d === 'budget' ? t('Finito il budget della notte: torna in coda')
-      : d === 'modificata' ? t('Fermata perché l’hai cambiata: adesso è tua')
-      : d === 'riavvio' ? t('Interrotta da un riavvio: torna in coda')
-      : d.startsWith('disfatto') ? t('Disfatta') : t('Ripresa da te')
-    case 'turno': return d === 'notte' ? t('Partita di notte, col turno') : d === 'via' ? t('Partita col turno, mentre non c’eri') : t('Partita col turno')
-    case 'file': return frasi.fileScritto(d)
-    case 'nota': return frasi.notaCreata(d)
-    default: return d
-  }
-}

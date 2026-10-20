@@ -62,6 +62,14 @@ test('una risposta guadagnata in coda non mostra il compito per chi lavora: la n
   assert.equal(notaPerLei({ origine: 'iniziativa', nota: PROMPT }), '')
   assert.equal(notaPerLei({ origine: 'primo-giorno', nota: PROMPT }), '')
   assert.equal(notaPerLei({ origine: 'chat', nota: 'Ask about the budget' }), 'Ask about the budget')
+  // le carte che Myynd fa da sé: il compito per chi lavora non si legge nel dettaglio
+  for (const origine of ['idee-x', 'copione-video', 'pagina-notion', 'pacchetto', 'lato'])
+    assert.equal(notaPerLei({ origine, nota: 'AUTONOMOUS WORK: written on its own from the user\'s own material.' }), '', origine)
+  // il quadro: si legge il perché, non «Cosa consegno» né l'offerta in italiano
+  const quadro = 'A two-week pilot at H Farm.\nCosa consegno: I draft the plan.\nPROACTIVE WORK from the project status.'
+  assert.equal(notaPerLei({ origine: 'quadro', nota: quadro }), 'A two-week pilot at H Farm.')
+  assert.equal(notaPerLei({ origine: 'quadro', nota: 'Call Rossi.\nSe me la passi: I draft the email.' }), 'Call Rossi.')
+  assert.equal(notaDaSalvare({ origine: 'quadro', nota: quadro }, 'Ask Marco first.'), 'Ask Marco first.\nCosa consegno: I draft the plan.\nPROACTIVE WORK from the project status.', 'chi lavora tiene il suo compito')
   assert.equal(notaPerLei({ origine: 'chat', nota: null }), '')
 })
 

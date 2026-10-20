@@ -14,7 +14,7 @@
 // criterio, e sulle fatte la prova. Nessun paragrafo che spiega.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Compito, type ManoCompito, type PassoCompito, type Progetto, type StatoTurno } from '../api'
+import { api, type Compito, type PassoCompito, type Progetto, type StatoTurno } from '../api'
 import { frasi, t } from '../lingua'
 import { Cestino } from '../ui'
 import { Casella } from '../components/forme'
@@ -30,15 +30,6 @@ const NOME_CORSIA: Record<Corsia, string> = {
   lavora: 'Al lavoro',
   attende: 'Aspetta te',
   fatte: 'Fatte'
-}
-
-const NOME_MANO: Record<ManoCompito, string> = {
-  posta: 'Bozza nella casella',
-  file: 'File sul disco',
-  nota: 'Nota',
-  web: 'Web',
-  codice: 'Codice, in una copia',
-  notion: 'Pagina in Notion'
 }
 
 const NOME_PROVENIENZA: Record<Provenienza, string> = {
@@ -171,7 +162,6 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
   trascina: (id: string) => void; lasciaAndare: () => void; trascinata: boolean
 }) {
   const chiusa = c.stato === 'fatto'
-  const diMyynd = corsia !== 'tue' && !chiusa
   const controlla = corsia === 'lavora' && staControllando(passo)
   const prov = provenienza(c)
   const classi = ['tavola-carta', `in-${corsia}`, controlla ? 'controlla' : '', chiusa ? 'chiusa' : '', trascinata ? 'trascinata' : '',
@@ -198,14 +188,6 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
         {c.testo}
       </button>
 
-      {diMyynd && <Fatto c={c} l={l} />}
-
-      {diMyynd && !!c.contratto?.mani.length && corsia !== 'fatte' && (
-        <div className="tavola-mani" aria-label={t('Mani')}>
-          {c.contratto.mani.map(m => <span key={m}>{t(NOME_MANO[m])}</span>)}
-        </div>
-      )}
-
       {corsia === 'coda' && <Quando c={c} s={l.turno} />}
 
       {corsia === 'lavora' && passo && (
@@ -218,9 +200,6 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
 
       {corsia === 'fatte' && !chiusa && (
         <div className="tavola-prova">
-          {c.prova?.esito === 'pass' && <p className="si"><span aria-hidden="true">✓</span>{c.prova.perche || t('Controllata contro il suo «fatto».')}</p>}
-          {c.prova?.esito === 'unavailable' && <p className="forse">{t('Non controllata: rileggila prima di usarla.')}</p>}
-          {!c.prova && <p className="forse">{t('Pronta da guardare.')}</p>}
           {cosa.tipo === 'file' && cosa.nome && <p className="tavola-cosa">{cosa.nome}</p>}
           {cosa.tipo === 'casella' && <p className="tavola-cosa">{t('Bozza nella tua casella')}</p>}
         </div>
@@ -245,65 +224,6 @@ function CartaTavola({ c, corsia, l, oggi, passo, progetto, progetti, modifica, 
         </div>
       )}
     </li>
-  )
-}
-
-/**
- * Il «fatto» della carta, sulla carta.
- *
- * Si legge in una riga. Un clic e si scrive: Invio salva, Esc lascia com'era,
- * uscire dal campo salva se è cambiato. Scritto da lei, resta suo — e la
- * carta lo dice con una parola sola, «tuo». Una carta di Myynd che non ne ha
- * ancora uno lo chiede a Myynd con un tocco.
- */
-function Fatto({ c, l }: { c: Compito; l: Lista }) {
-  const k = c.contratto
-  const [scrivo, setScrivo] = useState(false)
-  const [testo, setTesto] = useState(k?.criterio ?? '')
-  const [chiedo, setChiedo] = useState(false)
-  const scatola = useRef<HTMLDivElement>(null)
-  useEffect(() => { if (!scrivo) setTesto(k?.criterio ?? '') }, [k?.criterio, scrivo])
-  useEffect(() => {
-    if (!scrivo) return
-    const el = scatola.current?.querySelector('textarea')
-    if (!el) return
-    el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
-  }, [scrivo])
-  /*
-   * Uscire salva, se è cambiato. Vuoto non salva mai da qui: Esc nella
-   * casella svuota, e un «fatto» scritto da lei non deve sparire per un tasto.
-   * Per toglierlo c'è il dettaglio della carta.
-   */
-  const salva = () => {
-    const nuovo = testo.trim()
-    setScrivo(false)
-    if (!nuovo || nuovo === (k?.criterio ?? '').trim()) { setTesto(k?.criterio ?? ''); return }
-    void l.cambia(c.id, { criterio: nuovo })
-  }
-  if (scrivo) {
-    return (
-      <div className="tavola-fatto scrivo" ref={scatola}
-        // Esc lascia com'era e chiude, prima che la casella lo prenda per «svuota»
-        onKeyDownCapture={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setTesto(k?.criterio ?? ''); setScrivo(false) } }}>
-        <span>{t('Fatto vuol dire')}</span>
-        <Casella valore={testo} cambia={setTesto} righe={3} invio={salva} alUscire={salva} aria-label={t('Fatto vuol dire')} />
-      </div>
-    )
-  }
-  if (!k) {
-    return (
-      <button type="button" className="tavola-fatto vuoto" disabled={chiedo}
-        onClick={async () => { setChiedo(true); await l.contratto(c.id); setChiedo(false) }}>
-        <span>{t('Fatto vuol dire')}</span>{chiedo ? t('Lo scrivo…') : t('Scrivilo')}
-      </button>
-    )
-  }
-  return (
-    <button type="button" className="tavola-fatto" onClick={() => setScrivo(true)} title={t('Cambialo')}>
-      <span>{t('Fatto vuol dire')}{k.scritto === 'tu' && <em>{t('tuo')}</em>}</span>
-      {k.criterio}
-    </button>
   )
 }
 

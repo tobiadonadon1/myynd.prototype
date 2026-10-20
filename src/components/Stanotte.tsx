@@ -11,7 +11,7 @@
 // chat o la domanda. Nessun bottone per riga, tranne «Disfa» nel foglio, che
 // è un gesto diverso dall'aprire e resta scritto piccolo.
 
-import type { AspettaMattina, Compito, FattaMattina, StatoTurno } from '../api'
+import type { AspettaMattina, Compito, FattaMattina } from '../api'
 import { frasi, t } from '../lingua'
 import type { Lista } from '../oggi/useCompiti'
 import { carteDiStanotte } from '../oggi/bacheca'
@@ -34,26 +34,6 @@ export function laNotte(l: Lista | undefined): { fatte: Compito[]; attende: Comp
 
 /** «HH:MM» di un istante ISO. */
 export const ora = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
-
-/**
- * F9 · la riga della notte, solo con i pezzi che ci sono: «Last night: 5
- * done, 1 needs you · $1.42 of $3 · 2 wait for tonight's budget · Mac asleep
- * 01:10 to 05:40». Il costo si dice se la notte ha speso, o se c'è un budget.
- */
-export function rigaDellaNotte(s: StatoTurno | null | undefined, n: { fatte: Compito[]; attende: Compito[] }): string {
-  const pezzi = [frasi.stanotteFatte(n.fatte.length, n.attende.length)]
-  const x = s?.stanotte
-  if (x) {
-    const costo = x.costo ?? 0
-    if (x.limite) { if (costo > 0 || x.fermata === 'budget') pezzi.push(frasi.spesaDelTurno(costo, x.limite)) }
-    else if (costo > 0) pezzi.push(frasi.dollari(costo))
-    if (x.fermata === 'budget' && x.rimaste) pezzi.push(frasi.aspettanoIlBudget(x.rimaste))
-    if (x.fermata === 'stop') pezzi.push(t('fermato da te'))
-    if (x.fermata === 'mese') pezzi.push(t('trattenuto: quota del mese raggiunta'))
-    for (const b of (x.buchi ?? []).slice(0, 2)) pezzi.push(frasi.macAddormentato(ora(b.da), ora(b.a)))
-  }
-  return pezzi.join(' · ')
-}
 
 /** La carta dietro una riga, se è ancora in lista: senza, la riga si legge e basta. */
 export const cartaDi = (l: Lista | undefined, id: string): Compito | null =>
