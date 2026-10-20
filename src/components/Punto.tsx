@@ -255,7 +255,7 @@ function Finestra({ v, punto, guaio, chiudi, m, ricevuta, notte }: {
         {ricevuta.length > 0 && (
           <Sezione etichetta={t('Aspetta te')}>
             <RigheAspettano xs={ricevuta} l={notte?.l} apri={apriCarta}
-              apriChat={() => { chiudi(); v.goChat() }} apriDomande={() => { chiudi(); vaiAlleDomande() }} />
+              apriChat={() => { chiudi(); v.apriLettera() }} apriDomande={() => { chiudi(); vaiAlleDomande() }} />
           </Sezione>
         )}
 

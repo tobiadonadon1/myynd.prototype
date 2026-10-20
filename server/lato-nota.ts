@@ -382,10 +382,15 @@ export async function rispondi(d: Pick<Domanda, 'id' | 'spunto'>, testo: string)
   if (!esito) return dici(en ? 'Noted.' : 'Me lo sono segnato.')
 
   const nome = id === 'libero' ? pulita(esito, 40).replace(/^./, c => c.toUpperCase()) : NOMI[id][l]
-  const { progetto } = progetti.crea({ nome, obiettivo: esito, origine: 'conversazione' })
-  mandato.salva(progetto.id, {
-    esito, misura: def.misura[l] || misuraDa(esito, l), classi: def.classi
-  }, { conferma: true, origine: 'lei' })
+  const { progetto, esisteva } = progetti.crea({ nome, obiettivo: esito, origine: 'conversazione' })
+  // un progetto che c'era già (lo stesso nome, o un suo alias) col mandato che
+  // lui ha confermato tiene le sue regole: il lato ci lavora dentro, non le riscrive
+  const suo = esisteva ? mandato.scritto(progetto.id) : null
+  if (!(suo && suo.stato === 'confermato')) {
+    mandato.salva(progetto.id, {
+      esito, misura: def.misura[l] || misuraDa(esito, l), classi: def.classi
+    }, { conferma: true, origine: 'lei' })
+  }
   aggiorna(st => { st.scelto = { id, esito, progetto: progetto.id, quando: new Date().toISOString(), ...(parole ? { parole } : {}) } })
   console.log(`myynd · lato · scelto · ${id}`)
   const cosa = id === 'libero' ? progetto.nome : def.nome[l]
