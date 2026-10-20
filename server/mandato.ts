@@ -12,9 +12,11 @@
 //
 // Tre cose che questo file tiene ferme:
 //
-//   · Il mandato lo scrive solo lei. `salva` è chiamato da una rotta sola
-//     (le impostazioni del progetto); niente di quello che passa dal modello,
-//     da una pagina web, da una mail o dall'uscita di un attrezzo arriva qui.
+//   · Il mandato lo scrive solo lei. `salva` è chiamato dalla rotta delle
+//     impostazioni del progetto e dalle sue risposte a una domanda di Myynd
+//     (il sì al mandato proposto, il sì al lato in `lato-nota.ts`, con le
+//     regole fisse di `LATI`); niente di quello che passa dal modello, da una
+//     pagina web, da una mail o dall'uscita di un attrezzo arriva qui.
 //     `decidi` legge e basta.
 //   · Finché non l'ha confermato valgono le regole di serie, o le sue se sono
 //     più strette: un mandato proposto non allarga mai niente.
@@ -252,9 +254,12 @@ export function pulisci(c: Cambio): Partial<Pick<Mandato, 'esito' | 'misura' | '
 }
 
 /**
- * Scrive il mandato. Solo la rotta delle impostazioni del progetto la
- * chiama (con `origine: 'lei'`), e `mandato-proposta.ts` per la prima
- * proposta (`origine: 'dedotto'`, mai sopra una riga che c'è già).
+ * Scrive il mandato. La chiamano la rotta delle impostazioni del progetto
+ * (con `origine: 'lei'`), le sue risposte alle domande di Myynd
+ * (`mandato-proposta.rispondi` e `lato-nota.rispondi`, `origine: 'lei'`:
+ * il sì l'ha dato lei, e le regole del lato sono quelle fisse di `LATI`), e
+ * `mandato-proposta.ts` per la prima proposta (`origine: 'dedotto'`, mai
+ * sopra una riga che c'è già).
  * `conferma` lo porta a «confermato»; un cambio suo senza conferma lascia
  * lo stato com'era.
  */

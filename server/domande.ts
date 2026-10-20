@@ -27,6 +27,8 @@ import * as dopoFatto from './dopo-fatto.ts'
 import * as riordino from './riordino.ts'
 import * as quadro from './quadro.ts'
 import * as mandatoProposta from './mandato-proposta.ts'
+import * as latoNota from './lato-nota.ts'
+import { suaDomanda } from './lato-lati.ts'
 
 /**
  * Quanti scarti muti sullo stesso tema prima di considerarlo un segnale.
@@ -299,6 +301,17 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
    * «È questo l'obiettivo?»: il mandato del progetto (`mandato-proposta.ts`).
    * Un sì lo conferma; un'altra frase diventa l'esito, da confermare dopo.
    */
+  /*
+   * «While you are awake he handles a side of the business just like you
+   * would»: la domanda del lato (`lato-nota.ts`). Un sì fa nascere il
+   * progetto col mandato confermato; altre parole scelgono un altro lato.
+   */
+  if (suaDomanda(questa?.tema)) {
+    const esito = await latoNota.rispondi(questa!, pulita)
+    store.chiudiDomanda(id, 'risposta', pulita, esito)
+    return { esito }
+  }
+
   if (questa?.tema.startsWith(mandatoProposta.TEMA)) {
     const esito = mandatoProposta.rispondi(questa.tema, pulita)
     store.chiudiDomanda(id, 'risposta', pulita, esito)
@@ -409,5 +422,8 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
 
 /** Lasciarla cadere è una risposta anche quella, e non si ripropone. */
 export function ignora(id: string) {
+  const questa = store.domanda(id)
   store.chiudiDomanda(id, 'ignorata', undefined, 'lasciata cadere')
+  // il lato lasciato cadere è un no, e non si chiede più
+  if (suaDomanda(questa?.tema)) latoNota.ignorata(questa)
 }
