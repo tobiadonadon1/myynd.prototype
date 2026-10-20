@@ -1549,7 +1549,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     lato: latoAperta ? {
       idMessaggio: `lato-${latoAperta.id}`,
       scrivendo: latoAltro === latoAperta.id && thread === CHAT_MYYND,
-      si: () => { void rispondiLato('yes', t('Sì')) },
+      si: () => { void rispondiLato(t('Sì')) },
       altro: () => {
         setLatoAltro(latoAperta.id)
         requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-campo-chat]')?.focus())
