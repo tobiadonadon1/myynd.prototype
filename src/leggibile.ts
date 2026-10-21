@@ -24,11 +24,17 @@ export type Blocco = {
   /**
    * `riga` è la prosa; `titolo` va in grassetto; `codice` in monospazio;
    * `vuota` è aria; `voce` è una voce di elenco, e allora `numero` dice se
-   * l'elenco era numerato e con che numero.
+   * l'elenco era numerato e con che numero. `tabella` c'è solo in `CHAT`:
+   * allora `celle` ha le righe, la prima è l'intestazione.
    */
-  tipo: 'riga' | 'titolo' | 'codice' | 'vuota' | 'voce'
+  tipo: 'riga' | 'titolo' | 'codice' | 'vuota' | 'voce' | 'tabella'
   testo: string
   numero?: number | null
+  /** Il livello del titolo (1 per «#», 2 per «##»…), solo in `CHAT`. */
+  livello?: number
+  /** La lingua scritta dopo i tre apici di un blocco di codice («bash»), se c'è. */
+  lingua?: string
+  celle?: string[][]
 }
 
 /**
@@ -51,12 +57,21 @@ export type Come = {
   spoglia: boolean
   /** Le voci di elenco come blocchi a sé, invece che righe col puntino davanti. */
   elenchi: boolean
+  /**
+   * La chat (21 ott 2026): le tabelle restano tabelle e i link restano link.
+   * «It feels a bit like an HTML kind of vibe»: una tabella appiattita in
+   * «Step · Owner · When Fix account issues · Alex» e un link scritto
+   * «testo (https://…)» erano le due cose che più sapevano di sorgente.
+   */
+  ricco?: boolean
 }
 
 /** Come lo vuole il visualizzatore dei documenti: parole, e niente segni. */
 export const SPOGLIO: Come = { spoglia: true, elenchi: false }
 /** Come lo vuole una risposta in chat: i segni restano, gli elenchi sono elenchi. */
 export const IMPAGINATO: Come = { spoglia: false, elenchi: true }
+/** Come lo vuole la chat: come `IMPAGINATO`, più tabelle vere e link da cliccare (li disegna `Testo`). */
+export const CHAT: Come = { spoglia: false, elenchi: true, ricco: true }
 
 const APERTURA = /^\s{0,3}(?:```|~~~)/
 const TITOLO = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/
@@ -115,6 +130,13 @@ function tieniISegni(riga: string): string {
     .replace(/[ \t]+$/, '')
 }
 
+/** In chat il link resta scritto com'è: lo riconosce e lo disegna `segni-chat.ts`. */
+function tieniILink(riga: string): string {
+  return riga
+    .replace(/<((?:https?|mailto):[^>\s]+)>/g, '$1')
+    .replace(/[ \t]+$/, '')
+}
+
 /** Le celle di una riga di tabella, senza le pipe. */
 function celle(riga: string): string[] {
   const dentro = RIGA_TABELLA.exec(riga)?.[1] ?? ''
@@ -147,7 +169,7 @@ function senzaFrontespizio(righe: string[]): string[] {
  * riga come è entrata, e le righe vuote restano dove le ha messe chi scriveva.
  */
 export function leggibile(md: string, come: Come = SPOGLIO): Blocco[] {
-  const dentroLaRiga = come.spoglia ? spoglia : tieniISegni
+  const dentroLaRiga = come.spoglia ? spoglia : come.ricco ? tieniILink : tieniISegni
   const fuori: Blocco[] = []
   const spingi = (b: Blocco) => {
     if (b.tipo === 'vuota') {
@@ -166,11 +188,12 @@ export function leggibile(md: string, come: Come = SPOGLIO): Blocco[] {
     // il codice esce intatto: dentro un blocco recintato ogni segno è voluto
     if (APERTURA.test(riga)) {
       const dentro: string[] = []
+      const lingua = /^\s{0,3}(?:```|~~~)\s*([\w+#.-]{1,20})/.exec(riga)?.[1]
       i++
       while (i < righe.length && !APERTURA.test(righe[i])) { dentro.push(righe[i]); i++ }
       i++   // la riga di chiusura
       const testo = dentro.join('\n').replace(/\s+$/, '')
-      if (testo) spingi({ tipo: 'codice', testo })
+      if (testo) spingi(come.ricco && lingua ? { tipo: 'codice', testo, lingua } : { tipo: 'codice', testo })
       continue
     }
 
@@ -185,11 +208,26 @@ export function leggibile(md: string, come: Come = SPOGLIO): Blocco[] {
     const titolo = TITOLO.exec(pulita)
     if (titolo) {
       const testo = dentroLaRiga(titolo[2]).trim()
-      if (testo) spingi({ tipo: 'titolo', testo })
+      if (testo) spingi(come.ricco ? { tipo: 'titolo', testo, livello: titolo[1].length } : { tipo: 'titolo', testo })
       continue
     }
 
     if (RIGA_TABELLA.test(pulita)) {
+      // in chat: tutte le righe di fila diventano una tabella sola, la riga
+      // dei trattini sparisce, e ogni riga ha tante celle quante l'intestazione
+      if (come.ricco) {
+        const righeTab: string[][] = [celle(pulita).map(dentroLaRiga)]
+        while (i < righe.length && RIGA_TABELLA.test(righe[i].replace(CITAZIONE, ''))) {
+          const r = righe[i].replace(CITAZIONE, '')
+          i++
+          if (!soloTrattini(r)) righeTab.push(celle(r).map(dentroLaRiga))
+        }
+        if (soloTrattini(pulita)) righeTab.shift()
+        const larga = righeTab[0]?.length ?? 0
+        const piene = righeTab.map(r => Array.from({ length: larga }, (_x, k) => r[k] ?? ''))
+        if (piene.length && larga) spingi({ tipo: 'tabella', testo: piene.map(r => r.join(' · ')).join('\n'), celle: piene })
+        continue
+      }
       if (soloTrattini(pulita)) continue
       const testo = celle(pulita).filter(c => c !== '').map(dentroLaRiga).join(` ${PUNTO} `).trim()
       if (testo) spingi({ tipo: 'riga', testo })

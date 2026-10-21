@@ -1502,6 +1502,10 @@ const EN: Record<string, string> = {
   'interrotta': 'interrupted',
   'non disponibile': 'unavailable',
   'Copia': 'Copy',
+  // la chat (21 ott 2026): «Copiato» sotto la risposta e sul codice, «Ferma» al posto della freccia, la freccia per tornare giù
+  'Copiato': 'Copied',
+  'Ferma': 'Stop',
+  'Vai all’ultimo messaggio': 'Jump to latest',
   'Apri la copia': 'Open the copy',
   'Il lavoro si è fermato prima di finire.': 'The work stopped before it finished.',
   'Claude Code non è installato su questo computer.': 'Claude Code is not installed on this computer.',

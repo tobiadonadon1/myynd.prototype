@@ -13,6 +13,7 @@ import { IconPiu } from '../icons'
 import type { Secchio } from './useCompiti'
 import { righeDaTesto } from './righe'
 import { dataLocale } from './giorni'
+import { bottoneBarra, scatolaBarra } from '../barra-scatola'
 
 /** Cosa gli si affida scrivendo la riga: la bozza, tutto, o il prompt per farla fare altrove. */
 export type Modo = 'bozza' | 'tutto' | 'prompt'
@@ -142,11 +143,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
     <div style={{ position: 'relative', WebkitAppRegion: 'no-drag' } as CSSProperties}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 9, padding: '7px 7px 7px 17px',
-        borderRadius: 14, background: 'rgba(var(--carta-rgb),.86)',
-        backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
-        border: `1px solid ${fuoco ? 'rgba(var(--inchiostro-rgb),.26)' : 'rgba(var(--luce-rgb),.9)'}`,
-        boxShadow: fuoco ? '0 8px 26px rgba(var(--ombra-rgb),.10)' : '0 4px 16px rgba(var(--ombra-rgb),.05)',
-        transition: 'border-color .15s, box-shadow .15s'
+        ...scatolaBarra(fuoco)
       }}>
         <input
           id="task-composer"
@@ -190,13 +187,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
 
         <button type="button" onClick={manda} disabled={!testo.trim()}
           title={t('Aggiungila')} aria-label={t('Aggiungila')}
-          style={{
-            width: 30, height: 30, flex: 'none', borderRadius: 9, border: 'none',
-            background: testo.trim() ? 'var(--pieno)' : 'rgba(var(--inchiostro-rgb),.07)',
-            color: testo.trim() ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.28)',
-            display: 'grid', placeItems: 'center',
-            cursor: testo.trim() ? 'pointer' : 'default', fontFamily: 'inherit'
-          }}><IconPiu size={13} /></button>
+          style={bottoneBarra(!!testo.trim())}><IconPiu size={13} /></button>
       </div>
 
       {aperto && (

@@ -286,19 +286,26 @@ export function nomePorta(p: 'posta' | 'file' | 'pagina'): string {
 
 const RIGA_MIA: CSSProperties = { display: 'flex', justifyContent: 'flex-end' }
 const RIGA_SUA: CSSProperties = { display: 'flex', justifyContent: 'flex-start' }
+/*
+ * La chat come la conoscono tutti (21 ott 2026): «it feels a bit like an HTML
+ * kind of vibe… I wish it felt a bit more like ChatGPT or Claude».
+ *
+ * Due bolle colorate a destra e a sinistra sono una messaggistica, non una
+ * conversazione con chi ti risponde. Adesso la domanda è una bolla quieta di
+ * carta, a destra, con l'inchiostro di sempre (il rame pieno era decorazione:
+ * il rame resta per i gesti); la risposta è testo sulla pagina, senza scatola,
+ * larga quanto la colonna, come un testo da leggere.
+ */
 const BOLLA_MIA: CSSProperties = {
-  maxWidth: '74%', padding: '13px 17px', borderRadius: '20px 18px 6px 20px',
-  background: 'linear-gradient(130deg,rgba(176,82,46,.92),rgba(140,100,64,.9))',
-  color: 'var(--avorio)', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
+  maxWidth: '78%', padding: '10px 16px', borderRadius: '20px 20px 6px 20px',
+  background: 'rgba(var(--carta-rgb),.9)', border: '1px solid rgba(var(--luce-rgb),.9)',
+  color: 'var(--inchiostro)', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere', minWidth: 0
 }
-// piatta: la sfocatura e l'ombra larga facevano un alone fra una bolla e l'altra
 const BOLLA_SUA: CSSProperties = {
-  maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
-  background: 'rgba(var(--carta-rgb),.92)',
-  border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 1px 2px rgba(var(--ombra-rgb),.06)',
-  color: 'var(--inchiostro)', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
-  overflowWrap: 'anywhere', minWidth: 0
+  flex: 1, minWidth: 0, padding: '2px 0 0',
+  color: 'var(--inchiostro)', fontSize: '15px', lineHeight: 1.65,
+  overflowWrap: 'anywhere'
 }
 
 export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => void, avviaOnboarding: () => void = () => {}, email = '') {
@@ -779,14 +786,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       .finally(() => { if (gen.current === mio) setMessaggiPronti(true) })
   }, [thread, rilettura])
 
-  useEffect(() => {
-    const el = threadRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
-    const id = requestAnimationFrame(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight })
-    return () => cancelAnimationFrame(id)
-  // anche l'intervista: ogni domanda nuova e la chiusura devono arrivare in vista
-  }, [visibili.length, screen, pensando, battute.length, passo, intervistaFinita])
+  // Lo scorrimento della chat (in fondo mentre la risposta arriva, fermo se
+  // lui è risalito a leggere) sta in `screens/Chat.tsx`, `useInFondo`.
 
   // aperta la ricerca senza scrivere niente, mostro gli ultimi documenti letti
   const genCerca = useRef(0)
@@ -884,6 +885,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const mia = () => filiChat.current.get(id) === filo
     // P10 · quanto ci mette la prima parola
     const cronometro = tempiChat()
+    // quello che è già arrivato, per tenerlo se lui ferma la risposta a metà
+    let scritto = ''
     try {
       // La risposta cresce sotto gli occhi invece di comparire tutta insieme:
       // un messaggio finto che si riempie a ogni frammento, sostituito da
@@ -891,10 +894,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       const r = await api.chiedi(id, testo, delta => {
         if (!mia()) return
         cronometro.primaParola()
+        scritto += delta
         setCorse(c => corsa.frammento(c, id, delta))
       }, () => {
         // il motore è cambiato a metà e la risposta riparte da capo: quello
         // che si è già letto non è un pezzo di questa, e sotto tornerebbe due volte
+        scritto = ''
         if (mia()) setCorse(c => corsa.riparti(c, id))
       }, filo.signal, compitoDiscussione(id), p => { if (mia()) setCorse(c => corsa.passo(c, id, p)) })
       /*
@@ -918,8 +923,19 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
        */
       const suo = filo.signal.aborted
       if (!suo) mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a rispondere.'))
-      // il testo scritto non si perde, se si è ancora nella sua chat
-      if (mia() && threadAperto.current === id) setDraftMsg(d => d || bozza)
+      /*
+       * Fermata da lui col quadratino (21 ott 2026): come in Claude e in
+       * ChatGPT la domanda resta dov'è, e con lei quello che era già
+       * arrivato. Il server l'ha salvata prima di cominciare, e salva anche
+       * il pezzo di risposta (`/api/chat/:id`, ramo dell'interruzione): la
+       * chat riaperta dopo è la stessa che si vede adesso. Fermata prima della
+       * prima parola, resta la domanda sola, e il campo torna vuoto.
+       */
+      if (suo && threadAperto.current === id) {
+        ++gen.current
+        setMessaggi(m => corsa.fermata(m, { id: idScritta, role: 'u', text: testo }, scritto))
+        setMessaggiPronti(true)
+      } else if (mia() && threadAperto.current === id) setDraftMsg(d => d || bozza)
     }
     /*
      * Sempre, non solo se è ancora la chat aperta.
@@ -1808,6 +1824,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     chatTitolo: passo !== null || intervistaFinita ? 'Myynd' : th?.titolo ?? 'Nuova chat',
     pensando,
     passoChat,
+    /** Una risposta sta arrivando nella chat aperta (prima o dopo la prima parola): il bottone diventa «Ferma». */
+    inCorso: !!corsaAperta,
+    /** Il thread aperto: cambiarlo riporta in fondo e rimette il fuoco nel campo. */
+    chatAperta: thread,
     /** Taglia la risposta che sta arrivando nella chat aperta, e solo quella. */
     annulla: () => { if (thread) filiChat.current.get(thread)?.abort() },
     messages: visibili.map(m => ({

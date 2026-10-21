@@ -162,7 +162,7 @@ import * as mandato from './mandato.ts'
 import * as mandatoProposta from './mandato-proposta.ts'
 import { leggiQuadri } from './quadro.ts'
 import * as tracce from './tracce.ts'
-import { riflua, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
+import { riflua, rispostaFermata, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
 import * as diagnosi from './diagnosi.ts'
 
 // le ultime righe del registro, per il rapporto di diagnosi: anche senza il file del guscio
@@ -5301,6 +5301,8 @@ app.post('/api/chat/:id', async (req, res) => {
   // quattro giri che nessuno legge costa come una che si legge.
   const controllo = new AbortController()
   res.on('close', () => { clearInterval(battito); if (!res.writableEnded) controllo.abort() })
+  // la risposta finora: se lui la ferma a metà, questo pezzo resta nella chat
+  let parziale = ''
 
   try {
     const nuovaChat = !store.esisteChat(chat)
@@ -5330,7 +5332,7 @@ app.post('/api/chat/:id', async (req, res) => {
       if (sul.iniziativa && feedbackProjectInitiative(sul.iniziativa, 'answered')) compiti.annunciaFeed()
     }
 
-    const r = await quotaMese.conChiGuarda(() => claude.rispondiInStreaming(domanda, storico, delta => invia({ fase: 'testo', delta }), {
+    const r = await quotaMese.conChiGuarda(() => claude.rispondiInStreaming(domanda, storico, delta => { parziale += delta; invia({ fase: 'testo', delta }) }, {
       compitoId: selectedTask?.id,
       progetto: sul?.progetto,
       // già concluso in questa chat: il modello lo sa, e non chiude due volte
@@ -5374,7 +5376,7 @@ app.post('/api/chat/:id', async (req, res) => {
       // Claude Code è caduto dopo aver già scritto mezza risposta, e il motore
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
       // invece di vedersela accodare a quella intera.
-    }, controllo.signal, () => invia({ fase: 'ricomincio' }), undefined, tappe))
+    }, controllo.signal, () => { parziale = ''; invia({ fase: 'ricomincio' }) }, undefined, tappe))
     // il testo è già pulito da `ancora` (segni fuori elenco, lineette fuori dal codice); `verifica` è il verbale, che si registra e basta
     store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: senzaTrattiniFuoriCodice(r.testo), fonti: r.fonti, verifica: r.verifica })
     console.log(risposteVive.rigaRisposta(r.verifica))
@@ -5391,6 +5393,14 @@ app.post('/api/chat/:id', async (req, res) => {
         .catch(() => {})
     }
   } catch (e) {
+    // Fermata da lui col quadratino (21 ott 2026): quello che era già
+    // arrivato resta nella chat, come in Claude e in ChatGPT. La finestra lo
+    // tiene già sullo schermo (`chat-in-corso.ts`, `fermata`); salvato qui,
+    // la chat riaperta domani è la stessa. Un modello che non sa fermarsi
+    // e finisce lo stesso passa dal ramo di sopra, intero.
+    if (controllo.signal.aborted && parziale.trim()) {
+      try { store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: rispostaFermata(parziale) }) } catch { /* la domanda resta comunque */ }
+    }
     // Preserve the user's words across timeouts/restarts so they can retry or
     // correct them. A failed provider call must not erase their request.
     invia({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })

@@ -79,6 +79,20 @@ export const IconSpunta = ({ size = 15, style }: P) => (
   </svg>
 )
 
+/** Copia: due fogli sovrapposti, lo stesso tratto delle altre. */
+export const IconCopia = ({ size = 14, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true" focusable="false">
+    <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2.2" /><path d="M15.5 8.5V6A2 2 0 0 0 13.5 4H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+  </svg>
+)
+
+/** Ferma: il quadratino pieno al posto della freccia, mentre la risposta arriva. */
+export const IconFerma = ({ size = 12, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={style} aria-hidden="true" focusable="false">
+    <rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor" />
+  </svg>
+)
+
 export const IconGiu = ({ size = 12, stroke = 'rgba(var(--inchiostro-rgb),.5)' }: P & { stroke?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7 10l5 5 5-5" />

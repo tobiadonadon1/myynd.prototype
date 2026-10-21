@@ -1,0 +1,21 @@
+/*
+ * La chat (21 ott 2026). Due cose sole che lo stile in linea non sa fare:
+ * «Copia» sotto le risposte che compare al passaggio (sotto l'ultima c'è
+ * sempre), e la parola che respira mentre Myynd ci pensa, al posto della
+ * rotella dentro una pastiglia.
+ */
+.chat-gesti { opacity: 0; transition: opacity .15s; }
+.chat-gesti-sempre,
+.chat-risposta:hover .chat-gesti,
+.chat-gesti:focus-within { opacity: 1; }
+
+.chat-respiro { animation: chat-respiro 1.8s ease-in-out infinite; }
+@keyframes chat-respiro {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-respiro { animation: none; }
+  .chat-gesti { transition: none; }
+}

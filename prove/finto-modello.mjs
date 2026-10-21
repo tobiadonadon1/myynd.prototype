@@ -22,7 +22,8 @@
 //                                     // una risposta vuota ma valida per quello schema
 //   }
 // La prima regola che combacia vince. `in` manca = "tutto". `attesa` sono
-// millisecondi prima di rispondere (per provare le attese e i lucchetti).
+// millisecondi prima di rispondere (per provare le attese e i lucchetti);
+// `ritmo` i millisecondi fra un pezzo e l'altro dello streaming.
 //
 // Per collegarci un conto seminato: motore «compatibile», con
 //   compatibile: { url: 'http://127.0.0.1:<porta>/v1/', chiave: 'sk-finta', modello: 'finto' }
@@ -144,7 +145,7 @@ function scegli(corpo) {
     }
     const testo = r.json !== undefined ? JSON.stringify(r.json) : String(r.testo ?? '')
     // F8 · `stato`: un rifiuto del fornitore (un 429 del ponte dell'AI inclusa), con `json` come corpo
-    return { regola: i, testo, attesa: Number(r.attesa || 0), system, utente: dove.utente, ...(r.stato ? { stato: Number(r.stato) } : {}) }
+    return { regola: i, testo, attesa: Number(r.attesa || 0), ritmo: Number(r.ritmo || 0), system, utente: dove.utente, ...(r.stato ? { stato: Number(r.stato) } : {}) }
   }
   const schema = corpo.response_format?.json_schema?.schema
   const testo = vuoleJSON
@@ -275,7 +276,8 @@ const server = createServer(async (req, res) => {
   // a pezzi di venti caratteri, con un respiro: la chat deve vedere il testo che arriva
   for (let i = 0; i < s.testo.length; i += 20) {
     manda({ id, object: 'chat.completion.chunk', model: modello, choices: [{ index: 0, delta: { content: s.testo.slice(i, i + 20) } }] })
-    await new Promise(r => setTimeout(r, 15))
+    // `ritmo` nella regola: millisecondi fra un pezzo e l'altro, per fotografare una risposta a metà
+    await new Promise(r => setTimeout(r, s.ritmo || 15))
   }
   manda({ id, object: 'chat.completion.chunk', model: modello, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage })
   res.write('data: [DONE]\n\n')
@@ -327,7 +329,7 @@ async function anthropic(req, res) {
     // una parola alla volta, con lo spazio che la precede
     for (const parola of s.testo.match(/\s*\S+/g) ?? []) {
       manda('content_block_delta', { index: 0, delta: { type: 'text_delta', text: parola } })
-      await new Promise(r => setTimeout(r, 5))
+      await new Promise(r => setTimeout(r, s.ritmo || 5))
     }
   }
   manda('content_block_stop', { index: 0 })
