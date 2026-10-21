@@ -17,6 +17,7 @@
 import { congedoAParte, firmaSotto, ipotesiNellaLingua, senzaTrattini } from './testo.ts'
 import * as mani from './mani.ts'
 import { corpoPerChiRiceve, haSegnaposto } from './cornice.ts'
+import { controlliFissi } from './controlli-bozza.ts'
 import { bloccoDalTesto, decidi, duroDalTesto, ipotesiDaDomanda, type Genere, type Mossa } from './domanda-sola.ts'
 import { feedbackPer, type Giudizio } from './revisione-lavoro.ts'
 import * as store from './store.ts'
@@ -244,6 +245,11 @@ export async function stendi(o: {
     })
     if (o.fermo()) return null
     const dellaVoce = o.controllaVoce ? o.controllaVoce(corpoPerChiRiceve(testo)) : []
+    // i controlli fissi (`controlli-bozza.ts`): contro tutto quello che chi scriveva aveva davanti
+    const davanti = [c.testo, o.nota ?? '', o.doc?.corpo ?? '',
+      ...davantiAlRevisore(uscita).map(f => store.documento(f.id)?.corpo ?? ''),
+      ...(uscita.fatti ?? []).map(f => f.testo ?? '')].join('\n')
+    dellaVoce.push(...controlliFissi(corpoPerChiRiceve(testo), davanti, o.consegna ?? o.lingua))
     if (dellaVoce.length) {
       verdetto = { ...verdetto, esito: 'revise', problemi: [...verdetto.problemi, ...dellaVoce] }
     }

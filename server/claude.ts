@@ -2794,6 +2794,23 @@ export const DOMANDA_AL_PIU =
   'non prima. Una preferenza, un formato, un tono, una lunghezza o un giorno da proporre non ' +
   'sono mai una domanda. Se nella nota c\'è già la risposta a una tua domanda, non chiedi più niente.'
 
+/**
+ * La risposta finale di un lavoro, o la stesura di un giro prima se la finale
+ * è solo un rimando. Il 21 ottobre il banco ha consegnato «Fatto: la mail ai
+ * clienti è sopra», con la mail persa nel giro in cui il modello aveva anche
+ * chiamato un attrezzo. Se la finale è corta e una stesura di prima è lunga
+ * una volta e mezza tanto, il lavoro è quella; la riga «Fatto:/Done:» della finale,
+ * se c'è, resta in cima. Pura.
+ */
+export function ritornaAllaStesura(finale: string, stesure: readonly string[]): string {
+  const f = finale.trim()
+  const piuLunga = [...stesure].map(t => t.trim()).sort((a, b) => b.length - a.length)[0] ?? ''
+  if (f.length > 500 || piuLunga.length < 200 || piuLunga.length < 1.5 * f.length) return finale
+  const prima = f.split('\n')[0]!
+  const corpo = piuLunga.replace(/^(?:Fatto|Done):[^\n]*\n+/i, '')
+  return /^(?:Fatto|Done):/i.test(prima) ? `${prima}\n\n${corpo}` : piuLunga
+}
+
 export const SVOLGERE = `
 
 Adesso non ti è stata fatta una domanda: ti è stato affidato un compito dalla
@@ -2854,9 +2871,26 @@ quello che il compito chiede: niente offerte, disponibilità o promesse in più.
 Un segnaposto solo per un dato che nessuna fonte ha: se il dato o il file c'è,
 usalo.
 
+Mai scrivere che una cosa è fatta, pronta, allegata o mandata se la fonte non
+lo dice: «in allegato», «è pronto», «l'ho già inviato» solo se è vero. E
+nessun impegno nuovo a suo nome che lei non ha detto: tenere un pagamento,
+mandare aggiornamenti, richiamare, spostare una data.
+
+Un segnaposto contiene solo il dato che manca («[data]», «[rinnovo / disdetta]»),
+mai un'istruzione per lei: le istruzioni vanno nella riga finale.
+
+Il saluto segue chi scrive: a chi non conosce e le ha scritto in modo formale,
+un saluto formale. Niente frasi che spiegano a chi riceve quello che sa già, e
+niente chiusure di circostanza («fammi sapere se hai domande», «send me a
+message»): chiudi come chiude lei.
+
+Un post è pubblico: niente indirizzi privati, nomi di clienti, cifre o
+dettagli che la fonte non ha già reso pubblici.
+
 Un cambio di coordinate bancarie, una richiesta di pagamento o di accesso
 arrivata per mail non si conferma rispondendo a quella mail: la bozza dice che
-verificherà con un contatto già noto, e la riga per lei lo segnala.
+verificherà lei chiamando un numero che ha già (non chiede di essere
+richiamata), e la riga per lei lo segnala.
 
 Dal web vale solo una pagina letta davvero, citata con l'indirizzo: il
 riassunto di un risultato di ricerca serve a trovare la pagina, non è una
@@ -3544,6 +3578,8 @@ export async function svolgi(
   const pagineRichieste = appNativa ? pagineDocumento(compito) : 0
   if (pagineRichieste > 0) sistemaLavoro += `\nLa lunghezza richiesta è ${pagineRichieste} pagine. In un documento standard usa circa ${pagineRichieste * 280} parole, non superare ${pagineRichieste * 320} parole inclusi i titoli. Pochi paragrafi e pochi titoli, senza lunghe sezioni ripetitive.`
   let testo = ''
+  /** La prosa scritta nei giri con un attrezzo: di solito una nota di lavoro, a volte il lavoro stesso. */
+  const stesure: string[] = []
 
   /*
    * F8 · l'account cade: si passa alla chiave, se c'è, ma solo finché nessuna
@@ -3620,7 +3656,10 @@ export async function svolgi(
 
     const chiamate = finale.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
     // Tool-round prose is a progress note, not part of the finished artifact.
-    if (!chiamate.length) { testo = scritto; break }
+    // Tranne quando il lavoro sta proprio lì: il modello scrive la mail, chiama un attrezzo, e chiude con
+    // «la mail è sopra». Allora vale la stesura di prima (`ritornaAllaStesura`).
+    if (!chiamate.length) { testo = ritornaAllaStesura(scritto, stesure); break }
+    if (scritto.trim()) stesure.push(scritto)
     if (ultimo && !appNativa) throw new Error('Il lavoro non ha prodotto un risultato completo. Riprova.')
 
     /**

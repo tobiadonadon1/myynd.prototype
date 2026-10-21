@@ -823,3 +823,15 @@ test('«parteDi» detto in chat scrive il padre nella colonna, e rifiuta un anel
   assert.match(String(no.content), /sottoprogetto/)
   assert.equal(progetti.trova(myynd.id)!.genitore, null)
 })
+
+test('un lavoro scritto prima di un attrezzo non si perde dietro «è sopra»', async () => {
+  const { ritornaAllaStesura } = await import('./claude.ts')
+  const mail = 'Oggetto: Chiusura per le feste\n\nGentili clienti,\n\nlo studio resterà chiuso dal [data] al [data] per le feste. Per urgenze potete scriverci: risponderemo al rientro. Vi auguriamo buone feste e un sereno anno nuovo.\n\nUn saluto,\nChiara Bianchi'
+  const finale = 'Fatto: la mail ai clienti per la chiusura di Natale è sopra, con le due date da completare.\n\nHo chiamato per errore uno strumento.'
+  const r = ritornaAllaStesura(finale, [mail])
+  assert.match(r, /^Fatto: la mail ai clienti/)
+  assert.match(r, /Gentili clienti/)
+  // una finale vera, lunga, resta com'è
+  const vera = `Fatto: la mail.\n\n${mail}`
+  assert.equal(ritornaAllaStesura(vera, ['Cerco il calendario dello studio.']), vera)
+})

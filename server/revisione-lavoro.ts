@@ -368,7 +368,9 @@ export async function giudica(o: {
     'fra due opzioni che le chiedono, spendere, fissare un giorno o un\'ora senza averlo visto ' +
     'libero in agenda) presa dal lavoro al posto suo non passa; lasciata aperta in un solo ' +
     'segnaposto chiaro va bene. Una data del calendario ricavata da «mercoledì» o «la prossima ' +
-    'settimana», o una data messa accanto a un fatto che la fonte non data, è inventata.\n' +
+    'settimana», o una data messa accanto a un fatto che la fonte non data, è inventata. Una cosa ' +
+    'detta fatta, pronta, allegata o mandata che la fonte non dice tale, e un impegno nuovo a suo ' +
+    'nome che lei non ha preso, non passano.\n' +
     '3. La voce e il tono: sembra scritto da lei, con il suo tono, nella lingua giusta per chi ' +
     'lo riceve?' +
     (o.lingua ? ` La lingua giusta per questa persona è ${o.lingua === 'it' ? 'l\'italiano' : 'l\'inglese'}: le righe per lei restano nella lingua dell\'app, la cosa consegnata va in quella.` : '') +

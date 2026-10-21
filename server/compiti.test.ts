@@ -1284,7 +1284,7 @@ test('P3 · una fonte che manca è un blocco: la riga torna sua con la frase fis
   const lavoroDati = await import('./lavoro-dati.ts')
   const { BLOCCHI } = await import('./domanda-sola.ts')
   let posta = false
-  const { svolgi, ricevute } = svolgiInFila(['I need your mail connected to read Dana\'s thread.', 'Done: the reply to Dana.\n\nHi Dana,\n\nthe invoice is attached.\n\nBest'])
+  const { svolgi, ricevute } = svolgiInFila(['I need your mail connected to read Dana\'s thread.', 'Done: the reply to Dana.\n\nHi Dana,\n\nthe invoice number is in the thread below.\n\nBest'])
   prova({ svolgi, chiedeAiuto: (...a) => claude.chiedeAiuto(...a), domandeDaFare: nessunaDomanda, postaCollegata: () => posta })
   const id = riga('Reply to Dana about the invoice')
   const o = orecchio(id)
@@ -1477,7 +1477,7 @@ test('P3 · (contro) un lavoro sul codice che finisce «chiede» e una revisione
 test('P3 · anche un blocco sulla posta si riprende al più una volta al giorno', async () => {
   const { BLOCCHI } = await import('./domanda-sola.ts')
   compiti.scordaRiprese()
-  const { svolgi } = svolgiInFila(['Done: the reply.\n\nHi Dana,\n\nthe invoice is attached, with the two lines you asked about.\n\nBest'])
+  const { svolgi } = svolgiInFila(['Done: the reply.\n\nHi Dana,\n\nthe invoice number is in the thread below. with the two lines you asked about.\n\nBest'])
   prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true })
   const id = riga('Reply to Dana about the invoice, again')
   const ferma = () => store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.posta, new Date().toISOString(), id)

@@ -94,7 +94,7 @@ export function ComeLaVedo({ v, dopo }: { v: Vals; dopo?: () => void }) {
                   <span className="cv-nome">{r.nome}</span>
                   {r.alta && <span className="pj-alta">{t('Priorità alta')}</span>}
                 </div>
-                <p className={r.fuoco ? 'cv-fuoco' : 'cv-fuoco muto'}>{r.fuoco || t('Non ancora letto')}</p>
+                <p className={r.fuoco ? 'cv-fuoco' : 'cv-fuoco muto'}>{r.fuoco ? r.fuoco.charAt(0).toLocaleUpperCase() + r.fuoco.slice(1) : t('Non ancora letto')}</p>
                 {!!r.perche && <p className="cv-perche">{r.perche}</p>}
               </li>
             )
