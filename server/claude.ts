@@ -12,6 +12,7 @@ import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomia
 import * as attrezzi from './attrezzi.ts'
 import { briefProduzione } from './stile-lavoro.ts'
 import { bloccoVoce } from './parole-sue.ts'
+import { raccogli } from './raccolta.ts'
 import { revisioneVisiva, type RevisioneVisiva } from './revisione-visiva.ts'
 import { existsSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -3340,8 +3341,35 @@ export async function svolgi(
    * prompt, e un obiettivo è proprio quello che si manda a Claude Code.
    */
   const obiettivoNudo = !concessi.length && !doc && modo !== 'prompt' && !appNativa && !dettaglioDellaRiga(nota) && sembraUnObiettivo(compito)
-  /** Cosa è stato fatto con le mani, nell'ordine: la frase di chiusura e chi rilegge partono da qui. */
-  const fatti: mani.Fatto[] = []
+  /*
+   * Prima di scrivere, quello che serve (`raccolta.ts`): le ricerche, le
+   * pagine, le sue cose. Solo per il lavoro affidato (una carta, non la
+   * chat), non per un prompt e non per il lavoro nel codice, che legge la sua
+   * cartella da sé. Le letture entrano nel prompt e fra i fatti delle mani,
+   * così chi rilegge le vede come fonti.
+   */
+  let raccolta: Awaited<ReturnType<typeof raccogli>> | null = null
+  // una riga con i suoi attrezzi dichiarati ha detto cosa apre: la raccolta non apre altro
+  if (esecuzione?.taskId && modo !== 'prompt' && !concessi.length && !(cartella && mani.sembraLavoroDiCodice(compito, nota))) {
+    const delProgetto = esecuzione.mandato?.progetto ? progetti.trova(esecuzione.mandato.progetto) : null
+    // il mandato del progetto vale anche qui: le fonti che lascia leggere, e il web solo se c'è
+    const ilMandato = mandato.di(esecuzione.mandato?.progetto ?? null)
+    const fontiMandato = ilMandato.fonti ? ilMandato.fonti.filter(f => f !== 'web' && !f.includes('/')) : null
+    try {
+      raccolta = await raccogli({
+        compito, nota, lingua: cfgLingua(), signal: esecuzione.signal, carta: esecuzione.taskId,
+        compatto: m?.tipo === 'compatibile', web: !ilMandato.fonti || ilMandato.fonti.includes('web'), fonti: fontiMandato,
+        progetto: delProgetto ? { nome: delProgetto.nome, obiettivo: delProgetto.obiettivo ?? '' } : null,
+        doc: doc ? documento(doc) : null,
+        segna: cosa => { try { onPasso?.({ passo: 'cerco', dettaglio: cosa }) } catch { /* chi ascolta non ferma il lavoro */ } }
+      })
+    } catch (e) {
+      if (esecuzione.signal.aborted) throw e
+      console.warn('myynd · raccolta:', e instanceof Error ? e.message : e)
+    }
+  }
+  /** Cosa è stato fatto con le mani, nell'ordine: la frase di chiusura e chi rilegge partono da qui. Le letture della raccolta per prime. */
+  const fatti: mani.Fatto[] = [...(raccolta?.fatti ?? [])]
   /** La copia in cui Claude Code ha lavorato, se ha lavorato: lì `scrivi_file` può scrivere. */
   let copiaDiLavoro: string | null = null
   const pianoAttuale = progettiPerPiano(domanda).length > 0
@@ -3478,8 +3506,10 @@ export async function svolgi(
   }
   // come scrive a chi riceve (P3, `voce.ts`): prova, non istruzione, prima del brief
   if (esecuzione?.voce) sistemaLavoro += '\n\n' + esecuzione.voce
+  // quello che è andato a prendere prima di cominciare (`raccolta.ts`)
+  if (raccolta?.testo) sistemaLavoro += '\n\n' + raccolta.testo
   // come scrive lui, con le sue parole (`parole-sue.ts`): «it's working like an AI when it should work like me»
-  try { const sue = bloccoVoce(false); if (sue) sistemaLavoro += '\n\n' + sue } catch { /* la voce è un di più */ }
+  try { const sue = bloccoVoce(false, undefined, esecuzione?.consegna ?? cfgLingua()); if (sue) sistemaLavoro += '\n\n' + sue } catch { /* la voce è un di più */ }
   sistemaLavoro += '\n\n' + brief.testo
   const consegna = esecuzione?.consegna
   let ultimaConsegna: (DocumentoCreato & {revisione: Pick<RevisioneVisiva, 'esito' | 'problemi'>}) | undefined

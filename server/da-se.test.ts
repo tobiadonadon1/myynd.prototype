@@ -20,6 +20,8 @@ const cfg = await import('./config.ts')
 const progetti = await import('./progetti.ts')
 const x = await import('./connettori/x.ts')
 const daSe = await import('./da-se.ts')
+const tracce = await import('./tracce.ts')
+const lati = await import('./lato-lati.ts')
 const compiti = await import('./compiti.ts')
 const turno = await import('./turno.ts')
 type Evento = import('./compiti.ts').Evento
@@ -63,6 +65,16 @@ function chiudiLeMie() { for (const c of mie()) store.cambiaStatoCompito(c.id, '
 function ripulisci() {
   chiudiLeMie()
   rmSync(join(cfg.cartella(), 'da-se.json'), { force: true })
+  ciConta()
+}
+/**
+ * Le idee per X e il copione nascono solo per chi ci conta (`motivo.ts`): qui la persona ne ha prese
+ * due di ciascuno, l'ultima decisa adesso, così le prove di questo file guardano il ritmo e il lavoro.
+ */
+function ciConta() {
+  for (const origine of [daSe.ORIGINE_X, daSe.ORIGINE_VIDEO]) {
+    for (const g of ['prova-1', 'prova-2']) { tracce.inizia({ compito: `${origine}-${g}` }); tracce.decidi(`${origine}-${g}`, 'accettato') }
+  }
 }
 
 /** Il modello finto che riesce: due idee che reggono, e un copione che regge. */
@@ -308,7 +320,7 @@ test('il prompt del copione: il progresso con le etichette, la forma, la voce; n
   assert.ok(cartella.some(f => /commit: drafts read the notes/.test(f.testo)), JSON.stringify(cartella))
   assert.ok(cartella.some(f => /notes: 0\.3: drafts read your notes before writing/.test(f.testo)), JSON.stringify(cartella))
   const p = daSe.promptVideo({ progetto: myynd, foto, progresso, cartella, post: daSe.suoiPost(ORA), lingua: 'en' })
-  assert.match(p.utente, /From the project folder \(commits and his notes\):\n\[C1\] /)
+  assert.match(p.utente, /From the project folder \(commits and their notes\):\n\[C1\] /)
   const tutto = `${p.system}\n${p.utente}`
   assert.match(p.utente, /\[E1\] .*Launched the notes sync|\[E\d\] .*Shipped v0\.3/)
   assert.match(p.utente, /\[P2\] In short: Myynd drafts replies overnight/)
@@ -369,7 +381,10 @@ test('la rilettura: una seconda chiamata riscrive il lotto con i problemi trovat
     chiedi: (async (o: { system: string; messages: { content: string }[] }) => { chiamate.push({ system: o.system, utente: o.messages[0]!.content }); return chiamate.length === 1 ? deboli : IDEE_BUONE }) as never,
     salva: salvaFinta
   })
+  // quaranta giorni dopo le carte prese non contano più: qui ha detto di sì al lato x
+  lati.aggiorna(st => { st.scelto = { id: 'x', esito: 'Post on X', progetto: null, quando: new Date(ORA).toISOString() } as never })
   const id = (await daSe.giro(ORA + 40 * GIORNO, { pronto: SI, pagina: () => false })).find(x => x.startsWith('idee-x-'))
+  lati.aggiorna(st => { st.scelto = null as never })
   assert.ok(id)
   const e = await daSe.lavora(store.compito(id!)!, { adesso: ORA + 40 * GIORNO })
   assert.equal(chiamate.length, 2)
@@ -542,7 +557,7 @@ test('il campione della sua voce dall\'archivio entra nei prompt come voce, non 
   const m = daSe.materialeX(ORA)!
   assert.equal(m.voce[0], 'Most founders don\'t need more tools. They need fewer tabs.')
   const p = daSe.promptX(m)
-  assert.match(p.utente, /His most engaged posts ever, from his archive \(his voice; not facts to cite\):\n- Most founders/)
+  assert.match(p.utente, /Their most engaged posts ever, from their archive \(their voice; not facts to cite\):\n- Most founders/)
   assert.ok(![...p.fonti.values()].some(f => f.testo.includes('fewer tabs')), 'il campione non si cita')
   const v = daSe.promptVideo({ progetto: myynd, foto: null, progresso: [], post: daSe.suoiPost(ORA), lingua: 'en' })
   assert.match(v.utente, /Ship on Friday\. Fix on Saturday/)

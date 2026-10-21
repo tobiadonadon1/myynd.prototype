@@ -38,6 +38,7 @@
 import { createHash } from 'node:crypto'
 import db from './store.ts'
 import * as store from './store.ts'
+import * as motivo from './motivo.ts'
 import * as quotaMese from './quota-mese.ts'
 import * as cfg from './config.ts'
 import * as chi from './chi.ts'
@@ -92,7 +93,7 @@ export type Candidato = {
 export type Stato = 'proposto' | 'scelto' | 'trattenuto' | 'scartato' | 'scaduto'
 /** Perché un candidato non è stato scelto, in una parola. */
 export type Motivo =
-  | 'scaduto' | 'doppione' | 'gia_scartato' | 'prove_vecchie' | 'mandato' | 'budget_progetto' | 'fonte'
+  | 'scaduto' | 'senza_motivo' | 'doppione' | 'gia_scartato' | 'prove_vecchie' | 'mandato' | 'budget_progetto' | 'fonte'
   | 'poco_valore' | 'mese' | 'notte'
 
 /** Gli stati che tornano in gara al giro dopo. */
@@ -273,6 +274,9 @@ export function valuta(cs: readonly Candidato[], m: Mondo): Decisione[] {
     const giorno = 86_400_000
     if (!doc && m.recenti.some(r => r.scartato && stesso(r.progetto) && adesso - Date.parse(r.quando) <= GIORNI_SCARTATI * giorno && simile(r.testo, c.titolo))) { scarta(c, 'scartato', 'gia_scartato', p); continue }
     if (!doc && !RICORRENTI.includes(c.genere) && m.recenti.some(r => !r.scartato && stesso(r.progetto) && adesso - Date.parse(r.quando) <= GIORNI_FATTI * giorno && simile(r.testo, c.titolo))) { scarta(c, 'scartato', 'doppione', p); continue }
+    // una riga nella sua lista ha una ragione: l'ha chiesta, qualcuno aspetta, l'ha promessa (`motivo.ts`)
+    // (chiesta adesso con un suo gesto, `presto`, la ragione c'è già)
+    if (!m.presto?.has(c.id) && !motivo.motivoDi({ origine: c.carta.origine, doc, progetto: c.progetto }, m.adesso.getTime())) { scarta(c, 'scartato', 'senza_motivo', p); continue }
     if (proveVecchie(c, m.adesso)) { scarta(c, 'scartato', 'prove_vecchie', p); continue }
     if (c.classi.some(k => m.regola(c.progetto, k) === 'mai')) { scarta(c, 'trattenuto', 'mandato', p); continue }
     if (m.budgetFinito(c.progetto)) { scarta(c, 'trattenuto', 'budget_progetto', p); continue }

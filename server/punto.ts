@@ -39,6 +39,7 @@ import { radice } from './lingua.ts'
 import { documentoVero } from './veri.ts'
 import { classificaAttenzione, validaVoceFeed } from './rilevanza.ts'
 import * as store from './store.ts'
+import { aspetta } from './motivo.ts'
 import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import { giornoIn, parti } from './fuso.ts'
@@ -1387,7 +1388,8 @@ function ancoraViva(m: Materiale, adesso: number): { ancora: Ancora; creati: () 
         if (!testo) return null
         // Feedback and project state may have changed while the model worked.
         const fonte = doc ? store.documento(doc) : null
-        if (!fonte || store.docsIgnoratiDalFeed([fonte]).has(fonte.id) ||
+        // una riga del punto ha la sua ragione: una persona che aspetta una risposta (`motivo.ts`)
+        if (!fonte || !aspetta(fonte) || store.docsIgnoratiDalFeed([fonte]).has(fonte.id) ||
           store.docsConRiga([fonte.id]).has(fonte.id) || store.docsSulFeed([fonte.id]).has(fonte.id)) return null
         if (progetto && progetti.trova(progetto)?.stato !== 'attivo') return null
         if (!validaVoceFeed({ titolo: testo, testo: nota ?? '', perche: (nota ?? '').slice(0, 200), prova }, fonte)) return null

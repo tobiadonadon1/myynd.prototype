@@ -47,7 +47,7 @@ function lavoro(chiave: string, o: Partial<import('./candidati.ts').Candidato> =
     id: `lavoro:${chiave}`, genere: 'lavoro', progetto: null, titolo: `Work ${chiave}`, risultato: 'A file in the Myynd folder.',
     perche: 'The project moved.', prove: [], eventAt: null, valore: 0.7, incertezza: 0.2, costo: 0.2, classi: ['file'],
     chiave, scade: iso(ORA.getTime() + GIORNO),
-    carta: { testo: o.titolo ?? `Work ${chiave}`, modo: 'tutto', origine: 'quadro' },
+    carta: { testo: o.titolo ?? `Work ${chiave}`, modo: 'tutto', origine: 'prova' },
     ...o
   }
 }
@@ -249,7 +249,7 @@ test('14 · la carta nasce in un modo solo: riga, coda, contratto, traccia col c
   candidati.proponi(c)
   const [id] = candidati.decidi(ORA, { presto: [c.id] }).scelti
   const k = store.compito(id)!
-  assert.equal(k.origine, 'quadro')
+  assert.equal(k.origine, 'prova')
   assert.equal(k.turno?.quando, 'presto')
   assert.ok(k.contratto?.criterio)
   assert.equal(tracce.ultimaDi(id)!.candidato, c.id)

@@ -122,16 +122,19 @@ function ciConta(origine: string) {
 
 // — senza un lato —
 
-test('senza un lato scelto il giro non propone niente, e le idee per X e il copione nascono come prima', async () => {
+test('senza un lato scelto il giro non propone niente, e le idee per X e il copione non nascono: nessuno li ha chiesti', async () => {
   investitori()
   lavoro.perProva({ chiedi: (async () => tre()) as never })
   assert.deepEqual(await lavoro.giro(ORA, { pronto: SI }), [])
   assert.equal(candidati.aperti().filter(c => lati.suo(c.carta.origine)).length, 0)
-  assert.equal(lavoro.tieneRicorrente('x', ORA), true)
-  assert.equal(lavoro.tieneRicorrente('video', ORA), true)
+  assert.equal(lavoro.tieneRicorrente('x', ORA), false)
+  assert.equal(lavoro.tieneRicorrente('video', ORA), false)
   postX()
   const nate = await daSe.giro(ORA, { pronto: SI, pagina: () => false })
-  assert.ok(nate.some(id => id.startsWith('idee-x-')), nate.join(', '))
+  assert.ok(!nate.some(id => id.startsWith('idee-x-')), nate.join(', '))
+  // due prese in due settimane sono il suo segno: allora sì
+  ciConta(daSe.ORIGINE_X)
+  assert.equal(lavoro.tieneRicorrente('x', ORA), true)
 })
 
 // — investitori —
@@ -181,6 +184,7 @@ test('investitori: fino a tre candidati del lato, col progetto, il messaggio arr
 
 test('due carte buttate di fila fermano il modello fisso, e fermo resta fermo', async () => {
   // il 19 ottobre: «this is not important… not in my plans for now», e i copioni arrivavano il 20 e il 21 lo stesso
+  scegli('video')
   tracce.inizia({ compito: 'copione-video-p1-2026-10-19' }); tracce.decidi('copione-video-p1-2026-10-19', 'scartato')
   assert.equal(lavoro.tieneRicorrente('video', ORA), true, 'una sola buttata non ferma niente')
   tracce.inizia({ compito: 'copione-video-p1-2026-10-19' }); tracce.decidi('copione-video-p1-2026-10-19', 'scartato')

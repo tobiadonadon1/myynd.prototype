@@ -18,6 +18,7 @@ writeFileSync(join(dati, 'config.json'), JSON.stringify({ lingua: 'en', nome: 'T
 const store = await import('./store.ts')
 const progetti = await import('./progetti.ts')
 const quadro = await import('./quadro.ts')
+const mandato = await import('./mandato.ts')
 const priorita = await import('./priorita.ts')
 const riordino = await import('./riordino.ts')
 const domande = await import('./domande.ts')
@@ -101,9 +102,11 @@ test('una risposta qualunque al riordino non tocca niente', () => {
   assert.ok(progetti.trova(x.id) && progetti.trova(y.id))
 })
 
-test('il lavoro che fa da sé va in coda per la notte, non sul feed; la domanda sull\'obiettivo solo quando non si capisce', async () => {
+test('il lavoro che fa da sé va in coda per la notte dove il mandato è confermato, non sul feed; la domanda sull\'obiettivo solo quando non si capisce', async () => {
   for (const d of store.domandeConTema('')) if (d.stato === 'aperta') store.chiudiDomanda(d.id, 'ignorata')
   const sito = progetti.scrivi({ nome: 'tobiadonadon.com', obiettivo: '' })
+  // il suo sì: lavora da sé su questo progetto (`motivo.ts`)
+  mandato.salva(sito.id, { esito: 'Sell the info products on the site' }, { conferma: true, origine: 'lei' })
   const vaga = progetti.scrivi({ nome: 'Orbita' })
   store.salvaDocumenti([
     { id: 'lavoro:/Users/t/Desktop/tobiaweb', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: tobiaweb', corpo: 'README: the source of tobiadonadon.com. The blog lives in /blog.', percorso: '/Users/t/Desktop/tobiaweb', quando: giorniFa(0) }
@@ -165,7 +168,7 @@ test('la consegna del quadro va nella sottocartella del progetto, come documento
   assert.ok(strano.percorso.startsWith(join(scrivania, 'Myynd')), 'un nome storto non esce dalla cartella')
 })
 
-test('quello che solo lui può fare va nella sua lista di oggi; una domanda su una cosa vista va nelle note', async () => {
+test('quello che solo lui può fare è una carta del feed, non una riga che nessuno ha chiesto; una domanda su una cosa vista va nelle note', async () => {
   for (const d of store.domandeConTema('')) if (d.stato === 'aperta') store.chiudiDomanda(d.id, 'ignorata')
   store.default.prepare("DELETE FROM domande").run()
   const ev = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Get Evermute approved in the US' })
@@ -187,12 +190,11 @@ test('quello che solo lui può fare va nella sua lista di oggi; una domanda su u
   priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [], domande: [], superate: [] })) as never })
   priorita.dimentica()
   await priorita.forse(true)
-  const riga = store.elencoCompiti().find(c => c.testo === 'Ask Tommaso for signing access on build 15')
-  assert.ok(riga, 'nella sua lista')
-  assert.equal(riga.modo, 'io')
-  assert.equal(riga.giorno, new Date().toLocaleDateString('en-CA'), 'di oggi')
-  assert.match(riga.nota ?? '', /I draft the two line message to Tommaso/)
-  assert.ok(!(feedAttuale() as Record<string, unknown>[]).some(v => v.titolo === riga.testo), 'non anche come carta')
+  // il 21 ottobre: «there is no reason for it to create action items that have nothing to do with the actual things I have to do»
+  assert.ok(!store.elencoCompiti().some(c => c.testo === 'Ask Tommaso for signing access on build 15'), 'una mossa del quadro non entra nella lista da sola')
+  const carta = (feedAttuale() as Record<string, unknown>[]).find(v => v.titolo === 'Ask Tommaso for signing access on build 15')
+  assert.ok(carta, 'è una carta, che lui prende o lascia')
+  assert.match(String(carta.offerta), /I draft the two line message to Tommaso/)
   const d = store.domandeConTema(priorita.TEMA_QUADRO).find(x => x.stato === 'aperta')
   assert.ok(d && d.tema.startsWith('quadro:osservazione:'), 'la domanda su una cosa vista, anche con l\'obiettivo chiaro')
   const { esito } = await domande.rispondiADomanda(d.id, 'No, swap them for the English ones')

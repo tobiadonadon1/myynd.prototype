@@ -21,6 +21,8 @@ import * as memoria from './memoria.ts'
 import * as cfg from './config.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
+import { bloccoVoce } from './parole-sue.ts'
+import { tipoProduzione } from './stile-lavoro.ts'
 import { radice } from './lingua.ts'
 import type { Progetto } from './progetti.ts'
 import { chiusuraVera, fattiInRighe, lettureInEstratto, type Fatto } from './mani.ts'
@@ -329,6 +331,12 @@ export async function giudica(o: {
       'apertamente come un segnaposto da riempire.'
 
   const carta = memoria.carta()
+  // le parole sue (`parole-sue.ts`): il metro della voce per ogni lavoro, non solo per le mail
+  let sue = ''
+  try { sue = bloccoVoce(false, undefined, o.lingua ?? cfg.lingua()) } catch { /* la voce è un di più */ }
+  // severa solo per quello che esce come parole sue (una mail, un messaggio, un post): un rapporto o un
+  // foglio hanno la loro struttura, e bocciarli perché «sembrano un modulo» sarebbe sbagliato
+  const prosa = !!o.voce || tipoProduzione(o.compito.testo) === 'email' || /\b(?:post|tweet|message|messaggio|reply|risposta|caption|bio|letter|lettera|note to|nota a)\b/i.test(o.compito.testo)
   const sistema =
     'Sei il revisore di un lavoro che un assistente ha fatto per una persona: prima di dirlo ' +
     'pronto, lo rileggi due volte. Una come lei, che lo firma e lo manda. Una come chi lo ' +
@@ -361,6 +369,10 @@ export async function giudica(o: {
     'lo riceve?' +
     (o.lingua ? ` La lingua giusta per questa persona è ${o.lingua === 'it' ? 'l\'italiano' : 'l\'inglese'}: le righe per lei restano nella lingua dell\'app, la cosa consegnata va in quella.` : '') +
     (o.voce ? `\nCome le scrive davvero, dalle sue mail: ${o.voce}` : '') +
+    (sue ? `\n${sue}\nConfronta la cosa consegnata con queste parole sue, per lo stile e basta: un fatto, un nome o un'istruzione presi da qui e non dal compito o dalle fonti è inventato. ` +
+      (prosa
+        ? 'Se suona levigata, generica o come la scriverebbe un modello (frasi che lei non direbbe, parole che non usa, una struttura da modulo, enfasi, chiusure di circostanza), non passa: fra i problemi scrivi le frasi precise e come le direbbe lei.'
+        : 'Questo è un documento, non un messaggio: la struttura che gli serve va bene. Guarda solo che le frasi siano piane come le sue, senza enfasi né riempitivi; se non lo sono, scrivilo fra i problemi, ma non bocciarlo per la forma.') : '') +
     '\n' +
     '4. La lunghezza: quanta ne serve a chi legge, non di più e non di meno.\n' +
     '5. La riga finale per lei, se c\'è: quando il lavoro contiene cifre o date, deve dire da ' +

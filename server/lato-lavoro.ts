@@ -35,9 +35,9 @@
 // messaggi arrivati: un filo dove ha scritto lui per ultimo non ha un
 // messaggio della controparte a cui rispondere nella casella, e resta fuori.
 //
-// Le idee per X e il copione video (`da-se.ts`) nascono solo se lui ci conta
-// (`tieneRicorrente`): nessun lato scelto ancora, il lato è proprio quello, o
-// ne ha prese almeno due in quattordici giorni. Notion non cambia.
+// Le idee per X e il copione video (`da-se.ts`) nascono solo se la persona ci
+// conta (`tieneRicorrente`): il lato detto di sì è proprio quello, o ne ha
+// prese almeno due in quattordici giorni. Notion non cambia.
 
 import { createHash } from 'node:crypto'
 import db from './store.ts'
@@ -458,10 +458,10 @@ export function buttatoDal(genere: 'x' | 'video'): string | null {
 }
 
 /**
- * Le idee per X e il copione video nascono ancora? Sì finché non ha scelto un
- * lato (niente cambia finché non risponde), sì se il lato è proprio quello, e
- * sì se ci conta: almeno due carte di quel modello prese (com'erano o
- * ritoccate) in quattordici giorni.
+ * Le idee per X e il copione video nascono ancora? Sì se il lato che ha
+ * detto di sì è proprio quello, e sì se ci conta: almeno due carte di quel
+ * modello prese (com'erano o ritoccate) in quattordici giorni. Senza nessuno
+ * dei due no: prima del 21 ottobre nascevano per chi non aveva scelto niente.
  *
  * Prima di tutto: le ultime due carte di quel modello buttate, una dopo
  * l'altra, e il modello si ferma. Il 19 ottobre aveva scritto del copione
@@ -472,13 +472,15 @@ export function buttatoDal(genere: 'x' | 'video'): string | null {
  */
 export function tieneRicorrente(genere: 'x' | 'video', adesso = Date.now()): boolean {
   if (buttatoDal(genere)) return false
+  // senza un lato scelto non nascono più «come prima»: una cosa che nessuno ha chiesto non è
+  // lavoro suo (`motivo.ts`). Il lato detto di sì, o due carte prese, sono il suo segno.
   const s = lati.scelto()
-  if (!s || s.id === genere) return true
+  if (s?.id === genere) return true
   const origine = genere === 'x' ? ORIGINE_X : ORIGINE_VIDEO
   try {
     const dal = new Date(adesso - GIORNI * GIORNO).toISOString()
     const r = db.prepare(`SELECT COUNT(DISTINCT compito) AS n FROM tracce WHERE compito LIKE ? AND utente = ? AND esito IN ('accettato','modificato') AND COALESCE(decisa, creata) >= ?`)
       .get(`${origine}-%`, chi.adesso() ?? '', dal) as { n: number } | undefined
     return (r?.n ?? 0) >= RICORRENTE_MIN
-  } catch { return true }
+  } catch { return false }
 }

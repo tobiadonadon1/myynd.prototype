@@ -503,6 +503,7 @@ export type Lavoro =
   | 'domande'       // cosa gli serve sapere per andare avanti, con le opzioni
   | 'rassegna'      // quali titoli di giornale vale la pena leggere stamattina
   | 'contratto'     // cosa vuol dire «fatto» per una carta, prima di lavorarla (F1)
+  | 'raccolta'      // cosa andare a prendere prima di un lavoro: ricerche, pagine, le sue cose
   | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
   | 'priorita'      // cosa dovrebbe fare adesso, guardando tutto: le fonti non lo chiedono, lo propone lui
@@ -661,6 +662,12 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * senza modello c'è la base deterministica: `media` basta e avanza.
    */
   contratto:  { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 30_000 },
+  /*
+   * La raccolta (`raccolta.ts`): cosa deve andare a vedere un professionista
+   * bravo prima di fare questo lavoro. Frontiera, perché è lì che si decide
+   * la qualità di tutto quello che segue; una chiamata corta, una per carta.
+   */
+  raccolta:   { livello: 'frontiera', ragiona: false, sforzo: 'low',  attesa: 45_000 },
 
   // Manovre interne: il locale le fa uguale.
   //

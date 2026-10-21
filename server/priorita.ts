@@ -36,6 +36,7 @@ import * as store from './store.ts'
 import * as progetti from './progetti.ts'
 import * as desktop from './connettori/desktop.ts'
 import * as riferimento from './riferimento.ts'
+import * as motivo from './motivo.ts'
 import { cartella, lingua, nellaLingua } from './config.ts'
 import { fuoco } from './timone.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
@@ -892,21 +893,23 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   ]
   const alti = new Set(progetti.elenco('attivo').filter(p => p.priorita === 'alta').map(p => p.id))
 
-  // il lavoro che fa Myynd da sé: in coda per stanotte, e il risultato torna nel blocco del progetto
-  const lavori = quadro.scegli(quadri, gia, alti, ['lavoro'])
+  // il lavoro che fa Myynd da sé, in coda per stanotte: solo dove la persona ha confermato il mandato
+  // del progetto. Altrove una mossa del quadro non è una riga sua (`motivo.ts`): è una carta del feed,
+  // che prende con un gesto o lascia. Prima finivano in lista anche gli «sblocco», e la lista si
+  // riempiva di cose che nessuno aveva chiesto.
+  // (i progetti col mandato si filtrano prima della scelta: dopo, il tetto delle carte li lasciava fuori)
+  const conMandato = new Set(quadri.filter(q => motivo.mandatoConfermato(q.progetto)).map(q => q.progetto))
+  const lavori = quadro.scegli(quadri.filter(q => conMandato.has(q.progetto)), gia, alti, ['lavoro'])
   const messi = mettiAlLavoro(lavori)
 
-  // quello che può fare solo lui va nella sua lista di oggi, non solo sul feed:
-  // «the ones that I should do, should be on my to-do list» (2 ottobre)
-  const sue = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo)], alti, ['sblocco'])
-  const inLista = mettiInLista(sue)
-
-  // le carte: i consigli
-  const scelte = quadro.scegli(quadri, [...gia, ...messi.map(m => m.titolo), ...inLista.map(m => m.titolo)], alti, ['consiglio'])
+  // le carte: i consigli, gli sblocchi e il lavoro che aspetta il suo sì. Il lavoro di un progetto col
+  // mandato non va sul feed: aspetta il suo posto nella notte, che è quello che lei ha chiesto
+  const perIlFeed = quadri.map(q => conMandato.has(q.progetto) ? { ...q, mosse: q.mosse.filter(m => m.genere !== 'lavoro') } : q)
+  const scelte = quadro.scegli(perIlFeed, [...gia, ...messi.map(m => m.titolo)], alti, ['consiglio', 'sblocco', 'lavoro'])
   const domande = salvaDomandeSullObiettivo(quadri)
   if (!scelte.length) {
-    quadro.segnaMesse([...messi, ...inLista])
-    return { quadri, titoli: [...messi, ...inLista].map(m => m.titolo), salvate: messi.length + inLista.length + domande }
+    quadro.segnaMesse(messi)
+    return { quadri, titoli: messi.map(m => m.titolo), salvate: messi.length + domande }
   }
   const adessoIso = new Date().toISOString()
   /*
@@ -933,8 +936,8 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   const salvate = tenute.length ? store.salvaFeed(tenute.map(voceDelFeed)) : 0
   if (salvate) console.log(`myynd · quadro · ${salvate} carte sul feed: ${tenute.map(t => t.titolo).join(' · ')}`)
   // segnate anche se `salvaFeed` le ha fermate come doppioni: in un caso o nell'altro non vanno riproposte
-  quadro.segnaMesse([...scelte, ...messi, ...inLista])
-  return { quadri, titoli: [...tenute.map(t => t.titolo), ...messi.map(m => m.titolo), ...inLista.map(m => m.titolo)], salvate: salvate + messi.length + inLista.length + domande }
+  quadro.segnaMesse([...scelte, ...messi])
+  return { quadri, titoli: [...tenute.map(t => t.titolo), ...messi.map(m => m.titolo)], salvate: salvate + messi.length + domande }
 }
 
 /** Quante righe nate dal quadro possono aspettare o lavorare insieme: oltre, il lavoro nuovo aspetta. */
@@ -987,23 +990,6 @@ export function candidatoDelLavoro(m: quadro.Scelta, adesso = new Date()): candi
     chiave: id, scade: new Date(adesso.getTime() + 3 * 86_400_000).toISOString(),
     carta: { id, testo: m.titolo, nota, modo: 'tutto', origine: ORIGINE_QUADRO }
   }
-}
-
-/**
- * Quello che solo lui può fare, nella sua lista di oggi: una riga sua, sotto
- * il progetto, con nella nota quello che Myynd prepara se gliela passa.
- */
-function mettiInLista(sue: quadro.Scelta[]): quadro.Scelta[] {
-  const messe: quadro.Scelta[] = []
-  const oggi = new Date().toLocaleDateString('en-CA')
-  for (const m of sue.slice(0, 2)) {
-    const id = `quadro-${impronta(`${m.progetto}:${m.titolo}`)}`
-    if (store.compito(id)) continue
-    store.scriviCompito({ id, testo: m.titolo, nota: `${m.testo}\nSe me la passi: ${m.offerta}`, progetto: m.progetto, origine: ORIGINE_QUADRO, quando: 'oggi', giorno: oggi, ordine: fra(store.ultimoOrdine('oggi'), '') })
-    messe.push(m)
-    console.log(`myynd · quadro · nella tua lista di oggi: ${m.titolo}`)
-  }
-  return messe
 }
 
 /**
