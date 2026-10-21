@@ -100,6 +100,11 @@ export function contieneRichiesta(testo: string): boolean {
   return RICHIESTA.test(testo) || DOMANDA_DIRETTA.test(testo)
 }
 
+/** Un file che ha scritto Myynd: la cartella delle consegne sulla Scrivania, o quella nascosta. Non è lavoro suo. */
+export function eConsegna(percorso: string | null | undefined): boolean {
+  return /(?:^|[/\\])Desktop[/\\]Myynd(?:[/\\]|$)|(?:^|[/\\])\.myynd[/\\]deliverables(?:[/\\]|$)/i.test(percorso ?? '')
+}
+
 export type Attenzione = { destinazione: 'feed' | 'brief' | 'ignora'; motivo: string }
 export function classificaAttenzione(
   d: Documento,
@@ -107,7 +112,7 @@ export function classificaAttenzione(
 ): Attenzione {
   const no = (motivo: string): Attenzione => ({ destinazione: 'ignora', motivo })
   if (suppressSender(d)) return no('mittente_archiviato_dalla_persona')
-  if (/(?:^|[/\\])Desktop[/\\]Myynd(?:[/\\]|$)|(?:^|[/\\])\.myynd[/\\]deliverables(?:[/\\]|$)/i.test(d.percorso ?? '')) return no('consegna_gia_preparata')
+  if (eConsegna(d.percorso)) return no('consegna_gia_preparata')
   const adesso = opzioni.adesso ?? Date.now()
   const quando = Date.parse(d.quando ?? '')
   const giorni = Math.max(1, Math.min(30, opzioni.giorniMax ?? GIORNI_ATTENZIONE))

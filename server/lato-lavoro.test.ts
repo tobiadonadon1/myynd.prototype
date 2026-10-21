@@ -179,6 +179,22 @@ test('investitori: fino a tre candidati del lato, col progetto, il messaggio arr
 
 // — i modelli fissi —
 
+test('due carte buttate di fila fermano il modello fisso, e fermo resta fermo', async () => {
+  // il 19 ottobre: «this is not important… not in my plans for now», e i copioni arrivavano il 20 e il 21 lo stesso
+  tracce.inizia({ compito: 'copione-video-p1-2026-10-19' }); tracce.decidi('copione-video-p1-2026-10-19', 'scartato')
+  assert.equal(lavoro.tieneRicorrente('video', ORA), true, 'una sola buttata non ferma niente')
+  tracce.inizia({ compito: 'copione-video-p1-2026-10-19' }); tracce.decidi('copione-video-p1-2026-10-19', 'scartato')
+  assert.equal(lavoro.tieneRicorrente('video', ORA), true, 'la stessa carta decisa due volte non fa due di fila')
+  tracce.inizia({ compito: 'copione-video-p2-2026-10-20' }); tracce.decidi('copione-video-p2-2026-10-20', 'scartato')
+  assert.ok(lavoro.buttatoDal('video'))
+  assert.equal(lavoro.tieneRicorrente('video', ORA), false)
+  tracce.inizia({ compito: 'idee-x-2026-10-19' }); tracce.decidi('idee-x-2026-10-19', 'scartato')
+  tracce.inizia({ compito: 'idee-x-2026-10-20' }); tracce.decidi('idee-x-2026-10-20', 'scartato')
+  assert.equal(lavoro.tieneRicorrente('x', ORA), false)
+  postX()
+  assert.ok(!(await daSe.giro(ORA, { pronto: SI, pagina: () => false })).some(id => id.startsWith('idee-x-')), 'con i post ma due buttate di fila: niente')
+})
+
 test('le idee per X e il copione non nascono col lato investitori, fatture, partner o clienti se non ci conta; nascono col lato x o video, e con due prese in 14 giorni', async () => {
   for (const id of ['investitori', 'fatture', 'partner', 'clienti'] as const) {
     pulisci()

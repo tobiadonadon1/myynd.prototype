@@ -42,15 +42,12 @@ export function progettoDelTesto(testo: string): string | null {
  * della riga.
  */
 export function cercatoreDiProgetti(): (testo: string) => string | null {
-  const attivi = [...progetti.elenco('attivo')].sort((a, b) => b.nome.length - a.nome.length)
-  // gli altri nomi: quelli scritti nella Memoria e quelli fra parentesi nel riferimento
-  const alias = [...riferimento.alias()]
-  return testo => {
-    const trovato = attivi.find(p => nominaAmbito(testo, p.nome))?.id
-    if (trovato) return trovato
-    for (const [nome, id] of alias) if (nominaAmbito(testo, nome)) return id
-    return null
-  }
+  // i nomi dei progetti attivi, poi gli altri nomi: quelli scritti nella Memoria e quelli fra parentesi nel riferimento
+  const nomi: [string, string][] = progetti.elenco('attivo').map(p => [p.nome, p.id])
+  for (const [nome, id] of riferimento.alias()) if (!nomi.some(([n]) => n.toLowerCase() === nome)) nomi.push([nome, id])
+  // vince il nome che viene prima nel testo, non il più lungo: «Draft the X posts that announce
+  // Myynd for Nextas» è di Myynd; a pari posto il più lungo («H-Farm audit» batte «H-Farm»)
+  return testo => riferimento.diChiERiga(testo, nomi)
 }
 
 /** Una carta come la legge la pagina: la riga del feed più quello che si calcola a ogni caricamento. */

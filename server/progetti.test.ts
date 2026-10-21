@@ -127,11 +127,13 @@ test('la riga per il modello: nome, obiettivo, stato; senza i chiusi, e al massi
 
 // — cosa tocca un progetto —
 
-test('«tocca»: il nome intero, o due parole distintive dell’obiettivo; una sola no', () => {
+test('«tocca»: il nome intero o un alias; le parole dell’obiettivo no', () => {
   const p = { nome: 'Nextas', obiettivo: 'Chiudere il round seed con Bianchi entro ottobre' }
   assert.deepEqual(progetti.paroleDi(p), ['chiudere', 'round', 'seed', 'bianchi', 'ottobre'])
   assert.ok(progetti.tocca(p, 'Re: NEXTAS — aggiornamento'), 'il nome, maiuscolo, non è stato riconosciuto')
-  assert.ok(progetti.tocca(p, 'Bianchi conferma per il round'), 'due parole dell’obiettivo non bastano')
+  // «Solidify AI systems to streamline company efforts» si prendeva ogni testo con «systems» e «company»
+  assert.ok(!progetti.tocca(p, 'Bianchi conferma per il round'), 'due parole dell’obiettivo hanno fatto passare un documento')
+  assert.ok(!progetti.tocca({ nome: 'H-Farm', obiettivo: 'Solidify AI systems to streamline company efforts' }, 'Trey: written systems would make the company worth more'))
   assert.ok(!progetti.tocca(p, 'Il round di golf di domenica'), 'una parola sola ha fatto passare un documento')
   assert.ok(!progetti.tocca(p, 'Fattura della luce di settembre'))
   // un obiettivo di una parola non ha «due parole distintive»: solo il nome conta

@@ -186,7 +186,7 @@ export function inviatiVerso(indirizzo: string, limite = 12): store.Documento[] 
   // giorni (idx_doc_quando); si uniscono qui, senza doppioni, le più recenti prima
   const perFilo = db.prepare(`
     SELECT ${CAMPI} FROM documenti
-    WHERE inviato = 1 AND filo IS NOT NULL AND filo NOT LIKE 's:%' AND filo IN (
+    WHERE inviato = 1 AND tipo = 'email' AND filo IS NOT NULL AND filo NOT LIKE 's:%' AND filo IN (
       SELECT filo FROM documenti WHERE autoreIndirizzo = ? AND inviato = 0 AND filo IS NOT NULL
     )
     ORDER BY quando DESC
@@ -196,7 +196,7 @@ export function inviatiVerso(indirizzo: string, limite = 12): store.Documento[] 
   const cercato = `%,${chi.replace(/[\\%_]/g, x => `\\${x}`)},%`
   const perDestinatari = db.prepare(`
     SELECT ${CAMPI} FROM documenti
-    WHERE inviato = 1 AND quando >= ? AND destinatari IS NOT NULL AND (',' || destinatari || ',') LIKE ? ESCAPE '\\'
+    WHERE inviato = 1 AND tipo = 'email' AND quando >= ? AND destinatari IS NOT NULL AND (',' || destinatari || ',') LIKE ? ESCAPE '\\'
     ORDER BY quando DESC
     LIMIT ?
   `).all(da, cercato, limite) as Record<string, unknown>[]
@@ -208,9 +208,13 @@ export function inviatiVerso(indirizzo: string, limite = 12): store.Documento[] 
   return documenti(insieme)
 }
 
-/** Le ultime mail che ha mandato, a chiunque: la voce di tutti i giorni. */
+/**
+ * Le ultime mail che ha mandato, a chiunque: la voce di tutti i giorni. Solo
+ * mail: `inviato` vale anche per i post pubblicati dal suo account, e il 21
+ * ottobre 25 delle ultime 30 «mail» erano post scritti da x-engine.
+ */
 export function ultimiInviati(n = 30): store.Documento[] {
-  const righe = db.prepare(`SELECT ${CAMPI} FROM documenti WHERE inviato = 1 ORDER BY quando DESC LIMIT ?`).all(n) as Record<string, unknown>[]
+  const righe = db.prepare(`SELECT ${CAMPI} FROM documenti WHERE inviato = 1 AND tipo = 'email' ORDER BY quando DESC LIMIT ?`).all(n) as Record<string, unknown>[]
   return documenti(righe)
 }
 

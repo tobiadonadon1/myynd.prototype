@@ -255,13 +255,19 @@ test('il copione: al progetto che si è mosso abbastanza, una volta alla settima
   // il giorno dopo, con altro progresso su Myynd: dentro la settimana, niente
   chiusa('Shipped v0.3 with the receipt', myynd.id)
   assert.equal((await daSe.giro(ORA + GIORNO, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-')).length, 0)
-  // otto giorni dopo, senza niente di nuovo: niente; con un traguardo nuovo: il copione
+  // otto giorni dopo, senza niente di nuovo: niente; e un traguardo riscritto dal quadro non è niente di nuovo
+  // (il 21 ottobre un traguardo riformulato ha fatto vincere H-Farm, dove lui non aveva toccato niente)
   assert.equal((await daSe.giro(ORA + 8 * GIORNO, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-')).length, 0)
   quadri({
     [myynd.id]: { sintesi: 'Myynd drafts replies overnight.', traguardo: 'Ten paying founders by December' },
     [evermute.id]: { sintesi: 'Evermute is a sleep app.', traguardo: 'App Store review' }
   })
-  const dopo = (await daSe.giro(ORA + 8 * GIORNO + 3_600_000, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-'))
+  assert.equal((await daSe.giro(ORA + 8 * GIORNO + 3_600_000, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-')).length, 0)
+  // con lavoro suo nuovo, sì
+  for (const t of ['Launched the notes sync to everyone', 'Shipped v0.4 with the receipt']) {
+    store.default.prepare('UPDATE compiti SET chiuso = ? WHERE id = ?').run(new Date(ORA + 8 * GIORNO).toISOString(), chiusa(t, myynd.id))
+  }
+  const dopo = (await daSe.giro(ORA + 8 * GIORNO + 7_200_000, { pronto: SI, pagina: () => false })).filter(id => id.startsWith('copione-video-'))
   assert.equal(dopo.length, 1)
   assert.ok(dopo[0]!.includes(myynd.id))
   chiudiLeMie()
@@ -282,14 +288,13 @@ test('un copione caduto non brucia la settimana: il giorno dopo il progetto torn
   chiudiLeMie()
 })
 
-test('il progresso: una cosa uscita e un traguardo nuovo pesano tre, una riga chiusa uno; il traguardo nuovo conta solo se è un altro', () => {
+test('il progresso: solo quello che ha fatto lui; un traguardo riscritto dal quadro non pesa niente', () => {
   const foto = daSe.fotoDi({ progetto: evermute.id, nome: 'Evermute', stato: 'In review.', traguardo: 'Featured on the App Store', blocco: '', mosse: [], quando: '', impronta: '' })!
   const solo = daSe.progressoDi(evermute, foto, ORA - 7 * GIORNO, ORA, 'Featured on the App Store')
   assert.ok(daSe.pesoDi(solo) < daSe.PESO_VIDEO, JSON.stringify(solo))
-  const mosso = daSe.progressoDi(evermute, foto, ORA - 7 * GIORNO, ORA, 'Pass App Store review')
-  assert.ok(mosso.some(e => /^Milestone moved/.test(e.testo)))
-  assert.ok(daSe.pesoDi(mosso) >= daSe.PESO_VIDEO)
-  assert.deepEqual(mosso.map(e => e.id).slice(0, 2), ['E1', 'E2'])
+  const riscritto = daSe.progressoDi(evermute, foto, ORA - 7 * GIORNO, ORA, 'Pass App Store review')
+  assert.ok(!riscritto.some(e => /^Milestone moved/.test(e.testo)))
+  assert.equal(daSe.pesoDi(riscritto), daSe.pesoDi(solo))
 })
 
 test('il prompt del copione: il progresso con le etichette, la forma, la voce; niente posta né segreti', () => {
@@ -309,7 +314,8 @@ test('il prompt del copione: il progresso con le etichette, la forma, la voce; n
   assert.match(p.utente, /\[P2\] In short: Myynd drafts replies overnight/)
   assert.match(p.system, /Exactly 3 beats, in this order/)
   assert.match(p.system, /150 to 230 words/)
-  assert.match(p.utente, /How he talks on X \(his voice only, not facts\)/)
+  // i post usciti dal suo account li scriveva x-engine: non sono la sua voce
+  assert.doesNotMatch(p.utente, /How he talks on X/)
   for (const segreto of ['SEGRETO-DELLA-POSTA', 'ntn_SEGRETO', 'sk-SEGRETO']) assert.ok(!tutto.includes(segreto))
 })
 

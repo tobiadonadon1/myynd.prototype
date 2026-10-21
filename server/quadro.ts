@@ -51,12 +51,12 @@ import { promisify } from 'node:util'
 import * as store from './store.ts'
 import * as progetti from './progetti.ts'
 import * as riferimento from './riferimento.ts'
+import { eConsegna } from './rilevanza.ts'
 import { cartella, nellaLingua } from './config.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
 import { FONTI_POSTA } from './connettori/registro.ts'
 import { conGergo } from './rifinitura.ts'
-import { nominaAmbito } from './ambiti-memoria.ts'
 import { normalizzata, stessaCosa, testoDelProgetto, PROVA_MIN, PROVA_MAX } from './priorita.ts'
 import { dayLogContext } from './project-memory.ts'
 import * as mandatoProposta from './mandato-proposta.ts'
@@ -416,6 +416,8 @@ export function fontiDel(p: progetti.Progetto, docs: readonly store.Documento[],
   }).sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 6)
   const altri = docs.filter(d => !['lavoro', 'conversazioni', 'x'].includes(d.fonte)
     && Date.parse(d.quando ?? '') >= soglia
+    // le consegne di Myynd stanno in Desktop/Myynd: per il nome del percorso sembravano lavoro suo su Myynd
+    && !eConsegna(d.percorso ?? d.id)
     && progetti.tocca(p, `${d.titolo}\n${d.corpo.slice(0, 1500)}`))
     .sort((a, b) => (b.quando ?? '').localeCompare(a.quando ?? '')).slice(0, 8)
   /*
@@ -433,8 +435,7 @@ export function fontiDel(p: progetti.Progetto, docs: readonly store.Documento[],
 
 /** Le righe che ha scritto lui di suo pugno su questo progetto (il riferimento), col suo nome o un alias. */
 function suoiDel(p: progetti.Progetto): string {
-  const nomi = [p.nome, ...p.alias, ...[...riferimento.alias()].filter(([, id]) => id === p.id).map(([n]) => n)]
-  return riferimento.leggi().testo.split('\n').filter(r => nomi.some(n => nominaAmbito(r, n))).join('\n').slice(0, 1500)
+  return riferimento.righeDel(p.id).join('\n').slice(0, 1500)
 }
 
 /**
@@ -502,7 +503,7 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   for (const d of suoiSuX) {
     const t = d.corpo.replace(/\s+/g, ' ').trim().slice(0, 600)
     segna(d.quando)
-    metti(d.id, `[${d.id}] Post suo su X (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`, 'x')
+    metti(d.id, `[${d.id}] Post uscito dal suo account X, scritto con x-engine (${(d.quando ?? '').slice(0, 10)})\n${t}`, `${d.titolo}\n${t}`, 'x')
   }
 
   // la cosa vista da fuori, come la vede un cliente: il sito vero, e se il blog è fermo.
@@ -524,12 +525,15 @@ export async function materiale(p: progetti.Progetto, docs: readonly store.Docum
   const memoria = testoDelProgetto(p.id).slice(0, 3000)
   if (memoria) blocchi.unshift({ id: 'memoria', testo: `[memoria] Obiettivo e memoria del progetto\n${memoria}`, fonte: memoria, tipo: 'memoria' })
   const suoi = suoiDel(p)
-  if (suoi) blocchi.unshift({ id: 'riferimento', testo: `[riferimento] Quello che ha scritto lui su questo progetto, di suo pugno (vale più di tutto il resto)\n${suoi}`, fonte: suoi, tipo: 'riferimento' })
+  if (suoi) blocchi.unshift({ id: 'riferimento', testo: `[riferimento] Quello che ha scritto lui su questo progetto, di suo pugno (vale più di tutto il resto).${riferimento.avvisoVecchio()}\n${suoi}`, fonte: suoi, tipo: 'riferimento' })
 
   // la lista, e com'è andata con le carte di prima: è così che impara
   const aperti = store.elencoCompiti().filter(c => c.progetto === p.id).map(c => `— ${c.testo}${c.stato !== 'aperto' ? ` (${c.stato})` : ''}`)
   const chiusi = store.compitiChiusi(60).filter(c => c.progetto === p.id && Date.parse(c.chiuso ?? '') >= adesso - 21 * 86_400_000)
     .map(c => `— ${c.testo} → ${c.stato === 'fatto' ? 'fatta' : 'lasciata'}${c.esito ? `: ${c.esito.slice(0, 100)}` : ''}`)
+  // il cestino resta fuori da `compitiChiusi` (la riga è ancora 'aperto' con `sparito`): senza queste righe
+  // il quadro non sapeva che «Read a one-page plan for a Myynd trial at H Farm» era stata buttata, e la riscriveva
+  chiusi.push(...store.compitiTolti(21).filter(c => c.progetto === p.id && ['aperto', 'pronto', 'chiede', 'delegato'].includes(c.stato)).map(c => `— ${c.titolo || c.testo} → buttata nel cestino`))
   const carte = store.feedDelProgetto(p.id, 15).filter(v => v.stato !== 'aperto')
     .map(v => `— «${v.titolo}» → ${v.stato === 'fatto' ? 'presa' : v.stato === 'scaduto' ? 'ignorata finché è scaduta' : `scartata${v.motivo ? `: ${v.motivo}` : ''}`}`)
   const lista = [
@@ -694,6 +698,7 @@ export async function quadroDi(p: progetti.Progetto, m: Materiale): Promise<Quad
   if (!out) return null
   const gia = [
     ...store.elencoCompiti().map(c => c.testo),
+    ...store.compitiTolti(21).flatMap(c => [c.testo, c.titolo].filter((t): t is string => !!t)),
     ...store.feedDelProgetto(p.id, 30).map(v => v.titolo)
   ]
   const mosse: Mossa[] = []
@@ -825,12 +830,30 @@ export type Scelta = Mossa & { progetto: string; perche: string }
  * feed (anche riscritto), e le mosse di leva 1 che non sono di oggi: «aiuta»
  * non basta per stare in cima alla pagina.
  */
+/**
+ * La mossa parla per prima di un altro progetto attivo? Allora non è di
+ * questo quadro: «Read a one-page plan for a Myynd trial at H Farm» stava
+ * nel quadro di Myynd, «Draft a one-page pitch for Trey» in quello di H-Farm.
+ * Si lascia cadere, non si sposta: il quadro dell'altro progetto ha le sue.
+ */
+export function diUnAltro(progetto: string, m: Pick<Mossa, 'titolo' | 'testo'>, nomi: [string, string][] = nomiAttivi()): boolean {
+  const di = riferimento.diChiERiga(`${m.titolo}. ${m.testo}`, nomi)
+  return !!di && di !== progetto
+}
+function nomiAttivi(): [string, string][] {
+  const nomi: [string, string][] = progetti.elenco('attivo').map(p => [p.nome, p.id])
+  for (const [nome, id] of riferimento.alias()) if (!nomi.some(([n]) => n.toLowerCase() === nome)) nomi.push([nome, id])
+  return nomi
+}
+
 export function scegli(quadri: readonly Quadro[], gia: string[], alti: Set<string> = new Set(), generi: readonly Genere[] = GENERI): Scelta[] {
   const migliori: Scelta[] = []
+  const nomi = nomiAttivi()
   for (const q of quadri) {
     const messe = q.messe ?? []
     const buone = q.mosse
       .filter(m => generi.includes(m.genere ?? 'consiglio'))
+      .filter(m => !diUnAltro(q.progetto, m, nomi))
       .filter(m => (m.leva >= 2 || m.urgenza === 'oggi') && !messe.includes(m.titolo) && !gia.some(t => stessaCosa(t, m.titolo)))
       .sort((a, b) => punteggio(b, alti.has(q.progetto)) - punteggio(a, alti.has(q.progetto)))
     // il perché sulla carta è il traguardo che la mossa avvicina: il blocco del

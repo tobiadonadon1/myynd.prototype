@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta , lingua as cfgLingua } from './config.ts'
 import * as attrezzi from './attrezzi.ts'
 import { briefProduzione } from './stile-lavoro.ts'
+import { bloccoVoce } from './parole-sue.ts'
 import { revisioneVisiva, type RevisioneVisiva } from './revisione-visiva.ts'
 import { existsSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -3477,6 +3478,8 @@ export async function svolgi(
   }
   // come scrive a chi riceve (P3, `voce.ts`): prova, non istruzione, prima del brief
   if (esecuzione?.voce) sistemaLavoro += '\n\n' + esecuzione.voce
+  // come scrive lui, con le sue parole (`parole-sue.ts`): «it's working like an AI when it should work like me»
+  try { const sue = bloccoVoce(false); if (sue) sistemaLavoro += '\n\n' + sue } catch { /* la voce è un di più */ }
   sistemaLavoro += '\n\n' + brief.testo
   const consegna = esecuzione?.consegna
   let ultimaConsegna: (DocumentoCreato & {revisione: Pick<RevisioneVisiva, 'esito' | 'problemi'>}) | undefined

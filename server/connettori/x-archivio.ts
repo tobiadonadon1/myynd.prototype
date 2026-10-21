@@ -440,7 +440,9 @@ export function documenti(c: Contenuto, o: { adesso?: number; it?: boolean; esis
     const d = documentoMio({
       postId: p.postId, testo: p.testo, risposta: p.risposta, quando: p.quando,
       url: prima?.percorso || `https://x.com/${maniglia}/status/${p.postId}`,
-      numeri: delMotore ? piuAlto(delMotore, suoi) : suoi
+      numeri: delMotore ? piuAlto(delMotore, suoi) : suoi,
+      // c'era già e non dall'archivio: l'aveva scritto x-engine (prima del 21 ottobre i suoi non avevano autore)
+      scritto: prima && prima.autore !== 'archivio' ? 'x-engine' : 'archivio'
     }, it)
     if (d) { docs.push(d); esito.post++ }
   }
@@ -681,7 +683,14 @@ export function campioneVoce(): string[] {
     .sort((a, b) => Number(a.slice(7)) - Number(b.slice(7)))
     .map(id => store.documento(id))
     .filter((d): d is Documento => !!d)
+  // l'archivio ha tutto quello che è uscito dal suo account, anche i post di x-engine: quelli li ha
+  // scritti un modello, e la voce di un modello non è la sua. Un `x:mio` è di x-engine se non viene
+  // solo dall'archivio (`scritto`); solo il testo del post, senza la coda «Post published on X.»
+  const segno = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '').slice(0, 60)
+  const macchina = new Set(store.idsConPrefisso('x:mio:').map(id => store.documento(id))
+    .filter((d): d is Documento => !!d && d.autore !== 'archivio')
+    .map(d => segno(d.corpo.split('\n\n')[0]!)))
   return docs.flatMap(d => d.corpo.split('\n').slice(2))
     .map(r => r.replace(/^\d+\. /, '').replace(/ \(\d+ (?:mi piace|likes), \d+ repost\)$/, '').trim())
-    .filter(Boolean)
+    .filter(t => t && !macchina.has(segno(t)))
 }

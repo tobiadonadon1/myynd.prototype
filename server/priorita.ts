@@ -93,6 +93,8 @@ export type FontiPriorita = {
   riferimento: string
   /** I nomi con cui si chiama un progetto: il nome e gli altri nomi. */
   nomiDi(progettoId: string): string[]
+  /** I progetti di una riga del riferimento (`riferimento.diChiSonoRiga`). */
+  diChi(riga: string): string[]
   /** I progetti attivi, per riconoscere un obiettivo riscritto nel perché. */
   progetti?: readonly { nome: string; obiettivo?: string | null }[]
 }
@@ -512,7 +514,7 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
   // una scadenza senza la data letta nella fonte è una voce che tira a indovinare
   if (genere === 'scadenza' && !conUnaData(quando) && !conUnaData(testo)) return null
   const nome = typeof g.progetto === 'string' ? g.progetto.trim().toLowerCase() : ''
-  const progetto = nome ? nomi.get(nome) ?? null : null
+  let progetto = nome ? nomi.get(nome) ?? null : null
   if (progetto && morti.has(progetto)) return null
   if (morti.size) {
     for (const [n, id] of nomi) if (morti.has(id) && nominaAmbito(`${titolo} ${perche}`, n)) return null
@@ -538,6 +540,9 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
   if (doc) {
     const d = fonti.testoDoc(doc)
     if (!d || !normalizzata(`${d.titolo}\n${d.testo}`).includes(cercata)) return null
+    // il progetto lo sceglie il modello: una mail o un file che non lo nomina non è suo (le note su Trey,
+    // di Nextas, finivano sotto H-Farm). Le cartelle e le sessioni sono già sue per dove stanno.
+    if (progetto && !/^(?:lavoro|conversazioni):/.test(doc) && !fonti.nomiDi(progetto).some(n => nominaAmbito(`${d.titolo}\n${d.testo}`, n))) progetto = null
     origine = 'doc'
     fonte = { titolo: d.titolo, testo: d.testo, autore: d.autore, quando: d.quando }
     // «domani» in una fonte di lunedì è martedì: si scioglie prima di controllare
@@ -548,7 +553,7 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
   } else {
     if (!progetto) return null
     const memoria = fonti.memoria(progetto)
-    const rigaRif = fonti.riferimento.split('\n').find(r => normalizzata(r).includes(cercata) && fonti.nomiDi(progetto).some(n => nominaAmbito(r, n)))
+    const rigaRif = fonti.riferimento.split('\n').find(r => normalizzata(r).includes(cercata) && !!progetto && fonti.diChi(r).includes(progetto))
     if (memoria && normalizzata(memoria).includes(cercata)) { origine = 'memoria'; fonte = { testo: memoria, quando: null } }
     else if (rigaRif) { origine = 'riferimento'; fonte = { testo: rigaRif, quando: null } }
     else return null
@@ -561,7 +566,7 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
 }
 
 /** Senza fonti niente passa: chi chiama `ripulisci` deve dire dove cercare le prove. */
-const SENZA_FONTI: FontiPriorita = { testoDoc: () => null, memoria: () => '', riferimento: '', nomiDi: () => [] }
+const SENZA_FONTI: FontiPriorita = { testoDoc: () => null, memoria: () => '', riferimento: '', nomiDi: () => [], diChi: () => [] }
 
 /**
  * Da quello che il modello ha chiesto a una domanda che si può fare, o niente.
@@ -634,7 +639,7 @@ export async function proponi(quadri: readonly quadro.Quadro[] = [], dalQuadro: 
       (suoi.some(p => p.priorita === 'alta') ? `\nQuelli con «priorità alta» li ha segnati lui come i più importanti: a parità di urgenza, le voci per quelli vengono prima.` : '')
       : '\nNon ha ancora registrato progetti.',
     rif.testo
-      ? `\nQUELLO CHE HA SCRITTO LUI, di suo pugno, su a che punto è ogni progetto (${(rif.aggiornato ?? '').slice(0, 10)}). Vale più dei file, dei commit e delle mail: se qui un progetto è morto o finito, per quel progetto non proporre niente, nemmeno una lettura; se è bloccato, l'unica voce buona è il passo che lo sblocca (chi deve rispondere, cosa manca, a chi scrivere); se dice che sta facendo una cosa, quella è la cosa in corso, e i file che dicono altro sono indietro.\n${rif.testo}` +
+      ? `\nQUELLO CHE HA SCRITTO LUI, di suo pugno, su a che punto è ogni progetto (${(rif.aggiornato ?? '').slice(0, 10)}). Vale più dei file, dei commit e delle mail: se qui un progetto è morto o finito, per quel progetto non proporre niente, nemmeno una lettura; se è bloccato, l'unica voce buona è il passo che lo sblocca (chi deve rispondere, cosa manca, a chi scrivere); se dice che sta facendo una cosa, quella è la cosa in corso, e i file che dicono altro sono indietro.${riferimento.avvisoVecchio(rif)}\n${rif.testo}` +
         (morti.size ? `\nMorti, secondo lui: ${perNome(morti).join(', ')}.` : '') +
         (bloccati.size ? `\nBloccati, secondo lui: ${perNome(bloccati).join(', ')}.` : '')
       : `\nNon ha ancora scritto a che punto è ogni progetto. Dove non sei sicuro che una cosa sia ancora viva, non tirare a indovinare: mettila fra le domande.`,
@@ -688,6 +693,7 @@ Scrivi in ${nellaLingua()}.`)
     memoria: id => testoDelProgetto(id),
     riferimento: rif.testo,
     nomiDi: id => [...nomi].filter(([, x]) => x === id).map(([n]) => n),
+    diChi: r => riferimento.diChiSonoRiga(r, nomi),
     progetti: suoi
   }
   const voci: Priorita[] = []
@@ -880,6 +886,7 @@ async function carteDalQuadro(): Promise<{ quadri: quadro.Quadro[]; titoli: stri
   if (!quadri.length) return { quadri, titoli: [], salvate: 0 }
   const gia = [
     ...store.elencoCompiti().map(c => c.testo),
+    ...store.compitiTolti(21).flatMap(c => [c.testo, c.titolo].filter((t): t is string => !!t)),
     ...store.feedAperto(40).map(v => v.titolo),
     ...store.feedGiaVisto(40).map(v => v.titolo)
   ]

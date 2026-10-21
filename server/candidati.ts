@@ -436,7 +436,8 @@ export function valido(c: Candidato, adesso = Date.now()): boolean {
  * partire, e per la coda prima di consegnarla. Le carte scritte da lei reggono sempre.
  */
 export function cartaValida(c: Pick<store.Compito, 'origine' | 'doc' | 'voce' | 'progetto'>, adesso = Date.now()): boolean {
-  const proposte = ['iniziativa', gradino.ORIGINE, primoGiorno.ORIGINE, lati.ORIGINE]
+  // anche il lavoro del quadro: un progetto messo in pausa dopo la scelta non si lavora quella notte
+  const proposte = ['iniziativa', gradino.ORIGINE, primoGiorno.ORIGINE, lati.ORIGINE, 'quadro']
   if (!proposte.includes(c.origine)) return true
   try { return regge({ genere: null, origine: c.origine, doc: c.doc ?? null, voce: c.voce ?? null, progetto: c.progetto ?? null }, adesso) } catch { return false }
 }
@@ -524,6 +525,9 @@ function impegnati(adesso: Date): number {
   return n
 }
 
+/** Gli stati di una riga che, buttata nel cestino, è un suo «no». */
+const APERTE: string[] = ['aperto', 'pronto', 'chiede', 'delegato']
+
 function mondo(adesso: Date): Mondo {
   const vive = store.elencoCompiti()
   const recenti: Mondo['recenti'] = []
@@ -536,6 +540,13 @@ function mondo(adesso: Date): Mondo {
     // ritirata senza un suo gesto (la fonte è cambiata) non dice niente di lei
     if (c.stato === 'ritirato' && !scartato) continue
     recenti.push({ testo: c.titolo || c.testo, scartato, quando, progetto: c.progetto ?? null })
+  }
+  // il cestino è il suo gesto più chiaro, e la carta buttata resta 'aperto' con `sparito`:
+  // senza questa riga «Post ideas for X» buttata ieri tornava stamattina uguale
+  // solo le righe ancora aperte: una fatta e poi tolta, o gli impegni che `seguito` riordina da sé, non sono un suo no
+  for (const c of store.compitiTolti(GIORNI_SCARTATI, 200)) {
+    if (c.sparito! < soglia || !APERTE.includes(c.stato)) continue
+    recenti.push({ testo: c.titolo || c.testo, scartato: true, quando: c.sparito!, progetto: c.progetto ?? null })
   }
   const r = resti(adesso)
   const gia = impegnati(adesso)

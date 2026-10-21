@@ -244,7 +244,9 @@ export function numeriDa(corpo: string): Numeri | null {
 // — i documenti —
 
 /** Un suo post, da chiunque arrivi: il motore, o più avanti il browser dentro Myynd. */
-export type PostMio = { postId: string; testo: string; url: string | null; risposta: boolean; quando: string; numeri: Numeri | null }
+export type PostMio = { postId: string; testo: string; url: string | null; risposta: boolean; quando: string; numeri: Numeri | null
+  /** Chi l'ha scritto: x-engine, o lui (un post che c'è solo nell'archivio). Fra le parole sue entrano solo i secondi (`x-archivio.campioneVoce`). */
+  scritto?: 'x-engine' | 'archivio' }
 
 /**
  * Il documento di un suo post. Il corpo è il testo, una riga vuota, e la
@@ -264,7 +266,7 @@ export function documentoMio(p: PostMio, it = lingua() === 'it'): Documento | nu
     tipo: p.risposta ? 'risposta' : 'post',
     titolo: titoloDi(testo),
     corpo: `${testo}\n\n${coda}`,
-    autore: null,
+    autore: p.scritto ?? null,
     percorso: p.url || null,
     quando,
     gruppo: 'note',
@@ -278,7 +280,7 @@ function postDelMotore(p: Post, it: boolean, adesso: number): Documento | null {
   if (!postId || !quando) return null
   const fermi = Date.parse(quando) <= adesso - GIORNI_ASSESTATO * 86_400_000
   return documentoMio({
-    postId, testo: p.body ?? '', url: p.url, risposta: p.kind === 'reply', quando,
+    postId, testo: p.body ?? '', url: p.url, risposta: p.kind === 'reply', quando, scritto: 'x-engine',
     numeri: fermi ? { visualizzazioni: numero(p.views), mipiace: numero(p.likes), repost: numero(p.reposts), risposte: numero(p.replies), segnalibri: numero(p.bookmarks) } : null
   }, it)
 }

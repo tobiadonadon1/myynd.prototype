@@ -226,8 +226,12 @@ test('importa: gli stessi documenti del motore, uniti a quelli che c’erano', a
   assert.equal(store.idsConPrefisso('x:segnalibro:').length, 1)
   assert.match(store.documento(store.idsConPrefisso('x:segnalibro:')[0]!)!.corpo, /You saved a post/)
   assert.deepEqual(store.idsConPrefisso('x:voce:'), ['x:voce:1'])
+  // il post che il motore aveva già scritto è suo nei numeri, ma non nella voce: l'aveva scritto x-engine
   const voce = a.campioneVoce()
-  assert.equal(voce.length, 4)
+  assert.equal(voce.length, 3)
+  assert.ok(!voce.includes(suo.testo), 'un post di x-engine è entrato nella voce')
+  assert.equal(store.documento(`x:mio:${suo.postId}`)!.autore, 'x-engine')
+  assert.equal(soloArchivio.autore, 'archivio')
   assert.equal(voce[0], 'An old post that went far: agents need a boundary before a prompt.')
   assert.ok(!voce.some(t => t.startsWith('RT @')))
 

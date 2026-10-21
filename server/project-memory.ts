@@ -154,9 +154,12 @@ export function recordDoneByUser(projectId:string,text:string,ref:string):Projec
  return record({projectId,key:'fatto:'+ref,kind:'work',value:`Completed by the user: ${text.trim().slice(0,500)}`,provenance:'task-record',evidenceAt:new Date().toISOString()})
 }
 /** A delivered draft is not a completed user commitment. Facts come from task state. */
+// il lavoro che Myynd fa da sé (`da-se.ts`): un copione, le idee per X, la pagina di Notion non sono lavoro suo
+// sul progetto, e «User marked completed: Video script for Myynd» lo faceva sembrare
+const DI_MYYND=new Set(['copione-video','idee-x','pagina-notion'])
 export function recordTaskOutcome(taskId:string):ProjectMemory|null {
  const task=compito(taskId)
- if(!task?.progetto || task.sparito)return null
+ if(!task?.progetto || task.sparito || DI_MYYND.has(task.origine ?? ''))return null
  const done=task.stato==='fatto'
  const artifact=task.consegna && task.consegna.revisione?.esito==='pass' && existsSync(task.consegna.percorso)
  const draft=task.stato==='pronto' && !!task.risultato
@@ -164,11 +167,18 @@ export function recordTaskOutcome(taskId:string):ProjectMemory|null {
  const outcome=done?'User marked completed':artifact?'Verified artifact produced; user completion not confirmed':'Draft prepared; not sent or completed'
  return record({projectId:task.progetto,key:'work:'+task.id,kind:'work',value:`${outcome}: ${task.testo.slice(0,500)}`,taskId:task.id,provenance:'task-record',evidenceAt:task.aggiornato})
 }
+/** Il testo di una prova, per confrontarlo: senza «Told me:» e «Completed by the user:», minuscolo, solo lettere e cifre. */
+const nudo=(v:string)=>v.replace(/^(?:Told me|Completed by the user|User marked completed):\s*/i,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()
 export function projectEvidence(projectId:string,options:{history?:boolean;now?:number}={}) {
  project(projectId)
  const now=options.now??Date.now()
- return read().filter(r=>r.projectId===projectId && (options.history || !r.supersededBy)).map(r=>{
+ const rows=read().filter(r=>r.projectId===projectId && (options.history || !r.supersededBy))
+ // quello che ha detto in chat di voler fare, e che ha poi segnato fatto: «Make the website and prove the demand»
+ // restava il «prossimo risultato» di Myynd anche dopo la spunta del 19 ottobre
+ const fatti=rows.filter(r=>r.key.startsWith('fatto:')).map(r=>({testo:nudo(r.value),at:r.evidenceAt}))
+ return rows.map(r=>{
   let stale=false,reason:string|undefined
+  if(r.provenance==='user-chat' && r.kind==='work'){const t=nudo(r.value);if(t.length>=15 && fatti.some(f=>f.at>r.evidenceAt && f.testo.includes(t))){stale=true;reason='Done since he said it'}}
   if(r.sourceId){const source=documento(r.sourceId);if(!source){stale=true;reason='Source no longer available'}
    else if(fingerprint(source.corpo)!==r.fingerprint){stale=true;reason='Source changed since recording'}
    else if(!Number.isFinite(Date.parse(r.evidenceAt)) || now-Date.parse(r.evidenceAt)>30*86400_000){stale=true;reason='Source older than 30 days'}

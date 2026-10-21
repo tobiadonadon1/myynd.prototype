@@ -443,13 +443,35 @@ export async function giro(adesso = Date.now(), o: { pronto?: () => boolean } = 
 
 // — i modelli fissi del lavoro da sé —
 
+/** Quante carte buttate di fila fermano un modello fisso. */
+export const BUTTATE_DI_FILA = 2
+
+/** Quando ha buttato l'ultima carta di quel modello, se le ultime `BUTTATE_DI_FILA` decise sono tutte nel cestino; sennò null. */
+export function buttatoDal(genere: 'x' | 'video'): string | null {
+  const origine = genere === 'x' ? ORIGINE_X : ORIGINE_VIDEO
+  try {
+    // una carta per riga: l'ultima decisione di ognuna (una carta decisa due volte non fa «due di fila»)
+    const righe = db.prepare(`SELECT esito, MAX(decisa) AS decisa FROM tracce WHERE compito LIKE ? AND utente = ? AND decisa IS NOT NULL AND esito IN ('accettato','modificato','scartato') GROUP BY compito ORDER BY decisa DESC LIMIT ?`)
+      .all(`${origine}-%`, chi.adesso() ?? '', BUTTATE_DI_FILA) as { esito: string; decisa: string }[]
+    return righe.length === BUTTATE_DI_FILA && righe.every(r => r.esito === 'scartato') ? righe[0]!.decisa : null
+  } catch { return null }
+}
+
 /**
  * Le idee per X e il copione video nascono ancora? Sì finché non ha scelto un
  * lato (niente cambia finché non risponde), sì se il lato è proprio quello, e
  * sì se ci conta: almeno due carte di quel modello prese (com'erano o
  * ritoccate) in quattordici giorni.
+ *
+ * Prima di tutto: le ultime due carte di quel modello buttate, una dopo
+ * l'altra, e il modello si ferma. Il 19 ottobre aveva scritto del copione
+ * «this is not important… not in my plans for now», e i copioni sono
+ * arrivati il 20 e il 21 lo stesso: senza un lato scelto il cestino non
+ * contava niente. Fermo resta fermo: i post che contano come «ha ripreso a
+ * scrivere» sarebbero i suoi, e Myynd vede solo quelli di x-engine.
  */
 export function tieneRicorrente(genere: 'x' | 'video', adesso = Date.now()): boolean {
+  if (buttatoDal(genere)) return false
   const s = lati.scelto()
   if (!s || s.id === genere) return true
   const origine = genere === 'x' ? ORIGINE_X : ORIGINE_VIDEO

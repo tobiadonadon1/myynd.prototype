@@ -389,7 +389,9 @@ export function raccogli(dal: string, primo = false, adesso = Date.now()): Mater
    * dello stabile ha scritto» — dice che non l'ha ascoltato. Si tolgono dal
    * materiale, e le si nominano al modello perché non ci giri intorno.
    */
-  const scartate = [...store.elencoFeed('scartato'), ...store.elencoFeed('scaduto')]
+  // scaduta per il tempo o per un giudizio del modello («superata», «data», «tempo») non è un suo dito:
+  // contano le sue (scartato) e le scadute vecchie senza ragione, di cui non si sa chi le ha chiuse
+  const scartate = [...store.elencoFeed('scartato'), ...store.elencoFeed('scaduto').filter(v => !v.ragione)]
   const docsScartati = new Set(scartate.map(v => v.doc).filter((d): d is string => !!d))
   const lasciate = store.compitiChiusi(80).filter(c => c.stato === 'lasciato')
   /*

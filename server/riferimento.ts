@@ -28,7 +28,7 @@ import * as progetti from './progetti.ts'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cartella, lingua } from './config.ts'
-import { nominaAmbito } from './ambiti-memoria.ts'
+import { nominaAmbito, nomeNormalizzato } from './ambiti-memoria.ts'
 
 /** L'etichetta del blocco dove vive: uno solo, si riscrive. */
 export const ETICHETTA = 'riferimento'
@@ -127,6 +127,71 @@ export function alias(): Map<string, string> {
 }
 
 /**
+ * Il riferimento ha più di `GIORNI_VALIDO` giorni? Allora vale come cosa
+ * detta allora: quello di settembre diceva «H Farm… I just want to get more
+ * involved», e a ottobre era ancora la prima riga del quadro di Myynd.
+ */
+export function vecchio(r: Riferimento = leggi(), adesso = Date.now()): boolean {
+  const q = Date.parse(r.aggiornato ?? '')
+  return !!r.testo && Number.isFinite(q) && adesso - q > GIORNI_VALIDO * GIORNO
+}
+
+/** La frase per il modello quando il riferimento è vecchio, o la stringa vuota. */
+export function avvisoVecchio(r: Riferimento = leggi(), adesso = Date.now()): string {
+  return vecchio(r, adesso) ? ` L'ha scritto il ${(r.aggiornato ?? '').slice(0, 10)}, più di due settimane fa: dove il suo lavoro, la sua posta o la sua chat di questi giorni dicono una cosa più nuova, vale quella.` : ''
+}
+
+/** Tutti i nomi delle sue cose, in minuscolo → id: il nome del progetto vivo e gli altri nomi di `alias`. */
+export function nomiDeiProgetti(): Map<string, string> {
+  const nomi = new Map<string, string>()
+  for (const p of progetti.vivi()) nomi.set(p.nome.toLowerCase(), p.id)
+  for (const [a, id] of alias()) if (!nomi.has(a)) nomi.set(a, id)
+  return nomi
+}
+
+/**
+ * Di chi è una riga del riferimento: del progetto nominato per primo, e di
+ * nessun altro. «H Farm is my family company… Myynd is a part of it» è di
+ * H-Farm; fino al 21 ottobre andava a tutti e due, e il quadro di Myynd
+ * proponeva il pilota di H-Farm come se fosse lavoro su Myynd. A pari
+ * posto vince il nome più lungo («H-Farm audit» su «H-Farm»). Pura.
+ */
+export function diChiERiga(riga: string, nomi: Iterable<[string, string]>): string | null {
+  const testo = ` ${nomeNormalizzato(riga)} `
+  let meglio: { id: string; dove: number; lungo: number } | null = null
+  for (const [nome, id] of nomi) {
+    const entita = nomeNormalizzato(nome)
+    if (entita.replace(/ /g, '').length < 3) continue
+    const dove = testo.indexOf(` ${entita} `)
+    if (dove < 0) continue
+    if (!meglio || dove < meglio.dove || (dove === meglio.dove && entita.length > meglio.lungo)) meglio = { id, dove, lungo: entita.length }
+  }
+  return meglio?.id ?? null
+}
+
+/**
+ * I progetti di una riga: quelli della testa, se comincia con dei nomi e i
+ * due punti («Nextas, H-Brain: waiting on the quote» è di tutti e due), se
+ * no quello nominato per primo (`diChiERiga`).
+ */
+export function diChiSonoRiga(riga: string, nomi: Iterable<[string, string]>): string[] {
+  const tutti = [...nomi]
+  const testa = riga.match(/^\s*([^:\n]{2,60}?)\s*:/)?.[1]
+  if (testa) {
+    const ids = [...new Set(nomiNelRiferimento(`${testa}:`).map(n => diChiERiga(n, tutti)).filter((x): x is string => !!x))]
+    if (ids.length > 1) return ids
+  }
+  const uno = diChiERiga(riga, tutti)
+  return uno ? [uno] : []
+}
+
+/** Le righe del riferimento che sono di questo progetto (vedi `diChiSonoRiga`). */
+export function righeDel(id: string, testo = leggi().testo, nomi: Iterable<[string, string]> = nomiDeiProgetti()): string[] {
+  const tutti = [...nomi]
+  return testo.split(/\n+/).map(r => r.trim()).filter(r => r && diChiSonoRiga(r, tutti).includes(id))
+}
+
+/**
  * Un nome del riferimento che è anche una cartella di lavoro sul disco, e
  * non è ancora un progetto, diventa un progetto.
  *
@@ -169,11 +234,6 @@ export function nomeBreve(nome: string): string {
   return nome.split(/[:(]/)[0].trim() || nome.trim()
 }
 
-/** La riga del blocco che parla di questo progetto, se c'è. */
-function rigaDi(testo: string, nome: string): string | null {
-  return testo.split('\n').find(r => nominaAmbito(r, nome)) ?? null
-}
-
 /**
  * Il progetto da chiedere adesso: il primo vivo, quelli ad alta priorità in
  * testa, di cui non ha detto niente da due settimane. Una riga del blocco
@@ -182,9 +242,11 @@ function rigaDi(testo: string, nome: string): string | null {
 export function daChiedere(adesso = Date.now()): progetti.Progetto | null {
   const d = date()
   const r = leggi()
-  const vivi = [...progetti.vivi()].sort((a, b) => Number(b.priorita === 'alta') - Number(a.priorita === 'alta'))
+  // un progetto fermo non si chiede: «What are you working on in H-Brain right now?» a una cosa in pausa
+  const vivi = [...progetti.elenco('attivo')].sort((a, b) => Number(b.priorita === 'alta') - Number(a.priorita === 'alta'))
+  const nomi = [...nomiDeiProgetti()]
   return vivi.find(p => {
-    const quando = d[p.id] ?? (r.aggiornato && rigaDi(r.testo, p.nome) ? r.aggiornato : null)
+    const quando = d[p.id] ?? (r.aggiornato && righeDel(p.id, r.testo, nomi).length ? r.aggiornato : null)
     const q = Date.parse(quando ?? '')
     return !Number.isFinite(q) || adesso - q >= GIORNI_VALIDO * GIORNO
   }) ?? null

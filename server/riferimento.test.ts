@@ -184,3 +184,41 @@ test('la domanda di prima, su tutti i progetti insieme, diventa quella corta su 
   // una domanda d'altro tema non si tocca
   assert.equal(riferimento.aggiornata(null), null)
 })
+
+test('una riga del riferimento è del progetto nominato per primo, e di nessun altro', () => {
+  const farm = progetti.scrivi({ nome: 'H-Farm', obiettivo: 'Bring AI into the family company' })
+  const myynd = progetti.scrivi({ nome: 'Myynd', obiettivo: 'Sell the Mac app' })
+  const nomi: [string, string][] = [['H-Farm', farm.id], ['Myynd', myynd.id], ['H-Farm audit', 'audit']]
+  // la sua riga del 29 settembre: H-Farm, che nomina Myynd; fino al 21 ottobre andava a tutti e due
+  const riga = 'H Farm is my family company. I just want to get more involved in it. Myynd is a part of it.'
+  assert.equal(riferimento.diChiERiga(riga, nomi), farm.id)
+  assert.equal(riferimento.diChiERiga('Myynd, that product is basically you. Maybe H-Farm later.', nomi), myynd.id)
+  assert.equal(riferimento.diChiERiga('H-Farm audit: due Friday', nomi), 'audit', 'a pari posto vince il nome più lungo')
+  assert.equal(riferimento.diChiERiga('My website right now is good.', nomi), null)
+  const testo = `${riga}\n\nMyynd, that product is basically you.`
+  assert.deepEqual(riferimento.righeDel(myynd.id, testo, nomi), ['Myynd, that product is basically you.'])
+  assert.deepEqual(riferimento.righeDel(farm.id, testo, nomi), [riga])
+})
+
+test('il riferimento vecchio di più di due settimane lo dice al modello', () => {
+  const ora = Date.parse('2026-10-21T12:00:00Z')
+  assert.equal(riferimento.vecchio({ testo: 'Myynd: x', aggiornato: '2026-09-29T18:58:07Z' }, ora), true)
+  assert.match(riferimento.avvisoVecchio({ testo: 'Myynd: x', aggiornato: '2026-09-29T18:58:07Z' }, ora), /2026-09-29/)
+  assert.equal(riferimento.avvisoVecchio({ testo: 'Myynd: x', aggiornato: '2026-10-15T00:00:00Z' }, ora), '')
+  assert.equal(riferimento.vecchio({ testo: '', aggiornato: '2026-09-01T00:00:00Z' }, ora), false)
+})
+
+test('il progetto di un testo è quello nominato per primo, non quello dal nome più lungo', async () => {
+  const attenzione = await import('./attenzione.ts')
+  const nextas = progetti.scrivi({ nome: 'Nextas', obiettivo: 'Book paid audits' })
+  const myynd = progetti.elenco('attivo').find(p => p.nome === 'Myynd')!
+  assert.equal(attenzione.progettoDelTesto('Draft the X posts that announce Myynd for Nextas'), myynd.id)
+  assert.equal(attenzione.progettoDelTesto('Send the Nextas audit deck, then a Myynd update'), nextas.id)
+})
+
+test('una riga con più nomi in testa è di tutti quelli della testa', () => {
+  const nomi: [string, string][] = [['Nextas', 'n'], ['H-Brain', 'h'], ['Myynd', 'm']]
+  assert.deepEqual(riferimento.diChiSonoRiga('Nextas, H-Brain: waiting on the quote', nomi), ['n', 'h'])
+  assert.deepEqual(riferimento.righeDel('h', 'Nextas, H-Brain: waiting on the quote\nMyynd: shipping', nomi), ['Nextas, H-Brain: waiting on the quote'])
+  assert.deepEqual(riferimento.diChiSonoRiga('H Farm is family. Myynd is a part of it.', [['H-Farm', 'f'], ['Myynd', 'm']]), ['f'])
+})

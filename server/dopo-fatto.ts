@@ -158,6 +158,8 @@ export async function registraFatto(f: Fatto): Promise<Registrato> {
     if (!cosa || cosa.stato !== 'fatto') return dire(cosa?.progetto?.nome ?? null, cosa ? cosa.stato : 'sparita')
     const p = cosa.progetto
     if (!p) return dire(null)
+    // tenere un copione o le idee per X di Myynd non è un traguardo del progetto (vedi `project-memory.DI_MYYND`)
+    if (/^(?:copione-video|idee-x|pagina-notion)-/.test(f.id)) return dire(p.nome, 'consegna di Myynd')
     recordDoneByUser(p.id, cosa.testo, f.id)
     return dire(p.nome, 'segnato')
   } catch (e) {

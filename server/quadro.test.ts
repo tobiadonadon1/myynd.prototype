@@ -75,7 +75,7 @@ test('i suoi post su X che nominano il progetto entrano nel materiale; la timeli
     x('x:like:113', 'Evermute deck looks great\n\nYou liked a post by @a on X.', 'mipiace')
   ]
   const m = await quadro.materiale(evermute, docs as never, async () => '')
-  assert.match(m.testo, /\[x:mio:111\] Post suo su X/)
+  assert.match(m.testo, /\[x:mio:111\] Post uscito dal suo account X, scritto con x-engine/)
   assert.ok(m.fonti.has('x:mio:111'))
   assert.doesNotMatch(m.testo, /Nothing about any project/, 'controcaso: un suo post che non lo nomina')
   assert.doesNotMatch(m.testo, /scam|looks great/, 'controcaso: la timeline e i mi piace sono parole d\'altri')

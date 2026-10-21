@@ -31,7 +31,6 @@ import * as progetti from './progetti.ts'
 import * as riferimento from './riferimento.ts'
 import * as lavoro from './lavoro.ts'
 import { OSPITATO } from './ospitato.ts'
-import { nominaAmbito } from './ambiti-memoria.ts'
 import { projectMemoryContext } from './project-memory.ts'
 import * as candidati from './candidati.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
@@ -1150,8 +1149,9 @@ export function materialeDelProgetto(p: progetti.Progetto): claude.MaterialeProg
       ?? ids.find(i => { const b = base(i); return b.length >= 3 && nomi.some(n => b.startsWith(n) || n.startsWith(b)) })
     cartella = id ? store.documento(id) : null
   } catch { /* l'indice può non esserci: la riga lavora senza cartella */ }
-  const righe = testoRiferimento.split(/\n+/).map(r => r.trim())
-    .filter(r => r && (nominaAmbito(r, p.nome) || altriNomi.some(a => nominaAmbito(r, a))))
+  // le righe sue, non tutte quelle che lo nominano: «H Farm is my family company… Myynd is a part of it» è di H-Farm
+  let righe: string[] = []
+  try { righe = testoRiferimento ? riferimento.righeDel(p.id, testoRiferimento) : [] } catch { /* il riferimento è un di più */ }
   let memoria = ''
   try { memoria = projectMemoryContext(p.id) } catch { /* la memoria è un di più */ }
   return { cartella, memoria, riferimento: righe.join('\n').slice(0, 800) }

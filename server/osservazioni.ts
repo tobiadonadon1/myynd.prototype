@@ -23,6 +23,7 @@ import { basename } from 'node:path'
 import db from './store.ts'
 import * as fuso from './fuso.ts'
 import { cercatoreDiProgetti } from './attenzione.ts'
+import { eConsegna } from './rilevanza.ts'
 
 export type Genere = 'app' | 'finestra' | 'web' | 'file' | 'commit' | 'commit-altri' | 'repo' | 'editor'
 
@@ -156,9 +157,11 @@ export function somiglianza(a: string, b: string): number {
 /**
  * Di quale progetto è una cosa vista: prima il percorso o il documento (il
  * segno più preciso), poi il titolo, poi l'inizio del testo. La cartella di
- * casa non conta: «/Users/anna» non è un progetto.
+ * casa non conta: «/Users/anna» non è un progetto, e nemmeno le consegne di Myynd.
  */
 export function progettoDi(c: { percorso?: string | null; sourceId?: string; title?: string | null; text?: string | null }, cerca: (t: string) => string | null): string | null {
+  // un file di Myynd (Desktop/Myynd/…) ha «Myynd» nel percorso, ma è lavoro di Myynd, non suo su Myynd
+  if (eConsegna(c.percorso) || eConsegna(c.sourceId)) return null
   const casa = homedir()
   const percorso = (c.percorso ?? '').startsWith(casa) ? c.percorso!.slice(casa.length) : (c.percorso ?? '')
   for (const t of [percorso, c.title ?? '', (c.text ?? '').slice(0, 500)]) {

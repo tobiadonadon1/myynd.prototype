@@ -70,3 +70,13 @@ test('questions, hypotheticals and quoted decisions cannot enter explicit projec
   assert.doesNotThrow(()=>memory.recordUserDecision({projectId:p.id,key:quote.slice(0,25),value:quote,quote},quote))
  }
 })
+test('what he said he would do, then marked done, is no longer his next result',async()=>{
+ const p=projects.scrivi({nome:'Website demand'})
+ memory.recordNextResult(p.id,'Make the website and prove the demand')
+ assert.match(memory.projectMemoryContext(p.id),/prove the demand/)
+ await new Promise(r=>setTimeout(r,5))
+ memory.recordDoneByUser(p.id,'Make the website and prove the demand','t1')
+ const next=memory.projectEvidence(p.id).find(r=>r.provenance==='user-chat')
+ assert.equal(next?.stale,true)
+ assert.equal(next?.reason,'Done since he said it')
+})

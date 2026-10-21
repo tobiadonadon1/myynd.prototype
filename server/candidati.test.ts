@@ -108,6 +108,16 @@ test('4 · una cosa simile buttata la settimana scorsa non torna', () => {
   assert.deepEqual(stato(c.id), ['scartato', 'gia_scartato'])
 })
 
+test('4b · una carta buttata nel cestino conta come scartata: lo stesso lavoro non torna il giorno dopo', () => {
+  // il cestino scrive solo `sparito`: la riga resta «aperto», e «Post ideas for X» buttata ieri tornava stamattina
+  store.scriviCompito({ id: 'buttata', testo: 'Draft the onboarding email for Atlas', ordine: 'a', origine: 'quadro' })
+  store.scordaCompito('buttata')
+  const c = lavoro('onboarding', { titolo: 'Onboarding email for Atlas, first draft' })
+  candidati.proponi(c)
+  candidati.decidi(ORA)
+  assert.deepEqual(stato(c.id), ['scartato', 'gia_scartato'])
+})
+
 test('5 · una classe che il mandato dice «mai»: trattenuto col perché, e torna in gara se lei cambia idea', () => {
   const p = progetti.scrivi({ nome: 'Atlas', obiettivo: 'Launch the portal' })
   mandato.salva(p.id, { classi: { file: 'mai' } }, { conferma: true })

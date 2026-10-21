@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cartella, leggi as leggiConfig, aggiorna as aggiornaConfig, lingua as linguaApp } from './config.ts'
-import { nominaAmbito, nomeNormalizzato, paroleNormalizzate } from './ambiti-memoria.ts'
+import { nominaAmbito, nomeNormalizzato } from './ambiti-memoria.ts'
 import db, { compito, riassegnaProgetto, type Compito } from './store.ts'
 import { compitiAttuali } from './attenzione.ts'
 import { senzaTrattini } from './testo.ts'
@@ -697,23 +697,16 @@ export function eUnObiettivo(testo: string, progetti = vivi()): boolean {
 }
 
 /**
- * Questo testo tocca il progetto?
- *
- * Il nome intero, oppure due parole distintive dell'obiettivo: una sola
- * sarebbe troppo poco — «prezzo» sta in metà della posta — e tre sarebbero
- * troppe per un oggetto di email. Niente modello qui: è il criterio con cui
- * si decide *cosa fargli leggere*, e deve costare zero.
+ * Questo testo tocca il progetto? Solo se lo nomina: il nome o uno degli
+ * altri nomi. Fino al 21 ottobre bastavano due parole dell'obiettivo, e
+ * l'obiettivo «Solidify AI systems to streamline company efforts» si
+ * prendeva ogni documento con «systems» e «company»: le note su Trey, che
+ * sono di Nextas, erano diventate tutto il quadro di H-Farm. Un nome che
+ * Tobia usa per una cosa si aggiunge come alias. Niente modello qui: è il
+ * criterio con cui si decide *cosa fargli leggere*, e deve costare zero.
  */
 export function tocca(p: { nome: string; obiettivo: string; alias?: string[] }, testo: string): boolean {
-  const paroleTesto = paroleNormalizzate(testo)
-  if (nominaProgetto(testo, { nome: p.nome, alias: p.alias ?? [] })) return true
-  const parole = paroleDi(p)
-  if (parole.length < 2) return false
-  let trovate = 0
-  for (const w of parole) {
-    if (paroleTesto.has(w) && ++trovate >= 2) return true
-  }
-  return false
+  return nominaProgetto(testo, { nome: p.nome, alias: p.alias ?? [] })
 }
 
 /** Il testo tocca uno dei progetti vivi? Per ordinare, non per escludere. */

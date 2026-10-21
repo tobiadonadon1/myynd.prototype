@@ -54,6 +54,7 @@ const fontiDiProva = (): import('./priorita.ts').FontiPriorita => ({
   memoria: id => priorita.testoDelProgetto(id),
   riferimento: RIFERIMENTO,
   nomiDi: id => id === p.id ? ['Evermute'] : [],
+  diChi: r => /^Evermute\b/.test(r) ? [p.id] : [],
   progetti: [p]
 })
 const PROVA_APPLE = 'we need a recording of the app on a physical device and setup instructions'
