@@ -12,8 +12,11 @@
 // chi e quando, e il passo che regge la frase. «[M]» è un cerchietto: la
 // frase viene da quello che Myynd sa di lei, e apre il progetto o la Memoria.
 
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { IMPAGINATO, leggibile, type Blocco } from './leggibile.ts'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { CHAT, IMPAGINATO, leggibile, type Blocco } from './leggibile.ts'
+import { pezzi, type Pezzo } from './segni-chat.ts'
+import { IconCopia, IconSpunta } from './icons'
+import { Hov } from './ui'
 import { lingua, t } from './lingua'
 import { perNumero, fonteMemoria, passoDi, rigaFonte, titoloDi, virgolette, type Fonte } from './citazioni.ts'
 
@@ -144,49 +147,94 @@ function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: F
   )
 }
 
-/** Grassetto, corsivo, codice e citazioni dentro una riga. */
-function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: string) => void, conteggi: Conteggi = new Map()): ReactNode[] {
-  const pezzi: ReactNode[] = []
-  // Nuova a ogni chiamata: `lastIndex` è di stato, e la ricorsione qui sotto
-  // condividerebbe la posizione con il chiamante
-  const re = /\*\*(.+?)\*\*|(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)|`(.+?)`|\[(\d{1,3}|M)\]/g
-  let ultimo = 0
-  // dove finiva l'ultimo segno: un segno che comincia lì è attaccato al precedente
-  let fineSegno = -1
-  let m: RegExpExecArray | null
-  while ((m = re.exec(testo))) {
-    if (m.index > ultimo) pezzi.push(testo.slice(ultimo, m.index))
-    const vicini: Vicini = { prima: m.index === fineSegno, dopo: /^\[(?:\d{1,3}|M)\]/.test(testo.slice(m.index + m[0].length)) }
-    if (m[4] !== undefined) fineSegno = m.index + m[0].length
-    if (m[1] !== undefined) {
-      // ricorsivo: una citazione dentro il grassetto resta una citazione
-      pezzi.push(<strong key={m.index} style={{ fontWeight: 600 }}>{inline(m[1], fonti, onApri, conteggi)}</strong>)
-    } else if (m[2] !== undefined) {
-      pezzi.push(<em key={m.index}>{inline(m[2], fonti, onApri, conteggi)}</em>)
-    } else if (m[3] !== undefined) {
-      pezzi.push(
-        <code key={m.index} style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere' }}>{m[3]}</code>
-      )
-    } else if (m[4] === 'M') {
-      pezzi.push(<Segno key={m.index} n="M" fonte={fonteMemoria(fonti)} onApri={onApri} vicini={vicini} />)
-    } else {
-      const n = Number(m[4])
-      // La fonte si cerca per numero scritto nell'etichetta, non per posizione:
-      // l'elenco contiene solo quelle davvero citate, quindi se il modello cita
-      // [3] e [7] l'array ha due elementi e fonti[6] non esiste — ed era il
-      // motivo per cui cliccare il numerino non apriva niente.
-      // Il k-esimo [n] del testo porta il k-esimo passo della fonte: la
-      // frase del secondo segno è un'altra frase, e la data della prima non
-      // prova il prezzo della seconda.
-      const k = conteggi.get(n) ?? 0
-      conteggi.set(n, k + 1)
-      const fonte = perNumero(fonti, n)
-      pezzi.push(<Segno key={m.index} n={n} fonte={fonte} passo={passoDi(fonte, k)} onApri={onApri} vicini={vicini} />)
+/**
+ * Grassetto, corsivo, codice, citazioni e (in chat) link dentro una riga.
+ *
+ * Cosa sono lo decide `segni-chat.ts`, qui si vestono. Solo elementi React
+ * con testo dentro: niente HTML scritto dal modello arriva mai in pagina come
+ * HTML.
+ */
+function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: string) => void, conteggi: Conteggi = new Map(), link = false): ReactNode[] {
+  const vesti = (ps: Pezzo[]): ReactNode[] => ps.map((p, k) => {
+    if (p.tipo === 'testo') return p.testo
+    if (p.tipo === 'grassetto') return <strong key={k} style={{ fontWeight: 600 }}>{vesti(p.dentro)}</strong>
+    if (p.tipo === 'corsivo') return <em key={k}>{vesti(p.dentro)}</em>
+    if (p.tipo === 'codice') {
+      return <code key={k} style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere', ...(link ? { fontFamily: MONO } : {}) }}>{p.testo}</code>
     }
-    ultimo = m.index + m[0].length
+    if (p.tipo === 'link') {
+      // fuori, nel browser: il guscio apre solo http, https e mailto
+      return (
+        <a key={k} href={p.url} target="_blank" rel="noopener noreferrer" title={p.url}
+          style={{ color: 'var(--rame-testo)', textDecoration: 'underline', textDecorationColor: 'rgba(var(--rame-rgb),.4)', textUnderlineOffset: 3, overflowWrap: 'anywhere' }}>{p.testo}</a>
+      )
+    }
+    const vicini: Vicini = { prima: p.prima, dopo: p.dopo }
+    if (p.n === 'M') return <Segno key={k} n="M" fonte={fonteMemoria(fonti)} onApri={onApri} vicini={vicini} />
+    // La fonte si cerca per numero scritto nell'etichetta, non per posizione:
+    // l'elenco contiene solo quelle davvero citate, quindi se il modello cita
+    // [3] e [7] l'array ha due elementi e fonti[6] non esiste, ed era il
+    // motivo per cui cliccare il numerino non apriva niente.
+    // Il k-esimo [n] del testo porta il k-esimo passo della fonte: la
+    // frase del secondo segno è un'altra frase, e la data della prima non
+    // prova il prezzo della seconda.
+    const volte = conteggi.get(p.n) ?? 0
+    conteggi.set(p.n, volte + 1)
+    const fonte = perNumero(fonti, p.n)
+    return <Segno key={k} n={p.n} fonte={fonte} passo={passoDi(fonte, volte)} onApri={onApri} vicini={vicini} />
+  })
+  return vesti(pezzi(testo, link))
+}
+
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+
+/**
+ * Un blocco di codice in chat: la lingua in alto a sinistra, «Copia» a destra.
+ *
+ * Il gesto si vede subito: «Copiato» per un secondo e mezzo, poi torna com'era.
+ * Il codice scorre di lato dentro la sua scatola, non spinge la colonna.
+ */
+function Codice({ testo, linguaggio, primo }: { testo: string; linguaggio?: string; primo: boolean }) {
+  const [copiato, setCopiato] = useState(false)
+  const tempo = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(tempo.current), [])
+  const copia = () => {
+    void navigator.clipboard?.writeText(testo).catch(() => {})
+    setCopiato(true)
+    clearTimeout(tempo.current)
+    tempo.current = setTimeout(() => setCopiato(false), 1500)
   }
-  if (ultimo < testo.length) pezzi.push(testo.slice(ultimo))
-  return pezzi
+  return (
+    <div style={{ margin: primo ? 0 : '14px 0 0', borderRadius: 10, border: '1px solid rgba(var(--inchiostro-rgb),.09)', background: 'rgba(var(--inchiostro-rgb),.04)', overflow: 'hidden', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 6px 4px 12px', borderBottom: '1px solid rgba(var(--inchiostro-rgb),.07)', fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.55)' }}>
+        <span style={{ fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{linguaggio ?? ''}</span>
+        <Hov as="button" type="button" onClick={copia} aria-label={copiato ? t('Copiato') : t('Copia')}
+          style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none', background: 'none', padding: '4px 6px', borderRadius: 10, fontFamily: 'inherit', fontSize: 12, color: 'inherit', cursor: 'pointer' }}
+          hover={{ color: 'var(--inchiostro)' }}>
+          {copiato ? <IconSpunta size={12} /> : <IconCopia size={12} />}{copiato ? t('Copiato') : t('Copia')}
+        </Hov>
+      </div>
+      <pre style={{ margin: 0, padding: '10px 12px', fontFamily: MONO, fontSize: '12.5px', lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre' }}>{testo}</pre>
+    </div>
+  )
+}
+
+/** Una tabella in chat: la prima riga è l'intestazione; troppo larga, scorre di lato dentro la sua scatola. */
+function Tabella({ celle, primo, riga }: { celle: string[][]; primo: boolean; riga: (x: string) => ReactNode[] }) {
+  const [testa, ...corpo] = celle
+  const cella: CSSProperties = { padding: '7px 14px 7px 0', textAlign: 'left', verticalAlign: 'top', borderBottom: '1px solid rgba(var(--inchiostro-rgb),.08)', overflowWrap: 'anywhere', minWidth: 72 }
+  return (
+    <div style={{ margin: primo ? 0 : '14px 0 0', overflowX: 'auto', maxWidth: '100%' }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: '14px', lineHeight: 1.5, minWidth: '60%' }}>
+        <thead>
+          <tr>{(testa ?? []).map((c, k) => <th key={k} style={{ ...cella, fontWeight: 600, borderBottom: '1px solid rgba(var(--inchiostro-rgb),.2)' }}>{riga(c)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {corpo.map((r, j) => <tr key={j}>{r.map((c, k) => <td key={k} style={cella}>{riga(c)}</td>)}</tr>)}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 /**
@@ -226,7 +274,7 @@ function attacca(testo: string): string {
  * perché l'elenco intero smettesse di essere un elenco e finisse appiattito in
  * un paragrafo con dentro i trattini e gli spazi del rientro.
  */
-export function Testo({ testo, fonti = [], onApri, aCapo = false }: {
+export function Testo({ testo, fonti = [], onApri, aCapo = false, ricco = false }: {
   testo: string
   fonti?: Fonte[]
   onApri?: (id: string, passo?: string) => void
@@ -237,10 +285,19 @@ export function Testo({ testo, fonti = [], onApri, aCapo = false }: {
    * che parte.
    */
   aCapo?: boolean
+  /**
+   * La chat: tabelle vere, link da cliccare, il codice con «Copia», i titoli
+   * un poco più grandi e più aria fra i blocchi. Le carte e la lista restano
+   * come erano.
+   */
+  ricco?: boolean
 }) {
-  const blocchi = leggibile(attacca(testo.trim()), IMPAGINATO)
+  const blocchi = leggibile(attacca(testo.trim()), ricco ? CHAT : IMPAGINATO)
   // nuovo a ogni impaginazione: i segni si contano dall'inizio del testo
   const conteggi: Conteggi = new Map()
+  const riga = (x: string) => inline(x, fonti, onApri, conteggi, ricco)
+  // l'aria fra un blocco e l'altro: in chat un poco di più, come un testo da leggere
+  const aria = ricco ? '14px 0 0' : '10px 0 0'
   const pezzi: ReactNode[] = []
   let i = 0
   // `primo` e non `i`: l'aria in cima si toglie guardando cosa si è già messo
@@ -259,9 +316,9 @@ export function Testo({ testo, fonti = [], onApri, aCapo = false }: {
       while (i < blocchi.length && blocchi[i].tipo === 'voce') { voci.push(blocchi[i]); i++ }
       const El = numerato ? 'ol' : 'ul'
       pezzi.push(
-        <El key={pezzi.length} style={{ margin: primo() ? 0 : '10px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <El key={pezzi.length} style={{ margin: primo() ? 0 : aria, paddingLeft: ricco ? 22 : 20, display: 'flex', flexDirection: 'column', gap: ricco ? 6 : 4 }}>
           {voci.map((v, j) => (
-            <li key={j} style={{ lineHeight: 1.6, overflowWrap: 'anywhere' }}>{inline(v.testo, fonti, onApri, conteggi)}</li>
+            <li key={j} style={{ lineHeight: ricco ? 1.65 : 1.6, overflowWrap: 'anywhere', paddingLeft: ricco ? 2 : 0 }}>{riga(v.testo)}</li>
           ))}
         </El>
       )
@@ -269,6 +326,16 @@ export function Testo({ testo, fonti = [], onApri, aCapo = false }: {
     }
 
     i++
+
+    if (b.tipo === 'codice' && ricco) {
+      pezzi.push(<Codice key={pezzi.length} testo={b.testo} linguaggio={b.lingua} primo={primo()} />)
+      continue
+    }
+
+    if (b.tipo === 'tabella' && b.celle?.length) {
+      pezzi.push(<Tabella key={pezzi.length} celle={b.celle} primo={primo()} riga={riga} />)
+      continue
+    }
 
     if (b.tipo === 'codice') {
       pezzi.push(
@@ -282,13 +349,18 @@ export function Testo({ testo, fonti = [], onApri, aCapo = false }: {
       continue
     }
 
-    // il titolo: una riga di stacco, non un capitolo
+    // il titolo: una riga di stacco, non un capitolo. In chat un poco più
+    // grande del testo (e il primo livello un poco più del secondo), con più
+    // aria sopra che sotto: si legge come l'inizio di una parte, non come un
+    // grassetto in mezzo alle righe
     if (b.tipo === 'titolo') {
+      const grande = ricco ? ((b.livello ?? 3) <= 2 ? '1.13em' : '1.04em') : undefined
       pezzi.push(
         <p key={pezzi.length} style={{
-          margin: primo() ? 0 : '12px 0 0', lineHeight: 1.5, fontWeight: 600,
+          margin: primo() ? 0 : ricco ? '20px 0 0' : '12px 0 0', lineHeight: 1.45, fontWeight: 600,
+          fontSize: grande, letterSpacing: ricco ? '-.01em' : undefined,
           textWrap: 'pretty', overflowWrap: 'anywhere'
-        }}>{inline(b.testo, fonti, onApri, conteggi)}</p>
+        }}>{riga(b.testo)}</p>
       )
       continue
     }
@@ -297,10 +369,10 @@ export function Testo({ testo, fonti = [], onApri, aCapo = false }: {
     const righe = [b.testo]
     while (i < blocchi.length && blocchi[i].tipo === 'riga') { righe.push(blocchi[i].testo); i++ }
     pezzi.push(
-      <p key={pezzi.length} style={{ margin: primo() ? 0 : '10px 0 0', lineHeight: 1.6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+      <p key={pezzi.length} style={{ margin: primo() ? 0 : aria, lineHeight: ricco ? 1.65 : 1.6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
         {aCapo
-          ? righe.map((r, j) => <span key={j}>{j > 0 && <br />}{inline(r, fonti, onApri, conteggi)}</span>)
-          : inline(righe.join(' '), fonti, onApri, conteggi)}
+          ? righe.map((r, j) => <span key={j}>{j > 0 && <br />}{riga(r)}</span>)
+          : riga(righe.join(' '))}
       </p>
     )
   }

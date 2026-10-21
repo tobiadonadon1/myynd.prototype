@@ -88,6 +88,19 @@ export function vista<M extends MessaggioCorsa>(salvati: M[], corsa: Corsa | und
 }
 
 /**
+ * Dopo il quadratino «Ferma»: i messaggi che restano nella chat.
+ *
+ * La domanda resta (il server l'ha già salvata), e con lei la parte di
+ * risposta già arrivata, se ce n'è: come in Claude e in ChatGPT, fermare non
+ * cancella quello che si è letto. Una risposta fatta solo di spazi non è una
+ * risposta.
+ */
+export function fermata<M extends MessaggioCorsa>(salvati: M[], domanda: MessaggioCorsa, scritto: string): (M | MessaggioCorsa)[] {
+  const resto = scritto.trim() ? scritto : ''
+  return vista(salvati, { domanda, pensando: false, passo: null, vivo: resto })
+}
+
+/**
  * La chat appena nata, nell'elenco a sinistra da subito.
  *
  * Il server la crea alla prima domanda, ma l'elenco si rileggeva solo a
@@ -98,4 +111,24 @@ export function vista<M extends MessaggioCorsa>(salvati: M[], corsa: Corsa | und
 export function conRiga<T extends { id: string; titolo: string; quando: string }>(elenco: T[], chat: string, domanda: string, quando: string): (T | { id: string; titolo: string; quando: string })[] {
   if (elenco.some(x => x.id === chat)) return elenco
   return [{ id: chat, titolo: domanda.slice(0, 40), quando }, ...elenco]
+}
+
+/*
+ * Lo scorrimento (21 ott 2026): la colonna segue la risposta finché lui è in
+ * fondo, e lo lascia stare se è risalito a rileggere. «In fondo» ha un poco
+ * di margine: l'ultimo pixel non si raggiunge sempre, e una riga di
+ * differenza non è una scelta di risalire. La freccia per tornare giù compare
+ * solo quando sotto c'è davvero qualcosa da vedere, non per mezza riga.
+ */
+export const MARGINE_FONDO = 48
+export const SOGLIA_FRECCIA = 240
+
+/** Quanti pixel di conversazione restano sotto quello che si vede. */
+const sotto = (alta: number, sopra: number, vista: number) => alta - sopra - vista
+
+export function restaInFondo(alta: number, sopra: number, vista: number): boolean {
+  return sotto(alta, sopra, vista) <= MARGINE_FONDO
+}
+export function lontanoDalFondo(alta: number, sopra: number, vista: number): boolean {
+  return sotto(alta, sopra, vista) > SOGLIA_FRECCIA
 }

@@ -194,6 +194,19 @@ export function senzaTrattiniFuoriCodice(testo: string): string {
   return codice.rimetti(senzaTrattini(codice.testo))
 }
 
+/**
+ * Una risposta fermata a metà (21 ott 2026), come la si salva.
+ *
+ * Il pezzo arrivato fin lì, senza le lineette come ogni risposta salvata e
+ * senza lo spazio in coda. Un blocco di codice rimasto aperto si chiude: la
+ * risposta riletta domani non deve avere metà pagina in monospazio.
+ */
+export function rispostaFermata(parziale: string): string {
+  const recinti = (parziale.match(/^\s{0,3}(?:```|~~~)/gm) ?? []).length
+  const chiuso = recinti % 2 === 1 ? `${parziale.replace(/\s+$/, '')}\n\`\`\`` : parziale
+  return senzaTrattiniFuoriCodice(chiuso).replace(/\s+$/, '')
+}
+
 /*
  * Una domanda sola, e che si legga.
  *
