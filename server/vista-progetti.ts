@@ -19,6 +19,7 @@ import * as quadro from './quadro.ts'
 import { stessaCosa } from './priorita.ts'
 import { senzaTrattini } from './testo.ts'
 import { cartella } from './config.ts'
+import * as regole from './regole-sue.ts'
 
 /** Una cartella si propone se ci ha lavorato in questi giorni. */
 export const GIORNI_SUGGERITI = 14
@@ -151,7 +152,8 @@ export function svuotaCache() { cache.clear() }
 
 function firma(): string {
   const ps = progetti.elenco().map(p => `${p.id}|${p.nome}|${p.alias.join(',')}|${p.stato}|${p.priorita ?? ''}|${p.aggiornato}`).join('\n')
-  return `${quadro.quandoCambiatiIQuadri()}\n${ps}`
+  // e le sue regole: una nuova toglie il prossimo passo che ferma
+  return `${quadro.quandoCambiatiIQuadri()}\n${ps}\n${regole.elenco().map(r => r.id).join(',')}`
 }
 
 /** La pagina intera: i progetti vivi col loro succo, e le cartelle proposte. */
@@ -175,7 +177,8 @@ function fai(adesso: number): Vista {
     // e, per i quadri di prima, cosa c'era da leggere
     const m = quadro.attivitaDi(p, docs, adesso)
     const decise = store.feedDelProgetto(p.id, 30).filter(v => v.stato !== 'aperto').map(v => v.titolo)
-    const mossa = prossimaMossa(q, decise, progetti.eAlto(p))
+    // quello che lui ha detto «mai» non è il suo prossimo passo, anche se il quadro è di prima della regola
+    const mossa = prossimaMossa(q && { mosse: q.mosse.filter(x => !quadro.fermataDaUnaRegola(p.id, x)) }, decise, progetti.eAlto(p))
     fuori.push({
       id: p.id, nome: p.nome,
       obiettivo: p.obiettivo || q?.obiettivo?.testo || '',

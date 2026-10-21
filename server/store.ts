@@ -633,6 +633,13 @@ const TABELLE = {
     CREATE INDEX IF NOT EXISTS idx_candidati_stato ON candidati(stato, scade);
     CREATE INDEX IF NOT EXISTS idx_candidati_chiave ON candidati(chiave);
     CREATE INDEX IF NOT EXISTS idx_candidati_compito ON candidati(compito);
+  `,
+  // le regole che ha dato lui in una frase (`regole-sue.ts`): «mai», «sempre», e le pause con una fine
+  regole_sue: `
+    CREATE TABLE IF NOT EXISTS regole_sue (
+      id TEXT PRIMARY KEY, tipo TEXT NOT NULL, testo TEXT NOT NULL, lavoro TEXT, parole TEXT,
+      progetto TEXT, fino TEXT, frase TEXT, dal TEXT NOT NULL, tolta TEXT
+    );
   `
 } as const
 
@@ -1619,7 +1626,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   //   di prima non hanno una riga: valgono le regole di serie, finché lei non conferma.
   d => { d.exec(TABELLE.mandati); d.exec(TABELLE.tracce) },
   // 74 → 75 · la coda unica: i candidati di ogni produttore, una politica sola, e le ricevute
-  d => { d.exec(TABELLE.candidati) }
+  d => { d.exec(TABELLE.candidati) },
+  // 75 → 76 · le regole che ha dato lui correggendo le sue priorità in una frase
+  d => { d.exec(TABELLE.regole_sue) }
 ]
 
 /**

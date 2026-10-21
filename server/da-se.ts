@@ -69,6 +69,7 @@ import { OSPITATO } from './ospitato.ts'
 import * as mandato from './mandato.ts'
 import * as coda from './candidati.ts'
 import * as latoLavoro from './lato-lavoro.ts'
+import * as regole from './regole-sue.ts'
 
 export const ORIGINE_X = 'idee-x'
 export const ORIGINE_VIDEO = 'copione-video'
@@ -1107,13 +1108,16 @@ export async function giro(adesso = Date.now(), o: { pronto?: () => boolean; pag
     // senza una Scrivania (su un server) i file non si scrivono: solo Notion
     // le idee per X e il copione sono modelli fissi: nascono solo se lui ci conta (`lato-lavoro.tieneRicorrente`).
     // «it is something that myynd should text you because it changes based per user»: col lato scelto, la notte lavora su quello
+    // e quello che lui ha fermato con una regola («smetti di scrivermi i copioni») non nasce più (`regole-sue.ts`)
+    const scritte = regole.elenco()
+    const fermo = (lavoro: regole.Lavoro, progetto: string | null = null) => regole.chiFerma({ lavoro, progetto }, scritte) !== null
     if (!OSPITATO) {
-      const sx = posto() && latoLavoro.tieneRicorrente('x', adesso) ? sceltaX(vive(), adesso) : null
+      const sx = posto() && !fermo(ORIGINE_X) && latoLavoro.tieneRicorrente('x', adesso) ? sceltaX(vive(), adesso) : null
       if (sx) { const id = crea(sx, adesso); if (id) nate.push(id) }
       const sv = sceltaVideo(vive(), adesso)
-      if (sv && posto() && latoLavoro.tieneRicorrente('video', adesso)) { const id = crea(sv, adesso); if (id) nate.push(id) }
+      if (sv && sv.genere === 'video' && !fermo(ORIGINE_VIDEO, sv.progetto.id) && posto() && latoLavoro.tieneRicorrente('video', adesso)) { const id = crea(sv, adesso); if (id) nate.push(id) }
     }
-    for (const sn of scelteNotion(vive(), adesso, o.pagina).slice(0, NOTION_AL_GIRO)) {
+    for (const sn of scelteNotion(vive(), adesso, o.pagina).filter(x => !(x.genere === 'notion' && fermo(ORIGINE_NOTION, x.progetto.id))).slice(0, NOTION_AL_GIRO)) {
       if (!posto()) break
       const id = crea(sn, adesso)
       if (id) nate.push(id)
@@ -1228,6 +1232,8 @@ export async function lavora(c: store.Compito, o: { signal?: AbortSignal; adesso
    * pagare un modello, trattenuta e non guasta.
    */
   const fileTrattenuto = (progetto: string | null) => mandato.regolaPer(progetto, 'file') !== 'auto'
+  // una carta già in coda quando lui ha detto di smettere non parte: la regola vale da subito, prima di pagare un modello
+  if (regole.fermato({ lavoro: regole.lavoroDi(c.origine), progetto: c.progetto ?? null })) return { testo: '', fatti: [], ritira: 'Stopped by your rule' }
   if (c.origine === ORIGINE_X) {
     if (fileTrattenuto(c.progetto ?? null)) return { testo: '', fatti: [], ritira: 'Held by the project mandate' }
     const m = materialeX(adesso)

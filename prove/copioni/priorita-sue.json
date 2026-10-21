@@ -1,0 +1,11 @@
+{
+  "modello": "finto",
+  "risposte": [
+    { "se": "Trasformi una frase", "in": "system", "json": { "cambi": [
+      { "tipo": "ordine", "progetto": "Atlas", "altro": "Fernway", "stato": "", "fino": "", "alta": "", "regola": "", "lavoro": "", "parole": [], "testo": "" },
+      { "tipo": "regola", "progetto": "", "altro": "", "stato": "", "fino": "", "alta": "", "regola": "mai", "lavoro": "copione-video", "parole": ["video script", "copione video"], "testo": "No video scripts" }
+    ], "domanda": "" } },
+    { "se": "capo di gabinetto", "in": "system", "json": { "priorita": [], "domande": [], "superate": [] } }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

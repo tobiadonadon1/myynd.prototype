@@ -38,6 +38,7 @@ import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
 import * as progetti from './progetti.ts'
 import * as vistaProgetti from './vista-progetti.ts'
+import * as correzione from './correzione.ts'
 import * as avvio from './avvio.ts'
 import { leggiSeAncoraCollegata } from './fonti-collegate.ts'
 import * as compiti from './compiti.ts'
@@ -3808,6 +3809,26 @@ app.get('/api/progetti', (req, res) => {
 // progetto. Si legge e basta; una cartella diventa progetto solo col tocco suo
 app.get('/api/progetti/quadro', async (_req, res) => {
   try { res.json(await vistaProgetti.vista()) } catch (e) { errore(res, e) }
+})
+
+// come vedo la sua settimana, e la frase che la corregge: i cambi si fanno subito, ognuno si disfa
+app.get('/api/priorita-sue', async (_req, res) => {
+  try { res.json(await correzione.comeLaVedo()) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/priorita-sue/correggi', async (req, res) => {
+  try {
+    const esito = await correzione.correggi(String(req.body?.frase ?? ''))
+    res.json({ esito, vista: await correzione.comeLaVedo() })
+  } catch (e) { errore(res, e, 400) }
+})
+
+app.post('/api/priorita-sue/disfa', async (req, res) => {
+  try {
+    const c = correzione.disfa(String(req.body?.id ?? ''), Number(req.body?.indice))
+    if (!c) return res.status(404).json({ errore: 'Questo cambio non c\'è più.' })
+    res.json({ correzione: c, vista: await correzione.comeLaVedo() })
+  } catch (e) { errore(res, e, 400) }
 })
 
 app.post('/api/progetti/suggeriti', (req, res) => {
