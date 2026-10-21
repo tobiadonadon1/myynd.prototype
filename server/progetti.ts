@@ -217,6 +217,17 @@ export function elenco(stato?: Stato): Progetto[] {
   return righe.map(daRiga)
 }
 
+/**
+ * I progetti nell'ordine che ha dato lui: gli alti davanti, poi l'ordine che
+ * ha trascinato sulla prima pagina o detto in una frase (`ordineBlocchi`),
+ * poi quello di `elenco`. Lo stesso ordine della prima pagina
+ * (`ordinaBlocchi`), e quello che il feed e la vista delle priorità seguono.
+ */
+export function inOrdine(ps: readonly Progetto[] = elenco('attivo'), ordine: readonly string[] = leggiConfig().ordineBlocchi ?? []): Progetto[] {
+  const posto = new Map(ordine.map((id, i) => [id, i]))
+  const dove = (p: Progetto) => posto.get(p.id) ?? Number.MAX_SAFE_INTEGER
+  return ps.map((p, i) => ({ p, i })).sort((a, b) => Number(eAlto(b.p)) - Number(eAlto(a.p)) || dove(a.p) - dove(b.p) || a.i - b.i).map(x => x.p)
+}
 
 /** Quelli che contano adesso: attivi e fermi. Un chiuso non è più un progetto. */
 export function vivi(): Progetto[] {

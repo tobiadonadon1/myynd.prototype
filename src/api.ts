@@ -488,6 +488,22 @@ export type ProgettoVisto = {
 export type CartellaSuggerita = { nome: string; percorso: string; dove: string; ultima: string }
 export type VistaProgetti = { progetti: ProgettoVisto[]; suggeriti: CartellaSuggerita[] }
 
+/** Come Myynd vede la sua settimana (`server/correzione.ts`): l'ordine, la cosa di ognuno, e quello che lascia stare. */
+export type PrioritaSue = {
+  ordine: { id: string; nome: string; alta: boolean; fuoco: string; suo: boolean; perche: string }[]
+  lasciati: (
+    | { genere: 'pausa'; id: string; nome: string; fino: string | null }
+    | { genere: 'detto'; id: string; nome: string }
+    | { genere: 'regola'; id: string; nome: string; progetto: string | null }
+  )[]
+}
+/** Una correzione fatta: la frase, e ogni cambio con la sua riga e se è stato annullato. */
+export type CorrezioneFatta = { id: string; frase: string; quando: string; cambi: { riga: string; disfatto: boolean }[] }
+export type EsitoCorrezione =
+  | { genere: 'cambi'; correzione: CorrezioneFatta }
+  | { genere: 'domanda'; testo: string }
+  | { genere: 'risposta'; testo: string }
+
 export type SlackStato = {
   squadra: string | null; utente: string | null; url: string | null
   ambiti: string[] | null; mancano: string[]; manifesto: string
@@ -1656,6 +1672,14 @@ export const api = {
   settimana: () => json<SettimanaTracce>('/api/tracce/settimana'),
   /** La pagina dei Progetti: il succo di ogni progetto vivo, e le cartelle in cui lavora che non sono di nessuno. */
   vistaProgetti: () => json<VistaProgetti>('/api/progetti/quadro'),
+  /** Come vede la sua settimana: i progetti attivi in ordine, e quello che lascia stare. */
+  prioritaSue: () => json<PrioritaSue>('/api/priorita-sue'),
+  /** Una frase sua che corregge: i cambi si fanno subito; una domanda torna come domanda o risposta. */
+  correggiPriorita: (frase: string) =>
+    json<{ esito: EsitoCorrezione; vista: PrioritaSue }>('/api/priorita-sue/correggi', { method: 'POST', body: JSON.stringify({ frase }) }),
+  /** Annulla un cambio di una correzione. */
+  disfaCorrezione: (id: string, indice: number) =>
+    json<{ correzione: CorrezioneFatta; vista: PrioritaSue }>('/api/priorita-sue/disfa', { method: 'POST', body: JSON.stringify({ id, indice }) }),
   /** Una cartella proposta diventa progetto, col suo nome: solo se è fra le proposte di adesso. */
   progettoDaCartella: (percorso: string) =>
     json<{ ok: true; progetto: Progetto; esisteva?: boolean; riaperto?: boolean }>('/api/progetti/suggeriti', { method: 'POST', body: JSON.stringify({ percorso }) }),

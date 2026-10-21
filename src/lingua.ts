@@ -2625,6 +2625,18 @@ const EN: Record<string, string> = {
   'Aggiungi una cosa da fare': 'Add a task',
   'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
+  // — come vedo la tua settimana, e la frase che la corregge (21 ott 2026) —
+  'Come vedo la tua settimana': 'How I see your week',
+  'Lascio stare': 'Leaving alone',
+  'In pausa fino al': 'Paused until',
+  'Fermo, l’hai detto tu': 'On hold, you said so',
+  'Solo per': 'Only for',
+  'Correggimi in una frase': 'Correct me in one sentence',
+  'Lo cambio…': 'Changing it…',
+  'Disfatto': 'Undone',
+  'Non sono riuscito a cambiarlo.': 'I couldn’t change it.',
+  'Rispondi qui, o scrivi un’altra frase': 'Answer here, or write another sentence',
+  'Questo cambio non c\'è più.': 'This change is no longer there.',
   'Poi:': 'Next:',
   'La tua posta: chi ti scrive e cosa dice. Non manda niente senza di te.': 'Your mail: who writes to you and what they say. It sends nothing without you.',
   // — feedback 23 set: accesso e primo avvio —

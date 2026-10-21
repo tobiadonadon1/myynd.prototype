@@ -517,6 +517,7 @@ export type Lavoro =
   | 'rispostaBreve' // P10: una domanda secca in chat (quando, chi, dove); tutto il resto resta `risposta`
   | 'scalda'        // P10: scaldare il modello di questo Mac quando si apre la chat; non esce mai dal Mac
   | 'diario'        // il diario del giorno: cosa si è mosso, cosa è fermo, chi aspetta, dagli episodi visti sul Mac
+  | 'correzione'    // una sua frase sulle priorità («Nextas viene prima di H-Farm») in cambi da un elenco chiuso
 
 /*
  * Tre livelli, non due.
@@ -723,7 +724,15 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * difficile l'ha già fatto il codice, che ha deciso cosa è di chi; qui si
    * scrive. Una chiamata al giorno per conto, sul gradino più economico.
    */
-  diario:     { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 }
+  diario:     { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 },
+  /*
+   * Una correzione delle priorità: una frase sua in pochi cambi da un elenco
+   * chiuso, con i nomi dei suoi progetti davanti. È una lettura, non una
+   * scrittura che esce: il codice controlla ogni cambio prima di farlo
+   * (`correzione.ts`), e ognuno si disfa. Una chiamata corta per frase, sul
+   * gradino più economico.
+   */
+  correzione: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 30_000 }
 }
 
 type Messaggio = { role: 'user' | 'assistant'; content: string }

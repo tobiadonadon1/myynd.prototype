@@ -5,6 +5,7 @@ import { Bottone, Casella } from '../components/forme'
 import { IconPiu } from '../icons'
 import { velato } from '../colori-progetto'
 import { daQuando, lettoInRiga } from '../progetti-vista'
+import { ComeLaVedo } from './ComeLaVedo'
 import type { Vals } from '../vals'
 import './progetti.css'
 
@@ -79,6 +80,8 @@ export function Progetti({ v }: { v: Vals }) {
             </ul>
           </>
         )}
+      {/* come vede la sua settimana, e la frase che la corregge (`ComeLaVedo.tsx`) */}
+      {!!fuoco && <ComeLaVedo v={v} dopo={() => void carica()} />}
       {vista.suggeriti.length > 0 && (
         <section className="pj-cartelle" aria-labelledby="pj-cartelle-titolo">
           <h2 id="pj-cartelle-titolo">{t('Cartelle in cui stai lavorando')}</h2>

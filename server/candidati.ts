@@ -276,7 +276,7 @@ export function valuta(cs: readonly Candidato[], m: Mondo): Decisione[] {
     if (!doc && !RICORRENTI.includes(c.genere) && m.recenti.some(r => !r.scartato && stesso(r.progetto) && adesso - Date.parse(r.quando) <= GIORNI_FATTI * giorno && simile(r.testo, c.titolo))) { scarta(c, 'scartato', 'doppione', p); continue }
     // una riga nella sua lista ha una ragione: l'ha chiesta, qualcuno aspetta, l'ha promessa (`motivo.ts`)
     // (chiesta adesso con un suo gesto, `presto`, la ragione c'è già)
-    if (!m.presto?.has(c.id) && !motivo.motivoDi({ origine: c.carta.origine, doc, progetto: c.progetto }, m.adesso.getTime())) { scarta(c, 'scartato', 'senza_motivo', p); continue }
+    if (!m.presto?.has(c.id) && !motivo.motivoDi({ origine: c.carta.origine, doc, progetto: c.progetto, testo: c.titolo }, m.adesso.getTime())) { scarta(c, 'scartato', 'senza_motivo', p); continue }
     if (proveVecchie(c, m.adesso)) { scarta(c, 'scartato', 'prove_vecchie', p); continue }
     if (c.classi.some(k => m.regola(c.progetto, k) === 'mai')) { scarta(c, 'trattenuto', 'mandato', p); continue }
     if (m.budgetFinito(c.progetto)) { scarta(c, 'trattenuto', 'budget_progetto', p); continue }

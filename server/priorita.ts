@@ -38,6 +38,7 @@ import * as desktop from './connettori/desktop.ts'
 import * as riferimento from './riferimento.ts'
 import * as motivo from './motivo.ts'
 import { cartella, lingua, nellaLingua } from './config.ts'
+import * as cfg from './config.ts'
 import { fuoco } from './timone.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { rigaInLinguaSbagliata, senzaTrattini } from './testo.ts'
@@ -53,6 +54,7 @@ import { percheFondato } from './perche-oggi.ts'
 import * as quadro from './quadro.ts'
 import * as riordino from './riordino.ts'
 import * as candidati from './candidati.ts'
+import * as regole from './regole-sue.ts'
 import { fra } from './ordine.ts'
 
 export type Genere = 'priorita' | 'proposta' | 'da-leggere' | 'scadenza'
@@ -631,13 +633,18 @@ export async function proponi(quadri: readonly quadro.Quadro[] = [], dalQuadro: 
   const perNome = (ids: Set<string>) => suoi.filter(p => ids.has(p.id)).map(p => p.nome)
   const chieste = store.domandeConTema('priorita:').slice(0, 8)
 
+  const scritte = regole.elenco()
+  const leRegole = regole.perIlModello(scritte)
   const indicazioni = [
     carta() ? `Chi è:\n${carta()}` : '',
+    leRegole ? `\n${leRegole}` : '',
     f ? `\nTi ha chiesto di concentrarti su questo, e viene prima del resto:\n${f}` : '',
     quadroAdesso ? `\nIN QUESTI TRE GIORNI LAVORA SU QUESTO (oggi è il ${oggi}), dalle sue sessioni con gli assistenti, dai commit e dai file che ha toccato. È il lavoro che ha in mano: le voci nascono prima di tutto da qui.\n${quadroAdesso}` : '',
     suoi.length ? `\nI suoi progetti, con l'obiettivo e quello che ne sai:\n${progetti.perIlModello()}` +
       // l'unico ordine fra i progetti che ha dato lui: le voci seguono quello
-      (suoi.some(p => p.priorita === 'alta') ? `\nQuelli con «priorità alta» li ha segnati lui come i più importanti: a parità di urgenza, le voci per quelli vengono prima.` : '')
+      (suoi.some(p => p.priorita === 'alta') ? `\nQuelli con «priorità alta» li ha segnati lui come i più importanti: a parità di urgenza, le voci per quelli vengono prima.` : '') +
+      // e l'ordine che ha dato lui fra tutti, trascinando i blocchi o dicendolo in una frase
+      (suoi.length > 1 && (cfg.leggi().ordineBlocchi ?? []).some(id => suoi.some(p => p.id === id)) ? `\nL'ordine fra i suoi progetti l'ha dato lui, dal più importante: ${progetti.inOrdine(suoi).map(p => p.nome).join(', ')}. A parità di urgenza, le voci seguono questo ordine.` : '')
       : '\nNon ha ancora registrato progetti.',
     rif.testo
       ? `\nQUELLO CHE HA SCRITTO LUI, di suo pugno, su a che punto è ogni progetto (${(rif.aggiornato ?? '').slice(0, 10)}). Vale più dei file, dei commit e delle mail: se qui un progetto è morto o finito, per quel progetto non proporre niente, nemmeno una lettura; se è bloccato, l'unica voce buona è il passo che lo sblocca (chi deve rispondere, cosa manca, a chi scrivere); se dice che sta facendo una cosa, quella è la cosa in corso, e i file che dicono altro sono indietro.${riferimento.avvisoVecchio(rif)}\n${rif.testo}` +
@@ -698,9 +705,14 @@ Scrivi in ${nellaLingua()}.`)
     progetti: suoi
   }
   const voci: Priorita[] = []
+  // un progetto che ha messo in pausa vale come uno detto morto, finché non lo riprende: niente voci per lui
+  const fermi = progetti.elenco('fermo')
+  const nomiEFermi = new Map([...nomi, ...fermi.map(p => [p.nome.trim().toLowerCase(), p.id] as const).filter(([n]) => !nomi.has(n))])
+  const fuori = new Set([...morti, ...fermi.map(p => p.id)])
   for (const g of Array.isArray(out.priorita) ? out.priorita : []) {
-    const p = ripulisci(g, ids, nomi, [...giaDette, ...voci.map(v => v.titolo)], morti, fonti)
-    if (p) voci.push(p)
+    const p = ripulisci(g, ids, nomiEFermi, [...giaDette, ...voci.map(v => v.titolo)], fuori, fonti)
+    // quello che ha detto «mai» non arriva sul feed, qualunque cosa abbia capito il modello
+    if (p && !regole.chiFerma({ testo: `${p.titolo}. ${p.testo}`, progetto: p.progetto }, scritte)) voci.push(p)
     // il parapetto del giro sta qui, nel codice: non nel prompt, non nello schema
     if (voci.length >= AL_GIRO) break
   }

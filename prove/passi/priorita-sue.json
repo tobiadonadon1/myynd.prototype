@@ -1,0 +1,18 @@
+[
+  { "aspetta": 2500 },
+  { "clicca": "Your account" },
+  { "aspetta": 400 },
+  { "clicca": "Projects" },
+  { "aspetta": 2200 },
+  { "js": "(() => { const s = document.querySelector('.cv'); if (s) s.scrollIntoView({ block: 'start' }); return !!s })()" },
+  { "aspetta": 500 },
+  { "scatta": "prima" },
+  { "testo": "prima" },
+  { "scrivi": "Atlas comes before Fernway this week, and stop writing video scripts", "in": "Correct me in one sentence" },
+  { "js": "(() => { const b = document.querySelector('.cv-correggi button'); if (b) b.click(); return !!b })()" },
+  { "aspetta": 2500 },
+  { "js": "(() => { const s = document.querySelector('.cv'); if (s) s.scrollIntoView({ block: 'start' }); return !!s })()" },
+  { "aspetta": 500 },
+  { "scatta": "dopo" },
+  { "testo": "dopo" }
+]

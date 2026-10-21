@@ -19,6 +19,7 @@ import * as store from './store.ts'
 import * as cfg from './config.ts'
 import * as mandato from './mandato.ts'
 import * as lavoroDati from './lavoro-dati.ts'
+import * as regole from './regole-sue.ts'
 import { contieneRichiesta, corpoAttuale, mittenteAutomatico } from './rilevanza.ts'
 import { FONTI_POSTA } from './connettori/registro.ts'
 
@@ -93,7 +94,9 @@ export function mandatoConfermato(progetto: string | null | undefined): boolean 
  * (`lato-lavoro.tieneRicorrente`), la pagina di Notion dalla pagina che ha
  * scelto.
  */
-export function motivoDi(c: { origine: string; doc?: string | null; progetto?: string | null }, adesso = Date.now()): Motivo | null {
+export function motivoDi(c: { origine: string; doc?: string | null; progetto?: string | null; testo?: string | null }, adesso = Date.now()): Motivo | null {
+  // quello che lui ha detto «mai» non ha ragione di stare nella sua lista, da qualunque strada arrivi (`regole-sue.ts`)
+  if (regole.fermato({ testo: c.testo ?? '', progetto: c.progetto ?? null, lavoro: regole.lavoroDi(c.origine) })) return null
   if (c.origine === 'quadro') return mandatoConfermato(c.progetto) ? 'chiesto' : null
   if (c.origine === 'punto') return aspetta(c.doc ? store.documento(c.doc) : null, adesso) ? 'aspetta' : null
   return 'chiesto'

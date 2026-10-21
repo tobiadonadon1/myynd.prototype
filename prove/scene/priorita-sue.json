@@ -1,0 +1,36 @@
+{
+  "lingua": "en",
+  "nome": "Maya",
+  "ruolo": "Studio founder",
+  "progetti": [
+    { "chiave": "fw", "nome": "Fernway", "obiettivo": "Launch the Fernway booking app to the first hundred studios", "priorita": "alta" },
+    { "chiave": "at", "nome": "Atlas", "obiettivo": "Deliver the Atlas Bakery rebrand" },
+    { "chiave": "bl", "nome": "Brightline", "obiettivo": "Grow the Brightline newsletter to 5,000 readers" },
+    { "chiave": "pb", "nome": "Photo book", "obiettivo": "Finish the travel photo book", "stato": "fermo" }
+  ],
+  "riferimento": "Atlas: finishing the logo options for Thursday's review with the bakery.",
+  "documenti": [
+    { "id": "posta:INBOX:at1", "fonte": "posta", "tipo": "email", "titolo": "Atlas logo review", "corpo": "Hi Maya, can we see the three logo options on Thursday? The bakery owners will both be there.", "autore": "Ines <ines@atlasbakery.example>", "quando": "-1d" },
+    { "id": "conversazioni:codice:fw1", "fonte": "conversazioni", "tipo": "chat", "titolo": "fernway · onboarding", "corpo": "Project: fernway\n\nYou: finish the studio onboarding screens\n\nClaude: Onboarding done. The payment step waits for the Stripe live keys.", "quando": "-3h" }
+  ],
+  "quadri": [
+    {
+      "progetto": "fw", "quando": "-40m",
+      "stato": "Onboarding is finished and the payment step waits for the Stripe live keys. Twelve studios are on the waitlist.",
+      "traguardo": "First paying studio on Fernway",
+      "mosse": [{ "genere": "sblocco", "titolo": "Ask Dario for the Stripe live keys today", "testo": "The payment step is done in code and only waits for the keys.", "leva": 3, "urgenza": "oggi" }]
+    },
+    {
+      "progetto": "at", "quando": "-50m",
+      "stato": "Ines asked to see three logo options on Thursday with both owners. Two options are drawn, the third is a sketch.",
+      "traguardo": "Logo picked at Thursday's review",
+      "mosse": []
+    },
+    {
+      "progetto": "bl", "quando": "-30m",
+      "stato": "The last issue went out twelve days ago and the next one has no draft yet.",
+      "traguardo": "Next issue sent",
+      "mosse": [{ "genere": "lavoro", "titolo": "Write a 60 second video script for the Brightline launch", "testo": "A short talking head clip to announce the new format.", "leva": 2, "urgenza": "settimana" }]
+    }
+  ]
+}
