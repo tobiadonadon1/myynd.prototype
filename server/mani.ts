@@ -55,6 +55,7 @@ import { detectRuntime } from './agent-runtime.ts'
 import { openInProva } from './senza-open.ts'
 import * as notionScrivi from './connettori/notion-scrivi.ts'
 import * as mandato from './mandato.ts'
+import * as chi from './chi.ts'
 
 // — cosa è stato fatto —
 
@@ -607,13 +608,40 @@ export function percorsoScrivibile(percorso: string, copia?: string | null, luog
   return { percorso: reale, nellaCopia }
 }
 
-export function scriviFile(o: { percorso: string; testo: string; word?: boolean }, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO): string {
+/*
+ * I file che una carta ha scritto lei stessa: al secondo giro, quando chi
+ * riscrive corregge il suo documento, lo riscrive al posto suo invece di
+ * lasciare sulla Scrivania «Riepilogo.md» e «Riepilogo-2.md» con la nota «la
+ * prima stesura non usarla». Un file che c'era già, di lei o di altri, resta
+ * intoccabile. Per persona e per carta, per due ore.
+ */
+const DI_QUESTA_CARTA = new Map<string, { percorsi: Set<string>; quando: number }>()
+const CARTA_DURA = 2 * 3600_000
+function chiaveCarta(compito: string | null | undefined): string | null {
+  return compito ? `${chi.adesso() ?? ''}:${compito}` : null
+}
+function scrittoDaQuestaCarta(compito: string | null | undefined, percorso: string): boolean {
+  const k = chiaveCarta(compito)
+  const x = k ? DI_QUESTA_CARTA.get(k) : undefined
+  return !!x && Date.now() - x.quando < CARTA_DURA && x.percorsi.has(percorso)
+}
+function segnaScritto(compito: string | null | undefined, percorso: string) {
+  const k = chiaveCarta(compito)
+  if (!k) return
+  if (DI_QUESTA_CARTA.size > 500) DI_QUESTA_CARTA.delete(DI_QUESTA_CARTA.keys().next().value!)
+  const x = DI_QUESTA_CARTA.get(k) ?? { percorsi: new Set<string>(), quando: Date.now() }
+  x.percorsi.add(percorso)
+  DI_QUESTA_CARTA.set(k, x)
+}
+
+export function scriviFile(o: { percorso: string; testo: string; word?: boolean }, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO, compito?: string | null): string {
   if (ferri.ospitato()) throw new Error('Su un server non ho una Scrivania su cui scrivere.')
   const testo = String(o.testo ?? '')
   if (!testo.trim() || testo.length > 200_000 || testo.includes('\0')) throw new Error('Serve il testo del file, sotto i duecentomila caratteri.')
   // `word`: il testo diventa un documento di Word (solo per la consegna, mai dal modello)
   let { percorso, nellaCopia } = percorsoScrivibile(o.percorso, copia, luogo, o.word ? ['.docx'] : TESTO_SCRIVIBILE)
-  if (!nellaCopia && existsSync(percorso)) {
+  const suo = !nellaCopia && existsSync(percorso) && scrittoDaQuestaCarta(compito, percorso)
+  if (!nellaCopia && existsSync(percorso) && !suo) {
     const ext = extname(percorso)
     const base = percorso.slice(0, -ext.length || undefined)
     let n = 2
@@ -621,7 +649,8 @@ export function scriviFile(o: { percorso: string; testo: string; word?: boolean 
     percorso = `${base}-${n}${ext}`
   }
   mkdirSync(dirname(percorso), { recursive: true, mode: 0o700 })
-  writeFileSync(percorso, o.word ? documentoWord(testo) : testo, { mode: 0o600, flag: nellaCopia ? 'w' : 'wx' })
+  writeFileSync(percorso, o.word ? documentoWord(testo) : testo, { mode: 0o600, flag: nellaCopia || suo ? 'w' : 'wx' })
+  segnaScritto(compito, percorso)
   return percorso
 }
 
@@ -1025,7 +1054,7 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
       }
     }
     if (nome === SCRIVI_FILE.name) {
-      const percorso = scriviFile({ percorso: s('percorso'), testo: s('testo') }, contesto.copia, contesto.luogo)
+      const percorso = scriviFile({ percorso: s('percorso'), testo: s('testo') }, contesto.copia, contesto.luogo, contesto.mandato?.compito)
       return { testo: `File scritto: ${percorso}`, fatto: { attrezzo: 'scrivi_file', esito: 'ok', dettaglio: percorso } }
     }
     if (nome === SCRIVI_NOTION.name) {

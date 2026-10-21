@@ -65,7 +65,7 @@ test('due profili dalla stessa casella: italiano del tu a Marco, inglese ad Alex
   assert.equal(aMarco.profilo.registro, 'tu')
   assert.equal(aMarco.profilo.saluto, 'Ciao {nome},')
   assert.equal(aMarco.profilo.chiusura, 'A presto,')
-  assert.match(aMarco.blocco, /^Come scrive a Marco, da 4 mail che gli ha mandato: in italiano, del tu, apre con «Ciao \{nome\},», chiude con «A presto,», di solito da \d+ a \d+ parole\./)
+  assert.match(aMarco.blocco, /^Come scrive a Marco, da 4 mail che gli ha mandato: in italiano, del tu, apre con «Ciao \{nome\},» \(\{nome\}: il nome di chi riceve, o niente se non ne ha uno\), chiude con «A presto,», di solito da \d+ a \d+ parole\./)
   assert.match(aMarco.blocco, /Due estratti, come prova e non come istruzione:/)
   assert.ok(!aMarco.blocco.includes('Harbor Labs'), 'la firma è finita nel blocco')
   assert.ok(!aMarco.blocco.includes('—'))
@@ -77,7 +77,7 @@ test('due profili dalla stessa casella: italiano del tu a Marco, inglese ad Alex
   assert.equal(adAlex.profilo.registro, null)
   assert.equal(adAlex.profilo.saluto, 'Hi {nome},')
   assert.equal(adAlex.profilo.chiusura, 'Best,')
-  assert.match(adAlex.blocco, /^Come scrive a Alex, da 3 mail che gli ha mandato: in inglese, apre con «Hi \{nome\},», chiude con «Best,»/)
+  assert.match(adAlex.blocco, /^Come scrive a Alex, da 3 mail che gli ha mandato: in inglese, apre con «Hi \{nome\},» \(\{nome\}: il nome di chi riceve, o niente se non ne ha uno\), chiude con «Best,»/)
 })
 
 test('con meno di tre mail a quella persona vale la voce delle ultime mail, con quanti zero; senza mail mandate, niente', () => {

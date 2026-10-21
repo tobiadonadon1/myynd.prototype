@@ -364,7 +364,11 @@ export async function giudica(o: {
     'perimetro: un prezzo, un indirizzo, una persona o un impegno supposti non passano mai. Un ' +
     'segnaposto «[da completare: …]» o «[to fill: …]» non è un fatto inventato.\n' +
     '2. Che faccia tutto il compito, e solo quello: niente che manca, niente aggiunto che ' +
-    'nessuno ha chiesto, il destinatario giusto.\n' +
+    'nessuno ha chiesto, il destinatario giusto. Una scelta che spetta a lei (approvare, scegliere ' +
+    'fra due opzioni che le chiedono, spendere, fissare un giorno o un\'ora senza averlo visto ' +
+    'libero in agenda) presa dal lavoro al posto suo non passa; lasciata aperta in un solo ' +
+    'segnaposto chiaro va bene. Una data del calendario ricavata da «mercoledì» o «la prossima ' +
+    'settimana», o una data messa accanto a un fatto che la fonte non data, è inventata.\n' +
     '3. La voce e il tono: sembra scritto da lei, con il suo tono, nella lingua giusta per chi ' +
     'lo riceve?' +
     (o.lingua ? ` La lingua giusta per questa persona è ${o.lingua === 'it' ? 'l\'italiano' : 'l\'inglese'}: le righe per lei restano nella lingua dell\'app, la cosa consegnata va in quella.` : '') +

@@ -293,7 +293,8 @@ function bloccoDi(p: Profilo, testa: string, esempi: string[]): string {
   const tratti = [
     p.lingua ? `in ${NOME_LINGUA[p.lingua]}` : '',
     p.registro ? (p.registro === 'tu' ? 'del tu' : 'del Lei') : '',
-    p.saluto ? `apre con «${p.saluto}»` : '',
+    // «{nome}» è il posto del nome di chi riceve: se chi riceve non ha un nome (un ufficio, un team), il saluto senza nome
+    p.saluto ? `apre con «${p.saluto}»${p.saluto.includes('{nome}') ? ' ({nome}: il nome di chi riceve, o niente se non ne ha uno)' : ''}` : '',
     p.chiusura ? `chiude con «${p.chiusura}»` : '',
     p.parole.mediana ? `di solito da ${p.parole.mediana} a ${p.parole.alta} parole` : ''
   ].filter(Boolean).join(', ')
@@ -376,6 +377,9 @@ function voceDi(c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>): Voce | null {
  * a quella persona, un corpo chiaramente nell'altra lingua non passa.
  */
 export function controlla(corpo: string, v: Voce | null | undefined): string[] {
+  // il segnaposto del saluto copiato com'è («Hi {name},»): la bozza non è finita
+  const modello = corpo.match(/\{(?:nome|name)\}/i)
+  if (modello) return [`C'è «${modello[0]}» nel testo: è il posto del nome di chi riceve. Scrivi il nome vero, o il saluto senza nome se chi riceve non ne ha uno.`]
   if (!v || v.profilo.quanti < MINIMO || !v.profilo.lingua || !v.destinatario) return []
   const scritta = linguaDi(corpo)
   if (!scritta || scritta === v.profilo.lingua) return []
